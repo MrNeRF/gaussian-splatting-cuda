@@ -1,5 +1,5 @@
-#include <iostream>
 #include "read_utils.cuh"
+#include <iostream>
 
 int main(int argc, char* argv[]) {
 

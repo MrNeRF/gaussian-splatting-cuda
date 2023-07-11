@@ -3,8 +3,8 @@ Language:        Cpp
 # BasedOnStyle:  WebKit
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
-AlignConsecutiveAssignments:  AcrossEmptyLinesAndComments
-AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveAssignments:  false
+AlignConsecutiveDeclarations: false
 AlignConsecutiveMacros: Consecutive
 AlignEscapedNewlines: Left
 AlignOperands:   true
@@ -25,30 +25,29 @@ AlwaysBreakTemplateDeclarations: true
 BinPackArguments: true
 BinPackParameters: true
 BraceWrapping:
-  AfterCaseLabel:  true
-  AfterClass:      true
-  AfterControlStatement: Always
+  AfterCaseLabel:  false
+  AfterClass:      false
+  AfterControlStatement: false
   AfterEnum:       false
-  AfterFunction:   true
-  AfterNamespace:  true
+  AfterFunction:   false
+  AfterNamespace:  false
   AfterObjCDeclaration: false
-  AfterStruct:     true
-  AfterUnion:      true
-  AfterExternBlock: true
-  BeforeCatch:     true
-  BeforeElse:      true
-  BeforeLambdaBody: false
+  AfterStruct:     false
+  AfterUnion:      false
+  AfterExternBlock: false
+  BeforeCatch:     false
+  BeforeElse:      false
   IndentBraces:    false
   SplitEmptyFunction: true
   SplitEmptyRecord: true
   SplitEmptyNamespace: true
 BreakBeforeBinaryOperators: None
-BreakBeforeBraces: Allman
-BreakBeforeInheritanceComma: true
+BreakBeforeBraces: Custom
+BreakBeforeInheritanceComma: false
+BreakInheritanceList: BeforeColon
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializersBeforeComma: false
 BreakConstructorInitializers: BeforeColon
-BreakInheritanceList: BeforeColon
 BreakAfterJavaFieldAnnotations: false
 BreakStringLiterals: true
 ColumnLimit:     0
@@ -63,27 +62,28 @@ DerivePointerAlignment: false
 DisableFormat:   false
 EmptyLineBeforeAccessModifier: Always
 ExperimentalAutoDetectBinPacking: false
-FixNamespaceComments: false
-ForEachMacros:   
+FixNamespaceComments: true
+ForEachMacros:
   - foreach
   - Q_FOREACH
   - BOOST_FOREACH
 IncludeBlocks:   Preserve
-IncludeCategories: 
+IncludeCategories:
   - Regex:           '^"(llvm|llvm-c|clang|clang-c)/'
     Priority:        2
   - Regex:           '^(<|"(gtest|gmock|isl|json)/)'
     Priority:        3
   - Regex:           '.*'
     Priority:        1
-IncludeIsMainRegex: '(Test)?$'
-IndentCaseLabels: true
+IndentCaseBlocks: false
+IndentCaseLabels: false
+IndentGotoLabels: false
 IndentPPDirectives: None
 IndentWidth:     4
 IndentWrappedFunctionNames: false
 JavaScriptQuotes: Leave
 JavaScriptWrapImports: true
-KeepEmptyLinesAtTheStartOfBlocks: false
+KeepEmptyLinesAtTheStartOfBlocks: true
 MacroBlockBegin: ''
 MacroBlockEnd:   ''
 MaxEmptyLinesToKeep: 1
@@ -100,27 +100,19 @@ PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Left
 ReflowComments:  true
-SortIncludes:  CaseSensitive
-SortUsingDeclarations: true
-SpaceAfterLogicalNot: false
+SortIncludes:    true
 SpaceAfterCStyleCast: false
-SpaceAfterTemplateKeyword: false
+SpaceAfterTemplateKeyword: true
 SpaceBeforeAssignmentOperators: true
-SpaceBeforeCaseColon: false
-SpaceBeforeCpp11BracedList: false
-SpaceBeforeCtorInitializerColon: false
 SpaceBeforeParens: ControlStatements
-SpaceBeforeRangeBasedForLoopColon: false
-SpaceBeforeSquareBrackets: false
 SpaceInEmptyParentheses: false
-SpaceInEmptyBlock: false
 SpacesBeforeTrailingComments: 1
 SpacesInAngles:  false
 SpacesInContainerLiterals: true
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
-Standard:        c++20
+Standard:        Latest
 TabWidth:        4
 UseTab:        Never
 ...

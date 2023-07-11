@@ -4,6 +4,7 @@
 
 class Image {
 public:
+
 private:
     Eigen::Vector4f qvec;
 };
