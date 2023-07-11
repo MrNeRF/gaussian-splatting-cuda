@@ -33,6 +33,9 @@ set(SOURCES
 	src/main.cu	
 )
 
+add_subdirectory(external/tinyply)
+include_directories(${PROJECT_SOURCE_DIR}/external/tinyply/source)
+
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 target_compile_options(${PROJECT_NAME} PRIVATE -g -G -Xcompiler -Werror)
@@ -48,4 +51,6 @@ target_link_libraries(${PROJECT_NAME}
 	${CUDA_LIBRARIES}
 	curand
 	cublas
+	PRIVATE
+	tinyply
 )
