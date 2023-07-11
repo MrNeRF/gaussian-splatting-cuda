@@ -1,6 +1,7 @@
 #include "read_utils.cuh"
 #include <vector>
 #include <fstream>
+#include <tinyply.h>
 #include <memory>
 #include <iostream>
 
@@ -21,7 +22,7 @@ std::unique_ptr<std::istream> read_binary(std::filesystem::path file_path){
 }
 
 // Returns the file size of a given ifstream in MB
-const float file_in_mb(std::istream *file_stream) {
+float file_in_mb(std::istream *file_stream) {
     file_stream->seekg(0, std::ios::end);
     const float size_mb = file_stream->tellg() * 1e-6f;
     file_stream->seekg(0, std::ios::beg);

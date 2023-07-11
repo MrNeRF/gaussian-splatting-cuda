@@ -42,9 +42,7 @@ set(SOURCES
 )
 
 
-add_subdirectory(external/tinyply)
-include_directories(${PROJECT_SOURCE_DIR}/external/tinyply/source)
-include_directories(${PROJECT_SOURCE_DIR}/includes)
+add_subdirectory(external)
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
@@ -63,4 +61,7 @@ target_link_libraries(${PROJECT_NAME}
 	cublas
 	PRIVATE
 	tinyply
+	eigen3
 )
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes)

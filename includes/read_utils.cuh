@@ -1,5 +1,6 @@
 #pragma once
-#include "tinyply.h"
-#include "filesystem"
+#include <filesystem>
 
 void read_ply_file(std::filesystem::path filepath);
+
+void read_colmap_scene_info(std::filesystem::path filepath);

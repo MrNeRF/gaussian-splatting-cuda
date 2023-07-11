@@ -1,3 +1,6 @@
 [submodule "external/tinyply"]
 	path = external/tinyply
 	url = https://github.com/ddiakopoulos/tinyply
+[submodule "external/eigen"]
+	path = external/eigen
+	url = https://gitlab.com/libeigen/eigen
