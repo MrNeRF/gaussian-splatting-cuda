@@ -26,15 +26,21 @@ include_directories(${CUDA_INCLUDE_DIRS})
 # src project
 
 set(HEADERS
+	includes/readPly.cuh
+	includes/gaussian.cuh
 )
 
 set(SOURCES
 	# common
 	src/main.cu	
+	src/readPly.cu
+	src/gaussian.cu
 )
+
 
 add_subdirectory(external/tinyply)
 include_directories(${PROJECT_SOURCE_DIR}/external/tinyply/source)
+include_directories(${PROJECT_SOURCE_DIR}/includes)
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 

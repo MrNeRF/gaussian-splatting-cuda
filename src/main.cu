@@ -1,7 +1,16 @@
 #include <iostream>
-#include "tinyply.h"
+#include "readPly.cuh"
 
 int main(int argc, char* argv[]) {
-    tinyply::PlyFile file;
-    std::cout << "Hello gaussian splatting cuda implementation!" << std::endl;
+
+    if (argc != 2) {
+        std::cout << "Usage: ./readPly <ply file>" << std::endl;
+        return 1;
+    }
+
+    std::string filename = argv[1];
+
+    read_ply_file(filename);
+
+    return 0;
 }
