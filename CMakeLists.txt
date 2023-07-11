@@ -28,6 +28,8 @@ include_directories(${CUDA_INCLUDE_DIRS})
 set(HEADERS
 	includes/read_utils.cuh
 	includes/gaussian.cuh
+	includes/camera.cuh
+	includes/image.cuh
 )
 
 set(SOURCES
@@ -35,6 +37,8 @@ set(SOURCES
 	src/main.cu	
 	src/read_utils.cu
 	src/gaussian.cu
+	src/camera.cu
+	src/image.cu
 )
 
 
