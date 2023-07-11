@@ -32,7 +32,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes)
 
 target_compile_options(${PROJECT_NAME} PRIVATE -g -G -Xcompiler -Werror)
-#target_compile_options(${PROJECT_NAME} PRIVATE -O3) // Uncomment for release mode faster compilation
+#target_compile_options(${PROJECT_NAME} PRIVATE -O3) # Uncomment for release mode faster compilation
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
 	CUDA_RESOLVE_DEVICE_SYMBOLS ON
