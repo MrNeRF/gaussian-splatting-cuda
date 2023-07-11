@@ -1,3 +1,4 @@
+#include "image.cuh"
 #include "read_utils.cuh"
 #include <fstream>
 #include <iostream>
@@ -59,13 +60,43 @@ T read_binary_value(std::istream& file) {
     return value;
 }
 
+// copied from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
 void read_images_binary(std::filesystem::path file_path) {
-    auto image_stream_buffer = read_binary(file_path);
+    auto image_stream_buffer = read_binary(file_path / "images.bin");
     const size_t number_images = read_binary_value<uint64_t>(*image_stream_buffer);
 
     for (size_t i = 0; i < number_images; ++i) {
+        Image img;
+        img._id = read_binary_value<uint32_t>(*image_stream_buffer);
+        img._qvec.x() = read_binary_value<double>(*image_stream_buffer);
+        img._qvec.y() = read_binary_value<double>(*image_stream_buffer);
+        img._qvec.z() = read_binary_value<double>(*image_stream_buffer);
+        img._qvec.w() = read_binary_value<double>(*image_stream_buffer);
+        img._qvec.normalize();
+
+        img._tvec.x() = read_binary_value<double>(*image_stream_buffer);
+        img._tvec.y() = read_binary_value<double>(*image_stream_buffer);
+        img._tvec.z() = read_binary_value<double>(*image_stream_buffer);
+
+        img._camera_id = read_binary_value<uint32_t>(*image_stream_buffer);
+
+        char character;
+        do {
+            image_stream_buffer->read(&character, 1);
+            if (character != '\0') {
+                img._name += character;
+            }
+        } while (character != '\0');
+
+        const size_t number_points = read_binary_value<uint64_t>(*image_stream_buffer);
+        // Calculate total size needed for point data
+
+        // Read all the point data at once
+        img._points2D_ID.resize(number_points);
+        image_stream_buffer->read(reinterpret_cast<char*>(img._points2D_ID.data()), number_points * sizeof(ImagePoint));
     }
 }
 
 void read_colmap_scene_info(std::filesystem::path file_path) {
+    read_images_binary(file_path);
 }

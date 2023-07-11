@@ -10,7 +10,8 @@ int main(int argc, char* argv[]) {
 
     std::string filename = argv[1];
 
-    read_ply_file(filename);
+    // read_ply_file(filename);
+    read_colmap_scene_info(filename);
 
     return 0;
 }
