@@ -26,14 +26,14 @@ include_directories(${CUDA_INCLUDE_DIRS})
 # src project
 
 set(HEADERS
-	includes/readPly.cuh
+	includes/read_utils.cuh
 	includes/gaussian.cuh
 )
 
 set(SOURCES
 	# common
 	src/main.cu	
-	src/readPly.cu
+	src/read_utils.cu
 	src/gaussian.cu
 )
 

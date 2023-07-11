@@ -1,5 +1,5 @@
 #include <iostream>
-#include "readPly.cuh"
+#include "read_utils.cuh"
 
 int main(int argc, char* argv[]) {
 
