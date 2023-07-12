@@ -3,6 +3,8 @@
 #include "point3d.cuh"
 #include "read_utils.cuh"
 #include "utils.cuh"
+#include <algorithm>
+#include <execution>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -66,16 +68,16 @@ T read_binary_value(std::istream& file) {
 
 // TODO: Do something with the images vector
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
-std::unordered_map<uint32_t, Image> read_images_binary(std::filesystem::path file_path) {
+std::vector<Image> read_images_binary(std::filesystem::path file_path) {
     auto image_stream_buffer = read_binary(file_path);
     const size_t image_count = read_binary_value<uint64_t>(*image_stream_buffer);
 
-    std::unordered_map<uint32_t, Image> images;
+    std::vector<Image> images;
     images.reserve(image_count);
 
     for (size_t i = 0; i < image_count; ++i) {
         const auto image_ID = read_binary_value<uint32_t>(*image_stream_buffer);
-        auto img = Image(image_ID);
+        auto& img = images.emplace_back(image_ID);
         img._qvec.x() = read_binary_value<double>(*image_stream_buffer);
         img._qvec.y() = read_binary_value<double>(*image_stream_buffer);
         img._qvec.z() = read_binary_value<double>(*image_stream_buffer);
@@ -102,8 +104,6 @@ std::unordered_map<uint32_t, Image> read_images_binary(std::filesystem::path fil
         // Read all the point data at once
         img._points2D_ID.resize(number_points);
         image_stream_buffer->read(reinterpret_cast<char*>(img._points2D_ID.data()), number_points * sizeof(ImagePoint));
-
-        images.emplace(image_ID, img);
     }
 
     return images;
@@ -117,10 +117,12 @@ std::unordered_map<uint32_t, Camera> read_cameras_binary(std::filesystem::path f
 
     std::unordered_map<uint32_t, Camera> cameras;
     cameras.reserve(camera_count);
+
     for (size_t i = 0; i < camera_count; ++i) {
         auto camera_ID = read_binary_value<uint32_t>(*camera_stream_buffer);
         auto model_id = read_binary_value<int>(*camera_stream_buffer);
         auto cam = Camera(model_id);
+        cam._camera_ID = camera_ID;
         cam._width = read_binary_value<uint64_t>(*camera_stream_buffer);
         cam._height = read_binary_value<uint64_t>(*camera_stream_buffer);
 
@@ -160,35 +162,40 @@ std::vector<Point3D> read_point3D_binary(std::filesystem::path file_path) {
     return points3D;
 }
 
-std::vector<CameraInfo> read_colmap_cameras(std::filesystem::path file_path, std::unordered_map<uint32_t, Camera>& cameras, std::unordered_map<uint32_t, Image>& images) {
+std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_path, const std::unordered_map<uint32_t, Camera>& cameras, const std::vector<Image>& images) {
 
-    std::vector<CameraInfo> camera_infos;
-    camera_infos.reserve(images.size());
-    for (const auto& [image_ID, image] : images) {
+    std::vector<CameraInfo> camera_infos(images.size());
+
+    // Create a vector with all the keys from the images map
+    std::vector<uint32_t> keys(images.size());
+    std::generate(keys.begin(), keys.end(), [n = 0]() mutable { return n++; });
+
+    std::for_each(std::execution::par, keys.begin(), keys.end(), [&](uint32_t image_ID) {
+        // Make a copy of the image object to avoid accessing the shared resource
+        Image image = images[image_ID];
         auto it = cameras.find(image._camera_id);
         auto& camera = it->second; // This should never fail
-
-        auto& camInfo = camera_infos.emplace_back();
         const uint64_t channels = 3;
         unsigned char* img = read_image(file_path / image._name, camera._width, camera._height, channels);
-        camInfo.SetImage(img, camera._width, camera._height, channels);
-        camInfo._camera_ID = image._camera_id;
-        camInfo._R = qvec2rotmat(image._qvec).transpose();
-        camInfo._T = image._tvec;
+
+        camera_infos[image_ID].SetImage(img, camera._width, camera._height, channels);
+        camera_infos[image_ID]._camera_ID = image._camera_id;
+        camera_infos[image_ID]._R = qvec2rotmat(image._qvec).transpose();
+        camera_infos[image_ID]._T = image._tvec;
 
         if (camera._camera_model == CAMERA_MODEL::SIMPLE_PINHOLE) {
             double focal_length_x = camera._params[0];
-            camInfo._fov_x = focal2fov(focal_length_x, camInfo.GetImageWidth());
-            camInfo._fov_y = focal2fov(focal_length_x, camInfo.GetImageHeight());
+            camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID].GetImageWidth());
+            camera_infos[image_ID]._fov_y = focal2fov(focal_length_x, camera_infos[image_ID].GetImageHeight());
         } else if (camera._camera_model == CAMERA_MODEL::PINHOLE) {
             double focal_length_x = camera._params[0];
             double focal_length_y = camera._params[1];
-            camInfo._fov_x = focal2fov(focal_length_x, camInfo.GetImageWidth());
-            camInfo._fov_y = focal2fov(focal_length_y, camInfo.GetImageHeight());
+            camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID].GetImageWidth());
+            camera_infos[image_ID]._fov_y = focal2fov(focal_length_y, camera_infos[image_ID].GetImageHeight());
         } else {
             throw std::runtime_error("Camera model not supported");
         }
-    }
+    });
 
     return camera_infos;
 }

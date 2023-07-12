@@ -34,17 +34,22 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes)
 
-#target_compile_options(${PROJECT_NAME} PRIVATE -g -G -Xcompiler -Werror)
-target_compile_options(${PROJECT_NAME} PRIVATE -O3) # Uncomment for release mode faster compilation
+#target compile options
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_options(${PROJECT_NAME} PRIVATE -g -G -Xcompiler -Werror)
+  set_target_properties(${PROJECT_NAME} PROPERTIES
+      CUDA_RESOLVE_DEVICE_SYMBOLS ON
+      CUDA_SEPARABLE_COMPILATION ON
+  )
+elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+  target_compile_options(${PROJECT_NAME} PRIVATE -O3)
+endif()
 
-#set_target_properties(${PROJECT_NAME} PROPERTIES
-#	CUDA_RESOLVE_DEVICE_SYMBOLS ON
-#	CUDA_SEPARABLE_COMPILATION ON
-#)
 
 find_package(CUDAToolkit REQUIRED)
+find_package(TBB REQUIRED)
 
-# Check CUDA version
+#Check CUDA version
 if(CUDAToolkit_VERSION VERSION_LESS "12.0")
     message(FATAL_ERROR "This project requires CUDA 12.0 or higher")
 endif()
@@ -54,6 +59,7 @@ target_link_libraries(${PROJECT_NAME}
         CUDA::cudart
         CUDA::curand
         CUDA::cublas
+        TBB::tbb # tbb is used for later optimization
         tinyply
         eigen3
 )
