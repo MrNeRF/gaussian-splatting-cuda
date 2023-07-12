@@ -35,11 +35,14 @@ static const std::unordered_map<int, std::pair<CAMERA_MODEL, uint32_t>> camera_m
 
 class CameraInfo {
 public:
-    CameraInfo() 
-        : _image_data(nullptr), _image_width(0), _image_height(0), _image_channels(0) {}
+    CameraInfo()
+        : _image_data(nullptr),
+          _image_width(0),
+          _image_height(0),
+          _image_channels(0) {}
 
     // Copy constructor
-    CameraInfo(const CameraInfo& other) 
+    CameraInfo(const CameraInfo& other)
         : _camera_ID(other._camera_ID),
           _R(other._R),
           _T(other._T),
@@ -49,8 +52,7 @@ public:
           _image_path(other._image_path),
           _image_width(other._image_width),
           _image_height(other._image_height),
-          _image_channels(other._image_channels)
-    {
+          _image_channels(other._image_channels) {
         _image_data = new unsigned char[_image_width * _image_height * _image_channels];
         std::copy(other._image_data, other._image_data + _image_width * _image_height * _image_channels, _image_data);
     }
@@ -78,7 +80,7 @@ public:
     }
 
     // Move constructor
-    CameraInfo(CameraInfo&& other) noexcept 
+    CameraInfo(CameraInfo&& other) noexcept
         : _camera_ID(other._camera_ID),
           _R(std::move(other._R)),
           _T(std::move(other._T)),
@@ -89,8 +91,7 @@ public:
           _image_width(other._image_width),
           _image_height(other._image_height),
           _image_channels(other._image_channels),
-          _image_data(other._image_data) 
-    {
+          _image_data(other._image_data) {
         other._image_data = nullptr;
     }
 
@@ -161,6 +162,11 @@ public:
     uint64_t _width;
     uint64_t _height;
     std::vector<double> _params;
+    std::string _image_name;
+    Eigen::Matrix3d _R;
+    Eigen::Vector3d _T;
+    double _fov_x;
+    double _fov_y;
 
 private:
     int _model_ID;
