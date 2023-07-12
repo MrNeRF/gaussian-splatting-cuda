@@ -1,17 +1,18 @@
 #pragma once
 
-#include "point_cloud.cuh"
+#include "gaussian.cuh"
+#include "scene_info.cuh"
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
-struct SceneInfo {
-};
-
 class Scene {
 public:
-    Scene(const std::filesystem::path& path) : _path(path){};
+    Scene(const std::filesystem::path& path);
 
 private:
     std::filesystem::path _path;
+    GaussianModel _gaussians;
+    std::unique_ptr<SceneInfo> _scene_info;
 };
