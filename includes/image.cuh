@@ -13,10 +13,16 @@ struct ImagePoint {
 };
 class Image {
 public:
-    uint32_t _id;
+    Image(uint32_t image_ID) : _image_ID(image_ID) {}
+    uint32_t GetImageID() const { return _image_ID; }
+
+public:
     uint32_t _camera_id;
     std::string _name;
     Eigen::Quaterniond _qvec;
     Eigen::Vector3d _tvec;
     std::vector<ImagePoint> _points2D_ID;
+
+private:
+    uint32_t _image_ID;
 };

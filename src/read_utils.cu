@@ -2,10 +2,12 @@
 #include "image.cuh"
 #include "point3d.cuh"
 #include "read_utils.cuh"
+#include "utils.cuh"
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <tinyply.h>
+#include <unordered_map>
 #include <vector>
 
 // Reads and preloads a binary file into a string stream
@@ -64,16 +66,16 @@ T read_binary_value(std::istream& file) {
 
 // TODO: Do something with the images vector
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
-void read_images_binary(std::filesystem::path file_path) {
+std::unordered_map<uint32_t, Image> read_images_binary(std::filesystem::path file_path) {
     auto image_stream_buffer = read_binary(file_path);
     const size_t image_count = read_binary_value<uint64_t>(*image_stream_buffer);
 
-    std::vector<Image> images;
+    std::unordered_map<uint32_t, Image> images;
     images.reserve(image_count);
 
     for (size_t i = 0; i < image_count; ++i) {
-        auto& img = images.emplace_back();
-        img._id = read_binary_value<uint32_t>(*image_stream_buffer);
+        const auto image_ID = read_binary_value<uint32_t>(*image_stream_buffer);
+        auto img = Image(image_ID);
         img._qvec.x() = read_binary_value<double>(*image_stream_buffer);
         img._qvec.y() = read_binary_value<double>(*image_stream_buffer);
         img._qvec.z() = read_binary_value<double>(*image_stream_buffer);
@@ -100,31 +102,38 @@ void read_images_binary(std::filesystem::path file_path) {
         // Read all the point data at once
         img._points2D_ID.resize(number_points);
         image_stream_buffer->read(reinterpret_cast<char*>(img._points2D_ID.data()), number_points * sizeof(ImagePoint));
+
+        images.emplace(image_ID, img);
     }
+
+    return images;
 }
 
 // TODO: Do something with the cameras vector
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
-void read_cameras_binary(std::filesystem::path file_path) {
+std::unordered_map<uint32_t, Camera> read_cameras_binary(std::filesystem::path file_path) {
     auto camera_stream_buffer = read_binary(file_path);
     const size_t camera_count = read_binary_value<uint64_t>(*camera_stream_buffer);
 
-    std::vector<Camera> cameras;
+    std::unordered_map<uint32_t, Camera> cameras;
     cameras.reserve(camera_count);
     for (size_t i = 0; i < camera_count; ++i) {
         auto camera_ID = read_binary_value<uint32_t>(*camera_stream_buffer);
         auto model_id = read_binary_value<int>(*camera_stream_buffer);
-        auto& cam = cameras.emplace_back(model_id);
+        auto cam = Camera(model_id);
         cam._width = read_binary_value<uint64_t>(*camera_stream_buffer);
         cam._height = read_binary_value<uint64_t>(*camera_stream_buffer);
 
         camera_stream_buffer->read(reinterpret_cast<char*>(cam._params.data()), cam._params.size() * sizeof(double));
+        cameras.emplace(camera_ID, cam);
     }
+
+    return cameras;
 }
 
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
 // TODO: There should be points3D data returned
-void read_point3D_binary(std::filesystem::path file_path) {
+std::vector<Point3D> read_point3D_binary(std::filesystem::path file_path) {
     auto point3D_stream_buffer = read_binary(file_path);
     const size_t point3D_count = read_binary_value<uint64_t>(*point3D_stream_buffer);
 
@@ -147,11 +156,47 @@ void read_point3D_binary(std::filesystem::path file_path) {
         point._tracks.resize(track_length);
         point3D_stream_buffer->read(reinterpret_cast<char*>(point._tracks.data()), track_length * sizeof(Track));
     }
+
+    return points3D;
+}
+
+std::vector<CameraInfo> read_colmap_cameras(std::filesystem::path file_path, std::unordered_map<uint32_t, Camera>& cameras, std::unordered_map<uint32_t, Image>& images) {
+
+    std::vector<CameraInfo> camera_infos;
+    camera_infos.reserve(images.size());
+    for (const auto& [image_ID, image] : images) {
+        auto it = cameras.find(image._camera_id);
+        auto& camera = it->second; // This should never fail
+
+        auto& camInfo = camera_infos.emplace_back();
+        const uint64_t channels = 3;
+        unsigned char* img = read_image(file_path / image._name, camera._width, camera._height, channels);
+        camInfo.SetImage(img, camera._width, camera._height, channels);
+        camInfo._camera_ID = image._camera_id;
+        camInfo._R = qvec2rotmat(image._qvec).transpose();
+        camInfo._T = image._tvec;
+
+        if (camera._camera_model == CAMERA_MODEL::SIMPLE_PINHOLE) {
+            double focal_length_x = camera._params[0];
+            camInfo._fov_x = focal2fov(focal_length_x, camInfo.GetImageWidth());
+            camInfo._fov_y = focal2fov(focal_length_x, camInfo.GetImageHeight());
+        } else if (camera._camera_model == CAMERA_MODEL::PINHOLE) {
+            double focal_length_x = camera._params[0];
+            double focal_length_y = camera._params[1];
+            camInfo._fov_x = focal2fov(focal_length_x, camInfo.GetImageWidth());
+            camInfo._fov_y = focal2fov(focal_length_y, camInfo.GetImageHeight());
+        } else {
+            throw std::runtime_error("Camera model not supported");
+        }
+    }
+
+    return camera_infos;
 }
 
 // TODO: There should be data returned
 void read_colmap_scene_info(std::filesystem::path file_path) {
-    read_cameras_binary(file_path / "cameras.bin");
-    read_images_binary(file_path / "images.bin");
-    read_point3D_binary(file_path / "points3D.bin");
+    auto cameras = read_cameras_binary(file_path / "sparse/0/cameras.bin");
+    auto images = read_images_binary(file_path / "sparse/0/images.bin");
+    auto points3D = read_point3D_binary(file_path / "sparse/0/points3D.bin");
+    read_colmap_cameras(file_path / "images", cameras, images);
 }

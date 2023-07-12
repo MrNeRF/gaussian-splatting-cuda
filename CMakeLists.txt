@@ -7,6 +7,8 @@ set(HEADERS
 	includes/gaussian.cuh
 	includes/camera.cuh
 	includes/image.cuh
+    includes/utils.cuh
+    includes/stb_image.h
 )
 
 set(SOURCES
@@ -15,6 +17,7 @@ set(SOURCES
 	src/gaussian.cu
 	src/camera.cu
 	src/image.cu
+    src/utils.cu
 )
 
 add_subdirectory(external)
@@ -31,13 +34,13 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes)
 
-target_compile_options(${PROJECT_NAME} PRIVATE -g -G -Xcompiler -Werror)
-#target_compile_options(${PROJECT_NAME} PRIVATE -O3) # Uncomment for release mode faster compilation
+#target_compile_options(${PROJECT_NAME} PRIVATE -g -G -Xcompiler -Werror)
+target_compile_options(${PROJECT_NAME} PRIVATE -O3) # Uncomment for release mode faster compilation
 
-set_target_properties(${PROJECT_NAME} PROPERTIES
-	CUDA_RESOLVE_DEVICE_SYMBOLS ON
-	CUDA_SEPARABLE_COMPILATION ON
-)
+#set_target_properties(${PROJECT_NAME} PROPERTIES
+#	CUDA_RESOLVE_DEVICE_SYMBOLS ON
+#	CUDA_SEPARABLE_COMPILATION ON
+#)
 
 find_package(CUDAToolkit REQUIRED)
 
