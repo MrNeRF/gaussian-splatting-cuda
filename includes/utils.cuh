@@ -4,16 +4,16 @@
 #include <eigen3/Eigen/src/Geometry/Quaternion.h>
 #include <filesystem>
 
-Eigen::Matrix4f getWorld2View(const Eigen::Matrix3f& R, const Eigen::Vector3f& t);
+Eigen::Matrix4d getWorld2View(const Eigen::Matrix3d& R, const Eigen::Vector3d& t);
 
-Eigen::Matrix4f getWorld2View2(const Eigen::Matrix3f& R, const Eigen::Vector3f& t,
-                               const Eigen::Vector3f& translate = Eigen::Vector3f::Zero(), float scale = 1.0);
+Eigen::Matrix4d getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
+                               const Eigen::Vector3d& translate = Eigen::Vector3d::Zero(), float scale = 1.0);
 
-Eigen::Matrix4f getProjectionMatrix(float znear, float zfar, float fovX, float fovY);
+Eigen::Matrix4d getProjectionMatrix(double znear, double zfar, double fovX, double fovY);
 
-float fov2focal(float fov, float pixels);
+double fov2focal(double fov, double pixels);
 
-float focal2fov(float focal, float pixels);
+double focal2fov(double focal, double pixels);
 
 Eigen::Matrix3d qvec2rotmat(const Eigen::Quaterniond& qvec);
 

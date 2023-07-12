@@ -1,4 +1,5 @@
 #include "read_utils.cuh"
+#include <filesystem>
 #include <iostream>
 
 int main(int argc, char* argv[]) {
@@ -8,10 +9,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::string filename = argv[1];
+    auto file_path = std::filesystem::path(argv[1]);
 
-    // read_ply_file(filename);
-    read_colmap_scene_info(filename);
+    read_ply_file(file_path / "sparse/0/points3D.ply");
+    read_colmap_scene_info(file_path);
 
     return 0;
 }

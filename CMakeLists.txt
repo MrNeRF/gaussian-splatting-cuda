@@ -2,6 +2,17 @@
 
 project(gaussian_splatting_cuda LANGUAGES CUDA CXX)
 
+include(ProcessorCount)
+ProcessorCount(total_cores)
+if(NOT DEFINED total_cores OR total_cores EQUAL 0)
+    set(total_cores 1)
+    set(used_cores 1)
+elseif(total_cores GREATER 1)
+    math(EXPR used_cores "${total_cores} - 2") # use total_cores-2 if total_cores > 1
+endif()
+set(ENV{MAKEFLAGS} "-j${used_cores}")
+message(STATUS "Building with ${used_cores} out of ${total_cores} available cores")
+
 set(HEADERS
 	includes/read_utils.cuh
 	includes/gaussian.cuh
@@ -9,6 +20,7 @@ set(HEADERS
 	includes/image.cuh
     includes/utils.cuh
     includes/stb_image.h
+    includes/point_cloud.cuh
 )
 
 set(SOURCES
@@ -20,15 +32,18 @@ set(SOURCES
     src/utils.cu
 )
 
+# Get rid of pesky warnings from stb_image.h produced in src/utils.cu
+set_source_files_properties(src/utils.cu PROPERTIES COMPILE_FLAGS "-Xcudafe --diag_suppress=550")
+
 add_subdirectory(external)
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_ARCHITECTURES 89
-    CUDA_STANDARD 17
+    CUDA_STANDARD 20
     CUDA_STANDARD_REQUIRED ON
-    CXX_STANDARD 17
+    CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON
 )
 
@@ -59,7 +74,7 @@ target_link_libraries(${PROJECT_NAME}
         CUDA::cudart
         CUDA::curand
         CUDA::cublas
-        TBB::tbb # tbb is used for later optimization
+        TBB::tbb # parallel reading and writing optimization
         tinyply
         eigen3
 )

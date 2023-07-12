@@ -1,43 +1,42 @@
 #define STB_IMAGE_IMPLEMENTATION
-#include "utils.cuh"
 #include "stb_image.h"
+#include "utils.cuh"
 #include <cmath>
 
-Eigen::Matrix4f getWorld2View(const Eigen::Matrix3f& R, const Eigen::Vector3f& t) {
-    Eigen::Matrix4f Rt = Eigen::Matrix4f::Zero();
+Eigen::Matrix4d getWorld2View(const Eigen::Matrix3d& R, const Eigen::Vector3d& t) {
+    Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
     Rt.block<3, 3>(0, 0) = R.transpose();
     Rt.block<3, 1>(0, 3) = t;
     Rt(3, 3) = 1.0;
     return Rt;
 }
-
-Eigen::Matrix4f getWorld2View2(const Eigen::Matrix3f& R, const Eigen::Vector3f& t,
-                               const Eigen::Vector3f& translate /*= Eigen::Vector3f::Zero()*/, float scale /*= 1.0 */) {
-    Eigen::Matrix4f Rt = Eigen::Matrix4f::Zero();
+Eigen::Matrix4d getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
+                               const Eigen::Vector3d& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
+    Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
     Rt.block<3, 3>(0, 0) = R.transpose();
     Rt.block<3, 1>(0, 3) = t;
     Rt(3, 3) = 1.0;
 
-    Eigen::Matrix4f C2W = Rt.inverse();
-    Eigen::Vector3f cam_center = C2W.block<3, 1>(0, 3);
+    Eigen::Matrix4d C2W = Rt.inverse();
+    Eigen::Vector3d cam_center = C2W.block<3, 1>(0, 3);
     cam_center = (cam_center + translate) * scale;
     C2W.block<3, 1>(0, 3) = cam_center;
     Rt = C2W.inverse();
     return Rt;
 }
 
-Eigen::Matrix4f getProjectionMatrix(float znear, float zfar, float fovX, float fovY) {
-    float tanHalfFovY = std::tan((fovY / 2));
-    float tanHalfFovX = std::tan((fovX / 2));
+Eigen::Matrix4d getProjectionMatrix(double znear, double zfar, double fovX, double fovY) {
+    double tanHalfFovY = std::tan((fovY / 2));
+    double tanHalfFovX = std::tan((fovX / 2));
 
-    float top = tanHalfFovY * znear;
-    float bottom = -top;
-    float right = tanHalfFovX * znear;
-    float left = -right;
+    double top = tanHalfFovY * znear;
+    double bottom = -top;
+    double right = tanHalfFovX * znear;
+    double left = -right;
 
-    Eigen::Matrix4f P = Eigen::Matrix4f::Zero();
+    Eigen::Matrix4d P = Eigen::Matrix4d::Zero();
 
-    float z_sign = 1.0;
+    double z_sign = 1.0;
 
     P(0, 0) = 2.0 * znear / (right - left);
     P(1, 1) = 2.0 * znear / (top - bottom);
@@ -49,11 +48,11 @@ Eigen::Matrix4f getProjectionMatrix(float znear, float zfar, float fovX, float f
     return P;
 }
 
-float fov2focal(float fov, float pixels) {
+double fov2focal(double fov, double pixels) {
     return pixels / (2 * std::tan(fov / 2));
 }
 
-float focal2fov(float focal, float pixels) {
+double focal2fov(double focal, double pixels) {
     return 2 * std::atan(pixels / (2 * focal));
 }
 
@@ -71,7 +70,6 @@ Eigen::Quaterniond rotmat2qvec(const Eigen::Matrix3d& R) {
     return qvec;
 }
 
-
 unsigned char* read_image(std::filesystem::path image_path, int width, int height, int channels) {
     unsigned char* img = stbi_load(image_path.string().c_str(), &width, &height, &channels, 0);
     if (img == nullptr) {
@@ -85,4 +83,3 @@ void free_image(unsigned char* image) {
     stbi_image_free(image);
     image = nullptr;
 }
-
