@@ -182,7 +182,7 @@ std::unordered_map<uint32_t, Camera> read_cameras_binary(std::filesystem::path f
 
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
 // TODO: There should be points3D data returned
-void read_point3D_binary(std::filesystem::path file_path) {
+PointCloud read_point3D_binary(std::filesystem::path file_path) {
     auto point3D_stream_buffer = read_binary(file_path);
     const size_t point3D_count = read_binary_value<uint64_t>(*point3D_stream_buffer);
 
@@ -218,6 +218,7 @@ void read_point3D_binary(std::filesystem::path file_path) {
     }
 
     write_ply_file(file_path.parent_path() / "testply.ply", point_cloud);
+    return point_cloud;
 }
 
 std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_path, const std::unordered_map<uint32_t, Camera>& cameras, const std::vector<Image>& images) {
@@ -291,13 +292,18 @@ std::pair<Eigen::Vector3d, double> getNerfppNorm(std::vector<CameraInfo>& cam_in
 }
 
 // TODO: There should be data returned
-void read_colmap_scene_info(std::filesystem::path file_path) {
+std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_path) {
     auto cameras = read_cameras_binary(file_path / "sparse/0/cameras.bin");
     auto images = read_images_binary(file_path / "sparse/0/images.bin");
 
-    // if (filesystem::exists(file_path / "sparse/0/points3D.bin")) {
-    read_point3D_binary(file_path / "sparse/0/points3D.bin");
-    //}
+    PointCloud point_cloud;
+    if (!std::filesystem::exists(file_path / "sparse/0/points3D.bin")) {
+        point_cloud = read_point3D_binary(file_path / "sparse/0/points3D.bin");
+    } else {
+        point_cloud = read_ply_file(file_path / "sparse/0/points3D.ply");
+    }
     auto camera_infos = read_colmap_cameras(file_path / "images", cameras, images);
     auto [translate, radius] = getNerfppNorm(camera_infos);
+
+    return std::make_unique<SceneInfo>(camera_infos, point_cloud, radius, translate, file_path / "sparse/0/points3D.ply");
 }

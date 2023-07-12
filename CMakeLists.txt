@@ -21,6 +21,8 @@ set(HEADERS
     includes/utils.cuh
     includes/stb_image.h
     includes/point_cloud.cuh
+    includes/scene.cuh
+    includes/scene_info.cuh
 )
 
 set(SOURCES
@@ -30,6 +32,8 @@ set(SOURCES
 	src/camera.cu
 	src/image.cu
     src/utils.cu
+    src/scene.cu
+    src/scene_info.cu
 )
 
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu
