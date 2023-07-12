@@ -23,6 +23,7 @@ set(HEADERS
     includes/point_cloud.cuh
     includes/scene.cuh
     includes/scene_info.cuh
+    includes/camera_utils.cuh
 )
 
 set(SOURCES
@@ -34,6 +35,7 @@ set(SOURCES
     src/utils.cu
     src/scene.cu
     src/scene_info.cu
+    src/camera_utils.cu
 )
 
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu
@@ -45,9 +47,9 @@ add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_ARCHITECTURES 89
-    CUDA_STANDARD 20
+    CUDA_STANDARD 17 
     CUDA_STANDARD_REQUIRED ON
-    CXX_STANDARD 20
+    CXX_STANDARD 17 
     CXX_STANDARD_REQUIRED ON
 )
 
@@ -81,6 +83,7 @@ target_link_libraries(${PROJECT_NAME}
         TBB::tbb # parallel reading and writing optimization
         tinyply
         eigen3
+        nlohmann_json::nlohmann_json
 )
 
 source_group(TREE "${PROJECT_SOURCE_DIR}/includes" PREFIX "Header Files" FILES ${HEADERS})
