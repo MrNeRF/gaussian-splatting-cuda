@@ -1,4 +1,3 @@
 .vscode
-data/
 build/
 external/libtorch/
