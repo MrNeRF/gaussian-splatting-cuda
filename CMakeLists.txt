@@ -1,5 +1,19 @@
 ﻿cmake_minimum_required (VERSION 3.22)
 
+# Determine the project root directory
+get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
+
+# Define the absolute path to libtorch
+set(LIBTORCH_DIR "${PROJ_ROOT_DIR}/external/libtorch")
+
+# Set CMAKE_PREFIX_PATH
+set(CMAKE_PREFIX_PATH ${LIBTORCH_DIR})
+
+# Add the _GLIBCXX_USE_CXX11_ABI=0 flag
+# This is needed to avoid linker errors with libtorch
+# https://stackoverflow.com/questions/62693218/how-to-solve-gtest-and-libtorch-linkage-conflict
+add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+
 project(gaussian_splatting_cuda LANGUAGES CUDA CXX)
 
 include(ProcessorCount)
@@ -55,6 +69,11 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes)
 
+
+# Torch setup
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+find_package(Torch REQUIRED)
+
 #target compile options
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_options(${PROJECT_NAME} PRIVATE -g -G -Xcompiler -Werror)
@@ -77,6 +96,7 @@ endif()
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
+        ${TORCH_LIBRARIES}
         CUDA::cudart
         CUDA::curand
         CUDA::cublas

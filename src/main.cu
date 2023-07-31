@@ -3,6 +3,7 @@
 #include "read_utils.cuh"
 #include <filesystem>
 #include <iostream>
+#include <torch/torch.h>
 
 int main(int argc, char* argv[]) {
 
@@ -11,6 +12,11 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    {
+        // compile test
+        torch::Tensor tensor = torch::rand({2, 3});
+        tensor.to(torch::kCUDA);
+    }
     auto file_path = std::filesystem::path(argv[1]);
 
     read_ply_file(file_path / "sparse/0/points3D.ply");
