@@ -1,17 +1,29 @@
 #include "camera_utils.cuh"
 #include <eigen3/Eigen/Dense>
+#include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
 
-void write_json_to_file(const std::string& filename, const nlohmann::json& json_data) {
-    std::ofstream file(filename);
+Camera loadCam(CameraInfo& cam_info) {
+
+    // ptyhon code
+    //    return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T,
+    //                   FoVx=cam_info.FovX, FoVy=cam_info.FovY,
+    //                   image=gt_image, gt_alpha_mask=loaded_mask,
+    //                   image_name=cam_info.image_name, uid=id)
+
+    return Camera(cam_info._camera_model);
+}
+
+void dump_JSON(const std::filesystem::path& file_path, const nlohmann::json& json_data) {
+    std::ofstream file(file_path.string());
     if (file.is_open()) {
         file << json_data.dump(4); // Write the JSON data with indentation of 4 spaces
         file.close();
-        std::cout << "JSON data written to file: " << filename << std::endl;
     } else {
-        std::cerr << "Unable to open file: " << filename << std::endl;
+        throw std::runtime_error("Could not open file " + file_path.string());
     }
 }
 

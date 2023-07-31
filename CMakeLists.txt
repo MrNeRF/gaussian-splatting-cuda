@@ -38,6 +38,7 @@ set(HEADERS
     includes/scene.cuh
     includes/scene_info.cuh
     includes/camera_utils.cuh
+    includes/general_utils.cuh
 )
 
 set(SOURCES
@@ -50,6 +51,7 @@ set(SOURCES
     src/scene.cu
     src/scene_info.cu
     src/camera_utils.cu
+    src/general_utils.cu
 )
 
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu
