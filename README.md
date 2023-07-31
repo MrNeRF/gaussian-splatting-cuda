@@ -10,16 +10,15 @@ torch elements with my own custom cuda implementation.
 Download the libtorch library using the following command:
 
 ```bash
-wget https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip
+weg https://download.pytorch.org/libtorch/test/cu118/libtorch-cxx11-abi-shared-with-deps-latest.zip  
 ```
 
 This will download a zip file named `libtorch-shared-with-deps-latest.zip`. To extract this zip file, use the command:
 
 ```bash
-unzip libtorch-shared-with-deps-latest.zip -d external/
-rm libtorch-shared-with-deps-latest.zip
+unzip libtorch-cxx11-abi-shared-with-deps-latest.zip -d external/
+rm libtorch-cxx11-abi-shared-with-deps-latest.zip
 ```
-
 This will create a folder named `libtorch` in the `external` directory of your project.
 
 
