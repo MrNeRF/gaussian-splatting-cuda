@@ -1,8 +1,9 @@
 #pragma once
 
 #include "general_utils.cuh"
-#include <torch/torch.h>
 #include "point_cloud.cuh"
+#include "spatial.h"
+#include <torch/torch.h>
 
 class GaussianModel {
 public:

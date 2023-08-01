@@ -28,6 +28,12 @@ rm libtorch-cxx11-abi-shared-with-deps-latest.zip
 ```
 This will create a folder named `libtorch` in the `external` directory of your project.
 
+## MISC
+Here is random collection of things that have to be described in README later on
+Needed for simple-knn:
+sudo apt-get install python3-dev 
+We need to patch pybind in libtorch on linux because nvcc has problems with a template definition
+
 ## Citation and References
 
 When using this software, or presenting results obtained by it, please cite the original work as follows:

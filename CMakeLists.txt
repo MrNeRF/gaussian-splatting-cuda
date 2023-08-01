@@ -60,12 +60,6 @@ set(SOURCES
 set_source_files_properties(src/utils.cu PROPERTIES COMPILE_FLAGS "-Xcudafe --diag_suppress=550")
 
 # --------------------------------------
-# External Libraries
-# --------------------------------------
-
-add_subdirectory(external)
-
-# --------------------------------------
 # Project target
 # --------------------------------------
 
@@ -108,6 +102,14 @@ if(CUDAToolkit_VERSION VERSION_LESS "12.0")
     message(FATAL_ERROR "This project requires CUDA 12.0 or higher")
 endif()
 
+find_package(PythonLibs REQUIRED)
+include_directories(${PYTHON_INCLUDE_DIRS})
+# --------------------------------------
+# External Libraries
+# --------------------------------------
+
+add_subdirectory(external)
+
 # --------------------------------------
 # Linking
 # --------------------------------------
@@ -118,6 +120,7 @@ target_link_libraries(${PROJECT_NAME}
         CUDA::cudart
         CUDA::curand
         CUDA::cublas
+        simple-knn
         TBB::tbb # parallel reading and writing optimization
         tinyply
         eigen3

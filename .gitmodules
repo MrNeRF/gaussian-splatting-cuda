@@ -10,3 +10,6 @@
 [submodule "external/args"]
 	path = external/args
 	url = https://github.com/Taywee/args
+[submodule "external/simple-knn"]
+	path = external/simple-knn
+	url = https://gitlab.inria.fr/bkerbl/simple-knn
