@@ -59,7 +59,7 @@ struct Expon_lr_func {
           lr_delay_mult(lr_delay_mult),
           max_steps(max_steps) {}
 
-    double operator()(int64_t step) {
+    double operator()(int64_t step) const {
         if (step < 0 || (lr_init == 0.0 && lr_final == 0.0)) {
             return 0.0;
         }

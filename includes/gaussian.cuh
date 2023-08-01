@@ -2,13 +2,28 @@
 
 #include "general_utils.cuh"
 #include "point_cloud.cuh"
+#include "sh_utils.cuh"
 #include "spatial.h"
+#include <memory>
 #include <torch/torch.h>
 
-class GaussianModel {
+struct TrainingArgs {
+    float percent_dense;
+    float position_lr_init;
+    float position_lr_final;
+    float feature_lr;
+    float opacity_lr;
+    float scaling_lr;
+    float rotation_lr;
+    int64_t position_lr_delay_mult;
+    float position_lr_max_steps;
+};
+
+class GaussianModel : torch::nn::Module {
 public:
     GaussianModel(int sh_degree) : max_sh_degree(sh_degree),
-                                   active_sh_degree(0) {
+                                   active_sh_degree(0),
+                                   _xyz_scheduler_args(Expon_lr_func(0.0, 1.0)) {
 
         // Assuming these are 1D tensors
         _xyz = torch::empty({0});
@@ -19,8 +34,14 @@ public:
         _opacity = torch::empty({0});
         _max_radii2D = torch::empty({0});
         _xyz_gradient_accum = torch::empty({0});
-
         optimizer = nullptr;
+
+        register_parameter("xyz", _xyz, true);
+        register_parameter("features_dc", _features_dc, true);
+        register_parameter("features_rest", _features_rest, true);
+        register_parameter("scaling", _scaling, true);
+        register_parameter("rotation", _rotation, true);
+        register_parameter("opacity", _opacity, true);
 
         // Scaling activation and its inverse
         _scaling_activation = torch::exp;
@@ -69,38 +90,55 @@ public:
         }
     }
 
-    // void create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
-    //     this->spatial_lr_scale = spatial_lr_scale;
+    void create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
+        _spatial_lr_scale = spatial_lr_scale;
 
-    //     auto fused_point_cloud = torch::from_blob(pcd._points.data(), {pcd._points.size()}).to(torch::kCUDA);
-    //     auto fused_color = RGB2SH(torch::from_blob(pcd._colors.data(), {pcd._colors.size()}).to(torch::kCUDA));
+        torch::Tensor fused_point_cloud = torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size())}).to(torch::kCUDA);
+        auto fused_color = RGB2SH(torch::from_blob(pcd._colors.data(), {static_cast<long>(pcd._colors.size())}).to(torch::kCUDA));
 
-    //     auto features = torch::zeros({fused_color.size(0), 3, std::pow((max_sh_degree + 1), 2)}).to(torch::kCUDA);
-    //     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(0,3), 0}, fused_color);
-    //     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(3), torch::indexing::Slice(1)}, 0.0);
+        auto features = torch::zeros({fused_color.size(0), 3, static_cast<long>(std::pow((max_sh_degree + 1), 2))}).to(torch::kCUDA);
+        features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(0, 3), 0}, fused_color);
+        features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(3), torch::indexing::Slice(1)}, 0.0);
 
-    //     std::cout << "Number of points at initialisation : " << fused_point_cloud.size(0) << std::endl;
+        std::cout << "Number of points at initialisation : " << fused_point_cloud.size(0) << std::endl;
 
-    //     auto dist2 = torch::clamp_min(distCUDA2(torch::from_blob(pcd._points.data(), {pcd._points.size()}).to(torch::kCUDA)), 0.0000001);
-    //     auto scales = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3});
-    //     auto rots = torch::zeros({fused_point_cloud.size(0), 4}).to(torch::kCUDA);
-    //     rots.index_put_({torch::indexing::Slice(), 0}, 1);
+        auto dist2 = torch::clamp_min(distCUDA2(torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size())}).to(torch::kCUDA)), 0.0000001);
+        auto scales = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3});
+        auto rots = torch::zeros({fused_point_cloud.size(0), 4}).to(torch::kCUDA);
+        rots.index_put_({torch::indexing::Slice(), 0}, 1);
 
-    //     auto opacities = inverse_sigmoid(0.5 * torch::ones({fused_point_cloud.size(0), 1}).to(torch::kCUDA));
+        auto opacities = inverse_sigmoid(0.5 * torch::ones({fused_point_cloud.size(0), 1}).to(torch::kCUDA));
 
-    //     _xyz = torch::nn::Parameter(fused_point_cloud.requires_grad(true));
-    //     _features_dc = torch::nn::Parameter(features.index({torch::indexing::Slice(), torch::indexing::Slice(), 0}).transpose(1, 2).contiguous().requires_grad(true));
-    //     _features_rest = torch::nn::Parameter(features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(1)}).transpose(1, 2).contiguous().requires_grad(true));
-    //     _scaling = torch::nn::Parameter(scales.requires_grad(true));
-    //     _rotation = torch::nn::Parameter(rots.requires_grad(true));
-    //     _opacity = torch::nn::Parameter(opacities.requires_grad(true));
-    //     _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
-    // }
+        _xyz = fused_point_cloud.set_requires_grad(true);
+        _features_dc = features.index({torch::indexing::Slice(), torch::indexing::Slice(), 0}).transpose(1, 2).contiguous();
+        _features_rest = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(1)}).transpose(1, 2).contiguous();
+        _scaling = scales;
+        _rotation = rots;
+        _opacity = opacities;
+        _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
+    }
+
+    void training_setup(const TrainingArgs training_args) {
+        this->percent_dense = training_args.percent_dense;
+        this->_xyz_gradient_accum = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
+        this->_denom = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
+
+        register_parameter("xyz", this->_xyz);
+        optimizer = std::make_unique<torch::optim::Adam>(parameters(), torch::optim::AdamOptions(0.0).eps(1e-15));
+        this->_xyz_scheduler_args = Expon_lr_func(training_args.position_lr_init * this->_spatial_lr_scale,
+                                                  training_args.position_lr_final * this->_spatial_lr_scale,
+                                                  training_args.position_lr_delay_mult,
+                                                  training_args.position_lr_max_steps);
+    }
 
 public:
     int active_sh_degree;
     int max_sh_degree;
+    float _spatial_lr_scale;
+    float percent_dense;
 
+    Expon_lr_func _xyz_scheduler_args;
+    torch::Tensor _denom;
     torch::Tensor _xyz;
     torch::Tensor _features_dc;
     torch::Tensor _features_rest;
@@ -110,7 +148,7 @@ public:
     torch::Tensor _max_radii2D;
     torch::Tensor _xyz_gradient_accum;
 
-    torch::optim::Optimizer* optimizer;
+    std::unique_ptr<torch::optim::Adam> optimizer;
 
     std::function<torch::Tensor(const torch::Tensor&)> _scaling_activation = torch::exp;
     std::function<torch::Tensor(const torch::Tensor&)> _scaling_inverse_activation = torch::log;

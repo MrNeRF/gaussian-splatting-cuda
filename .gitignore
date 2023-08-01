@@ -1,3 +1,6 @@
 .vscode
 build/
+cmake-build-debug/
+cmake-build-release/
 external/libtorch/
+.idea
