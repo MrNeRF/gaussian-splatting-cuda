@@ -64,7 +64,7 @@ struct Expon_lr_func {
             return 0.0;
         }
         double delay_rate;
-        if (lr_delay_steps > 0) {
+        if (lr_delay_steps > 0 && step != 0) {
             delay_rate = lr_delay_mult + (1 - lr_delay_mult) * std::sin(0.5 * M_PI * std::min((double)step / (double)lr_delay_steps, 1.0));
         } else {
             delay_rate = 1.0;

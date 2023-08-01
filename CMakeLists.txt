@@ -160,6 +160,7 @@ set(TEST_SOURCES
     src/scene_info.cu
     src/camera_utils.cu
     src/general_utils.cu
+    tests/general_utils_test.cu
 )
 # Add test executable
 add_executable(testing ${TEST_SOURCES})
