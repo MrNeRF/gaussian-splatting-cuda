@@ -13,3 +13,6 @@
 [submodule "external/simple-knn"]
 	path = external/simple-knn
 	url = https://gitlab.inria.fr/bkerbl/simple-knn
+[submodule "external/diff-gaussian-rasterization"]
+	path = external/diff-gaussian-rasterization
+	url = https://github.com/graphdeco-inria/diff-gaussian-rasterization

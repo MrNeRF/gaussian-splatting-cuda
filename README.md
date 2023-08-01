@@ -30,9 +30,9 @@ This will create a folder named `libtorch` in the `external` directory of your p
 
 ## MISC
 Here is random collection of things that have to be described in README later on
-Needed for simple-knn:
-sudo apt-get install python3-dev 
-We need to patch pybind in libtorch on linux because nvcc has problems with a template definition
+- Needed for simple-knn: sudo apt-get install python3-dev 
+- We need to patch pybind in libtorch on linux because nvcc has problems with a template definition
+- git submodule update --init --recursive for glm in diff-gaussian-rasterization 
 
 ## Citation and References
 

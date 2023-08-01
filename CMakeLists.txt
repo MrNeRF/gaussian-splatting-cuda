@@ -125,6 +125,7 @@ target_link_libraries(${PROJECT_NAME}
         tinyply
         eigen3
         nlohmann_json::nlohmann_json
+        CudaRasterizer # naming is in diff-gaussian-rasterization a bit inconsistent
 )
 
 # --------------------------------------
