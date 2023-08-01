@@ -1,6 +1,9 @@
 #include "camera.cuh"
 #include "camera_utils.cuh"
+#include "gaussian.cuh"
+#include "parameters.cuh"
 #include "read_utils.cuh"
+#include "scene.cuh"
 #include <filesystem>
 #include <iostream>
 #include <torch/torch.h>
@@ -12,18 +15,26 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    {
-        // compile test
-        torch::Tensor tensor = torch::rand({2, 3});
-        tensor.to(torch::kCUDA);
-    }
-    auto file_path = std::filesystem::path(argv[1]);
+    // TODO: read parameters from JSON file or command line
+    const auto modelParams = ModelParameters();
+    const auto optimParams = OptimizationParameters();
+    const auto pipelineParams = PipelineParameters();
+    auto gaussians = GaussianModel(modelParams.sh_degree);
+    auto scene = Scene(gaussians, modelParams);
+    gaussians.training_setup(optimParams);
 
-    read_ply_file(file_path / "sparse/0/points3D.ply");
-    read_colmap_scene_info(file_path);
-
-    auto cam = Camera(0);
-    cam._camera_ID = 22;
-    camera_to_JSON(cam);
+    //    {
+    //        // compile test
+    //        torch::Tensor tensor = torch::rand({2, 3});
+    //        tensor.to(torch::kCUDA);
+    //    }
+    //    auto file_path = std::filesystem::path(argv[1]);
+    //
+    //    read_ply_file(file_path / "sparse/0/points3D.ply");
+    //    read_colmap_scene_info(file_path);
+    //
+    //    auto cam = Camera(0);
+    //    cam._camera_ID = 22;
+    //    camera_to_JSON(cam);
     return 0;
 }

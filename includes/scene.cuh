@@ -1,18 +1,18 @@
 #pragma once
 
-#include "gaussian.cuh"
 #include "scene_info.cuh"
-#include <filesystem>
 #include <memory>
-#include <string>
-#include <vector>
+
+class GaussianModel;
+struct ModelParameters;
 
 class Scene {
 public:
-    Scene(const std::filesystem::path& path);
+    Scene(GaussianModel& gaussians, const ModelParameters& params);
 
 private:
-    std::filesystem::path _path;
-    GaussianModel _gaussians;
+    GaussianModel& _gaussians;
+    const ModelParameters& _params;
+
     std::unique_ptr<SceneInfo> _scene_info;
 };

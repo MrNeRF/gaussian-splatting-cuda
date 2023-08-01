@@ -33,3 +33,8 @@ struct ModelParameters {
     bool white_background = false;
     bool eval = false;
 };
+
+struct PipelineParameters {
+    bool convert_SHs_python = false;
+    bool compute_cov3D_python = false;
+};
