@@ -1,23 +1,15 @@
+// Copyright (c) 2023 Janusch Patas.
+// All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
+
 #pragma once
 
 #include "general_utils.cuh"
+#include "parameters.cuh"
 #include "point_cloud.cuh"
 #include "sh_utils.cuh"
 #include "spatial.h"
 #include <memory>
 #include <torch/torch.h>
-
-struct TrainingArgs {
-    float percent_dense;
-    float position_lr_init;
-    float position_lr_final;
-    float feature_lr;
-    float opacity_lr;
-    float scaling_lr;
-    float rotation_lr;
-    int64_t position_lr_delay_mult;
-    float position_lr_max_steps;
-};
 
 class GaussianModel : torch::nn::Module {
 public:
@@ -118,17 +110,17 @@ public:
         _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
     }
 
-    void training_setup(const TrainingArgs training_args) {
-        this->percent_dense = training_args.percent_dense;
+    void training_setup(const OptimizationParameters params) {
+        this->percent_dense = params.percent_dense;
         this->_xyz_gradient_accum = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
         this->_denom = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
 
         register_parameter("xyz", this->_xyz);
         optimizer = std::make_unique<torch::optim::Adam>(parameters(), torch::optim::AdamOptions(0.0).eps(1e-15));
-        this->_xyz_scheduler_args = Expon_lr_func(training_args.position_lr_init * this->_spatial_lr_scale,
-                                                  training_args.position_lr_final * this->_spatial_lr_scale,
-                                                  training_args.position_lr_delay_mult,
-                                                  training_args.position_lr_max_steps);
+        this->_xyz_scheduler_args = Expon_lr_func(params.position_lr_init * this->_spatial_lr_scale,
+                                                  params.position_lr_final * this->_spatial_lr_scale,
+                                                  params.position_lr_delay_mult,
+                                                  params.position_lr_max_steps);
     }
 
 public:

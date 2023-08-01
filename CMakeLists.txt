@@ -42,6 +42,7 @@ set(HEADERS
         includes/camera_utils.cuh
         includes/general_utils.cuh
         includes/sh_utils.cuh
+        includes/parameters.cuh
 )
 
 set(SOURCES
