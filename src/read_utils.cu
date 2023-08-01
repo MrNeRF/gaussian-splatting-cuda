@@ -75,7 +75,7 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
     return point_cloud;
 }
 
-void write_ply_file(std::filesystem::path file_path, const PointCloud& point_cloud) {
+void write_ply_file(const std::filesystem::path& file_path, const PointCloud& point_cloud) {
 
     std::filebuf fb_binary;
     fb_binary.open(file_path.c_str(), std::ios::out | std::ios::binary);
@@ -117,7 +117,7 @@ T read_binary_value(std::istream& file) {
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
 std::vector<Image> read_images_binary(std::filesystem::path file_path) {
     auto image_stream_buffer = read_binary(file_path);
-    const size_t image_count = read_binary_value<uint64_t>(*image_stream_buffer);
+    const auto image_count = read_binary_value<uint64_t>(*image_stream_buffer);
 
     std::vector<Image> images;
     images.reserve(image_count);
@@ -145,8 +145,7 @@ std::vector<Image> read_images_binary(std::filesystem::path file_path) {
             }
         } while (character != '\0');
 
-        const size_t number_points = read_binary_value<uint64_t>(*image_stream_buffer);
-        // Calculate total size needed for point data
+        const auto number_points = read_binary_value<uint64_t>(*image_stream_buffer);
 
         // Read all the point data at once
         img._points2D_ID.resize(number_points);
@@ -160,7 +159,7 @@ std::vector<Image> read_images_binary(std::filesystem::path file_path) {
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
 std::unordered_map<uint32_t, Camera> read_cameras_binary(std::filesystem::path file_path) {
     auto camera_stream_buffer = read_binary(file_path);
-    const size_t camera_count = read_binary_value<uint64_t>(*camera_stream_buffer);
+    const auto camera_count = read_binary_value<uint64_t>(*camera_stream_buffer);
 
     std::unordered_map<uint32_t, Camera> cameras;
     cameras.reserve(camera_count);
@@ -211,7 +210,7 @@ PointCloud read_point3D_binary(std::filesystem::path file_path) {
         // the rest can be ignored.
         read_binary_value<double>(*point3D_stream_buffer); // ignore
 
-        const size_t track_length = read_binary_value<uint64_t>(*point3D_stream_buffer);
+        const auto track_length = read_binary_value<uint64_t>(*point3D_stream_buffer);
         std::vector<Track> tracks;
         tracks.resize(track_length);
         point3D_stream_buffer->read(reinterpret_cast<char*>(tracks.data()), track_length * sizeof(Track));
@@ -280,7 +279,7 @@ std::pair<Eigen::Vector3d, double> getNerfppNorm(std::vector<CameraInfo>& cam_in
     for (CameraInfo& cam : cam_info) {
         Eigen::Matrix4d W2C = getWorld2View2(cam._R, cam._T);
         Eigen::Matrix4d C2W = W2C.inverse();
-        cam_centers.push_back(C2W.block<3, 1>(0, 3));
+        cam_centers.emplace_back(C2W.block<3, 1>(0, 3));
     }
 
     auto [center, diagonal] = get_center_and_diag(cam_centers);
