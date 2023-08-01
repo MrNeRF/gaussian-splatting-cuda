@@ -10,6 +10,7 @@ Eigen::Matrix4d getWorld2View(const Eigen::Matrix3d& R, const Eigen::Vector3d& t
     Rt(3, 3) = 1.0;
     return Rt;
 }
+
 Eigen::Matrix4d getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
                                const Eigen::Vector3d& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
     Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();

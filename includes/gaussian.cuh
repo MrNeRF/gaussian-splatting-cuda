@@ -2,6 +2,7 @@
 
 #include "general_utils.cuh"
 #include <torch/torch.h>
+#include "point_cloud.cuh"
 
 class GaussianModel {
 public:
@@ -67,11 +68,11 @@ public:
         }
     }
 
-    // void create_from_pcd(BasicPointCloud& pcd, float spatial_lr_scale) {
+    // void create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     //     this->spatial_lr_scale = spatial_lr_scale;
 
-    //     auto fused_point_cloud = torch::from_blob(pcd.points.data(), {pcd.points.size()}).to(torch::kCUDA);
-    //     auto fused_color = RGB2SH(torch::from_blob(pcd.colors.data(), {pcd.colors.size()}).to(torch::kCUDA));
+    //     auto fused_point_cloud = torch::from_blob(pcd._points.data(), {pcd._points.size()}).to(torch::kCUDA);
+    //     auto fused_color = RGB2SH(torch::from_blob(pcd._colors.data(), {pcd._colors.size()}).to(torch::kCUDA));
 
     //     auto features = torch::zeros({fused_color.size(0), 3, std::pow((max_sh_degree + 1), 2)}).to(torch::kCUDA);
     //     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(0,3), 0}, fused_color);
@@ -79,7 +80,7 @@ public:
 
     //     std::cout << "Number of points at initialisation : " << fused_point_cloud.size(0) << std::endl;
 
-    //     auto dist2 = torch::clamp_min(distCUDA2(torch::from_blob(pcd.points.data(), {pcd.points.size()}).to(torch::kCUDA)), 0.0000001);
+    //     auto dist2 = torch::clamp_min(distCUDA2(torch::from_blob(pcd._points.data(), {pcd._points.size()}).to(torch::kCUDA)), 0.0000001);
     //     auto scales = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3});
     //     auto rots = torch::zeros({fused_point_cloud.size(0), 4}).to(torch::kCUDA);
     //     rots.index_put_({torch::indexing::Slice(), 0}, 1);

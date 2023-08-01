@@ -156,6 +156,7 @@ set(TEST_SOURCES
     src/camera.cu
     src/image.cu
     src/utils.cu
+    tests/utils_test.cu
     src/scene.cu
     src/scene_info.cu
     src/camera_utils.cu

@@ -175,3 +175,39 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(torch::ones({1, 3}).cuda(), torch::tensor({1.0, 0.0, 0.0, 0.0}).unsqueeze(0).cuda()), // identity scaling and rotation
         std::make_tuple(torch::randn({1, 3}).cuda(), torch::randn({1, 4}).cuda())                             // random scaling and rotation
         ));
+
+// TODO: This is failing currently. Need to fix it.
+// struct ImageToTorchTest : public ::testing::TestWithParam<std::tuple<int, std::array<int64_t, 3>, int, bool>> {
+// };
+
+// TEST_P(ImageToTorchTest, CheckImageToTorch) {
+//     int input_value;
+//     std::array<int64_t, 3> input_size_array;
+//     int resolution_value;
+//     bool is_2d;
+
+//     std::tie(input_value, input_size_array, resolution_value, is_2d) = GetParam();
+
+//     std::vector<int64_t> input_size(input_size_array.begin(), input_size_array.end());
+//     torch::Tensor input = torch::full(input_size, input_value, torch::kUInt8);
+//     std::vector<int64_t> resolution = std::vector<int64_t>(input_size.size(), resolution_value);
+//     torch::Tensor expected_output = (input.to(torch::kFloat) / 255.0).permute({1, 2, 0});
+//     if(is_2d) {
+//         expected_output = expected_output.unsqueeze(-1);
+//     }
+
+//     torch::Tensor output = ImageToTorch(input, resolution);
+
+//     ASSERT_TRUE(torch::allclose(output, expected_output, 1e-5));
+// }
+
+// INSTANTIATE_TEST_SUITE_P(
+//     ImageToTorchFuncTest,
+//     ImageToTorchTest,
+//     ::testing::Values(
+//         // 3D tensor test case
+//         std::make_tuple(1, std::array<int64_t, 3>{3, 64, 64}, 64, false),
+//         // 2D tensor test case
+//         std::make_tuple(1, std::array<int64_t, 3>{64, 64, 1}, 64, true)
+//     )
+// );
