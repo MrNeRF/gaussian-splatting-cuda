@@ -4,7 +4,6 @@
 #include "parameters.cuh"
 #include "read_utils.cuh"
 #include "scene.cuh"
-#include <filesystem>
 #include <iostream>
 #include <torch/torch.h>
 

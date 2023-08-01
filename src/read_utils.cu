@@ -217,7 +217,7 @@ PointCloud read_point3D_binary(std::filesystem::path file_path) {
         point3D_stream_buffer->read(reinterpret_cast<char*>(tracks.data()), track_length * sizeof(Track));
     }
 
-    write_ply_file(file_path.parent_path() / "testply.ply", point_cloud);
+    write_ply_file(file_path.parent_path() / "points3D.ply", point_cloud);
     return point_cloud;
 }
 
@@ -297,7 +297,7 @@ std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_pat
     auto images = read_images_binary(file_path / "sparse/0/images.bin");
 
     auto sceneInfos = std::make_unique<SceneInfo>();
-    if (!std::filesystem::exists(file_path / "sparse/0/points3D.bin")) {
+    if (!std::filesystem::exists(file_path / "sparse/0/points3D.ply")) {
         sceneInfos->_point_cloud = read_point3D_binary(file_path / "sparse/0/points3D.bin");
     } else {
         sceneInfos->_point_cloud = read_ply_file(file_path / "sparse/0/points3D.ply");

@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <random>
 #include <string>
-#include <vector>
 
 Scene::Scene(GaussianModel& gaussians, const ModelParameters& params) : _gaussians(gaussians),
                                                                         _params(params) {
