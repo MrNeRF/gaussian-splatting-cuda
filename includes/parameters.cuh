@@ -5,7 +5,7 @@
 #include <filesystem>
 
 struct OptimizationParameters {
-    uint64_t iterations = 30'000;
+    size_t iterations = 30'000;
     float position_lr_init = 0.00016f;
     float position_lr_final = 0.0000016f;
     float position_lr_delay_mult = 0.01f;

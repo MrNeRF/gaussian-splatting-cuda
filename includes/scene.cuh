@@ -1,10 +1,10 @@
 #pragma once
 
-#include "scene_info.cuh"
 #include <memory>
 
 class GaussianModel;
 struct ModelParameters;
+struct SceneInfo;
 
 class Scene {
 public:
@@ -14,5 +14,5 @@ private:
     GaussianModel& _gaussians;
     const ModelParameters& _params;
 
-    std::unique_ptr<SceneInfo> _scene_info;
+    std::unique_ptr<SceneInfo> _scene_infos;
 };

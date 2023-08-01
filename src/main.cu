@@ -16,13 +16,36 @@ int main(int argc, char* argv[]) {
     }
 
     // TODO: read parameters from JSON file or command line
-    const auto modelParams = ModelParameters();
+    auto modelParams = ModelParameters();
+    modelParams.source_path = argv[1];
     const auto optimParams = OptimizationParameters();
     const auto pipelineParams = PipelineParameters();
     auto gaussians = GaussianModel(modelParams.sh_degree);
     auto scene = Scene(gaussians, modelParams);
     gaussians.training_setup(optimParams);
 
+    if (!torch::cuda::is_available()) {
+        // At the moment, I want to make sure that my GPU is utilized.
+        std::cout << "CUDA is not available! Training on CPU." << std::endl;
+        exit(-1);
+    }
+
+    torch::Tensor bg_color = torch::tensor({1, 1, 1}).to(torch::kCUDA);
+    for (int i = 0; i < optimParams.iterations; ++i) {
+        if (i % 1000 == 0) {
+            gaussians.oneupSHdegree();
+        }
+    }
+    //    bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
+    //    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+    //
+    //    iter_start = torch.cuda.Event(enable_timing = True)
+    //    iter_end = torch.cuda.Event(enable_timing = True)
+    //
+    //    viewpoint_stack = None
+    //    ema_loss_for_log = 0.0
+    //    for iteration in range(1, opt.iterations + 1):
+    //        if network_gui.conn == None:
     //    {
     //        // compile test
     //        torch::Tensor tensor = torch::rand({2, 3});

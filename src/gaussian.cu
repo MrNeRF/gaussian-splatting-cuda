@@ -117,7 +117,6 @@ void GaussianModel::training_setup(const OptimizationParameters& params) {
     this->_xyz_gradient_accum = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
     this->_denom = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
 
-    register_parameter("xyz", this->_xyz);
     optimizer = std::make_unique<torch::optim::Adam>(parameters(), torch::optim::AdamOptions(0.0).eps(1e-15));
     this->_xyz_scheduler_args = Expon_lr_func(params.position_lr_init * this->_spatial_lr_scale,
                                               params.position_lr_final * this->_spatial_lr_scale,
