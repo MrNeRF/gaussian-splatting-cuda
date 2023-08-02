@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     const auto pipelineParams = PipelineParameters();
     auto gaussians = GaussianModel(modelParams.sh_degree);
     auto scene = Scene(gaussians, modelParams);
-    gaussians.training_setup(optimParams);
+    gaussians.Training_setup(optimParams);
 
     if (!torch::cuda::is_available()) {
         // At the moment, I want to make sure that my GPU is utilized.
@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
     torch::Tensor bg_color = torch::tensor({1, 1, 1}).to(torch::kCUDA);
     for (int i = 0; i < optimParams.iterations; ++i) {
         if (i % 1000 == 0) {
-            gaussians.oneupSHdegree();
+            gaussians.One_up_sh_degree();
         }
     }
     //    bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]

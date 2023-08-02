@@ -38,22 +38,32 @@ public:
     // }
 
     // Methods
-    void OneupSHdegree();
+    void One_up_sh_degree();
     void Create_from_pcd(PointCloud& pcd, float spatial_lr_scale);
     void Training_setup(const OptimizationParameters& params);
-    void Update_Learning_Rate(float lr);
-    void Save_As_PLY(const std::string& filename);
-    void Reset_Opacity();
+    void Update_learning_rate(float lr);
+    void Save_as_ply(const std::string& filename);
+    void Reset_opacity();
+    void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
 
 private:
-    void prune_optimizer(const torch::Tensor& mask, torch::Tensor& updateTensor, const std::string& name);
     void prune_points(const torch::Tensor& mask);
+    void densification_postfix(const torch::Tensor& new_xyz,
+                               const torch::Tensor& new_features_dc,
+                               const torch::Tensor& new_features_rest,
+                               const torch::Tensor& new_scaling,
+                               const torch::Tensor& new_rotation,
+                               const torch::Tensor& new_opacity);
 
-public:
+    void densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent);
+    void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, int N = 2);
+    void densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size);
+
+private:
     int active_sh_degree;
     int max_sh_degree;
     float _spatial_lr_scale{};
-    float percent_dense{};
+    float _percent_dense{};
 
     Expon_lr_func _xyz_scheduler_args;
     torch::Tensor _denom;

@@ -29,7 +29,7 @@ Scene::Scene(GaussianModel& gaussians, const ModelParameters& params) : _gaussia
     // std::shuffle(_scene_infos->_cameras.begin(), _scene_infos->_cameras.end(), generator);
 
     // get the parameterr self.cameras.extent
-    _gaussians.create_from_pcd(_scene_infos->_point_cloud, _scene_infos->_nerf_norm_radius);
+    _gaussians.Create_from_pcd(_scene_infos->_point_cloud, _scene_infos->_nerf_norm_radius);
 }
 const std::vector<CameraInfo>& Scene::GetTraingingCameras() const {
     return _scene_infos->_cameras;
