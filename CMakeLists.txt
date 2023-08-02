@@ -45,6 +45,8 @@ set(HEADERS
         includes/parameters.cuh
         includes/loss_utils.cuh
         includes/render_utils.cuh
+        includes/rasterizer.cuh
+        includes/rasterize_points.cuh
 )
 
 set(SOURCES
@@ -58,6 +60,8 @@ set(SOURCES
         src/scene_info.cu
         src/camera_utils.cu
         src/general_utils.cu
+        src/rasterizer.cu
+        src/rasterize_points.cu
 )
 
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu
@@ -77,7 +81,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
         CXX_STANDARD_REQUIRED ON
 )
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes)
+target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/external/diff-gaussian-rasterization/cuda_rasterizer)
 
 # Torch setup
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
@@ -174,7 +178,8 @@ set(TEST_SOURCES
 # Add test executable
 add_executable(testing ${TEST_SOURCES})
 
-target_include_directories(testing PRIVATE ${PROJECT_SOURCE_DIR}/includes)
+
+target_include_directories(testing PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/external/diff-gaussian-rasterization/cuda_rasterizer)
 set_target_properties(testing PROPERTIES
         CUDA_ARCHITECTURES 89
         CUDA_STANDARD 17

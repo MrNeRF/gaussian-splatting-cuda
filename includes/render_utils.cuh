@@ -5,6 +5,7 @@
 #include "camera.cuh"
 #include "gaussian.cuh"
 #include "parameters.cuh"
+#include "rasterizer.cuh"
 #include <cmath>
 #include <torch/torch.h>
 
@@ -12,31 +13,26 @@ torch::Tensor render(CameraInfo& viewpoint_camera, GaussianModel& gaussianModel,
     // Ensure background tensor (bg_color) is on GPU!
     bg_color = bg_color.to(torch::kCUDA);
 
-    // Create zero tensor. We will use it to make libtorch return gradients of the 2D (screen-space) means
-    auto screenspace_points = torch::zeros_like(gaussianModel.Get_xyz()).requires_grad_(true);
-
     // Set up rasterization configuration
-    double tanfovx = std::tan(viewpoint_camera._fov_x * 0.5);
-    double tanfovy = std::tan(viewpoint_camera._fov_x * 0.5);
-
+    auto raster_settings = GaussianRasterizationSettings();
     //    GaussianRasterizationSettings raster_settings = {
-    //        .image_height=static_cast<int>(viewpoint_camera.image_height),
-    //        .image_width=static_cast<int>(viewpoint_camera.image_width),
-    //        .tanfovx=tanfovx,
-    //        .tanfovy=tanfovy,
+    //        .image_height=static_cast<int>(viewpoint_camera._image_height),
+    //        .image_width=static_cast<int>(viewpoint_camera._image_width),
+    //        .tanfovx=std::tan(viewpoint_camera._fov_x * 0.5f),
+    //        .tanfovy=std::tan(viewpoint_camera._fov_x * 0.5f),
     //        .bg=bg_color,
     //        .scale_modifier=scaling_modifier,
     //        .viewmatrix=viewpoint_camera.world_view_transform,
     //        .projmatrix=viewpoint_camera.full_proj_transform,
-    //        .sh_degree= gaussianModel.active_sh_degree,
-    //        .campos=viewpoint_camera.camera_center,
+    //        .sh_degree= gaussianModel.Get_active_sh_degree(),
+    //        .camera_center=viewpoint_camera.camera_center,
     //        .prefiltered=false
     //    };
 
-    //    GaussianRasterizer rasterizer = GaussianRasterizer(raster_settings);
+    GaussianRasterizer rasterizer = GaussianRasterizer(raster_settings);
 
     auto means3D = gaussianModel.Get_xyz();
-    auto means2D = screenspace_points;
+    auto means2D = torch::zeros_like(gaussianModel.Get_xyz()).requires_grad_(true);
     auto opacity = gaussianModel.Get_opacity();
 
     auto scales = torch::empty({});
@@ -65,7 +61,7 @@ torch::Tensor render(CameraInfo& viewpoint_camera, GaussianModel& gaussianModel,
     }
 
     // Rasterize visible Gaussians to image, obtain their radii (on screen).
-    //    std::pair<torch::Tensor, torch::Tensor> rasterize_result = rasterizer(
+    //    std::pair<torch::Tensor, torch::Tensor> rasterize_result = rasterizer.forward(
     //        means3D,
     //        means2D,
     //        shs,

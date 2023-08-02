@@ -143,8 +143,8 @@ public:
     uint32_t _camera_ID;
     Eigen::Matrix3d _R;
     Eigen::Vector3d _T;
-    double _fov_x;
-    double _fov_y;
+    float _fov_x;
+    float _fov_y;
     std::string _image_name;
     std::string _image_path;
     CAMERA_MODEL _camera_model;

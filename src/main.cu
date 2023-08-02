@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
         // TODO: CAmeraInfo
         auto camInfo = CameraInfo();
         auto render_img = render(camInfo, gaussians, pipelineParams, background);
-        //        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        // image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
         // Loss Computations
         // TODO: insert real data
         auto t1 = torch::rand({2, 3});

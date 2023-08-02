@@ -35,7 +35,7 @@ This will create a folder named `libtorch` in the `external` directory of your p
 - [ ] Right now the ply after x iterations cannot be saved. Need to implement this.
 - [ ] Proper logging. Right now everything is printed to stdout.
 - [ ] Proper config file or cmd line config.
-- [ ] Need to implement the rendering part. First sketch is there.
+- [x] Need to implement the rendering part. First sketch is there.
 - [ ] Need to remove bugs. Important!
 
 ## MISC
