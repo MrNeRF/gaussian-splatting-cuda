@@ -1,10 +1,10 @@
 #include "gaussian.cuh"
+#include <exception>
 
 GaussianModel::GaussianModel(int sh_degree) : max_sh_degree(sh_degree),
                                               active_sh_degree(0),
                                               _xyz_scheduler_args(Expon_lr_func(0.0, 1.0)) {
 
-    // Assuming these are 1D tensors
     _xyz = torch::empty({0});
     _features_dc = torch::empty({0});
     _features_rest = torch::empty({0});
@@ -13,8 +13,10 @@ GaussianModel::GaussianModel(int sh_degree) : max_sh_degree(sh_degree),
     _opacity = torch::empty({0});
     _max_radii2D = torch::empty({0});
     _xyz_gradient_accum = torch::empty({0});
-    optimizer = nullptr;
+    _optimizer = nullptr;
 
+    // IMPORTANT: The order has to stay fix because we must now the place of the parameters
+    // The optimizer just gets the tensor. There is currently no way to access the parameters by name
     register_parameter("xyz", _xyz, true);
     register_parameter("features_dc", _features_dc, true);
     register_parameter("features_rest", _features_rest, true);
@@ -60,7 +62,7 @@ torch::Tensor GaussianModel::get_features() const {
  *
  * This function increments the active_sh_degree by 1, up to a maximum of max_sh_degree.
  */
-void GaussianModel::oneupSHdegree() {
+void GaussianModel::OneupSHdegree() {
     if (active_sh_degree < max_sh_degree) {
         active_sh_degree++;
     }
@@ -76,7 +78,7 @@ void GaussianModel::oneupSHdegree() {
  * @param pcd The input point cloud
  * @param spatial_lr_scale The spatial learning rate scale
  */
-void GaussianModel::create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
+void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     std::cout << "Creating from pcd" << std::endl;
     _spatial_lr_scale = spatial_lr_scale;
     //  load points
@@ -119,14 +121,34 @@ void GaussianModel::create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
  *
  * @param params The OptimizationParameters object providing the settings for training
  */
-void GaussianModel::training_setup(const OptimizationParameters& params) {
+void GaussianModel::Training_setup(const OptimizationParameters& params) {
     this->percent_dense = params.percent_dense;
     this->_xyz_gradient_accum = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
     this->_denom = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
 
-    optimizer = std::make_unique<torch::optim::Adam>(parameters(), torch::optim::AdamOptions(0.0).eps(1e-15));
+    _optimizer = std::make_unique<torch::optim::Adam>(parameters(), torch::optim::AdamOptions(0.0).eps(1e-15));
     this->_xyz_scheduler_args = Expon_lr_func(params.position_lr_init * this->_spatial_lr_scale,
                                               params.position_lr_final * this->_spatial_lr_scale,
                                               params.position_lr_delay_mult,
                                               params.position_lr_max_steps);
+}
+
+void GaussianModel::Update_Learning_Rate(float lr) {
+    // This is hacky because you cant change in libtorch individual parameter learning rate
+    // xyz is added first, since _optimizer->param_groups() return a vector, we assume that xyz stays first
+    static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(lr);
+}
+
+void GaussianModel::Save_As_PLY(const std::string& filename) {
+    throw std::runtime_error("Not implemented");
+}
+
+void GaussianModel::Reset_Opacity() {
+    // Hopefully this is doing the same as the python code
+    std::cout << "Resetting opacity" << std::endl;
+    _opacity = inverse_sigmoid(torch::ones_like(get_opacity() * 0.01));
+    auto* adamParams = static_cast<torch::optim::AdamParamState*>(_optimizer->state()["opacity"].get());
+    adamParams->exp_avg(torch::zeros_like(_opacity));
+    adamParams->exp_avg_sq(torch::zeros_like(_opacity));
+    std::cout << "Opacity resetting done!" << std::endl;
 }

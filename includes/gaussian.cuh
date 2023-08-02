@@ -32,14 +32,17 @@ public:
     inline torch::Tensor get_xyz() const { return _xyz; }
     inline torch::Tensor get_opacity() const { return _opacity_activation(_opacity); }
     torch::Tensor get_features() const;
-    void oneupSHdegree();
     // torch::Tensor get_covariance(double scaling_modifier = 1.0) {
     //     return _covariance_activation(get_scaling(), scaling_modifier, _rotation);
     // }
 
     // Methods
-    void create_from_pcd(PointCloud& pcd, float spatial_lr_scale);
-    void training_setup(const OptimizationParameters& params);
+    void OneupSHdegree();
+    void Create_from_pcd(PointCloud& pcd, float spatial_lr_scale);
+    void Training_setup(const OptimizationParameters& params);
+    void Update_Learning_Rate(float lr);
+    void Save_As_PLY(const std::string& filename);
+    void Reset_Opacity();
 
 public:
     int active_sh_degree;
@@ -58,7 +61,7 @@ public:
     torch::Tensor _max_radii2D;
     torch::Tensor _xyz_gradient_accum;
 
-    std::unique_ptr<torch::optim::Adam> optimizer;
+    std::unique_ptr<torch::optim::Adam> _optimizer;
 
     std::function<torch::Tensor(const torch::Tensor&)> _scaling_activation = torch::exp;
     std::function<torch::Tensor(const torch::Tensor&)> _scaling_inverse_activation = torch::log;
