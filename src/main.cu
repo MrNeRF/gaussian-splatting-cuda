@@ -14,9 +14,6 @@ int main(int argc, char* argv[]) {
         std::cout << "Usage: ./readPly <ply file>" << std::endl;
         return 1;
     }
-    auto t1 = torch::rand({2, 3});
-    auto t2 = torch::rand({2, 3});
-    gaussian_splatting::l1_loss(t1, t2);
     // TODO: read parameters from JSON file or command line
     auto modelParams = ModelParameters();
     modelParams.source_path = argv[1];
@@ -30,35 +27,58 @@ int main(int argc, char* argv[]) {
         std::cout << "CUDA is not available! Training on CPU." << std::endl;
         exit(-1);
     }
+    auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
+    const auto bg_color = modelParams.white_background ? torch::tensor({1.f, 1.f, 1.f}) : torch::tensor({0.f, 0.f, 0.f}, pointType).to(torch::kCUDA);
 
-    torch::Tensor bg_color = torch::tensor({1, 1, 1}).to(torch::kCUDA);
+    // training loop
     for (int i = 0; i < optimParams.iterations; ++i) {
         if (i % 1000 == 0) {
             gaussians.One_up_sh_degree();
         }
+        // Pick random camera
+        // TODO: python code. Tranlate and adapt
+        //        if not viewpoint_stack:
+        //            viewpoint_stack = scene.getTrainCameras().copy()
+        //        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        //
+        // Rendering
+        //        render_pkg = render(viewpoint_cam, gaussians, pipe, background)
+        //        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        // Loss Computations
+        // TODO: insert real data
+        auto t1 = torch::rand({2, 3});
+        auto t2 = torch::rand({2, 3});
+        auto l1l = gaussian_splatting::l1_loss(t1, t2);
+        auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(t1, t2));
+        loss.backward();
+
+        {
+            torch::NoGradGuard no_grad;
+            // TODO: python code. Tranlate and adapt
+            //            # Keep track of max radii in image-space for pruning
+            //            gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
+            //
+            //            if (iteration in saving_iterations):
+            //              print("\n[ITER {}] Saving Gaussians".format(iteration))
+            //              scene.save(iteration)
+            //
+            //            # Densification
+            //            if iteration < opt.densify_until_iter:
+            //              gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
+            //
+            //            if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
+            //              size_threshold = 20 if iteration > opt.opacity_reset_interval else None
+            //              gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+            //
+            //            if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
+            //              gaussians.reset_opacity()
+            //
+            //            # Optimizer step
+            //            if iteration < opt.iterations:
+            //              gaussians.optimizer.step()
+            //              gaussians.optimizer.zero_grad(set_to_none = True)
+            //              gaussians.update_learning_rate(iteration)
+        }
     }
-    //    bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
-    //    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-    //
-    //    iter_start = torch.cuda.Event(enable_timing = True)
-    //    iter_end = torch.cuda.Event(enable_timing = True)
-    //
-    //    viewpoint_stack = None
-    //    ema_loss_for_log = 0.0
-    //    for iteration in range(1, opt.iterations + 1):
-    //        if network_gui.conn == None:
-    //    {
-    //        // compile test
-    //        torch::Tensor tensor = torch::rand({2, 3});
-    //        tensor.to(torch::kCUDA);
-    //    }
-    //    auto file_path = std::filesystem::path(argv[1]);
-    //
-    //    read_ply_file(file_path / "sparse/0/points3D.ply");
-    //    read_colmap_scene_info(file_path);
-    //
-    //    auto cam = Camera(0);
-    //    cam._camera_ID = 22;
-    //    camera_to_JSON(cam);
     return 0;
 }
