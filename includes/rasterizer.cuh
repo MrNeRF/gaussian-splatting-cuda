@@ -19,28 +19,28 @@ struct GaussianRasterizationSettings {
     bool prefiltered;
 };
 
-torch::Tensor rasterize_gaussians(torch::Tensor means3D,
-                                  torch::Tensor means2D,
-                                  torch::Tensor sh,
-                                  torch::Tensor colors_precomp,
-                                  torch::Tensor opacities,
-                                  torch::Tensor scales,
-                                  torch::Tensor rotations,
-                                  torch::Tensor cov3Ds_precomp,
-                                  GaussianRasterizationSettings raster_settings);
+torch::autograd::tensor_list rasterize_gaussians(torch::Tensor means3D,
+                                                 torch::Tensor means2D,
+                                                 torch::Tensor sh,
+                                                 torch::Tensor colors_precomp,
+                                                 torch::Tensor opacities,
+                                                 torch::Tensor scales,
+                                                 torch::Tensor rotations,
+                                                 torch::Tensor cov3Ds_precomp,
+                                                 GaussianRasterizationSettings raster_settings);
 
 class _RasterizeGaussians : public torch::autograd::Function<_RasterizeGaussians> {
 public:
-    static torch::Tensor forward(torch::autograd::AutogradContext* ctx,
-                                 torch::Tensor means3D,
-                                 torch::Tensor means2D,
-                                 torch::Tensor sh,
-                                 torch::Tensor colors_precomp,
-                                 torch::Tensor opacities,
-                                 torch::Tensor scales,
-                                 torch::Tensor rotations,
-                                 torch::Tensor cov3Ds_precomp,
-                                 GaussianRasterizationSettings raster_settings) {
+    static torch::autograd::tensor_list forward(torch::autograd::AutogradContext* ctx,
+                                                torch::Tensor means3D,
+                                                torch::Tensor means2D,
+                                                torch::Tensor sh,
+                                                torch::Tensor colors_precomp,
+                                                torch::Tensor opacities,
+                                                torch::Tensor scales,
+                                                torch::Tensor rotations,
+                                                torch::Tensor cov3Ds_precomp,
+                                                GaussianRasterizationSettings raster_settings) {
 
         auto [num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer] = RasterizeGaussiansCUDA(
             raster_settings.bg,
@@ -77,8 +77,7 @@ public:
         ctx->saved_data["sh_degree"] = raster_settings.sh_degree;
         ctx->saved_data["camera_center"] = raster_settings.camera_center;
         ctx->saved_data["prefiltered"] = raster_settings.prefiltered;
-        // TODO: return {color, radii};
-        return torch::zeros({1});
+        return {color, radii};
     }
 
     static torch::autograd::tensor_list backward(torch::autograd::AutogradContext* ctx, torch::autograd::tensor_list grad_outputs) {
@@ -139,14 +138,14 @@ public:
         return visible;
     }
 
-    torch::Tensor forward(torch::Tensor means3D,
-                          torch::Tensor means2D,
-                          torch::Tensor opacities,
-                          torch::Tensor shs = torch::Tensor(),
-                          torch::Tensor colors_precomp = torch::Tensor(),
-                          torch::Tensor scales = torch::Tensor(),
-                          torch::Tensor rotations = torch::Tensor(),
-                          torch::Tensor cov3D_precomp = torch::Tensor()) {
+    std::tuple<torch::Tensor, torch::Tensor> forward(torch::Tensor means3D,
+                                                     torch::Tensor means2D,
+                                                     torch::Tensor opacities,
+                                                     torch::Tensor shs = torch::Tensor(),
+                                                     torch::Tensor colors_precomp = torch::Tensor(),
+                                                     torch::Tensor scales = torch::Tensor(),
+                                                     torch::Tensor rotations = torch::Tensor(),
+                                                     torch::Tensor cov3D_precomp = torch::Tensor()) {
 
         if ((shs.defined() && colors_precomp.defined()) || (!shs.defined() && !colors_precomp.defined())) {
             throw std::invalid_argument("Please provide exactly one of either SHs or precomputed colors!");
@@ -157,7 +156,7 @@ public:
             throw std::invalid_argument("Please provide exactly one of either scale/rotation pair or precomputed 3D covariance!");
         }
 
-        return rasterize_gaussians(
+        auto result = rasterize_gaussians(
             means3D,
             means2D,
             shs,
@@ -167,6 +166,8 @@ public:
             rotations,
             cov3D_precomp,
             raster_settings_);
+
+        return {result[0], result[1]};
     }
 
 private:
