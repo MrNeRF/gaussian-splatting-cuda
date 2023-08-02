@@ -28,6 +28,16 @@ rm libtorch-cxx11-abi-shared-with-deps-latest.zip
 ```
 This will create a folder named `libtorch` in the `external` directory of your project.
 
+## TODO (in no particular order, reminders for myself)
+- [ ] Camera stuff is weird. Needs rework.
+- [ ] The gaussian initialization is not correct. Differs from original implementation.
+- [ ] Need to think about the cameras. Separting camera and camera_info seems useless.
+- [ ] Right now the ply after x iterations cannot be saved. Need to implement this.
+- [ ] Proper logging. Right now everything is printed to stdout.
+- [ ] Proper config file or cmd line config.
+- [ ] Need to implement the rendering part. First sketch is there.
+- [ ] Need to remove bugs. Important!
+
 ## MISC
 Here is random collection of things that have to be described in README later on
 - Needed for simple-knn: sudo apt-get install python3-dev 
