@@ -44,6 +44,7 @@ set(HEADERS
         includes/sh_utils.cuh
         includes/parameters.cuh
         includes/loss_utils.cuh
+        includes/render_utils.cuh
 )
 
 set(SOURCES

@@ -4,6 +4,7 @@
 #include "loss_utils.cuh"
 #include "parameters.cuh"
 #include "read_utils.cuh"
+#include "render_utils.cuh"
 #include "scene.cuh"
 #include <iostream>
 #include <torch/torch.h>
@@ -28,7 +29,7 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
     auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
-    const auto bg_color = modelParams.white_background ? torch::tensor({1.f, 1.f, 1.f}) : torch::tensor({0.f, 0.f, 0.f}, pointType).to(torch::kCUDA);
+    auto background = modelParams.white_background ? torch::tensor({1.f, 1.f, 1.f}) : torch::tensor({0.f, 0.f, 0.f}, pointType).to(torch::kCUDA);
 
     // training loop
     for (int i = 0; i < optimParams.iterations; ++i) {
@@ -42,7 +43,9 @@ int main(int argc, char* argv[]) {
         //        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
         //
         // Rendering
-        //        render_pkg = render(viewpoint_cam, gaussians, pipe, background)
+        // TODO: CAmeraInfo
+        auto camInfo = CameraInfo();
+        auto render_img = render(camInfo, gaussians, pipelineParams, background);
         //        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
         // Loss Computations
         // TODO: insert real data

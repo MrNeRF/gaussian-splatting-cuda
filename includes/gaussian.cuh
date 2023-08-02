@@ -15,36 +15,35 @@
 class GaussianModel : torch::nn::Module {
 public:
     explicit GaussianModel(int sh_degree);
-
     // Copy constructor
     GaussianModel(const GaussianModel& other) = delete;
-
     // Copy assignment operator
     GaussianModel& operator=(const GaussianModel& other) = delete;
-
     // Move constructor
     GaussianModel(GaussianModel&& other) = default;
-
     // Move assignment operator
     GaussianModel& operator=(GaussianModel&& other) = default;
 
 public:
     // Getters
-    inline torch::Tensor get_xyz() const { return _xyz; }
-    inline torch::Tensor get_opacity() const { return _opacity_activation(_opacity); }
-    torch::Tensor get_features() const;
-    // torch::Tensor get_covariance(double scaling_modifier = 1.0) {
-    //     return _covariance_activation(get_scaling(), scaling_modifier, _rotation);
-    // }
+    inline torch::Tensor Get_xyz() const { return _xyz; }
+    inline torch::Tensor Get_opacity() const { return torch::sigmoid(_opacity); }
+    inline torch::Tensor Get_rotation() const { return torch::nn::functional::normalize(_rotation); }
+    torch::Tensor Get_features() const;
+    torch::Tensor Get_covariance(float scaling_modifier = 1.0);
+    int Get_active_sh_degree() const { return _active_sh_degree; }
+    int Get_max_sh_degree() const { return _max_sh_degree; }
+    torch::Tensor Get_scaling() { return torch::exp(_scaling); }
 
     // Methods
     void One_up_sh_degree();
     void Create_from_pcd(PointCloud& pcd, float spatial_lr_scale);
     void Training_setup(const OptimizationParameters& params);
-    void Update_learning_rate(float lr);
+    void Update_learning_rate(float iteration);
     void Save_as_ply(const std::string& filename);
     void Reset_opacity();
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
+    void Densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size);
 
 private:
     void prune_points(const torch::Tensor& mask);
@@ -57,11 +56,10 @@ private:
 
     void densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent);
     void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, int N = 2);
-    void densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size);
 
 private:
-    int active_sh_degree;
-    int max_sh_degree;
+    int _active_sh_degree;
+    int _max_sh_degree;
     float _spatial_lr_scale{};
     float _percent_dense{};
 
@@ -77,15 +75,4 @@ private:
     torch::Tensor _xyz_gradient_accum;
 
     std::unique_ptr<torch::optim::Adam> _optimizer;
-
-    std::function<torch::Tensor(const torch::Tensor&)> _scaling_activation = torch::exp;
-    std::function<torch::Tensor(const torch::Tensor&)> _scaling_inverse_activation = torch::log;
-
-    std::function<torch::Tensor(const torch::Tensor&, const torch::Tensor&, const torch::Tensor&)> _covariance_activation;
-
-    std::function<torch::Tensor(const torch::Tensor&)> _opacity_activation = torch::sigmoid;
-    std::function<torch::Tensor(const torch::Tensor&)> _inverse_opacity_activation = inverse_sigmoid;
-
-    // Declare function that can hold normalize function
-    std::function<torch::Tensor(const torch::Tensor&, torch::nn::functional::NormalizeFuncOptions)> _rotation_activation;
 };

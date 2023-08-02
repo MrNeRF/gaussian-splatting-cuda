@@ -1,9 +1,9 @@
 #include "gaussian.cuh"
 #include <exception>
 
-GaussianModel::GaussianModel(int sh_degree) : max_sh_degree(sh_degree),
-                                              active_sh_degree(0),
-                                              _xyz_scheduler_args(Expon_lr_func(0.0, 1.0)) {
+GaussianModel::GaussianModel(int sh_degree) : _max_sh_degree(sh_degree),
+                                              _active_sh_degree(0),
+                                              _xyz_scheduler_args(Expon_lr_func(0.0, 1.0)) { // this is really ugly
 
     _xyz = torch::empty({0});
     _features_dc = torch::empty({0});
@@ -13,7 +13,6 @@ GaussianModel::GaussianModel(int sh_degree) : max_sh_degree(sh_degree),
     _opacity = torch::empty({0});
     _max_radii2D = torch::empty({0});
     _xyz_gradient_accum = torch::empty({0});
-    _optimizer = nullptr;
 
     // IMPORTANT: The order has to stay fix because we must now the place of the parameters
     // The optimizer just gets the tensor. There is currently no way to access the parameters by name
@@ -23,25 +22,13 @@ GaussianModel::GaussianModel(int sh_degree) : max_sh_degree(sh_degree),
     register_parameter("scaling", _scaling, true);
     register_parameter("rotation", _rotation, true);
     register_parameter("opacity", _opacity, true);
+}
 
-    // Scaling activation and its inverse
-    _scaling_activation = torch::exp;
-    _scaling_inverse_activation = torch::log;
-
-    // Covariance activation function
-    _covariance_activation = [](const torch::Tensor& scaling, const torch::Tensor& scaling_modifier, const torch::Tensor& rotation) {
-        auto L = build_scaling_rotation(scaling_modifier * scaling, rotation);
-        auto actual_covariance = torch::mm(L, L.transpose(1, 2));
-        auto symm = strip_symmetric(actual_covariance);
-        return symm;
-    };
-
-    // Opacity activation and its inverse
-    _opacity_activation = torch::sigmoid;
-    _inverse_opacity_activation = inverse_sigmoid;
-
-    // Rotation activation function
-    _rotation_activation = torch::nn::functional::normalize;
+torch::Tensor GaussianModel::Get_covariance(float scaling_modifier) {
+    auto L = build_scaling_rotation(scaling_modifier * Get_scaling(), _rotation);
+    auto actual_covariance = torch::mm(L, L.transpose(1, 2));
+    auto symm = strip_symmetric(actual_covariance);
+    return symm;
 }
 
 /**
@@ -51,7 +38,7 @@ GaussianModel::GaussianModel(int sh_degree) : max_sh_degree(sh_degree),
  *
  * @return Tensor of the concatenated features
  */
-torch::Tensor GaussianModel::get_features() const {
+torch::Tensor GaussianModel::Get_features() const {
     auto features_dc = _features_dc;
     auto features_rest = _features_rest;
     return torch::cat({features_dc, features_rest}, 1);
@@ -63,8 +50,8 @@ torch::Tensor GaussianModel::get_features() const {
  * This function increments the active_sh_degree by 1, up to a maximum of max_sh_degree.
  */
 void GaussianModel::One_up_sh_degree() {
-    if (active_sh_degree < max_sh_degree) {
-        active_sh_degree++;
+    if (_active_sh_degree < _max_sh_degree) {
+        _active_sh_degree++;
     }
 }
 
@@ -89,7 +76,7 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     auto colorType = torch::TensorOptions().dtype(torch::kUInt8);
     auto fused_color = RGB2SH(torch::from_blob(pcd._colors.data(), {static_cast<long>(pcd._colors.size()), 3}, colorType).to(torch::kCUDA));
 
-    auto features = torch::zeros({fused_color.size(0), 3, static_cast<long>(std::pow((max_sh_degree + 1), 2))}).to(torch::kCUDA);
+    auto features = torch::zeros({fused_color.size(0), 3, static_cast<long>(std::pow((_max_sh_degree + 1), 2))}).to(torch::kCUDA);
     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(torch::indexing::None, 3), 0}, fused_color);
     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(3, torch::indexing::None), torch::indexing::Slice(1, torch::indexing::None)}, 0.0);
 
@@ -127,19 +114,20 @@ void GaussianModel::Training_setup(const OptimizationParameters& params) {
     this->_percent_dense = params.percent_dense;
     this->_xyz_gradient_accum = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
     this->_denom = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
-
-    _optimizer = std::make_unique<torch::optim::Adam>(parameters(), torch::optim::AdamOptions(0.0).eps(1e-15));
     this->_xyz_scheduler_args = Expon_lr_func(params.position_lr_init * this->_spatial_lr_scale,
                                               params.position_lr_final * this->_spatial_lr_scale,
                                               params.position_lr_delay_mult,
                                               params.position_lr_max_steps);
+
+    // TODO: seems kind weird to do this here
+    _optimizer = std::make_unique<torch::optim::Adam>(parameters(), torch::optim::AdamOptions(0.0).eps(1e-15));
     std::cout << "Training setup done" << std::endl;
 }
 
-void GaussianModel::Update_learning_rate(float lr) {
+void GaussianModel::Update_learning_rate(float iteration) {
     // This is hacky because you cant change in libtorch individual parameter learning rate
     // xyz is added first, since _optimizer->param_groups() return a vector, we assume that xyz stays first
-    static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(lr);
+    static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(_xyz_scheduler_args(iteration));
 }
 
 void GaussianModel::Save_as_ply(const std::string& filename) {
@@ -149,7 +137,8 @@ void GaussianModel::Save_as_ply(const std::string& filename) {
 void GaussianModel::Reset_opacity() {
     // Hopefully this is doing the same as the python code
     std::cout << "Resetting opacity" << std::endl;
-    _opacity = inverse_sigmoid(torch::ones_like(get_opacity() * 0.01));
+    // opacitiy activation
+    _opacity = inverse_sigmoid(torch::ones_like(Get_opacity() * 0.01));
     auto* adamParams = static_cast<torch::optim::AdamParamState*>(_optimizer->state()["opacity"].get());
     adamParams->exp_avg(torch::zeros_like(_opacity));
     adamParams->exp_avg_sq(torch::zeros_like(_opacity));
@@ -237,14 +226,16 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
     torch::Tensor padded_grad = torch::zeros({n_init_points}).to(torch::kCUDA);
     padded_grad.slice(0, 0, grads.size(0)) = grads.squeeze();
     torch::Tensor selected_pts_mask = torch::where(padded_grad >= grad_threshold, torch::ones_like(padded_grad).to(torch::kBool), torch::zeros_like(padded_grad).to(torch::kBool));
-    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(_scaling.max(1)) > _percent_dense * scene_extent);
+    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)) > _percent_dense * scene_extent);
 
-    torch::Tensor stds = _scaling.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1});
+    torch::Tensor stds = Get_scaling().index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1});
     torch::Tensor means = torch::zeros({stds.size(0), 3}).to(torch::kCUDA);
     torch::Tensor samples = torch::randn({stds.size(0), stds.size(1)}).to(torch::kCUDA) * stds + means;
     torch::Tensor rots = build_rotation(_rotation.index_select(0, selected_pts_mask.nonzero().squeeze())).repeat({N, 1, 1});
     torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _xyz.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1});
-    torch::Tensor new_scaling = _scaling_inverse_activation(_scaling.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}) / (0.8 * N));
+
+    // scaling inverse activation immediately after the scaling activation
+    torch::Tensor new_scaling = torch::log(Get_scaling().index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}) / (0.8 * N));
     torch::Tensor new_rotation = _rotation.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1});
     torch::Tensor new_features_dc = _features_dc.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1, 1});
     torch::Tensor new_features_rest = _features_rest.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1, 1});
@@ -260,7 +251,7 @@ void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold
     std::cout << "Densify and clone" << std::endl;
     // Extract points that satisfy the gradient condition
     torch::Tensor selected_pts_mask = torch::where(grads.norm(-1) >= grad_threshold, torch::ones_like(grads).to(torch::kBool), torch::zeros_like(grads).to(torch::kBool));
-    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(_scaling.max(1)) <= _percent_dense * scene_extent);
+    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)) <= _percent_dense * scene_extent);
 
     torch::Tensor new_xyz = _xyz.index_select(0, selected_pts_mask.nonzero().squeeze());
     torch::Tensor new_features_dc = _features_dc.index_select(0, selected_pts_mask.nonzero().squeeze());
@@ -273,17 +264,17 @@ void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold
     std::cout << "Densify and clone done!" << std::endl;
 }
 
-void GaussianModel::densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size) {
+void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size) {
     torch::Tensor grads = _xyz_gradient_accum / _denom;
     grads.index_put_({grads.isnan()}, 0.0);
 
     densify_and_clone(grads, max_grad, extent);
     densify_and_split(grads, max_grad, extent);
 
-    torch::Tensor prune_mask = (_opacity < min_opacity).squeeze();
+    torch::Tensor prune_mask = (Get_opacity() < min_opacity).squeeze();
     if (max_screen_size > 0) {
         torch::Tensor big_points_vs = _max_radii2D > max_screen_size;
-        torch::Tensor big_points_ws = std::get<0>(_scaling.max(1)) > 0.1 * extent;
+        torch::Tensor big_points_ws = std::get<0>(Get_scaling().max(1)) > 0.1 * extent;
         prune_mask = torch::logical_or(prune_mask, torch::logical_or(big_points_vs, big_points_ws));
     }
     prune_points(prune_mask);
