@@ -9,6 +9,7 @@
 #include "sh_utils.cuh"
 #include "spatial.h"
 #include <memory>
+#include <string>
 #include <torch/torch.h>
 
 class GaussianModel : torch::nn::Module {
@@ -43,6 +44,10 @@ public:
     void Update_Learning_Rate(float lr);
     void Save_As_PLY(const std::string& filename);
     void Reset_Opacity();
+
+private:
+    void prune_optimizer(const torch::Tensor& mask, torch::Tensor& updateTensor, const std::string& name);
+    void prune_points(const torch::Tensor& mask);
 
 public:
     int active_sh_degree;

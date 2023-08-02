@@ -152,3 +152,27 @@ void GaussianModel::Reset_Opacity() {
     adamParams->exp_avg_sq(torch::zeros_like(_opacity));
     std::cout << "Opacity resetting done!" << std::endl;
 }
+
+void GaussianModel::prune_optimizer(const torch::Tensor& mask, torch::Tensor& updateTensor, const std::string& name) {
+    auto* adamParams = static_cast<torch::optim::AdamParamState*>(_optimizer->state()["opacity"].get());
+    if (adamParams != nullptr) {
+        adamParams->exp_avg(adamParams->exp_avg().masked_select(mask));
+        adamParams->exp_avg_sq(adamParams->exp_avg_sq().masked_select(mask));
+    }
+    updateTensor = updateTensor.masked_select(mask);
+}
+
+void GaussianModel::prune_points(const torch::Tensor& mask) {
+    std::cout << "Pruning points" << std::endl;
+    prune_optimizer(mask, _xyz, "xyz");
+    prune_optimizer(mask, _features_dc, "features_dc");
+    prune_optimizer(mask, _features_rest, "features_rest");
+    prune_optimizer(mask, _scaling, "scaling");
+    prune_optimizer(mask, _rotation, "rotation");
+    prune_optimizer(mask, _opacity, "opacity");
+
+    torch::Tensor valid_points_mask = ~mask;
+    _xyz_gradient_accum = _xyz_gradient_accum.masked_select(valid_points_mask);
+    _denom = _denom.masked_select(valid_points_mask);
+    _max_radii2D = _max_radii2D.masked_select(valid_points_mask);
+}
