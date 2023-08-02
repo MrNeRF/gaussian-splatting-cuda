@@ -1,6 +1,7 @@
 #include "camera.cuh"
 #include "camera_utils.cuh"
 #include "gaussian.cuh"
+#include "loss_utils.cuh"
 #include "parameters.cuh"
 #include "read_utils.cuh"
 #include "scene.cuh"
@@ -13,7 +14,9 @@ int main(int argc, char* argv[]) {
         std::cout << "Usage: ./readPly <ply file>" << std::endl;
         return 1;
     }
-
+    auto t1 = torch::rand({2, 3});
+    auto t2 = torch::rand({2, 3});
+    gaussian_splatting::l1_loss(t1, t2);
     // TODO: read parameters from JSON file or command line
     auto modelParams = ModelParameters();
     modelParams.source_path = argv[1];
@@ -22,7 +25,6 @@ int main(int argc, char* argv[]) {
     auto gaussians = GaussianModel(modelParams.sh_degree);
     auto scene = Scene(gaussians, modelParams);
     gaussians.Training_setup(optimParams);
-
     if (!torch::cuda::is_available()) {
         // At the moment, I want to make sure that my GPU is utilized.
         std::cout << "CUDA is not available! Training on CPU." << std::endl;

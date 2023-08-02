@@ -43,6 +43,7 @@ set(HEADERS
         includes/general_utils.cuh
         includes/sh_utils.cuh
         includes/parameters.cuh
+        includes/loss_utils.cuh
 )
 
 set(SOURCES
