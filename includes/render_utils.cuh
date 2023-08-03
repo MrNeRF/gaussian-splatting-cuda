@@ -9,7 +9,11 @@
 #include <cmath>
 #include <torch/torch.h>
 
-torch::Tensor render(CameraInfo& viewpoint_camera, GaussianModel& gaussianModel, const PipelineParameters& params, torch::Tensor& bg_color, float scaling_modifier = 1.0, torch::Tensor override_color = torch::empty({})) {
+torch::Tensor render(Camera& viewpoint_camera, GaussianModel& gaussianModel,
+                     const PipelineParameters& params,
+                     torch::Tensor& bg_color,
+                     float scaling_modifier = 1.0,
+                     torch::Tensor override_color = torch::empty({})) {
     // Ensure background tensor (bg_color) is on GPU!
     bg_color = bg_color.to(torch::kCUDA);
 

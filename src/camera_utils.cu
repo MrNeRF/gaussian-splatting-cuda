@@ -1,34 +1,34 @@
 #define STB_IMAGE_IMPLEMENTATION
-#include "camera_info.cuh"
 #include "camera_utils.cuh"
 #include "stb_image.h"
 #include <cmath>
 #include <eigen3/Eigen/Dense>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 
-Camera loadCam(CameraInfo& cam_info) {
-
-    // ptyhon code
-    //    return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T,
-    //                   FoVx=cam_info.FovX, FoVy=cam_info.FovY,
-    //                   image=gt_image, gt_alpha_mask=loaded_mask,
-    //                   image_name=cam_info.image_name, uid=id)
-
-    return Camera(1);
-}
-
-Eigen::Matrix4d getWorld2View(const Eigen::Matrix3d& R, const Eigen::Vector3d& t) {
+torch::Tensor getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
+                             const Eigen::Vector3d& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
     Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
     Rt.block<3, 3>(0, 0) = R.transpose();
     Rt.block<3, 1>(0, 3) = t;
     Rt(3, 3) = 1.0;
-    return Rt;
+
+    Eigen::Matrix4d C2W = Rt.inverse();
+    Eigen::Vector3d cam_center = C2W.block<3, 1>(0, 3);
+    cam_center = (cam_center + translate) * scale;
+    C2W.block<3, 1>(0, 3) = cam_center;
+    Rt = C2W.inverse();
+    // Here we create a torch::Tensor from the Eigen::Matrix
+    // Note that the tensor will be on the CPU, you may want to move it to the desired device later
+    auto RtTensor = torch::from_blob(Rt.data(), {4, 4}, torch::kFloat32);
+
+    // clone the tensor to allocate new memory, as from_blob shares the same memory
+    // this step is important if Rt will go out of scope and the tensor will be used later
+    return RtTensor.clone();
 }
 
-Eigen::Matrix4d getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
-                               const Eigen::Vector3d& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
+Eigen::Matrix4d getWorld2View2Eigen(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
+                                    const Eigen::Vector3d& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
     Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
     Rt.block<3, 3>(0, 0) = R.transpose();
     Rt.block<3, 1>(0, 3) = t;
@@ -42,7 +42,7 @@ Eigen::Matrix4d getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& 
     return Rt;
 }
 
-Eigen::Matrix4d getProjectionMatrix(double znear, double zfar, double fovX, double fovY) {
+torch::Tensor getProjectionMatrix(double znear, double zfar, double fovX, double fovY) {
     double tanHalfFovY = std::tan((fovY / 2));
     double tanHalfFovX = std::tan((fovX / 2));
 
@@ -62,7 +62,12 @@ Eigen::Matrix4d getProjectionMatrix(double znear, double zfar, double fovX, doub
     P(3, 2) = z_sign;
     P(2, 2) = z_sign * zfar / (zfar - znear);
     P(2, 3) = -(zfar * znear) / (zfar - znear);
-    return P;
+
+    // create torch::Tensor from Eigen::Matrix
+    auto PTensor = torch::from_blob(P.data(), {4, 4}, torch::kDouble);
+
+    // clone the tensor to allocate new memory
+    return PTensor.clone();
 }
 
 double fov2focal(double fov, double pixels) {

@@ -4,13 +4,20 @@
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/src/Geometry/Quaternion.h>
 #include <filesystem>
+#include <torch/torch.h>
 
-Eigen::Matrix4d getWorld2View(const Eigen::Matrix3d& R, const Eigen::Vector3d& t);
+torch::Tensor getWorld2View2(const Eigen::Matrix3d& R,
+                             const Eigen::Vector3d& t,
+                             const Eigen::Vector3d& translate = Eigen::Vector3d::Zero(),
+                             float scale = 1.0);
 
-Eigen::Matrix4d getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
-                               const Eigen::Vector3d& translate = Eigen::Vector3d::Zero(), float scale = 1.0);
+// TODO: hacky. Find better way
+Eigen::Matrix4d getWorld2View2Eigen(const Eigen::Matrix3d& R,
+                                    const Eigen::Vector3d& t,
+                                    const Eigen::Vector3d& translate = Eigen::Vector3d::Zero(),
+                                    float scale = 1.0);
 
-Eigen::Matrix4d getProjectionMatrix(double znear, double zfar, double fovX, double fovY);
+torch::Tensor getProjectionMatrix(double znear, double zfar, double fovX, double fovY);
 
 double fov2focal(double fov, double pixels);
 

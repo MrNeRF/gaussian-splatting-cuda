@@ -7,6 +7,7 @@
 #include "render_utils.cuh"
 #include "scene.cuh"
 #include <iostream>
+#include <random>
 #include <torch/torch.h>
 
 int main(int argc, char* argv[]) {
@@ -31,24 +32,26 @@ int main(int argc, char* argv[]) {
     auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
     auto background = modelParams.white_background ? torch::tensor({1.f, 1.f, 1.f}) : torch::tensor({0.f, 0.f, 0.f}, pointType).to(torch::kCUDA);
 
+    const int camera_count = scene.Get_camera_count();
+    // Initialize random engine
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, camera_count - 1);
     // training loop
     for (int i = 0; i < optimParams.iterations; ++i) {
         if (i % 1000 == 0) {
             gaussians.One_up_sh_degree();
         }
-        // Pick random camera
-        // TODO: python code. Tranlate and adapt
-        //        if not viewpoint_stack:
-        //            viewpoint_stack = scene.getTrainCameras().copy()
-        //        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
-        //
-        // Rendering
-        // TODO: CAmeraInfo
-        auto camInfo = CameraInfo();
-        auto render_img = render(camInfo, gaussians, pipelineParams, background);
+
+        // render
+        int random_index = dis(gen);
+        auto& cam = scene.Get_training_camera(random_index);
+        auto render_img = render(cam, gaussians, pipelineParams, background);
+
         // image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
         // Loss Computations
         // TODO: insert real data
+
         auto t1 = torch::rand({2, 3});
         auto t2 = torch::rand({2, 3});
         auto l1l = gaussian_splatting::l1_loss(t1, t2);
