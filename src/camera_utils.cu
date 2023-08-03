@@ -20,8 +20,8 @@ torch::Tensor getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
     Rt = C2W.inverse();
     // Here we create a torch::Tensor from the Eigen::Matrix
     // Note that the tensor will be on the CPU, you may want to move it to the desired device later
-    auto RtTensor = torch::from_blob(Rt.data(), {4, 4}, torch::kFloat32);
-
+    // TODO: get rid of double conversion
+    auto RtTensor = torch::from_blob(Rt.data(), {4, 4}, torch::kDouble).to(torch::kFloat);
     // clone the tensor to allocate new memory, as from_blob shares the same memory
     // this step is important if Rt will go out of scope and the tensor will be used later
     return RtTensor.clone();
@@ -64,7 +64,8 @@ torch::Tensor getProjectionMatrix(double znear, double zfar, double fovX, double
     P(2, 3) = -(zfar * znear) / (zfar - znear);
 
     // create torch::Tensor from Eigen::Matrix
-    auto PTensor = torch::from_blob(P.data(), {4, 4}, torch::kDouble);
+    // TODO: Get rid of double conversion
+    auto PTensor = torch::from_blob(P.data(), {4, 4}, torch::kDouble).to(torch::kFloat);
 
     // clone the tensor to allocate new memory
     return PTensor.clone();
