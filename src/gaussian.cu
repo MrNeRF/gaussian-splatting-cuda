@@ -71,14 +71,6 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     //  load points
     auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
     torch::Tensor fused_point_cloud = torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA);
-    std::cout << "First 10 points: " << std::endl;
-    for(int i = 0; i < 10; ++i)  {
-        std::cout << "(" << pcd._points[i].x << ", " << pcd._points[i].y << ", " << pcd._points[i].z << ")" << std::endl;
-    }
-    std::cout << "First 10 colors: " << std::endl;
-    for(int i = 0; i < 10; ++i)  {
-        std::cout << "(" << pcd._colors[i].r << ", " << pcd._colors[i].g << ", " << pcd._colors[i].b << ")" << std::endl;
-    }
 
     // load colors
     auto colorType = torch::TensorOptions().dtype(torch::kUInt8);

@@ -72,68 +72,67 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
 
     file.read(*ply_stream_buffer);
 
+    PointCloud point_cloud;
     if (vertices) {
         std::cout << "\tRead " << vertices->count << " total vertices " << std::endl;
+        try {
+            point_cloud._points.resize(vertices->count);
+            std::memcpy(point_cloud._points.data(), vertices->buffer.get(), vertices->buffer.size_bytes());
+
+            int counter = 0;
+            for (const auto& v : point_cloud._points) {
+                std::cout << "\tRead Vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
+                if (counter++ > 9) {
+                    break;
+                }
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "tinyply exception: " << e.what() << std::endl;
+        }
     } else {
         std::cerr << "Error: vertices not found" << std::endl;
         exit(0);
     }
+
     if (normals) {
         std::cout << "\tRead " << normals->count << " total vertex normals " << std::endl;
+        try {
+            point_cloud._normals.resize(normals->count);
+            std::memcpy(point_cloud._normals.data(), normals->buffer.get(), normals->buffer.size_bytes());
+
+            int counter = 0;
+            for (const auto& n : point_cloud._normals) {
+                std::cout << "\tRead Colors: " << static_cast<int>(n.x) << " " << static_cast<int>(n.y) << " " << static_cast<int>(n.z) << std::endl;
+                if (counter++ > 9) {
+                    break;
+                }
+            }
+
+        } catch (const std::exception& e) {
+            std::cerr << "tinyply exception: " << e.what() << std::endl;
+        }
     }
+
     if (colors) {
         std::cout << "\tRead " << colors->count << " total vertex colors " << std::endl;
+        try {
+            point_cloud._colors.resize(colors->count);
+            std::memcpy(point_cloud._colors.data(), colors->buffer.get(), colors->buffer.size_bytes());
+
+            int counter = 0;
+            for (const auto& c : point_cloud._colors) {
+                std::cout << "\tRead Colors: " << static_cast<int>(c.r) << " " << static_cast<int>(c.g) << " " << static_cast<int>(c.b) << std::endl;
+                if (counter++ > 9) {
+                    break;
+                }
+            }
+
+        } catch (const std::exception& e) {
+            std::cerr << "tinyply exception: " << e.what() << std::endl;
+        }
     } else {
         std::cerr << "Error: colors not found" << std::endl;
         exit(0);
-    }
-
-    PointCloud point_cloud;
-    try {
-        point_cloud._points.resize(vertices->count);
-        std::memcpy(point_cloud._points.data(), vertices->buffer.get(), vertices->buffer.size_bytes());
-
-        int counter = 0;
-        for (const auto& v : point_cloud._points) {
-            std::cout << "\tRead Vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
-            if (counter++ > 9) {
-                break;
-            }
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "tinyply exception: " << e.what() << std::endl;
-    }
-
-    try {
-        point_cloud._colors.resize(colors->count);
-        std::memcpy(point_cloud._colors.data(), colors->buffer.get(), colors->buffer.size_bytes());
-
-        int counter = 0;
-        for (const auto& c : point_cloud._colors) {
-            std::cout << "\tRead Colors: " << static_cast<int>(c.r) << " " << static_cast<int>(c.g) << " " << static_cast<int>(c.b) << std::endl;
-            if (counter++ > 9) {
-                break;
-            }
-        }
-
-    } catch (const std::exception& e) {
-        std::cerr << "tinyply exception: " << e.what() << std::endl;
-    }
-
-    try {
-        point_cloud._normals.resize(normals->count);
-        std::memcpy(point_cloud._normals.data(), normals->buffer.get(), normals->buffer.size_bytes());
-
-        int counter = 0;
-        for (const auto& n : point_cloud._normals) {
-            std::cout << "\tRead Colors: " << static_cast<int>(n.x) << " " << static_cast<int>(n.y) << " " << static_cast<int>(n.z) << std::endl;
-            if (counter++ > 9) {
-                break;
-            }
-        }
-
-    } catch (const std::exception& e) {
-        std::cerr << "tinyply exception: " << e.what() << std::endl;
     }
 
     return point_cloud;
