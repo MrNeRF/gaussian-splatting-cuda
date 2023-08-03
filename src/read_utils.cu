@@ -52,35 +52,86 @@ float file_in_mb(std::istream* file_stream) {
 // Reads ply file and prints header
 PointCloud read_ply_file(std::filesystem::path file_path) {
     auto ply_stream_buffer = read_binary(file_path);
+    tinyply::PlyFile file;
+    std::shared_ptr<tinyply::PlyData> vertices, normals, colors;
+    file.parse_header(*ply_stream_buffer);
+    // The header information can be used to programmatically extract properties on elements
+    // known to exist in the header prior to reading the data. For brevity of this sample, properties
+    // like vertex position are hard-coded:
+    try {
+        vertices = file.request_properties_from_element("vertex", {"x", "y", "z"});
+    } catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
 
-    tinyply::PlyFile ply_file;
-    ply_file.parse_header(*ply_stream_buffer);
+    try {
+        normals = file.request_properties_from_element("vertex", {"nx", "ny", "nz"});
+    } catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
+
+    try {
+        colors = file.request_properties_from_element("vertex", {"red", "green", "blue"});
+    } catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
+
+    file.read(*ply_stream_buffer);
+
+    if (vertices) {
+        std::cout << "\tRead " << vertices->count << " total vertices " << std::endl;
+    } else {
+        std::cerr << "Error: vertices not found" << std::endl;
+        exit(0);
+    }
+    if (normals) {
+        std::cout << "\tRead " << normals->count << " total vertex normals " << std::endl;
+    }
+    if (colors) {
+        std::cout << "\tRead " << colors->count << " total vertex colors " << std::endl;
+    } else {
+        std::cerr << "Error: colors not found" << std::endl;
+        exit(0);
+    }
 
     PointCloud point_cloud;
-
     try {
-        std::shared_ptr<tinyply::PlyData> vertices = ply_file.request_properties_from_element("vertex", {"x", "y", "z"});
-        const size_t byte_count = vertices->buffer.size_bytes();
         point_cloud._points.resize(vertices->count);
-        std::memcpy(point_cloud._points.data(), vertices->buffer.get(), byte_count);
+        std::memcpy(point_cloud._points.data(), vertices->buffer.get(), vertices->buffer.size_bytes());
+
+        int counter = 0;
+        for (const auto& v : point_cloud._points) {
+            std::cout << "\tRead Vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
+            if (counter++ > 9) {
+                break;
+            }
+        }
     } catch (const std::exception& e) {
         std::cerr << "tinyply exception: " << e.what() << std::endl;
     }
 
     try {
-        std::shared_ptr<tinyply::PlyData> normals = ply_file.request_properties_from_element("vertex", {"nx", "ny", "nz"});
-        const size_t byte_count = normals->buffer.size_bytes();
-        point_cloud._normals.resize(normals->count);
-        std::memcpy(point_cloud._normals.data(), normals->buffer.get(), byte_count);
-    } catch (const std::exception& e) {
-        std::cerr << "tinyply exception: " << e.what() << std::endl;
-    }
-
-    try {
-        std::shared_ptr<tinyply::PlyData> colors = ply_file.request_properties_from_element("vertex", {"red", "green", "blue"});
-        const size_t byte_count = colors->buffer.size_bytes();
         point_cloud._colors.resize(colors->count);
-        std::memcpy(point_cloud._colors.data(), colors->buffer.get(), byte_count);
+        std::memcpy(point_cloud._colors.data(), colors->buffer.get(), colors->buffer.size_bytes());
+
+        int counter = 0;
+        for (const auto& c : point_cloud._colors) {
+            std::cout << "\tRead Colors: " << static_cast<int>(c.r) << " " << static_cast<int>(c.g) << " " << static_cast<int>(c.b) << std::endl;
+            if (counter++ > 9) {
+                break;
+            }
+        }
+
+    } catch (const std::exception& e) {
+        std::cerr << "tinyply exception: " << e.what() << std::endl;
+    }
+
+    try {
+        point_cloud._normals.resize(normals->count);
+        std::memcpy(point_cloud._normals.data(), normals->buffer.get(), normals->buffer.size_bytes());
+
+        int counter = 0;
+        for (const auto& n : point_cloud._normals) {
+            std::cout << "\tRead Colors: " << static_cast<int>(n.x) << " " << static_cast<int>(n.y) << " " << static_cast<int>(n.z) << std::endl;
+            if (counter++ > 9) {
+                break;
+            }
+        }
+
     } catch (const std::exception& e) {
         std::cerr << "tinyply exception: " << e.what() << std::endl;
     }

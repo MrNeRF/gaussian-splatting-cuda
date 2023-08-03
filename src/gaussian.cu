@@ -71,6 +71,14 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     //  load points
     auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
     torch::Tensor fused_point_cloud = torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA);
+    std::cout << "First 10 points: " << std::endl;
+    for(int i = 0; i < 10; ++i)  {
+        std::cout << "(" << pcd._points[i].x << ", " << pcd._points[i].y << ", " << pcd._points[i].z << ")" << std::endl;
+    }
+    std::cout << "First 10 colors: " << std::endl;
+    for(int i = 0; i < 10; ++i)  {
+        std::cout << "(" << pcd._colors[i].r << ", " << pcd._colors[i].g << ", " << pcd._colors[i].b << ")" << std::endl;
+    }
 
     // load colors
     auto colorType = torch::TensorOptions().dtype(torch::kUInt8);
@@ -83,21 +91,24 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     std::cout << "Number of points at initialisation : " << fused_point_cloud.size(0) << std::endl;
 
     auto dist2 = torch::clamp_min(distCUDA2(torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA)), 0.0000001);
-
+    // print first 10 distances
+    std::cout << "First 10 distances : " << std::endl;
+    for (int i = 0; i < 10; i++) {
+        std::cout << dist2[i] << std::endl;
+    }
     auto scales = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3}, 0);
     auto rots = torch::zeros({fused_point_cloud.size(0), 4}).to(torch::kCUDA);
     rots.index_put_({torch::indexing::Slice(), 0}, 1);
     auto opacities = inverse_sigmoid(0.5 * torch::ones({fused_point_cloud.size(0), 1}).to(torch::kCUDA));
+
     _xyz = fused_point_cloud.set_requires_grad(true);
-    std::cout << "features size before transpose: (" << features.size(0) << ", " << features.size(1) << ", " << features.size(2) << ")" << std::endl;
     _features_dc = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(0, 1)}).transpose(1, 2).contiguous().set_requires_grad(true);
-    std::cout << "_features_dc size after transpose: (" << _features_dc.size(0) << ", " << _features_dc.size(1) << ", " << _features_dc.size(2) << ")" << std::endl;
     _features_rest = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(1, torch::indexing::None)}).transpose(1, 2).contiguous().set_requires_grad(true);
-    std::cout << "_features_rest size after transpose: (" << _features_rest.size(0) << ", " << _features_rest.size(1) << ", " << _features_rest.size(2) << ")" << std::endl;
     _scaling = scales.set_requires_grad(true);
     _rotation = rots.set_requires_grad(true);
     _opacity = opacities.set_requires_grad(true);
     _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
+
     std::cout << "Creating from pcd done" << std::endl;
 }
 
