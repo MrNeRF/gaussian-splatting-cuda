@@ -1,7 +1,7 @@
 // Copyright (c) 2023 Janusch Patas.
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 
-#include "utils.cuh"
+#include "camera_utils.cuh"
 #include <gtest/gtest.h>
 
 // class TransformMatrixTest : public ::testing::Test {

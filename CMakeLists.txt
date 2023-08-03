@@ -34,7 +34,6 @@ set(HEADERS
         includes/gaussian.cuh
         includes/camera.cuh
         includes/image.cuh
-        includes/utils.cuh
         includes/stb_image.h
         includes/point_cloud.cuh
         includes/scene.cuh
@@ -55,7 +54,6 @@ set(SOURCES
         src/gaussian.cu
         src/camera.cu
         src/image.cu
-        src/utils.cu
         src/scene.cu
         src/scene_info.cu
         src/camera_utils.cu
@@ -167,8 +165,7 @@ set(TEST_SOURCES
         src/gaussian.cu
         src/camera.cu
         src/image.cu
-        src/utils.cu
-        tests/utils_test.cu
+        tests/camera_utils_test.cu
         src/scene.cu
         src/scene_info.cu
         src/camera_utils.cu

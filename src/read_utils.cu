@@ -1,8 +1,8 @@
 #include "camera.cuh"
+#include "camera_utils.cuh"
 #include "image.cuh"
 #include "point_cloud.cuh"
 #include "read_utils.cuh"
-#include "utils.cuh"
 #include <algorithm>
 #include <exception>
 #include <execution>
