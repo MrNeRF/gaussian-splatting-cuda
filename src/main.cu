@@ -1,5 +1,3 @@
-#include "camera.cuh"
-#include "camera_utils.cuh"
 #include "gaussian.cuh"
 #include "loss_utils.cuh"
 #include "parameters.cuh"
@@ -43,19 +41,15 @@ int main(int argc, char* argv[]) {
             gaussians.One_up_sh_degree();
         }
 
-        // render
-        int random_index = dis(gen);
+        // Render
+        const int random_index = dis(gen);
         auto& cam = scene.Get_training_camera(random_index);
-        auto render_img = render(cam, gaussians, pipelineParams, background);
+        auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
-        // image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
         // Loss Computations
-        // TODO: insert real data
-
-        auto t1 = torch::rand({2, 3});
-        auto t2 = torch::rand({2, 3});
-        auto l1l = gaussian_splatting::l1_loss(t1, t2);
-        auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(t1, t2));
+        auto gt_image = cam.Get_original_image().to(torch::kCUDA);
+        auto l1l = gaussian_splatting::l1_loss(image, gt_image);
+        auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         loss.backward();
 
         {

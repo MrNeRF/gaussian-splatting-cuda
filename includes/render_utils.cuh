@@ -6,32 +6,31 @@
 #include "gaussian.cuh"
 #include "parameters.cuh"
 #include "rasterizer.cuh"
+#include "sh_utils.cuh"
 #include <cmath>
 #include <torch/torch.h>
 
-torch::Tensor render(Camera& viewpoint_camera, GaussianModel& gaussianModel,
-                     const PipelineParameters& params,
-                     torch::Tensor& bg_color,
-                     float scaling_modifier = 1.0,
-                     torch::Tensor override_color = torch::empty({})) {
+inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(Camera& viewpoint_camera, GaussianModel& gaussianModel,
+                                                                                     const PipelineParameters& params,
+                                                                                     torch::Tensor& bg_color,
+                                                                                     float scaling_modifier = 1.0,
+                                                                                     torch::Tensor override_color = torch::empty({})) {
     // Ensure background tensor (bg_color) is on GPU!
     bg_color = bg_color.to(torch::kCUDA);
 
     // Set up rasterization configuration
-    auto raster_settings = GaussianRasterizationSettings();
-    //    GaussianRasterizationSettings raster_settings = {
-    //        .image_height=static_cast<int>(viewpoint_camera._image_height),
-    //        .image_width=static_cast<int>(viewpoint_camera._image_width),
-    //        .tanfovx=std::tan(viewpoint_camera._fov_x * 0.5f),
-    //        .tanfovy=std::tan(viewpoint_camera._fov_x * 0.5f),
-    //        .bg=bg_color,
-    //        .scale_modifier=scaling_modifier,
-    //        .viewmatrix=viewpoint_camera.world_view_transform,
-    //        .projmatrix=viewpoint_camera.full_proj_transform,
-    //        .sh_degree= gaussianModel.Get_active_sh_degree(),
-    //        .camera_center=viewpoint_camera.camera_center,
-    //        .prefiltered=false
-    //    };
+    GaussianRasterizationSettings raster_settings = {
+        .image_height = static_cast<int>(viewpoint_camera.Get_image_height()),
+        .image_width = static_cast<int>(viewpoint_camera.Get_image_width()),
+        .tanfovx = std::tan(viewpoint_camera.Get_FoVx() * 0.5f),
+        .tanfovy = std::tan(viewpoint_camera.Get_FoVy() * 0.5f),
+        .bg = bg_color,
+        .scale_modifier = scaling_modifier,
+        .viewmatrix = viewpoint_camera.Get_world_view_transform(),
+        .projmatrix = viewpoint_camera.Get_full_proj_transform(),
+        .sh_degree = gaussianModel.Get_active_sh_degree(),
+        .camera_center = viewpoint_camera.Get_camera_center(),
+        .prefiltered = false};
 
     GaussianRasterizer rasterizer = GaussianRasterizer(raster_settings);
 
@@ -54,37 +53,28 @@ torch::Tensor render(Camera& viewpoint_camera, GaussianModel& gaussianModel,
     torch::Tensor colors_precomp = torch::empty({});
     // This is nonsense. Background color not used? See orginal file colors_precomp=None line 70
     if (params.convert_SHs_python) {
-        // TODO: Camera center is not properly implemented. Need to correct this first.
-        //            torch::Tensor shs_view = gaussianModel.Get_features.transpose(1, 2).view({-1, 3, std::pow(gaussianModel.Get_max_sh_degree()+1,2)});
-        //            torch::Tensor dir_pp = (gaussianModel.Get_xyz - viewpoint_camera._camera_center.repeat(gaussianModel.Get_features.sizes()[0], 1));
-        //            torch::Tensor dir_pp_normalized = dir_pp/dir_pp.norm(1);
-        //            torch::Tensor sh2rgb = eval_sh(gaussianModel.active_sh_degree, shs_view, dir_pp_normalized);
-        //            colors_precomp = torch::clamp_min(sh2rgb + 0.5, 0.0);
+        torch::Tensor shs_view = gaussianModel.Get_features().transpose(1, 2).view({-1, 3, static_cast<long>(std::pow(gaussianModel.Get_max_sh_degree() + 1, 2))});
+        torch::Tensor dir_pp = (gaussianModel.Get_xyz() - viewpoint_camera.Get_camera_center().repeat(gaussianModel.Get_features().sizes()[0], 1));
+        torch::Tensor dir_pp_normalized = dir_pp / dir_pp.norm(1);
+        torch::Tensor sh2rgb = Eval_sh(gaussianModel.Get_active_sh_degree(), shs_view, dir_pp_normalized);
+        colors_precomp = torch::clamp_min(sh2rgb + 0.5, 0.0);
     } else {
         shs = gaussianModel.Get_features();
     }
 
     // Rasterize visible Gaussians to image, obtain their radii (on screen).
-    //    std::pair<torch::Tensor, torch::Tensor> rasterize_result = rasterizer.forward(
-    //        means3D,
-    //        means2D,
-    //        shs,
-    //        colors_precomp,
-    //        opacity,
-    //        scales,
-    //        rotations,
-    //        cov3D_precomp);
-    //    torch::Tensor rendered_image = rasterize_result.first;
-    //    torch::Tensor radii = rasterize_result.second;
+    auto [rendererd_image, radii] = rasterizer.forward(
+        means3D,
+        means2D,
+        shs,
+        colors_precomp,
+        opacity,
+        scales,
+        rotations,
+        cov3D_precomp);
 
-    // Those Gaussians that were frustum culled or had a radius of 0 were not visible.
-    // They will be excluded from value updates used in the splitting criteria.
-    //    std::map<std::string, torch::Tensor> result;
-    //    result.insert(std::pair<std::string, torch::Tensor>("render", rendered_image));
-    //    result.insert(std::pair<std::string, torch::Tensor>("viewspace_points", screenspace_points));
-    //    result.insert(std::pair<std::string, torch::Tensor>("visibility_filter", radii > 0));
-    //    result.insert(std::pair<std::string, torch::Tensor>("radii", radii));
-
-    //    return result;
-    return torch::empty({});
+    // Apply visibility filter to remove occluded Gaussians.
+    // TODO: I think there is no real use for means2D, isn't it?
+    // render, viewspace_points, visibility_filter, radii
+    return {rendererd_image, means2D, radii > 0, radii};
 }
