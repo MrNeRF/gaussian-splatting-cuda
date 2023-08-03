@@ -290,7 +290,6 @@ std::pair<Eigen::Vector3d, double> get_center_and_diag(std::vector<Eigen::Vector
 
 std::pair<Eigen::Vector3d, double> getNerfppNorm(std::vector<CameraInfo>& cam_info) {
     std::vector<Eigen::Vector3d> cam_centers;
-
     for (CameraInfo& cam : cam_info) {
         Eigen::Matrix4d W2C = getWorld2View2Eigen(cam._R, cam._T);
         Eigen::Matrix4d C2W = W2C.inverse();

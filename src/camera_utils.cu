@@ -78,8 +78,21 @@ double focal2fov(double focal, double pixels) {
     return 2 * std::atan(pixels / (2 * focal));
 }
 
-Eigen::Matrix3d qvec2rotmat(const Eigen::Quaterniond& qvec) {
-    return qvec.normalized().toRotationMatrix();
+Eigen::Matrix3d qvec2rotmat(const Eigen::Quaterniond& q) {
+    Eigen::Vector4d qvec = q.coeffs(); // [x, y, z, w]
+
+    Eigen::Matrix3d rotmat;
+    rotmat << 1 - 2 * qvec[2] * qvec[2] - 2 * qvec[3] * qvec[3],
+        2 * qvec[1] * qvec[2] - 2 * qvec[0] * qvec[3],
+        2 * qvec[3] * qvec[1] + 2 * qvec[0] * qvec[2],
+        2 * qvec[1] * qvec[2] + 2 * qvec[0] * qvec[3],
+        1 - 2 * qvec[1] * qvec[1] - 2 * qvec[3] * qvec[3],
+        2 * qvec[2] * qvec[3] - 2 * qvec[0] * qvec[1],
+        2 * qvec[3] * qvec[1] - 2 * qvec[0] * qvec[2],
+        2 * qvec[2] * qvec[3] + 2 * qvec[0] * qvec[1],
+        1 - 2 * qvec[1] * qvec[1] - 2 * qvec[2] * qvec[2];
+
+    return rotmat;
 }
 
 Eigen::Quaterniond rotmat2qvec(const Eigen::Matrix3d& R) {
