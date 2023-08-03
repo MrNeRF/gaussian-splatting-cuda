@@ -42,8 +42,8 @@ int main(int argc, char* argv[]) {
         }
 
         // Render
-        const int random_index = dis(gen);
-        auto& cam = scene.Get_training_camera(random_index);
+        // const int random_index = dis(gen);
+        auto& cam = scene.Get_training_camera(0);
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
         // Loss Computations

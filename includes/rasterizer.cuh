@@ -150,10 +150,65 @@ public:
         if ((shs.defined() && colors_precomp.defined()) || (!shs.defined() && !colors_precomp.defined())) {
             throw std::invalid_argument("Please provide exactly one of either SHs or precomputed colors!");
         }
-
         if (((scales.defined() || rotations.defined()) && cov3D_precomp.defined()) ||
             (!scales.defined() && !rotations.defined() && !cov3D_precomp.defined())) {
             throw std::invalid_argument("Please provide exactly one of either scale/rotation pair or precomputed 3D covariance!");
+        }
+
+        // Check if tensors are undefined, and if so, initialize them
+        if (!shs.defined()) {
+            shs = torch::empty({0});
+        }
+        if (!colors_precomp.defined()) {
+            colors_precomp = torch::empty({0});
+        }
+        if (!scales.defined()) {
+            scales = torch::empty({0});
+        }
+        if (!rotations.defined()) {
+            rotations = torch::empty({0});
+        }
+        if (!cov3D_precomp.defined()) {
+            cov3D_precomp = torch::empty({0});
+        }
+
+        //        struct GaussianRasterizationSettings {
+        //            int image_height;
+        //            int image_width;
+        //            float tanfovx;
+        //            float tanfovy;
+        //            torch::Tensor bg;
+        //            float scale_modifier;
+        //            torch::Tensor viewmatrix;
+        //            torch::Tensor projmatrix;
+        //            int sh_degree;
+        //            torch::Tensor camera_center;
+        //            bool prefiltered;
+        //        };
+
+        if (!raster_settings_.bg.defined()) {
+            std::cout << "BG not defined" << std::endl;
+        }
+        if (!raster_settings_.viewmatrix.defined()) {
+            std::cout << "viewmatrix not defined" << std::endl;
+        }
+        if (!raster_settings_.projmatrix.defined()) {
+            std::cout << "projmatrix not defined" << std::endl;
+        }
+        if (!raster_settings_.camera_center.defined()) {
+            std::cout << "camera_center not defined" << std::endl;
+        }
+        if (!raster_settings_.bg.is_cuda()) {
+            std::cout << "bg not on cuda" << std::endl;
+        }
+        if (!raster_settings_.viewmatrix.is_cuda()) {
+            std::cout << "viewmatrix not on cuda" << std::endl;
+        }
+        if (!raster_settings_.projmatrix.is_cuda()) {
+            std::cout << "projmatrix not on cuda" << std::endl;
+        }
+        if (!raster_settings_.camera_center.is_cuda()) {
+            std::cout << "camera_center not on cuda" << std::endl;
         }
 
         auto result = rasterize_gaussians(

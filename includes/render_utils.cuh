@@ -10,7 +10,8 @@
 #include <cmath>
 #include <torch/torch.h>
 
-inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(Camera& viewpoint_camera, GaussianModel& gaussianModel,
+inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(Camera& viewpoint_camera,
+                                                                                     GaussianModel& gaussianModel,
                                                                                      const PipelineParameters& params,
                                                                                      torch::Tensor& bg_color,
                                                                                      float scaling_modifier = 1.0,
@@ -38,9 +39,9 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
     auto means2D = torch::zeros_like(gaussianModel.Get_xyz()).requires_grad_(true);
     auto opacity = gaussianModel.Get_opacity();
 
-    auto scales = torch::empty({});
-    auto rotations = torch::empty({});
-    auto cov3D_precomp = torch::empty({});
+    auto scales = torch::Tensor();
+    auto rotations = torch::Tensor();
+    auto cov3D_precomp = torch::Tensor();
 
     if (params.compute_cov3D_python) {
         cov3D_precomp = gaussianModel.Get_covariance(scaling_modifier);
@@ -49,8 +50,8 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
         rotations = gaussianModel.Get_rotation();
     }
 
-    auto shs = torch::empty({});
-    torch::Tensor colors_precomp = torch::empty({});
+    auto shs = torch::Tensor();
+    torch::Tensor colors_precomp = torch::Tensor();
     // This is nonsense. Background color not used? See orginal file colors_precomp=None line 70
     if (params.convert_SHs_python) {
         torch::Tensor shs_view = gaussianModel.Get_features().transpose(1, 2).view({-1, 3, static_cast<long>(std::pow(gaussianModel.Get_max_sh_degree() + 1, 2))});
@@ -62,6 +63,7 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
         shs = gaussianModel.Get_features();
     }
 
+    torch::cuda::synchronize();
     // Rasterize visible Gaussians to image, obtain their radii (on screen).
     auto [rendererd_image, radii] = rasterizer.forward(
         means3D,

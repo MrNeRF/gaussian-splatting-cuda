@@ -74,11 +74,13 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
 
     // load colors
     auto colorType = torch::TensorOptions().dtype(torch::kUInt8);
-    auto fused_color = RGB2SH(torch::from_blob(pcd._colors.data(), {static_cast<long>(pcd._colors.size()), 3}, colorType).to(torch::kCUDA));
+    auto fused_color = RGB2SH(torch::from_blob(pcd._colors.data(), {static_cast<long>(pcd._colors.size()), 3}, colorType).to(pointType) / 255.f).to(torch::kCUDA);
 
     auto features = torch::zeros({fused_color.size(0), 3, static_cast<long>(std::pow((_max_sh_degree + 1), 2))}).to(torch::kCUDA);
     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(torch::indexing::None, 3), 0}, fused_color);
     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(3, torch::indexing::None), torch::indexing::Slice(1, torch::indexing::None)}, 0.0);
+    std::cout << "features: \n"
+              << features.slice(0, 0, 5) << std::endl;
 
     std::cout << "Number of points at initialisation : " << fused_point_cloud.size(0) << std::endl;
 
@@ -100,6 +102,21 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     _rotation = rots.set_requires_grad(true);
     _opacity = opacities.set_requires_grad(true);
     _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
+
+    std::cout << "_xyz: \n"
+              << _xyz.slice(0, 0, 5) << std::endl;
+    std::cout << "_features_dc: \n"
+              << _features_dc.slice(0, 0, 5) << std::endl;
+    std::cout << "_features_rest: \n"
+              << _features_rest.slice(0, 0, 5) << std::endl;
+    std::cout << "_scaling: \n"
+              << _scaling.slice(0, 0, 5) << std::endl;
+    std::cout << "_rotation: \n"
+              << _rotation.slice(0, 0, 5) << std::endl;
+    std::cout << "_opacity: \n"
+              << _opacity.slice(0, 0, 5) << std::endl;
+    std::cout << "_max_radii2D: \n"
+              << _max_radii2D.slice(0, 0, 5) << std::endl;
 
     std::cout << "Creating from pcd done" << std::endl;
 }
