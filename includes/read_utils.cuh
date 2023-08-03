@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 
+// struct SceneInfo;
 PointCloud read_ply_file(std::filesystem::path filepath);
 
 std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path filepath);

@@ -4,9 +4,6 @@
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/src/Geometry/Quaternion.h>
 #include <filesystem>
-#include <nlohmann/json.hpp>
-
-nlohmann::json Dump_camera_to_JSON(Camera cam);
 
 Eigen::Matrix4d getWorld2View(const Eigen::Matrix3d& R, const Eigen::Vector3d& t);
 

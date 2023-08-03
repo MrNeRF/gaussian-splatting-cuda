@@ -46,6 +46,7 @@ set(HEADERS
         includes/render_utils.cuh
         includes/rasterizer.cuh
         includes/rasterize_points.cuh
+        includes/camera_info.cuh
 )
 
 set(SOURCES
@@ -55,7 +56,6 @@ set(SOURCES
         src/camera.cu
         src/image.cu
         src/scene.cu
-        src/scene_info.cu
         src/camera_utils.cu
         src/general_utils.cu
         src/rasterizer.cu
@@ -167,7 +167,6 @@ set(TEST_SOURCES
         src/image.cu
         tests/camera_utils_test.cu
         src/scene.cu
-        src/scene_info.cu
         src/camera_utils.cu
         src/general_utils.cu
         tests/general_utils_test.cu
