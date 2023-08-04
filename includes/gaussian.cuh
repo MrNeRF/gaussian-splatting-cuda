@@ -45,6 +45,9 @@ public:
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
     void Densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size);
 
+public:
+    // should not be public or it should maybe be pulled out here. Not sure yet
+    std::unique_ptr<torch::optim::Adam> _optimizer;
 private:
     void prune_points(const torch::Tensor& mask);
     void densification_postfix(const torch::Tensor& new_xyz,
@@ -73,6 +76,4 @@ private:
     torch::Tensor _opacity;
     torch::Tensor _max_radii2D;
     torch::Tensor _xyz_gradient_accum;
-
-    std::unique_ptr<torch::optim::Adam> _optimizer;
 };

@@ -36,8 +36,8 @@ int main(int argc, char* argv[]) {
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, camera_count - 1);
     // training loop
-    for (int i = 0; i < optimParams.iterations; ++i) {
-        if (i % 1000 == 0) {
+    for (int iter = 0; iter < optimParams.iterations; ++iter) {
+        if (iter % 1000 == 0) {
             gaussians.One_up_sh_degree();
         }
 
@@ -75,11 +75,12 @@ int main(int argc, char* argv[]) {
             //            if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
             //              gaussians.reset_opacity()
             //
-            //            # Optimizer step
-            //            if iteration < opt.iterations:
-            //              gaussians.optimizer.step()
-            //              gaussians.optimizer.zero_grad(set_to_none = True)
-            //              gaussians.update_learning_rate(iteration)
+            //           Optimizer step
+                        if (iter < optimParams.iterations) {
+                            gaussians.optimizer.step()
+                            gaussians.optimizer.zero_grad(set_to_none = True)
+                            gaussians.update_learning_rate(iteration)
+                        }
         }
     }
     return 0;

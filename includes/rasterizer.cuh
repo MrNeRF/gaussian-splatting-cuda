@@ -141,7 +141,26 @@ public:
             imgBuffer,
             true);
 
-        return {grad_means3D, grad_means2D, grad_sh, grad_colors_precomp, grad_opacities, grad_scales, grad_rotations, grad_cov3Ds_precomp, torch::Tensor(), torch::Tensor()};
+        // return gradients for all inputs, 19 in total. :D
+        return {grad_means3D,
+                grad_means2D,
+                grad_sh,
+                grad_colors_precomp,
+                grad_opacities,
+                grad_scales,
+                grad_rotations,
+                grad_cov3Ds_precomp,
+                torch::Tensor(), // from here placeholder, not used: #forwards args = #backwards args.
+                torch::Tensor(),
+                torch::Tensor(),
+                torch::Tensor(),
+                torch::Tensor(),
+                torch::Tensor(),
+                torch::Tensor(),
+                torch::Tensor(),
+                torch::Tensor(),
+                torch::Tensor(),
+                torch::Tensor()};
     }
 };
 
