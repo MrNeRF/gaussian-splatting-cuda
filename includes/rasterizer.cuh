@@ -40,43 +40,61 @@ public:
                                                 torch::Tensor scales,
                                                 torch::Tensor rotations,
                                                 torch::Tensor cov3Ds_precomp,
-                                                GaussianRasterizationSettings raster_settings) {
+                                                torch::Tensor image_height,
+                                                torch::Tensor image_width,
+                                                torch::Tensor tanfovx,
+                                                torch::Tensor tanfovy,
+                                                torch::Tensor bg,
+                                                torch::Tensor scale_modifier,
+                                                torch::Tensor viewmatrix,
+                                                torch::Tensor projmatrix,
+                                                torch::Tensor sh_degree,
+                                                torch::Tensor camera_center,
+                                                torch::Tensor prefiltered) {
+
+        int image_height_val = image_height.item<int>();
+        int image_width_val = image_width.item<int>();
+        float tanfovx_val = tanfovx.item<float>();
+        float tanfovy_val = tanfovy.item<float>();
+        float scale_modifier_val = scale_modifier.item<float>();
+        int sh_degree_val = sh_degree.item<int>();
+        bool prefiltered_val = prefiltered.item<bool>();
 
         auto [num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer] = RasterizeGaussiansCUDA(
-            raster_settings.bg,
+            bg,
             means3D,
             colors_precomp,
             opacities,
             scales,
             rotations,
-            raster_settings.scale_modifier,
+            scale_modifier_val,
             cov3Ds_precomp,
-            raster_settings.viewmatrix,
-            raster_settings.projmatrix,
-            raster_settings.tanfovx,
-            raster_settings.tanfovy,
-            raster_settings.image_height,
-            raster_settings.image_width,
+            viewmatrix,
+            projmatrix,
+            tanfovx_val,
+            tanfovy_val,
+            image_height_val,
+            image_width_val,
             sh,
-            raster_settings.sh_degree,
-            raster_settings.camera_center,
-            raster_settings.prefiltered,
+            sh_degree_val,
+            camera_center,
+            prefiltered_val,
             false);
 
         ctx->save_for_backward({colors_precomp, means3D, scales, rotations, cov3Ds_precomp, radii, sh, geomBuffer, binningBuffer, imgBuffer});
         // TODO: Clean up. Too much data saved.
         ctx->saved_data["num_rendered"] = num_rendered;
-        ctx->saved_data["background"] = raster_settings.bg;
-        ctx->saved_data["scale_modifier"] = raster_settings.scale_modifier;
-        ctx->saved_data["viewmatrix"] = raster_settings.viewmatrix;
-        ctx->saved_data["projmatrix"] = raster_settings.projmatrix;
-        ctx->saved_data["tanfovx"] = raster_settings.tanfovx;
-        ctx->saved_data["tanfovy"] = raster_settings.tanfovy;
-        ctx->saved_data["image_height"] = raster_settings.image_height;
-        ctx->saved_data["image_width"] = raster_settings.image_width;
-        ctx->saved_data["sh_degree"] = raster_settings.sh_degree;
-        ctx->saved_data["camera_center"] = raster_settings.camera_center;
-        ctx->saved_data["prefiltered"] = raster_settings.prefiltered;
+        ctx->saved_data["background"] = bg;
+        ctx->saved_data["scale_modifier"] = scale_modifier_val;
+        ctx->saved_data["viewmatrix"] = viewmatrix;
+        ctx->saved_data["projmatrix"] = projmatrix;
+        ctx->saved_data["tanfovx"] = tanfovx_val;
+        ctx->saved_data["tanfovy"] = tanfovy_val;
+        ctx->saved_data["image_height"] = image_height_val;
+        ctx->saved_data["image_width"] = image_width_val;
+        ctx->saved_data["sh_degree"] = sh_degree_val;
+        ctx->saved_data["camera_center"] = camera_center;
+        ctx->saved_data["prefiltered"] = prefiltered_val;
         return {color, radii};
     }
 
@@ -156,59 +174,21 @@ public:
         }
 
         // Check if tensors are undefined, and if so, initialize them
+        torch::Device device = torch::kCUDA;
         if (!shs.defined()) {
-            shs = torch::empty({0});
+            shs = torch::empty({0}, device);
         }
         if (!colors_precomp.defined()) {
-            colors_precomp = torch::empty({0});
+            colors_precomp = torch::empty({0}, device);
         }
         if (!scales.defined()) {
-            scales = torch::empty({0});
+            scales = torch::empty({0}, device);
         }
         if (!rotations.defined()) {
-            rotations = torch::empty({0});
+            rotations = torch::empty({0}, device);
         }
         if (!cov3D_precomp.defined()) {
-            cov3D_precomp = torch::empty({0});
-        }
-
-        //        struct GaussianRasterizationSettings {
-        //            int image_height;
-        //            int image_width;
-        //            float tanfovx;
-        //            float tanfovy;
-        //            torch::Tensor bg;
-        //            float scale_modifier;
-        //            torch::Tensor viewmatrix;
-        //            torch::Tensor projmatrix;
-        //            int sh_degree;
-        //            torch::Tensor camera_center;
-        //            bool prefiltered;
-        //        };
-
-        if (!raster_settings_.bg.defined()) {
-            std::cout << "BG not defined" << std::endl;
-        }
-        if (!raster_settings_.viewmatrix.defined()) {
-            std::cout << "viewmatrix not defined" << std::endl;
-        }
-        if (!raster_settings_.projmatrix.defined()) {
-            std::cout << "projmatrix not defined" << std::endl;
-        }
-        if (!raster_settings_.camera_center.defined()) {
-            std::cout << "camera_center not defined" << std::endl;
-        }
-        if (!raster_settings_.bg.is_cuda()) {
-            std::cout << "bg not on cuda" << std::endl;
-        }
-        if (!raster_settings_.viewmatrix.is_cuda()) {
-            std::cout << "viewmatrix not on cuda" << std::endl;
-        }
-        if (!raster_settings_.projmatrix.is_cuda()) {
-            std::cout << "projmatrix not on cuda" << std::endl;
-        }
-        if (!raster_settings_.camera_center.is_cuda()) {
-            std::cout << "camera_center not on cuda" << std::endl;
+            cov3D_precomp = torch::empty({0}, device);
         }
 
         auto result = rasterize_gaussians(
