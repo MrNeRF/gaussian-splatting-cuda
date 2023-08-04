@@ -48,6 +48,8 @@ int main(int argc, char* argv[]) {
 
         // Loss Computations
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
+        std::cout << "image size: " << image.sizes() << std::endl;
+        std::cout << "gt_image size: " << gt_image.sizes() << std::endl;
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         loss.backward();

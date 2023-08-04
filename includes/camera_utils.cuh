@@ -27,6 +27,6 @@ Eigen::Matrix3d qvec2rotmat(const Eigen::Quaterniond& qvec);
 
 Eigen::Quaterniond rotmat2qvec(const Eigen::Matrix3d& R);
 
-unsigned char* read_image(std::filesystem::path image_path, int width, int height, int channels);
+std::tuple<unsigned char*, int, int, int> read_image(std::filesystem::path image_path);
 
 void free_image(unsigned char* image);

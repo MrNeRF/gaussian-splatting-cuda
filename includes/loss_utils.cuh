@@ -41,7 +41,8 @@ namespace gaussian_splatting {
             window = window.to(img1.device());
         }
         window = window.to(img1.dtype());
-
+        std::cout << "Window sizes: " << window.sizes() << std::endl;
+        std::cout << "Window:/n" << window << std::endl;
         auto mu1 = torch::nn::functional::conv2d(img1, window, torch::nn::functional::Conv2dFuncOptions().padding(window_size / 2).groups(channel));
         auto mu2 = torch::nn::functional::conv2d(img2, window, torch::nn::functional::Conv2dFuncOptions().padding(window_size / 2).groups(channel));
 

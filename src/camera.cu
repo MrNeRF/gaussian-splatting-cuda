@@ -39,14 +39,14 @@ Camera::Camera(int imported_colmap_id,
 // TODO: I have skipped the resolution for now.
 Camera loadCam(const ModelParameters& params, int id, CameraInfo& cam_info) {
     // Create a torch::Tensor from the image data
-    torch::Tensor original_image_tensor = torch::from_blob(cam_info._image_data, {static_cast<long>(cam_info._image_height), static_cast<long>(cam_info._image_width), 3}, torch::kU8).to(torch::kFloat) / 255.f;
+    torch::Tensor original_image_tensor = torch::from_blob(cam_info._img_data, {static_cast<long>(cam_info._img_h), static_cast<long>(cam_info._img_w), 3}, torch::kU8).to(torch::kFloat) / 255.f;
 
     // Change the view to be {height * width, 3}
     // original_image_tensor = original_image_tensor.view({static_cast<long>(cam_info._image_height) *  static_cast<long>(cam_info._image_width), 3});
     // TODO: Check if this is correct
     original_image_tensor = original_image_tensor.permute({2, 0, 1});
-    free_image(cam_info._image_data); // we dont longer need the image here.
-    cam_info._image_data = nullptr;   // Assure that we dont use the image data anymore.
+    free_image(cam_info._img_data); // we dont longer need the image here.
+    cam_info._img_data = nullptr;   // Assure that we dont use the image data anymore.
 
     if (original_image_tensor.size(0) > 3) {
         original_image_tensor = original_image_tensor.slice(0, 0, 3);

@@ -106,13 +106,14 @@ Eigen::Quaterniond rotmat2qvec(const Eigen::Matrix3d& R) {
     return qvec;
 }
 
-unsigned char* read_image(std::filesystem::path image_path, int width, int height, int channels) {
+std::tuple<unsigned char*, int, int, int> read_image(std::filesystem::path image_path) {
+    int width, height, channels;
     unsigned char* img = stbi_load(image_path.string().c_str(), &width, &height, &channels, 0);
     if (img == nullptr) {
         throw std::runtime_error("Could not load image: " + image_path.string());
     }
 
-    return img;
+    return {img, width, height, channels};
 }
 
 void free_image(unsigned char* image) {

@@ -153,18 +153,28 @@ void write_ply_file(const std::filesystem::path& file_path, const PointCloud& po
 
     if (!point_cloud._points.empty()) {
         binary_point3D_file.add_properties_to_element("vertex", {"x", "y", "z"},
-                                                      tinyply::Type::FLOAT32, point_cloud._points.size(), const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._points.data())), tinyply::Type::INVALID, 0);
+                                                      tinyply::Type::FLOAT32, point_cloud._points.size(),
+                                                      const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._points.data())),
+                                                      tinyply::Type::INVALID,
+                                                      0);
     }
 
     if (!point_cloud._normals.empty()) {
         binary_point3D_file.add_properties_to_element("vertex", {"nx", "ny", "nz"},
-                                                      tinyply::Type::FLOAT32, point_cloud._normals.size(), const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._normals.data())), tinyply::Type::INVALID, 0);
+                                                      tinyply::Type::FLOAT32,
+                                                      point_cloud._normals.size(),
+                                                      const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._normals.data())),
+                                                      tinyply::Type::INVALID,
+                                                      0);
     }
 
     if (!point_cloud._colors.empty()) {
 
         binary_point3D_file.add_properties_to_element("vertex", {"red", "green", "blue"},
-                                                      tinyply::Type::UINT8, point_cloud._colors.size(), const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._colors.data())), tinyply::Type::INVALID, 0);
+                                                      tinyply::Type::UINT8, point_cloud._colors.size(),
+                                                      const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._colors.data())),
+                                                      tinyply::Type::INVALID,
+                                                      0);
     }
     binary_point3D_file.write(outstream_binary, true);
 }
@@ -229,11 +239,10 @@ std::unordered_map<uint32_t, CameraInfo> read_cameras_binary(std::filesystem::pa
 
     for (size_t i = 0; i < camera_count; ++i) {
         auto cam = CameraInfo();
-        cam._image_channels = 3;
         cam._camera_ID = read_binary_value<uint32_t>(*camera_stream_buffer);
         auto model_id = read_binary_value<int>(*camera_stream_buffer);
-        cam._image_width = read_binary_value<uint64_t>(*camera_stream_buffer);
-        cam._image_height = read_binary_value<uint64_t>(*camera_stream_buffer);
+        cam._width = read_binary_value<uint64_t>(*camera_stream_buffer);
+        cam._height = read_binary_value<uint64_t>(*camera_stream_buffer);
         cam._camera_model = std::get<0>(camera_model_ids[model_id]);
         auto camera_param_count = std::get<1>(camera_model_ids[model_id]);
         cam._params.resize(camera_param_count);
@@ -296,23 +305,26 @@ std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_pat
         auto it = cameras.find(image._camera_id);
         camera_infos[image_ID] = it->second; // Make a copy
 
-        camera_infos[image_ID]._image_data = read_image(file_path / image._name,
-                                                        camera_infos[image_ID]._image_width,
-                                                        camera_infos[image_ID]._image_height,
-                                                        camera_infos[image_ID]._image_channels);
+        //        std::cout << "Image widht: " << camera_infos[image_ID]._im  << std::endl;
+        //        std::cout << "Image height: " << camera_infos[image_ID]._image_height << std::endl;
+        auto [img_data, width, height, channels] = read_image(file_path / image._name);
+        camera_infos[image_ID]._img_w = width;
+        camera_infos[image_ID]._img_h = height;
+        camera_infos[image_ID]._channels = channels;
+        camera_infos[image_ID]._img_data = img_data;
 
         camera_infos[image_ID]._R = qvec2rotmat(image._qvec).transpose();
         camera_infos[image_ID]._T = image._tvec;
 
         if (camera_infos[image_ID]._camera_model == CAMERA_MODEL::SIMPLE_PINHOLE) {
             double focal_length_x = camera_infos[image_ID]._params[0];
-            camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID]._image_width);
-            camera_infos[image_ID]._fov_y = focal2fov(focal_length_x, camera_infos[image_ID]._image_height);
+            camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID]._width);
+            camera_infos[image_ID]._fov_y = focal2fov(focal_length_x, camera_infos[image_ID]._height);
         } else if (camera_infos[image_ID]._camera_model == CAMERA_MODEL::PINHOLE) {
             double focal_length_x = camera_infos[image_ID]._params[0];
             double focal_length_y = camera_infos[image_ID]._params[1];
-            camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID]._image_width);
-            camera_infos[image_ID]._fov_y = focal2fov(focal_length_y, camera_infos[image_ID]._image_height);
+            camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID]._width);
+            camera_infos[image_ID]._fov_y = focal2fov(focal_length_y, camera_infos[image_ID]._height);
         } else {
             throw std::runtime_error("Camera model not supported");
         }

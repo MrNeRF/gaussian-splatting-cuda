@@ -33,11 +33,13 @@ struct CameraInfo {
     std::string _image_name;
     std::filesystem::path _image_path;
     CAMERA_MODEL _camera_model;
-    uint64_t _image_width;
-    uint64_t _image_height;
+    int _width;
+    int _height;
+    int _img_w;
+    int _img_h;
+    int _channels;
     std::vector<double> _params;
-    uint64_t _image_channels;
-    unsigned char* _image_data; // shallow copy is fine here. No ownership
+    unsigned char* _img_data; // shallow copy is fine here. No ownership
 };
 
 // void dump_JSON(const std::filesystem::path& file_path, const nlohmann::json& json_data) {
