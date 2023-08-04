@@ -34,15 +34,13 @@ namespace gaussian_splatting {
     // It's considered a better metric than mean squared error for perceptual image quality as it considers changes in structural information,
     // luminance, and contrast.
     torch::Tensor ssim(const torch::Tensor& img1, const torch::Tensor& img2, int window_size = 11, bool size_average = true) {
-        int channel = img1.size(1);
+        int channel = img1.size(0); // first dimension is channel
         auto window = create_window(window_size, channel);
 
         if (img1.is_cuda()) {
             window = window.to(img1.device());
         }
         window = window.to(img1.dtype());
-        std::cout << "Window sizes: " << window.sizes() << std::endl;
-        std::cout << "Window:/n" << window << std::endl;
         auto mu1 = torch::nn::functional::conv2d(img1, window, torch::nn::functional::Conv2dFuncOptions().padding(window_size / 2).groups(channel));
         auto mu2 = torch::nn::functional::conv2d(img2, window, torch::nn::functional::Conv2dFuncOptions().padding(window_size / 2).groups(channel));
 
