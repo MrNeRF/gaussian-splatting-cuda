@@ -103,21 +103,6 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     _opacity = opacities.set_requires_grad(true);
     _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
 
-    std::cout << "_xyz: \n"
-              << _xyz.slice(0, 0, 5) << std::endl;
-    std::cout << "_features_dc: \n"
-              << _features_dc.slice(0, 0, 5) << std::endl;
-    std::cout << "_features_rest: \n"
-              << _features_rest.slice(0, 0, 5) << std::endl;
-    std::cout << "_scaling: \n"
-              << _scaling.slice(0, 0, 5) << std::endl;
-    std::cout << "_rotation: \n"
-              << _rotation.slice(0, 0, 5) << std::endl;
-    std::cout << "_opacity: \n"
-              << _opacity.slice(0, 0, 5) << std::endl;
-    std::cout << "_max_radii2D: \n"
-              << _max_radii2D.slice(0, 0, 5) << std::endl;
-
     std::cout << "Creating from pcd done" << std::endl;
 }
 

@@ -64,13 +64,14 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
     }
 
     torch::cuda::synchronize();
+
     // Rasterize visible Gaussians to image, obtain their radii (on screen).
     auto [rendererd_image, radii] = rasterizer.forward(
         means3D,
         means2D,
+        opacity,
         shs,
         colors_precomp,
-        opacity,
         scales,
         rotations,
         cov3D_precomp);

@@ -60,6 +60,9 @@ public:
         int sh_degree_val = sh_degree.item<int>();
         bool prefiltered_val = prefiltered.item<bool>();
 
+        // TODO: should it be this way? Bug?
+        camera_center = camera_center.contiguous();
+
         auto [num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer] = RasterizeGaussiansCUDA(
             bg,
             means3D,
@@ -79,7 +82,7 @@ public:
             sh_degree_val,
             camera_center,
             prefiltered_val,
-            false);
+            true);
 
         ctx->save_for_backward({colors_precomp, means3D, scales, rotations, cov3Ds_precomp, radii, sh, geomBuffer, binningBuffer, imgBuffer});
         // TODO: Clean up. Too much data saved.
@@ -136,7 +139,7 @@ public:
             num_rendered,
             binningBuffer,
             imgBuffer,
-            false);
+            true);
 
         return {grad_means3D, grad_means2D, grad_sh, grad_colors_precomp, grad_opacities, grad_scales, grad_rotations, grad_cov3Ds_precomp, torch::Tensor(), torch::Tensor()};
     }
@@ -190,6 +193,9 @@ public:
         if (!cov3D_precomp.defined()) {
             cov3D_precomp = torch::empty({0}, device);
         }
+
+        // match datalayout to python implementation
+        //        means3D = means3D.transpose(0, 1);
 
         auto result = rasterize_gaussians(
             means3D,
