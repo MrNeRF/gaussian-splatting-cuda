@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, camera_count - 1);
     // training loop
-    for (int iter = 0; iter < optimParams.iterations; ++iter) {
+    for (int iter = 1; iter < optimParams.iterations; ++iter) {
         if (iter % 1000 == 0) {
             gaussians.One_up_sh_degree();
         }
@@ -48,39 +48,45 @@ int main(int argc, char* argv[]) {
 
         // Loss Computations
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
-        std::cout << "image size: " << image.sizes() << std::endl;
-        std::cout << "gt_image size: " << gt_image.sizes() << std::endl;
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         loss.backward();
 
         {
             torch::NoGradGuard no_grad;
-            // TODO: python code. Tranlate and adapt
-            //            # Keep track of max radii in image-space for pruning
-            //            gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-            //
-            //            if (iteration in saving_iterations):
-            //              print("\n[ITER {}] Saving Gaussians".format(iteration))
-            //              scene.save(iteration)
-            //
-            //            # Densification
-            //            if iteration < opt.densify_until_iter:
-            //              gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
-            //
-            //            if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
-            //              size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-            //              gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-            //
-            //            if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
-            //              gaussians.reset_opacity()
-            //
-            //           Optimizer step
-                        if (iter < optimParams.iterations) {
-                            gaussians.optimizer.step()
-                            gaussians.optimizer.zero_grad(set_to_none = True)
-                            gaussians.update_learning_rate(iteration)
-                        }
+            // Keep track of max radii in image-space for pruning
+            auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
+            auto visible_radii = radii.masked_select(visibility_filter);
+
+            auto max_radii = torch::max(visible_max_radii, visible_radii);
+            gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
+
+            // TODO: support saving
+            //          if (iteration in saving_iterations):
+            //             print("\n[ITER {}] Saving Gaussians".format(iteration))
+            //             scene.save(iteration)
+
+            // Densification
+            if (iter < optimParams.densify_until_iter) {
+                gaussians.Add_densification_stats(viewspace_point_tensor, visibility_filter);
+                if (iter > optimParams.densify_from_iter && iter % optimParams.densification_interval == 0) {
+                    // @TODO: Not sure about type
+                    float size_threshold = iter > optimParams.opacity_reset_interval ? 20.f : -1.f;
+                    gaussians.Densify_and_prune(optimParams.densify_grad_threshold, 0.005, scene.Get_cameras_extent(), size_threshold);
+                }
+
+                if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
+                    gaussians.Reset_opacity();
+                }
+            }
+
+            //  Optimizer step
+            if (iter < optimParams.iterations) {
+                gaussians._optimizer->step();
+                gaussians._optimizer->zero_grad(true);
+                // @TODO: Not sure about type
+                gaussians.Update_learning_rate(iter);
+            }
         }
     }
     return 0;

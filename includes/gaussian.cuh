@@ -12,7 +12,7 @@
 #include <string>
 #include <torch/torch.h>
 
-class GaussianModel : torch::nn::Module {
+class GaussianModel {
 public:
     explicit GaussianModel(int sh_degree);
     // Copy constructor
@@ -48,6 +48,8 @@ public:
 public:
     // should not be public or it should maybe be pulled out here. Not sure yet
     std::unique_ptr<torch::optim::Adam> _optimizer;
+    torch::Tensor _max_radii2D;
+
 private:
     void prune_points(const torch::Tensor& mask);
     void densification_postfix(const torch::Tensor& new_xyz,
@@ -65,6 +67,7 @@ private:
     int _max_sh_degree;
     float _spatial_lr_scale{};
     float _percent_dense{};
+    std::vector<torch::optim::OptimizerParamGroup> _optimizer_params_groups;
 
     Expon_lr_func _xyz_scheduler_args;
     torch::Tensor _denom;
@@ -74,6 +77,5 @@ private:
     torch::Tensor _scaling;
     torch::Tensor _rotation;
     torch::Tensor _opacity;
-    torch::Tensor _max_radii2D;
     torch::Tensor _xyz_gradient_accum;
 };

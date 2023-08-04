@@ -79,13 +79,13 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
             point_cloud._points.resize(vertices->count);
             std::memcpy(point_cloud._points.data(), vertices->buffer.get(), vertices->buffer.size_bytes());
 
-            int counter = 0;
-            for (const auto& v : point_cloud._points) {
-                std::cout << "\tRead Vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
-                if (counter++ > 9) {
-                    break;
-                }
-            }
+            //            int counter = 0;
+            //            for (const auto& v : point_cloud._points) {
+            //                std::cout << "\tRead Vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
+            //                if (counter++ > 9) {
+            //                    break;
+            //                }
+            //            }
         } catch (const std::exception& e) {
             std::cerr << "tinyply exception: " << e.what() << std::endl;
         }
@@ -100,14 +100,13 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
             point_cloud._normals.resize(normals->count);
             std::memcpy(point_cloud._normals.data(), normals->buffer.get(), normals->buffer.size_bytes());
 
-            int counter = 0;
-            for (const auto& n : point_cloud._normals) {
-                std::cout << "\tRead Colors: " << static_cast<int>(n.x) << " " << static_cast<int>(n.y) << " " << static_cast<int>(n.z) << std::endl;
-                if (counter++ > 9) {
-                    break;
-                }
-            }
-
+            //            int counter = 0;
+            //            for (const auto& n : point_cloud._normals) {
+            //                std::cout << "\tRead Colors: " << static_cast<int>(n.x) << " " << static_cast<int>(n.y) << " " << static_cast<int>(n.z) << std::endl;
+            //                if (counter++ > 9) {
+            //                    break;
+            //                }
+            //            }
         } catch (const std::exception& e) {
             std::cerr << "tinyply exception: " << e.what() << std::endl;
         }
@@ -119,14 +118,13 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
             point_cloud._colors.resize(colors->count);
             std::memcpy(point_cloud._colors.data(), colors->buffer.get(), colors->buffer.size_bytes());
 
-            int counter = 0;
-            for (const auto& c : point_cloud._colors) {
-                std::cout << "\tRead Colors: " << static_cast<int>(c.r) << " " << static_cast<int>(c.g) << " " << static_cast<int>(c.b) << std::endl;
-                if (counter++ > 9) {
-                    break;
-                }
-            }
-
+            //            int counter = 0;
+            //            for (const auto& c : point_cloud._colors) {
+            //                std::cout << "\tRead Colors: " << static_cast<int>(c.r) << " " << static_cast<int>(c.g) << " " << static_cast<int>(c.b) << std::endl;
+            //                if (counter++ > 9) {
+            //                    break;
+            //                }
+            //            }
         } catch (const std::exception& e) {
             std::cerr << "tinyply exception: " << e.what() << std::endl;
         }
@@ -305,8 +303,6 @@ std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_pat
         auto it = cameras.find(image._camera_id);
         camera_infos[image_ID] = it->second; // Make a copy
 
-        //        std::cout << "Image widht: " << camera_infos[image_ID]._im  << std::endl;
-        //        std::cout << "Image height: " << camera_infos[image_ID]._image_height << std::endl;
         auto [img_data, width, height, channels] = read_image(file_path / image._name);
         camera_infos[image_ID]._img_w = width;
         camera_infos[image_ID]._img_h = height;

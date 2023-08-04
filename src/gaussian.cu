@@ -13,15 +13,6 @@ GaussianModel::GaussianModel(int sh_degree) : _max_sh_degree(sh_degree),
     _opacity = torch::empty({0});
     _max_radii2D = torch::empty({0});
     _xyz_gradient_accum = torch::empty({0});
-
-    // IMPORTANT: The order has to stay fix because we must now the place of the parameters
-    // The optimizer just gets the tensor. There is currently no way to access the parameters by name
-    register_parameter("xyz", _xyz, true);
-    register_parameter("features_dc", _features_dc, true);
-    register_parameter("features_rest", _features_rest, true);
-    register_parameter("scaling", _scaling, true);
-    register_parameter("rotation", _rotation, true);
-    register_parameter("opacity", _opacity, true);
 }
 
 torch::Tensor GaussianModel::Get_covariance(float scaling_modifier) {
@@ -79,17 +70,11 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     auto features = torch::zeros({fused_color.size(0), 3, static_cast<long>(std::pow((_max_sh_degree + 1), 2))}).to(torch::kCUDA);
     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(torch::indexing::None, 3), 0}, fused_color);
     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(3, torch::indexing::None), torch::indexing::Slice(1, torch::indexing::None)}, 0.0);
-    std::cout << "features: \n"
-              << features.slice(0, 0, 5) << std::endl;
 
     std::cout << "Number of points at initialisation : " << fused_point_cloud.size(0) << std::endl;
 
     auto dist2 = torch::clamp_min(distCUDA2(torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA)), 0.0000001);
-    // print first 10 distances
-    std::cout << "First 10 distances : " << std::endl;
-    for (int i = 0; i < 10; i++) {
-        std::cout << dist2[i] << std::endl;
-    }
+
     auto scales = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3}, 0);
     auto rots = torch::zeros({fused_point_cloud.size(0), 4}).to(torch::kCUDA);
     rots.index_put_({torch::indexing::Slice(), 0}, 1);
@@ -125,7 +110,29 @@ void GaussianModel::Training_setup(const OptimizationParameters& params) {
                                               params.position_lr_max_steps);
 
     // TODO: seems kind weird to do this here
-    _optimizer = std::make_unique<torch::optim::Adam>(parameters(), torch::optim::AdamOptions(0.0).eps(1e-15));
+    _xyz.set_requires_grad(true);
+    _features_dc.set_requires_grad(true);
+    _features_rest.set_requires_grad(true);
+    _scaling.set_requires_grad(true);
+    _rotation.set_requires_grad(true);
+    _opacity.set_requires_grad(true);
+
+    _optimizer_params_groups.reserve(6);
+    _optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_xyz}, std::make_unique<torch::optim::AdamOptions>(params.position_lr_init * this->_spatial_lr_scale)));
+    _optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_features_dc}, std::make_unique<torch::optim::AdamOptions>(params.feature_lr)));
+    _optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_features_rest}, std::make_unique<torch::optim::AdamOptions>(params.feature_lr / 20.)));
+    _optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_scaling}, std::make_unique<torch::optim::AdamOptions>(params.scaling_lr * this->_spatial_lr_scale)));
+    _optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_rotation}, std::make_unique<torch::optim::AdamOptions>(params.rotation_lr)));
+    _optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_opacity}, std::make_unique<torch::optim::AdamOptions>(params.opacity_lr)));
+
+    static_cast<torch::optim::AdamOptions&>(_optimizer_params_groups[0].options()).eps(1e-15);
+    static_cast<torch::optim::AdamOptions&>(_optimizer_params_groups[1].options()).eps(1e-15);
+    static_cast<torch::optim::AdamOptions&>(_optimizer_params_groups[2].options()).eps(1e-15);
+    static_cast<torch::optim::AdamOptions&>(_optimizer_params_groups[3].options()).eps(1e-15);
+    static_cast<torch::optim::AdamOptions&>(_optimizer_params_groups[4].options()).eps(1e-15);
+    static_cast<torch::optim::AdamOptions&>(_optimizer_params_groups[5].options()).eps(1e-15);
+
+    _optimizer = std::make_unique<torch::optim::Adam>(_optimizer_params_groups, torch::optim::AdamOptions(params.position_lr_init * this->_spatial_lr_scale).eps(1e-15));
     std::cout << "Training setup done" << std::endl;
 }
 
@@ -143,10 +150,28 @@ void GaussianModel::Reset_opacity() {
     // Hopefully this is doing the same as the python code
     std::cout << "Resetting opacity" << std::endl;
     // opacitiy activation
+
     _opacity = inverse_sigmoid(torch::ones_like(Get_opacity() * 0.01));
-    auto* adamParams = static_cast<torch::optim::AdamParamState*>(_optimizer->state()["opacity"].get());
-    adamParams->exp_avg(torch::zeros_like(_opacity));
-    adamParams->exp_avg_sq(torch::zeros_like(_opacity));
+    // for debugging
+    for (auto& group : _optimizer->param_groups()) {
+        std::cout << "Group" << std::endl;
+        if (group.params().size() != 1) {
+            throw std::runtime_error("too many params");
+        }
+
+        if (!group.params()[0].grad().defined()) {
+            throw std::runtime_error("param grad not defined");
+        }
+    }
+
+    // Get opacity ParamState? Is this really the most elegant and intuitive way to do this?
+    auto& opacityAdamParamStates = static_cast<torch::optim::AdamParamState&>(
+        *_optimizer->state()[c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl())]);
+
+    // Reset optimizer opacity states?
+    opacityAdamParamStates.exp_avg(torch::zeros_like(opacityAdamParamStates.exp_avg()));
+    opacityAdamParamStates.exp_avg_sq(torch::zeros_like(opacityAdamParamStates.exp_avg_sq()));
+
     std::cout << "Opacity resetting done!" << std::endl;
 }
 
