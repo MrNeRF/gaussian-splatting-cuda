@@ -47,8 +47,10 @@ public:
 
 public:
     // should not be public or it should maybe be pulled out here. Not sure yet
+    // This is all public mostly for debugging purposes
     std::unique_ptr<torch::optim::Adam> _optimizer;
     torch::Tensor _max_radii2D;
+    torch::Tensor _opacity;
 
 private:
     void prune_points(const torch::Tensor& mask);
@@ -76,6 +78,5 @@ private:
     torch::Tensor _features_rest;
     torch::Tensor _scaling;
     torch::Tensor _rotation;
-    torch::Tensor _opacity;
     torch::Tensor _xyz_gradient_accum;
 };

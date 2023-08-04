@@ -146,31 +146,40 @@ void GaussianModel::Save_as_ply(const std::string& filename) {
     throw std::runtime_error("Not implemented");
 }
 
+static const std::vector<std::string> mapping = {"xyz", "features_dc", "features_rest", "scaling", "rotation", "opacity"};
 void GaussianModel::Reset_opacity() {
     // Hopefully this is doing the same as the python code
     std::cout << "Resetting opacity" << std::endl;
-    // opacitiy activation
-
-    _opacity = inverse_sigmoid(torch::ones_like(Get_opacity() * 0.01));
     // for debugging
+    int i = 0;
     for (auto& group : _optimizer->param_groups()) {
-        std::cout << "Group" << std::endl;
+        std::cout << "Group " << mapping[i] << std::endl;
         if (group.params().size() != 1) {
-            throw std::runtime_error("too many params");
+            throw std::runtime_error("too many params: " + mapping[i]);
         }
 
         if (!group.params()[0].grad().defined()) {
-            throw std::runtime_error("param grad not defined");
+            throw std::runtime_error("param grad not defined: " + mapping[i]);
         }
+        ++i;
     }
+
+    // opacitiy activation
+    auto new_opacity = inverse_sigmoid(torch::ones_like(Get_opacity(), torch::TensorOptions().dtype(torch::kFloat32)) * 0.01f);
 
     // Get opacity ParamState? Is this really the most elegant and intuitive way to do this?
     auto& opacityAdamParamStates = static_cast<torch::optim::AdamParamState&>(
         *_optimizer->state()[c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl())]);
 
+    // Zero params out
+    opacityAdamParamStates.exp_avg(torch::zeros_like(new_opacity));
+    opacityAdamParamStates.exp_avg_sq(torch::zeros_like(new_opacity));
+
+    // replace tensor
+    _optimizer->param_groups()[5].params()[0] = new_opacity.requires_grad_(true);
+    // replace opacity with new tensor
+    _opacity = new_opacity;
     // Reset optimizer opacity states?
-    opacityAdamParamStates.exp_avg(torch::zeros_like(opacityAdamParamStates.exp_avg()));
-    opacityAdamParamStates.exp_avg_sq(torch::zeros_like(opacityAdamParamStates.exp_avg_sq()));
 
     std::cout << "Opacity resetting done!" << std::endl;
 }
@@ -251,6 +260,7 @@ void GaussianModel::densification_postfix(const torch::Tensor& new_xyz,
 }
 
 void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, int N) {
+    std::cout << "Densify and split" << std::endl;
     int n_init_points = _xyz.size(0);
     // Extract points that satisfy the gradient condition
     torch::Tensor padded_grad = torch::zeros({n_init_points}).to(torch::kCUDA);
@@ -275,6 +285,7 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
 
     torch::Tensor prune_filter = torch::cat({selected_pts_mask, torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kCUDA).to(torch::kBool)});
     prune_points(prune_filter);
+    std::cout << "Densify and split done!" << std::endl;
 }
 
 void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent) {

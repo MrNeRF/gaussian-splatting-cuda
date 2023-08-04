@@ -52,6 +52,9 @@ int main(int argc, char* argv[]) {
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         loss.backward();
 
+        if (!gaussians._opacity.grad().defined()) {
+            std::cout << "Opacity gradient is not defined! Iter: " << iter << std::endl;
+        }
         {
             torch::NoGradGuard no_grad;
             // Keep track of max radii in image-space for pruning
@@ -76,6 +79,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
+                    std::cout << "iteration " << iter << " resetting opacity" << std::endl;
                     gaussians.Reset_opacity();
                 }
             }
