@@ -54,12 +54,12 @@ public:
 
 private:
     void prune_points(const torch::Tensor& mask);
-    void densification_postfix(const torch::Tensor& new_xyz,
-                               const torch::Tensor& new_features_dc,
-                               const torch::Tensor& new_features_rest,
-                               const torch::Tensor& new_scaling,
-                               const torch::Tensor& new_rotation,
-                               const torch::Tensor& new_opacity);
+    void densification_postfix(torch::Tensor& new_xyz,
+                               torch::Tensor& new_features_dc,
+                               torch::Tensor& new_features_rest,
+                               torch::Tensor& new_scaling,
+                               torch::Tensor& new_rotation,
+                               torch::Tensor& new_opacity);
 
     void densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent);
     void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, int N = 2);

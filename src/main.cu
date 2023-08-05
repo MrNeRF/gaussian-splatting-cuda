@@ -42,14 +42,15 @@ int main(int argc, char* argv[]) {
         }
 
         // Render
-        // const int random_index = dis(gen);
-        auto& cam = scene.Get_training_camera(0);
+        const int random_index = dis(gen);
+        auto& cam = scene.Get_training_camera(random_index);
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
         // Loss Computations
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
+        std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << std::endl;
         loss.backward();
 
         if (!gaussians._opacity.grad().defined()) {
