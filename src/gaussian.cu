@@ -213,7 +213,7 @@ void GaussianModel::prune_points(const torch::Tensor& mask) {
 }
 
 void cat_tensors_to_optimizer(torch::optim::Adam* optimizer,
-                              torch::Tensor& new_tensor,
+                              torch::Tensor& extension_tensor,
                               torch::Tensor& old_tensor,
                               const std::string& name,
                               int param_position) {
@@ -224,14 +224,14 @@ void cat_tensors_to_optimizer(torch::optim::Adam* optimizer,
         *optimizer->state()[c10::guts::to_string(optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl())]);
 
     // Zero params out
-    adamParamStates.exp_avg(torch::cat({adamParamStates.exp_avg(), torch::zeros_like(old_tensor)}, 0));
-    adamParamStates.exp_avg_sq(torch::cat({adamParamStates.exp_avg_sq(), torch::zeros_like(old_tensor)}, 0));
+    adamParamStates.exp_avg(torch::cat({adamParamStates.exp_avg(), torch::zeros_like(extension_tensor)}, 0));
+    adamParamStates.exp_avg_sq(torch::cat({adamParamStates.exp_avg_sq(), torch::zeros_like(extension_tensor)}, 0));
 
     // replace tensor param
-    optimizer->param_groups()[param_position].params()[0] = new_tensor.requires_grad_(true);
+    optimizer->param_groups()[param_position].params()[0] = torch::cat({old_tensor, extension_tensor}, 0).set_requires_grad(true);
 
     // replace old with new tensor
-    old_tensor = new_tensor;
+    old_tensor = optimizer->param_groups()[param_position].params()[0];
 
     std::cout << "Cat tensors to optimizer done!" << std::endl;
 }
