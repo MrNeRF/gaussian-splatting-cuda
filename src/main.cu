@@ -59,7 +59,10 @@ int main(int argc, char* argv[]) {
         {
             torch::NoGradGuard no_grad;
             // Keep track of max radii in image-space for pruning
+            std::cout << "visibility_filter size" << visibility_filter.sizes() << std::endl;
+            std::cout << "gaussian._max_radii2D size" << gaussians._max_radii2D.sizes() << std::endl;
             auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
+            std::cout << "visible_max_raddi size" << visible_max_radii.sizes() << std::endl;
             auto visible_radii = radii.masked_select(visibility_filter);
 
             auto max_radii = torch::max(visible_max_radii, visible_radii);

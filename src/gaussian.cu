@@ -184,30 +184,44 @@ void GaussianModel::Reset_opacity() {
     std::cout << "Opacity resetting done!" << std::endl;
 }
 
-void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, torch::Tensor& updateTensor, const std::string& name) {
-    std::cout << "Prune Optimizer " << name << std::endl;
-    auto* adamParamState = static_cast<torch::optim::AdamParamState*>(optimizer->state()[name].get());
-    if (adamParamState != nullptr) {
-        adamParamState->exp_avg(adamParamState->exp_avg().masked_select(mask));
-        adamParamState->exp_avg_sq(adamParamState->exp_avg_sq().masked_select(mask));
-    }
-    updateTensor = updateTensor.masked_select(mask);
-    std::cout << "Prune Optimizer done!" << name << std::endl;
+void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, torch::Tensor& old_tensor, int param_position) {
+    std::cout << "Prune Optimizer " << std::endl;
+
+    std::cout << "old tensor size: " << old_tensor.sizes() << std::endl;
+    std::cout << "mask size: " << mask.sizes() << std::endl;
+    old_tensor = old_tensor.index_select(0, mask);
+    optimizer->param_groups()[param_position].params()[0] = old_tensor;
+    //    auto* adamParamState = static_cast<torch::optim::AdamParamState*>(optimizer->state()[param].get());
+    //    if (adamParamState != nullptr) {
+    //        adamParamState->exp_avg(adamParamState->exp_avg().masked_select(mask));
+    //        adamParamState->exp_avg_sq(adamParamState->exp_avg_sq().masked_select(mask));
+    //    }
+    std::cout << "Prune Optimizer done!" << std::endl;
 }
 
 void GaussianModel::prune_points(const torch::Tensor& mask) {
     std::cout << "Pruning points" << std::endl;
-    prune_optimizer(_optimizer.get(), mask, _xyz, "xyz");
-    prune_optimizer(_optimizer.get(), mask, _features_dc, "features_dc");
-    prune_optimizer(_optimizer.get(), mask, _features_rest, "features_rest");
-    prune_optimizer(_optimizer.get(), mask, _scaling, "scaling");
-    prune_optimizer(_optimizer.get(), mask, _rotation, "rotation");
-    prune_optimizer(_optimizer.get(), mask, _opacity, "opacity");
+    auto indices = torch::nonzero(mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
+    std::cout << "Indices: " << indices.sizes() << std::endl;
+    prune_optimizer(_optimizer.get(), indices, _xyz, 0);
+    prune_optimizer(_optimizer.get(), indices, _features_dc, 1);
+    prune_optimizer(_optimizer.get(), indices, _features_rest, 2);
+    prune_optimizer(_optimizer.get(), indices, _scaling, 3);
+    prune_optimizer(_optimizer.get(), indices, _rotation, 4);
+    prune_optimizer(_optimizer.get(), indices, _opacity, 5);
 
     torch::Tensor valid_points_mask = ~mask;
-    _xyz_gradient_accum = _xyz_gradient_accum.masked_select(valid_points_mask);
-    _denom = _denom.masked_select(valid_points_mask);
-    _max_radii2D = _max_radii2D.masked_select(valid_points_mask);
+    indices = torch::nonzero(valid_points_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
+    std::cout << "Indices: " << indices.sizes() << std::endl;
+    std::cout << "xyz_gradient_accum size: " << _xyz_gradient_accum.sizes() << std::endl;
+    _xyz_gradient_accum = _xyz_gradient_accum.index_select(0, indices);
+    std::cout << "xyz_gradient_accum size: " << _xyz_gradient_accum.sizes() << std::endl;
+    std::cout << "denom size: " << _denom.sizes() << std::endl;
+    _denom = _denom.index_select(0, indices);
+    std::cout << "denom size: " << _denom.sizes() << std::endl;
+    std::cout << "max_radii2D size: " << _max_radii2D.sizes() << std::endl;
+    _max_radii2D = _max_radii2D.index_select(0, indices);
+    std::cout << "max_radii2D size: " << _max_radii2D.sizes() << std::endl;
 
     std::cout << "Pruning points done!" << std::endl;
 }
@@ -219,19 +233,19 @@ void cat_tensors_to_optimizer(torch::optim::Adam* optimizer,
                               int param_position) {
     std::cout << "Cat tensors to optimizer" << std::endl;
 
-    // Get opacity ParamState? Is this really the most elegant and intuitive way to do this?
-    auto& adamParamStates = static_cast<torch::optim::AdamParamState&>(
-        *optimizer->state()[c10::guts::to_string(optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl())]);
+    //    auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(static_cast<torch::optim::AdamParamState&>(
+    //        *optimizer->state()[c10::guts::to_string(optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl())]));
+    //    optimizer->state().erase(c10::guts::to_string(optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl()));
+    //
+    //    adamParamStates->exp_avg(torch::cat({adamParamStates->exp_avg(), torch::zeros_like(extension_tensor)}, 0));
+    //    adamParamStates->exp_avg_sq(torch::cat({adamParamStates->exp_avg_sq(), torch::zeros_like(extension_tensor)}, 0));
 
-    // Zero params out
-    adamParamStates.exp_avg(torch::cat({adamParamStates.exp_avg(), torch::zeros_like(extension_tensor)}, 0));
-    adamParamStates.exp_avg_sq(torch::cat({adamParamStates.exp_avg_sq(), torch::zeros_like(extension_tensor)}, 0));
-
-    // replace tensor param
-    optimizer->param_groups()[param_position].params()[0] = torch::cat({old_tensor, extension_tensor}, 0).set_requires_grad(true);
-
-    // replace old with new tensor
-    old_tensor = optimizer->param_groups()[param_position].params()[0];
+    old_tensor = torch::cat({old_tensor, extension_tensor}, 0).set_requires_grad(true);
+    optimizer->param_groups()[param_position].params()[0] = old_tensor;
+    // TODO maybe? This does not work
+    //    optimizer->state()[c10::guts::to_string(optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl())] = std::move(adamParamStates);
+    //    std::cout << "adamParamStates->exp_avg(): " << adamParamStates->exp_avg().sizes() << std::endl;
+    //    std::cout << "adamParamStates->exp_avg_sq(): " << adamParamStates->exp_avg_sq().sizes() << std::endl;
 
     std::cout << "Cat tensors to optimizer done!" << std::endl;
 }
@@ -244,18 +258,22 @@ void GaussianModel::densification_postfix(torch::Tensor& new_xyz,
                                           torch::Tensor& new_opacity) {
     std::cout << "Densification postfix" << std::endl;
 
-    //    int i = 0;
-    //    for (auto& group : _optimizer->param_groups()) {
-    //        std::cout << "Group " << mapping[i] << std::endl;
-    //        if (group.params().size() != 1) {
-    //            throw std::runtime_error("too many params: " + mapping[i]);
-    //        }
-    //
-    //        if (!group.params()[0].grad().defined()) {
-    //            throw std::runtime_error("param grad not defined: " + mapping[i]);
-    //        }
-    //        ++i;
+    int i = 0;
+    if (_optimizer->param_groups().size() != 6) {
+        throw std::runtime_error("optimizer param groups size not 6");
+    }
+    for (auto& group : _optimizer->param_groups()) {
+        std::cout << "Group " << mapping[i] << std::endl;
+        if (group.params().size() != 1) {
+            throw std::runtime_error("too many params: " + mapping[i]);
+        }
+        std::cout << group.params().size() << std::endl;
+    }
+    //    if (_optimizer->state().size() != 6) {
+    //       throw std::runtime_error("optimizer state size not 6");
     //    }
+
+    std::cout << "Optimizer state size: " << _optimizer->state().size() << std::endl;
     cat_tensors_to_optimizer(_optimizer.get(), new_xyz, _xyz, "xyz", 0);
     cat_tensors_to_optimizer(_optimizer.get(), new_features_dc, _features_dc, "features_dc", 1);
     cat_tensors_to_optimizer(_optimizer.get(), new_features_rest, _features_rest, "features_rest", 2);
@@ -285,14 +303,28 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
     torch::Tensor means = torch::zeros({stds.size(0), 3}).to(torch::kCUDA);
     torch::Tensor samples = torch::randn({stds.size(0), stds.size(1)}).to(torch::kCUDA) * stds + means;
     torch::Tensor rots = build_rotation(_rotation.index_select(0, selected_pts_mask.nonzero().squeeze())).repeat({N, 1, 1}, 0);
-    torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _xyz.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0);
 
-    // scaling inverse activation immediately after the scaling activation
+    std::cout << "Selected points mask: " << selected_pts_mask.sizes() << std::endl;
+    std::cout << "_xyx: " << _xyz.sizes() << std::endl;
+    std::cout << "_features_dc: " << _features_dc.sizes() << std::endl;
+    std::cout << "_features_rest: " << _features_rest.sizes() << std::endl;
+    std::cout << "_opacity: " << _opacity.sizes() << std::endl;
+    std::cout << "_scaling: " << _scaling.sizes() << std::endl;
+    std::cout << "_rotation: " << _rotation.sizes() << std::endl;
+
+    torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _xyz.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0);
     torch::Tensor new_scaling = torch::log(Get_scaling().index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0) / (0.8 * N));
     torch::Tensor new_rotation = _rotation.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0);
     torch::Tensor new_features_dc = _features_dc.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1, 1}, 0);
     torch::Tensor new_features_rest = _features_rest.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1, 1}, 0);
     torch::Tensor new_opacity = _opacity.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0);
+
+    std::cout << "new_xyx: " << new_xyz.sizes() << std::endl;
+    std::cout << "new_features_dc: " << new_features_dc.sizes() << std::endl;
+    std::cout << "new_features_rest: " << new_features_rest.sizes() << std::endl;
+    std::cout << "new_opacity: " << new_opacity.sizes() << std::endl;
+    std::cout << "new_scaling: " << new_scaling.sizes() << std::endl;
+    std::cout << "new_rotation: " << new_rotation.sizes() << std::endl;
 
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 
@@ -321,7 +353,7 @@ void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold
 
     auto indices = torch::nonzero(selected_pts_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
     std::cout << indices.sizes() << std::endl;
-    std::cout << indices << std::endl;
+    // std::cout << indices << std::endl;
     torch::Tensor new_xyz = _xyz.index_select(0, indices);
     torch::Tensor new_features_dc = _features_dc.index_select(0, indices);
     torch::Tensor new_features_rest = _features_rest.index_select(0, indices);
