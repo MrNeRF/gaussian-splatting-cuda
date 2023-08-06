@@ -4,3 +4,5 @@ cmake-build-debug/
 cmake-build-release/
 external/libtorch/
 .idea
+*.pt
+.venv/

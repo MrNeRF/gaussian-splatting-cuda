@@ -2,8 +2,8 @@
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
 
+#include "debug_utils.cuh"
 #include "rasterize_points.cuh"
-#include <torch/torch.h>
 
 struct GaussianRasterizationSettings {
     int image_height;
@@ -51,6 +51,25 @@ public:
                                                 torch::Tensor sh_degree,
                                                 torch::Tensor camera_center,
                                                 torch::Tensor prefiltered) {
+
+        ts::save_my_tensor(means3D, "libtorch_means3D.pt");
+        ts::save_my_tensor(sh, "libtorch_sh.pt");
+        ts::save_my_tensor(colors_precomp, "libtorch_colors_precomp.pt");
+        ts::save_my_tensor(opacities, "libtorch_opacities.pt");
+        ts::save_my_tensor(scales, "libtorch_scales.pt");
+        ts::save_my_tensor(rotations, "libtorch_rotations.pt");
+        ts::save_my_tensor(cov3Ds_precomp, "libtorch_cov3Ds_precomp.pt");
+        ts::save_my_tensor(image_height, "libtorch_image_height.pt");
+        ts::save_my_tensor(image_width, "libtorch_image_width.pt");
+        ts::save_my_tensor(tanfovx, "libtorch_tanfovx.pt");
+        ts::save_my_tensor(tanfovy, "libtorch_tanfovy.pt");
+        ts::save_my_tensor(bg, "libtorch_bg.pt");
+        ts::save_my_tensor(scale_modifier, "libtorch_scale_modifier.pt");
+        ts::save_my_tensor(viewmatrix, "libtorch_viewmatrix.pt");
+        ts::save_my_tensor(projmatrix, "libtorch_projmatrix.pt");
+        ts::save_my_tensor(sh_degree, "libtorch_sh_degree.pt");
+        ts::save_my_tensor(camera_center, "libtorch_camera_center.pt");
+        ts::save_my_tensor(prefiltered, "libtorch_prefiltered.pt");
 
         int image_height_val = image_height.item<int>();
         int image_width_val = image_width.item<int>();

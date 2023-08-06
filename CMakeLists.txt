@@ -47,6 +47,7 @@ set(HEADERS
         includes/rasterizer.cuh
         includes/rasterize_points.cuh
         includes/camera_info.cuh
+        includes/debug_utils.cuh
 )
 
 set(SOURCES

@@ -1,7 +1,7 @@
+#include "debug_utils.cuh"
 #include "gaussian.cuh"
 #include "loss_utils.cuh"
 #include "parameters.cuh"
-#include "read_utils.cuh"
 #include "render_utils.cuh"
 #include "scene.cuh"
 #include <iostream>
@@ -42,17 +42,19 @@ int main(int argc, char* argv[]) {
         }
 
         // Render
-        const int random_index = dis(gen);
-        auto& cam = scene.Get_training_camera(random_index);
+        //        const int random_index = dis(gen);
+        auto& cam = scene.Get_training_camera(0);
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
         // Loss Computations
+        ts::save_my_tensor(image, "libtorch_image.pt");
+        exit(0);
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << std::endl;
-        loss.backward();
 
+        loss.backward();
         if (!gaussians._opacity.grad().defined()) {
             std::cout << "Opacity gradient is not defined! Iter: " << iter << std::endl;
         }
