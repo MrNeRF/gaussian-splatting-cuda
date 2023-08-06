@@ -9,13 +9,12 @@ struct OptimizationParameters {
     float position_lr_init = 0.00016f;
     float position_lr_final = 0.0000016f;
     float position_lr_delay_mult = 0.01f;
-    uint64_t posititon_lr_max_steps = 30'000;
+    int64_t position_lr_max_steps = 30'000;
     float feature_lr = 0.0025f;
     float percent_dense = 0.01f;
     float opacity_lr = 0.05f;
     float scaling_lr = 0.001f;
     float rotation_lr = 0.001f;
-    float position_lr_max_steps = 0.f;
     float lambda_dssim = 0.2f;
     uint64_t densification_interval = 100;
     uint64_t opacity_reset_interval = 3'000;

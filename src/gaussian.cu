@@ -132,14 +132,16 @@ void GaussianModel::Training_setup(const OptimizationParameters& params) {
     static_cast<torch::optim::AdamOptions&>(_optimizer_params_groups[4].options()).eps(1e-15);
     static_cast<torch::optim::AdamOptions&>(_optimizer_params_groups[5].options()).eps(1e-15);
 
-    _optimizer = std::make_unique<torch::optim::Adam>(_optimizer_params_groups, torch::optim::AdamOptions(params.position_lr_init * this->_spatial_lr_scale).eps(1e-15));
+    _optimizer = std::make_unique<torch::optim::Adam>(_optimizer_params_groups, torch::optim::AdamOptions(0.f).eps(1e-15));
     std::cout << "Training setup done" << std::endl;
 }
 
 void GaussianModel::Update_learning_rate(float iteration) {
     // This is hacky because you cant change in libtorch individual parameter learning rate
     // xyz is added first, since _optimizer->param_groups() return a vector, we assume that xyz stays first
-    static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(_xyz_scheduler_args(iteration));
+    auto lr = _xyz_scheduler_args(iteration);
+    std::cout << "Setting lr to " << lr << std::endl;
+    static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(lr);
 }
 
 void GaussianModel::Save_as_ply(const std::string& filename) {

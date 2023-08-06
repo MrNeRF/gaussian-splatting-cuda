@@ -3,6 +3,7 @@ import numpy as np
 
 # Specification for tensors
 tensor_specs = {
+    "image": {"dims": 3, "shape": [3, 546, 979], "type": float},
     "means3D": {"dims": 2, "shape": [136029, 3], "type": float},
     "sh": {"dims": 3, "shape": [136029, 16, 3], "type": float},
     "colors_precomp": {"dims": 1, "shape": [0], "type": float},
@@ -20,8 +21,14 @@ tensor_specs = {
     "projmatrix": {"dims": 2, "shape": [4, 4], "type": float},
     "sh_degree": {"dims": 0, "shape": [], "type": np.int64},
     "camera_center": {"dims": 1, "shape": [3], "type": float},
-    "prefiltered": {"dims": 0, "shape": [], "type": bool}
+    "prefiltered": {"dims": 0, "shape": [], "type": bool},
+    "max_radii2D": {"dims": 1, "shape": [136029], "type": float},
+    "visibility_filter": {"dims": 1, "shape": [136029], "type": bool},
+    "radii": {"dims": 1, "shape": [136029], "type": int},
+    "viewspace_point_tensor": {"dims": 2, "shape": [136029, 3], "type": float},
+    "max_radii2D_masked": {"dims": 1, "shape": [136029], "type": float},
 }
+
 
 def load_tensor(filename, tensor_spec):
     with open(filename, 'rb') as f:
@@ -36,11 +43,16 @@ def load_tensor(filename, tensor_spec):
             data = np.fromfile(f, dtype=np.bool_).astype(np.bool_)
         elif data_type == float:
             data = np.fromfile(f, dtype=np.float32).astype(np.float32)
+        elif data_type == int:
+            data = np.fromfile(f, dtype=np.int32).astype(np.int32)
         else:
             data = np.fromfile(f, dtype=np.int64).astype(np.int64)
         
         # Reshape the data based on tensor specification, unless it's a scalar
         if tensor_spec["dims"] != 0:
+            print(f"Filename: {filename}")
+            print(f"Total size of loaded data: {data.size}")
+            print(f"Expected shape from tensor_spec: {tensor_spec['shape']}")
             data = data.reshape(tensor_spec["shape"])
         
         return torch.from_numpy(data)
@@ -83,5 +95,18 @@ for name, tensor in py_tensors.items():
     
     if not torch.all(approx_equal):
         print(f"Value mismatch for {name}")
+        
+        # Get indices of mismatched values
+        mismatched_indices = torch.nonzero(~approx_equal, as_tuple=True)
+        
+        # Get the mismatched values from both tensors
+        mismatched_pytorch_values = tensor[mismatched_indices]
+        mismatched_libtorch_values = libtorch_tensor[mismatched_indices]
+        
+        # Show up to 20 of the mismatched values side by side
+        print(f"Showing up to 20 of {mismatched_pytorch_values.shape[0]} mismatched values")
+        num_to_show = min(20, mismatched_pytorch_values.shape[0])
+        for i in range(num_to_show):
+            print(f"Index: {mismatched_indices[0][i]}, PyTorch: {mismatched_pytorch_values[i]}, LibTorch: {mismatched_libtorch_values[i]}")
     else:
         print(f"{name} matches!")

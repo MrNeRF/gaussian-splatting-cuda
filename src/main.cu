@@ -48,27 +48,27 @@ int main(int argc, char* argv[]) {
 
         // Loss Computations
         ts::save_my_tensor(image, "libtorch_image.pt");
-        exit(0);
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << std::endl;
 
         loss.backward();
-        if (!gaussians._opacity.grad().defined()) {
-            std::cout << "Opacity gradient is not defined! Iter: " << iter << std::endl;
-        }
         {
             torch::NoGradGuard no_grad;
             // Keep track of max radii in image-space for pruning
-            std::cout << "visibility_filter size" << visibility_filter.sizes() << std::endl;
-            std::cout << "gaussian._max_radii2D size" << gaussians._max_radii2D.sizes() << std::endl;
+            ts::save_my_tensor(gaussians._max_radii2D, "libtorch_max_radii2D.pt");
+            ts::save_my_tensor(visibility_filter, "libtorch_visibility_filter.pt");
+            ts::save_my_tensor(radii, "libtorch_radii.pt");
+            ts::save_my_tensor(viewspace_point_tensor, "libtorch_viewspace_point_tensor.pt");
             auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
-            std::cout << "visible_max_raddi size" << visible_max_radii.sizes() << std::endl;
             auto visible_radii = radii.masked_select(visibility_filter);
-
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
+            ts::save_my_tensor(gaussians._max_radii2D, "libtorch_max_radii2D_masked.pt");
+            if (iter == 2) {
+                exit(0);
+            }
 
             // TODO: support saving
             //          if (iteration in saving_iterations):

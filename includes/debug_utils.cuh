@@ -22,8 +22,19 @@ namespace ts {
         // Write sizes
         outfile.write(reinterpret_cast<char*>(sizes.data()), dims * sizeof(int64_t));
 
-        // Write tensor data
-        outfile.write(reinterpret_cast<char*>(cpu_tensor.data_ptr()), numel * sizeof(float));
+        // Write tensor data based on its type
+        if (cpu_tensor.dtype() == torch::kFloat32) {
+            outfile.write(reinterpret_cast<char*>(cpu_tensor.data_ptr<float>()), numel * sizeof(float));
+        } else if (cpu_tensor.dtype() == torch::kInt64) {
+            outfile.write(reinterpret_cast<char*>(cpu_tensor.data_ptr<int64_t>()), numel * sizeof(int64_t));
+        } else if (cpu_tensor.dtype() == torch::kBool) {
+            outfile.write(reinterpret_cast<char*>(cpu_tensor.data_ptr<bool>()), numel * sizeof(bool));
+        } else if (cpu_tensor.dtype() == torch::kInt32) {
+            outfile.write(reinterpret_cast<char*>(cpu_tensor.data_ptr<int32_t>()), numel * sizeof(int32_t));
+        } else {
+            throw std::runtime_error("Unsupported tensor type");
+        }
+        // Add more data types as needed...
 
         outfile.close();
     }
