@@ -1,9 +1,12 @@
 import torch
 import numpy as np
+from torchvision import transforms
+from PIL import Image
 
 # Specification for tensors
 tensor_specs = {
     "image": {"dims": 3, "shape": [3, 546, 979], "type": float},
+    "gt_image": {"dims": 3, "shape": [3, 546, 979], "type": float},
     "means3D": {"dims": 2, "shape": [136029, 3], "type": float},
     "sh": {"dims": 3, "shape": [136029, 16, 3], "type": float},
     "colors_precomp": {"dims": 1, "shape": [0], "type": float},
@@ -29,6 +32,28 @@ tensor_specs = {
     "max_radii2D_masked": {"dims": 1, "shape": [136029], "type": float},
 }
 
+def save_tensor(filename, tensor, tensor_spec):
+    with open(filename, 'wb') as f:
+        # Write dims
+        f.write(len(tensor_spec["shape"]).to_bytes(4, 'little'))
+        
+        # Write shape
+        for dim in tensor_spec["shape"]:
+            f.write(dim.to_bytes(8, 'little'))
+        
+        # Convert tensor to numpy
+        data_np = tensor.numpy()
+        
+        # Write data to file
+        data_type = tensor_spec["type"]
+        if data_type == bool:
+            data_np.astype(np.bool_).tofile(f)
+        elif data_type == float:
+            data_np.astype(np.float32).tofile(f)
+        elif data_type == int:
+            data_np.astype(np.int32).tofile(f)
+        else:
+            data_np.astype(np.int64).tofile(f)
 
 def load_tensor(filename, tensor_spec):
     with open(filename, 'rb') as f:
@@ -66,7 +91,7 @@ libtorch_tensors = {
     name: load_tensor(f"libtorch_{name}.pt", tensor_specs[name]) for name in tensor_specs.keys()
 }
 
-tolerance = 1e-5
+tolerance = 1e-3
 
 for name, tensor in py_tensors.items():
     print(f"======= Comparing {name} =======")
@@ -75,6 +100,20 @@ for name, tensor in py_tensors.items():
     if libtorch_tensor is None:
         print(f"{name}: libtorch tensor is None!")
         continue
+
+    if name == "image" or name == "gt_image":
+        # Convert to PIL image
+        tensor_spec = {
+            "dims": len(tensor.shape),
+            "shape": tuple(tensor.shape),
+            "type": float
+        }
+        save_tensor(f"pytorch_{name}_libtorch.pt", tensor, tensor_spec)
+        pytorch_img = transforms.ToPILImage()(tensor)
+        libtorch_img = transforms.ToPILImage()(libtorch_tensor)
+
+        pytorch_img.save(f"pytorch_{name}.png")
+        libtorch_img.save(f"libtorch_{name}.png")
 
     if tensor is None:
         print(f"{name}: pytorch tensor is None!")

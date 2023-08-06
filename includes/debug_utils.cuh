@@ -38,4 +38,35 @@ namespace ts {
 
         outfile.close();
     }
+
+    inline torch::Tensor load_my_tensor(const std::string& filename) {
+        std::ifstream infile(filename, std::ios::binary);
+        if (!infile.is_open()) {
+            throw std::runtime_error("Failed to open file " + filename);
+        }
+
+        // Read tensor dimensions
+        int dims;
+        infile.read(reinterpret_cast<char*>(&dims), sizeof(int));
+
+        // Read tensor sizes
+        std::vector<int64_t> sizes(dims);
+        infile.read(reinterpret_cast<char*>(sizes.data()), dims * sizeof(int64_t));
+
+        // Determine the size of the tensor data
+        int64_t numel = 1;
+        for (int i = 0; i < dims; ++i) {
+            numel *= sizes[i];
+        }
+
+        torch::Tensor tensor;
+
+        // We assume here float
+        std::vector<float> data(numel);
+        infile.read(reinterpret_cast<char*>(data.data()), numel * sizeof(float));
+        tensor = torch::tensor(data).reshape(sizes);
+
+        infile.close();
+        return tensor;
+    }
 } // namespace ts

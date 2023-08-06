@@ -98,7 +98,6 @@ RasterizeGaussiansCUDA(
         if (sh.size(0) != 0) {
             M = sh.size(1);
         }
-
         print_tensor_info(background, "background");
         print_tensor_info(means3D, "means3D");
         print_tensor_info(colors, "colors");

@@ -6,3 +6,5 @@ external/libtorch/
 .idea
 *.pt
 .venv/
+*.png
+test.py

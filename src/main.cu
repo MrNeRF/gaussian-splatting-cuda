@@ -49,6 +49,7 @@ int main(int argc, char* argv[]) {
         // Loss Computations
         ts::save_my_tensor(image, "libtorch_image.pt");
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
+        ts::save_my_tensor(gt_image, "libtorch_gt_image.pt");
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << std::endl;
@@ -66,7 +67,7 @@ int main(int argc, char* argv[]) {
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
             ts::save_my_tensor(gaussians._max_radii2D, "libtorch_max_radii2D_masked.pt");
-            if (iter == 2) {
+            if (iter == 100) {
                 exit(0);
             }
 
