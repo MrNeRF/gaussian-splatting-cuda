@@ -23,7 +23,7 @@ public:
     float Get_FoVx() const { return static_cast<float>(_FoVx); }
     float Get_FoVy() const { return static_cast<float>(_FoVy); }
     std::string Get_image_name() const { return _image_name; }
-    torch::Tensor& Get_original_image() { return _original_image; }
+    const torch::Tensor& Get_original_image() { return _original_image; }
     int Get_image_width() const { return _image_width; }
     int Get_image_height() const { return _image_height; }
     double Get_zfar() const { return _zfar; }

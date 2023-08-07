@@ -8,6 +8,15 @@
 #include <random>
 #include <torch/torch.h>
 
+
+std::vector<int> get_random_indices(int max_index) {
+    std::vector<int> indices(max_index);
+    std::iota(indices.begin(), indices.end(), 0);
+    // Shuffle the vector
+    std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
+    return indices;
+}
+
 int main(int argc, char* argv[]) {
 
     if (argc != 2) {
@@ -31,19 +40,19 @@ int main(int argc, char* argv[]) {
     auto background = modelParams.white_background ? torch::tensor({1.f, 1.f, 1.f}) : torch::tensor({0.f, 0.f, 0.f}, pointType).to(torch::kCUDA);
 
     const int camera_count = scene.Get_camera_count();
-    // Initialize random engine
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, camera_count - 1);
-    // training loop
-    for (int iter = 1; iter < optimParams.iterations; ++iter) {
+    std::vector<int> indices;
+    for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
         if (iter % 1000 == 0) {
             gaussians.One_up_sh_degree();
         }
 
+        if (indices.empty()) {
+            indices = get_random_indices(camera_count);
+        }
+        const int camera_index = indices.back();
+        indices.pop_back(); // remove last element to iterate over all cameras randomly
+        auto& cam = scene.Get_training_camera(camera_index);
         // Render
-        //        const int random_index = dis(gen);
-        auto& cam = scene.Get_training_camera(0);
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
         // Loss Computations
@@ -57,19 +66,10 @@ int main(int argc, char* argv[]) {
         loss.backward();
         {
             torch::NoGradGuard no_grad;
-            // Keep track of max radii in image-space for pruning
-            //            ts::print_debug_info(gaussians._max_radii2D, "max_radii2D");
-            //            ts::print_debug_info(visibility_filter, "visibility_filter");
-            //            ts::print_debug_info(radii, "radii");
-            //            ts::print_debug_info(viewspace_point_tensor, "viewspace_point_tensor");
             auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
             auto visible_radii = radii.masked_select(visibility_filter);
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
-            //            ts::print_debug_info(gaussians._max_radii2D, "max_radii2D_masked");
-            //            if (iter == 701) {
-            //                exit(0);
-            //            }
 
             // TODO: support saving
             //          if (iteration in saving_iterations):

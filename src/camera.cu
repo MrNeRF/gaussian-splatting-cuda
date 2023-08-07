@@ -4,6 +4,7 @@
 #include "debug_utils.cuh"
 #include "parameters.cuh"
 #include <eigen3/Eigen/Dense>
+#include <string>
 #include <torch/torch.h>
 
 Camera::Camera(int imported_colmap_id,
@@ -40,36 +41,32 @@ Camera::Camera(int imported_colmap_id,
 // TODO: I have skipped the resolution for now.
 Camera loadCam(const ModelParameters& params, int id, CameraInfo& cam_info) {
     // Create a torch::Tensor from the image data
-    torch::Tensor original_image_tensor;
-    if (id != 0) {
-        std::vector<uint8_t> r;
-        std::vector<uint8_t> g;
-        std::vector<uint8_t> b;
-        for (int i = 0; i < cam_info._img_h; i++) {
-            for (int j = 0; j < cam_info._img_w; j++) {
-                r.push_back(cam_info._img_data[i * cam_info._img_w * cam_info._channels + j * cam_info._channels + 0]);
-                g.push_back(cam_info._img_data[i * cam_info._img_w * cam_info._channels + j * cam_info._channels + 1]);
-                b.push_back(cam_info._img_data[i * cam_info._img_w * cam_info._channels + j * cam_info._channels + 2]);
-            }
+    // TODO: optimize
+    std::vector<uint8_t> r;
+    std::vector<uint8_t> g;
+    std::vector<uint8_t> b;
+    for (int i = 0; i < cam_info._img_h; i++) {
+        for (int j = 0; j < cam_info._img_w; j++) {
+            r.push_back(cam_info._img_data[i * cam_info._img_w * cam_info._channels + j * cam_info._channels + 0] / 255.f);
+            g.push_back(cam_info._img_data[i * cam_info._img_w * cam_info._channels + j * cam_info._channels + 1] / 255.f);
+            b.push_back(cam_info._img_data[i * cam_info._img_w * cam_info._channels + j * cam_info._channels + 2] / 255.f);
         }
-        // concat the vectors
-        std::vector<uint8_t> rgb;
-        rgb.insert(rgb.end(), r.begin(), r.end());
-        rgb.insert(rgb.end(), g.begin(), g.end());
-        rgb.insert(rgb.end(), b.begin(), b.end());
-        // to torch tensor
-        original_image_tensor = torch::from_blob(rgb.data(), {static_cast<long>(cam_info._img_h), static_cast<long>(cam_info._img_w), 3}, torch::kU8).clone().to(torch::kFloat) / 255.f;
-        original_image_tensor = original_image_tensor.permute({2, 0, 1});
+    }
+    // concat the vectors
+    std::vector<float> rgb;
+    rgb.insert(rgb.end(), r.begin(), r.end());
+    rgb.insert(rgb.end(), g.begin(), g.end());
+    rgb.insert(rgb.end(), b.begin(), b.end());
+    // to torch tensor
+    torch::Tensor original_image_tensor = torch::from_blob(rgb.data(), {static_cast<long>(cam_info._img_h), static_cast<long>(cam_info._img_w), 3}, torch::kFloat32).clone();
+    original_image_tensor = original_image_tensor.permute({2, 0, 1});
 
-        free_image(cam_info._img_data); // we dont longer need the image here.
-        cam_info._img_data = nullptr;   // Assure that we dont use the image data anymore.
+    free_image(cam_info._img_data); // we dont longer need the image here.
+    cam_info._img_data = nullptr;   // Assure that we dont use the image data anymore.
 
-        if (original_image_tensor.size(0) > 3) {
-            original_image_tensor = original_image_tensor.slice(0, 0, 3);
-            throw std::runtime_error("Image has more than 3 channels. This is not supported.");
-        }
-    } else {
-        original_image_tensor = ts::load_my_tensor("/home/paja/projects/gaussian_splatting_cuda/cmake-build-debug/pytorch_gt_image.tp");
+    if (original_image_tensor.size(0) > 3) {
+        original_image_tensor = original_image_tensor.slice(0, 0, 3);
+        throw std::runtime_error("Image has more than 3 channels. This is not supported.");
     }
 
     return Camera(cam_info._camera_ID, cam_info._R, cam_info._T, cam_info._fov_x, cam_info._fov_y, original_image_tensor,
