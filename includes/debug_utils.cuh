@@ -71,10 +71,10 @@ namespace ts {
     }
 
     inline void print_debug_info(const torch::Tensor& tensor, const std::string& tensor_name, bool save_tensor = false) {
-        std::cout << tensor_name << " Size: " << tensor.sizes() << ", Data type: " << tensor.dtype() << "\n";
-        if (save_tensor) {
-            save_my_tensor(tensor, "libtorch_" + tensor_name + ".pt");
-        }
+        //        std::cout << tensor_name << " Size: " << tensor.sizes() << ", Data type: " << tensor.dtype() << "\n";
+        //        if (save_tensor) {
+        //            save_my_tensor(tensor, "libtorch_" + tensor_name + ".pt");
+        //        }
     }
 
 } // namespace ts

@@ -70,7 +70,6 @@ Camera loadCam(const ModelParameters& params, int id, CameraInfo& cam_info) {
         }
     } else {
         original_image_tensor = ts::load_my_tensor("/home/paja/projects/gaussian_splatting_cuda/cmake-build-debug/pytorch_gt_image.tp");
-        std::cout << "shape: " << original_image_tensor.sizes() << std::endl;
     }
 
     return Camera(cam_info._camera_ID, cam_info._R, cam_info._T, cam_info._fov_x, cam_info._fov_y, original_image_tensor,
