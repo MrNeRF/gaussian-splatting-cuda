@@ -47,9 +47,9 @@ int main(int argc, char* argv[]) {
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
         // Loss Computations
-        ts::print_debug_info(image, "image");
+        //        ts::print_debug_info(image, "image");
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
-        ts::print_debug_info(gt_image, "gt_image");
+        //        ts::print_debug_info(gt_image, "gt_image");
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << std::endl;
@@ -58,15 +58,15 @@ int main(int argc, char* argv[]) {
         {
             torch::NoGradGuard no_grad;
             // Keep track of max radii in image-space for pruning
-            ts::print_debug_info(gaussians._max_radii2D, "max_radii2D");
-            ts::print_debug_info(visibility_filter, "visibility_filter");
-            ts::print_debug_info(radii, "radii");
-            ts::print_debug_info(viewspace_point_tensor, "viewspace_point_tensor");
+            //            ts::print_debug_info(gaussians._max_radii2D, "max_radii2D");
+            //            ts::print_debug_info(visibility_filter, "visibility_filter");
+            //            ts::print_debug_info(radii, "radii");
+            //            ts::print_debug_info(viewspace_point_tensor, "viewspace_point_tensor");
             auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
             auto visible_radii = radii.masked_select(visibility_filter);
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
-            ts::print_debug_info(gaussians._max_radii2D, "max_radii2D_masked");
+            //            ts::print_debug_info(gaussians._max_radii2D, "max_radii2D_masked");
             //            if (iter == 701) {
             //                exit(0);
             //            }

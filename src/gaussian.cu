@@ -1,3 +1,4 @@
+#include "debug_utils.cuh"
 #include "gaussian.cuh"
 #include <exception>
 

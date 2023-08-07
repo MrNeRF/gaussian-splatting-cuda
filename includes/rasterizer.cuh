@@ -52,24 +52,24 @@ public:
                                                 torch::Tensor camera_center,
                                                 torch::Tensor prefiltered) {
 
-        ts::print_debug_info(means3D, "means3D");
-        ts::print_debug_info(sh, "sh");
-        ts::print_debug_info(colors_precomp, "colors_precomp");
-        ts::print_debug_info(opacities, "opacities");
-        ts::print_debug_info(scales, "scales");
-        ts::print_debug_info(rotations, "rotations");
-        ts::print_debug_info(cov3Ds_precomp, "cov3Ds_precomp");
-        ts::print_debug_info(image_height, "image_height");
-        ts::print_debug_info(image_width, "image_width");
-        ts::print_debug_info(tanfovx, "tanfovx");
-        ts::print_debug_info(tanfovy, "tanfovy");
-        ts::print_debug_info(bg, "bg");
-        ts::print_debug_info(scale_modifier, "scale_modifier");
-        ts::print_debug_info(viewmatrix, "viewmatrix");
-        ts::print_debug_info(projmatrix, "projmatrix");
-        ts::print_debug_info(sh_degree, "sh_degree");
-        ts::print_debug_info(camera_center, "camera_center");
-        ts::print_debug_info(prefiltered, "prefiltered");
+        //        ts::print_debug_info(means3D, "means3D");
+        //        ts::print_debug_info(sh, "sh");
+        //        ts::print_debug_info(colors_precomp, "colors_precomp");
+        //        ts::print_debug_info(opacities, "opacities");
+        //        ts::print_debug_info(scales, "scales");
+        //        ts::print_debug_info(rotations, "rotations");
+        //        ts::print_debug_info(cov3Ds_precomp, "cov3Ds_precomp");
+        //        ts::print_debug_info(image_height, "image_height");
+        //        ts::print_debug_info(image_width, "image_width");
+        //        ts::print_debug_info(tanfovx, "tanfovx");
+        //        ts::print_debug_info(tanfovy, "tanfovy");
+        //        ts::print_debug_info(bg, "bg");
+        //        ts::print_debug_info(scale_modifier, "scale_modifier");
+        //        ts::print_debug_info(viewmatrix, "viewmatrix");
+        //        ts::print_debug_info(projmatrix, "projmatrix");
+        //        ts::print_debug_info(sh_degree, "sh_degree");
+        //        ts::print_debug_info(camera_center, "camera_center");
+        //        ts::print_debug_info(prefiltered, "prefiltered");
 
         int image_height_val = image_height.item<int>();
         int image_width_val = image_width.item<int>();
