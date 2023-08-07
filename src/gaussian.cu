@@ -147,19 +147,19 @@ void GaussianModel::Reset_opacity() {
     // opacitiy activation
     auto new_opacity = inverse_sigmoid(torch::ones_like(Get_opacity(), torch::TensorOptions().dtype(torch::kFloat32)) * 0.01f);
 
-    // Get opacity ParamState? Is this really the most elegant and intuitive way to do this?
-    auto& opacityAdamParamStates = static_cast<torch::optim::AdamParamState&>(
-        *_optimizer->state()[c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl())]);
+    auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(static_cast<torch::optim::AdamParamState&>(
+        *_optimizer->state()[c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl())]));
+    _optimizer->state().erase(c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl()));
 
     // Zero params out
-    opacityAdamParamStates.exp_avg(torch::zeros_like(new_opacity));
-    opacityAdamParamStates.exp_avg_sq(torch::zeros_like(new_opacity));
+    adamParamStates->exp_avg(torch::zeros_like(new_opacity));
+    adamParamStates->exp_avg_sq(torch::zeros_like(new_opacity));
 
     // replace tensor
     _optimizer->param_groups()[5].params()[0] = new_opacity.requires_grad_(true);
-    // replace opacity with new tensor
     _opacity = new_opacity;
-    // Reset optimizer opacity states?
+
+    _optimizer->state()[c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl())] = std::move(adamParamStates);
 }
 
 void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, torch::Tensor& old_tensor, int param_position) {
