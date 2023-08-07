@@ -30,14 +30,14 @@ This will create a folder named `libtorch` in the `external` directory of your p
 
 ## TODO (in no particular order, reminders for myself)
 - [x] Camera stuff is weird. Needs rework.
-- [ ] The gaussian initialization is not correct. Differs from original implementation.
+- [x] The gaussian initialization is not correct. Differs from original implementation.
 - [ ] Need to think about the cameras. Separating camera and camera_info seems useless.
-- [ ] Right now the ply after x iterations cannot be saved. Need to implement this.
-- [ ] Proper logging. Right now everything is printed to stdout.
+- [ ] The ply after x iterations cannot be saved. Need to implement this.
+- [ ] Proper logging. (Lets see, low prio)
 - [ ] Proper config file or cmd line config.
 - [x] Need to implement the rendering part. First sketch is there.
-- [ ] Need to remove bugs. Important!
-- [ ] Initially implement potentially full capable version. Currently not everything need is implemented.
+- [x] Remove bugs. Important! Seems to train properly.
+- [ ] Initially implement full 1:1 capable version. Currently not everything need is implemented.
 
 ## MISC
 Here is random collection of things that have to be described in README later on
