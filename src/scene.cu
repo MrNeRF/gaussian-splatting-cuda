@@ -1,4 +1,5 @@
 #include "camera.cuh"
+#include "camera_utils.cuh"
 #include "gaussian.cuh"
 #include "parameters.cuh"
 #include "read_utils.cuh"
@@ -17,12 +18,15 @@ Scene::Scene(GaussianModel& gaussians, const ModelParameters& params) : _gaussia
         exit(-1);
     }
 
-    // TODO: json camera dumping for debugging purpose at least
     _cameras.reserve(_scene_infos->_cameras.size());
     int counter = 0;
+    std::vector<nlohmann::json> json_cams(_scene_infos->_cameras.size());
     for (auto& cam_info : _scene_infos->_cameras) {
         _cameras.emplace_back(loadCam(_params, counter++, cam_info));
+        json_cams.push_back(Convert_camera_to_JSON(cam_info, _cameras.back().Get_R(), _cameras.back().Get_T()));
     }
+    dump_JSON(params.model_path / "cameras.json", json_cams);
+    // TODO: json camera dumping for debugging purpose at least
 
     // get the parameterr self.cameras.extent
     _gaussians.Create_from_pcd(_scene_infos->_point_cloud, _scene_infos->_nerf_norm_radius);

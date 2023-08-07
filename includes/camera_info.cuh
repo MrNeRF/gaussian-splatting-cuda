@@ -1,6 +1,7 @@
 // Copyright (c) 2023 Janusch Patas.
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
+#include "camera_utils.cuh"
 #include <eigen3/Eigen/Dense>
 #include <filesystem>
 #include <nlohmann/json.hpp>
@@ -42,41 +43,46 @@ struct CameraInfo {
     unsigned char* _img_data; // shallow copy is fine here. No ownership
 };
 
-// void dump_JSON(const std::filesystem::path& file_path, const nlohmann::json& json_data) {
-//     std::ofstream file(file_path.string());
-//     if (file.is_open()) {
-//         file << json_data.dump(4); // Write the JSON data with indentation of 4 spaces
-//         file.close();
-//     } else {
-//         throw std::runtime_error("Could not open file " + file_path.string());
-//     }
-// }
-//
-//// serialize camera to json
-// nlohmann::json Dump_camera_to_JSON(Camera cam) {
-//
-//     Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
-//     Rt.block<3, 3>(0, 0) = cam._R.transpose();
-//     Rt.block<3, 1>(0, 3) = cam._T;
-//     Rt(3, 3) = 1.0;
-//
-//     Eigen::Matrix4d W2C = Rt.inverse();
-//     Eigen::Vector3d pos = W2C.block<3, 1>(0, 3);
-//     Eigen::Matrix3d rot = W2C.block<3, 3>(0, 0);
-//     std::vector<std::vector<double>> serializable_array_2d;
-//     for (int i = 0; i < rot.rows(); i++) {
-//         serializable_array_2d.push_back(std::vector<double>(rot.row(i).data(), rot.row(i).data() + rot.row(i).size()));
-//     }
-//
-//     nlohmann::json camera_entry = {
-//         {"id", cam._camera_ID},
-//         {"img_name", cam._image_name},
-//         {"width", cam._width},
-//         {"height", cam._height},
-//         {"position", std::vector<double>(pos.data(), pos.data() + pos.size())},
-//         {"rotation", serializable_array_2d},
-//         {"fy", fov2focal(cam._fov_y, cam._height)},
-//         {"fx", fov2focal(cam._fov_x, cam._width)}};
-//
-//     return camera_entry;
-// }
+inline void dump_JSON(const std::filesystem::path& file_path, const std::vector<nlohmann::json>& json_data) {
+    // Ensure the directory exists
+    std::filesystem::create_directories(file_path.parent_path());
+
+    std::ofstream file(file_path.string());
+    if (file.is_open()) {
+        for (const auto& json : json_data) {
+            file << json.dump(4); // Write the JSON data with indentation of 4 spaces
+        }
+        file.close();
+    } else {
+        throw std::runtime_error("Could not open file " + file_path.string());
+    }
+}
+
+// serialize camera to json
+inline nlohmann::json Convert_camera_to_JSON(const CameraInfo& cam, Eigen::Matrix3d& R, const Eigen::Vector3d& T) {
+
+    Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
+    Rt.block<3, 3>(0, 0) = R.transpose();
+    Rt.block<3, 1>(0, 3) = T;
+    Rt(3, 3) = 1.0;
+
+    Eigen::Matrix4d W2C = Rt.inverse();
+    Eigen::Vector3d pos = W2C.block<3, 1>(0, 3);
+    Eigen::Matrix3d rot = W2C.block<3, 3>(0, 0);
+    std::vector<std::vector<double>> serializable_array_2d;
+    for (int i = 0; i < rot.rows(); i++) {
+        serializable_array_2d.push_back(std::vector<double>(rot.row(i).data(), rot.row(i).data() + rot.row(i).size()));
+    }
+
+    nlohmann::json camera_entry = {
+        {"id", cam._camera_ID},
+        {"img_name", cam._image_name},
+        {"width", cam._width},
+        {"height", cam._height},
+        {"position", std::vector<double>(pos.data(), pos.data() + pos.size())},
+        {"rotation", serializable_array_2d},
+        {"fy", fov2focal(cam._fov_y, cam._height)},
+        {"fx", fov2focal(cam._fov_x, cam._width)}};
+
+    return camera_entry;
+}

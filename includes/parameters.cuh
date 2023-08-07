@@ -26,7 +26,7 @@ struct OptimizationParameters {
 struct ModelParameters {
     int sh_degree = 3;
     std::filesystem::path source_path = "";
-    std::filesystem::path model_path = "";
+    std::filesystem::path model_path = "output";
     std::string images = "images";
     int resolution = -1;
     bool white_background = false;
