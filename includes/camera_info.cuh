@@ -2,6 +2,7 @@
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
 #include "camera_utils.cuh"
+#include <algorithm>
 #include <eigen3/Eigen/Dense>
 #include <filesystem>
 #include <nlohmann/json.hpp>
@@ -43,15 +44,18 @@ struct CameraInfo {
     unsigned char* _img_data; // shallow copy is fine here. No ownership
 };
 
-inline void dump_JSON(const std::filesystem::path& file_path, const std::vector<nlohmann::json>& json_data) {
+inline void dump_JSON(const std::filesystem::path& file_path, std::vector<nlohmann::json>& json_data) {
     // Ensure the directory exists
     std::filesystem::create_directories(file_path.parent_path());
+    json_data.erase(std::remove_if(json_data.begin(), json_data.end(),
+                                   [](const nlohmann::json& entry) { return entry.is_null(); }),
+                    json_data.end());
+
+    nlohmann::json json = json_data;
 
     std::ofstream file(file_path.string());
     if (file.is_open()) {
-        for (const auto& json : json_data) {
-            file << json.dump(4); // Write the JSON data with indentation of 4 spaces
-        }
+        file << json.dump(4); // Write the JSON data with indentation of 4 spaces
         file.close();
     } else {
         throw std::runtime_error("Could not open file " + file_path.string());
@@ -59,7 +63,7 @@ inline void dump_JSON(const std::filesystem::path& file_path, const std::vector<
 }
 
 // serialize camera to json
-inline nlohmann::json Convert_camera_to_JSON(const CameraInfo& cam, Eigen::Matrix3d& R, const Eigen::Vector3d& T) {
+inline nlohmann::json Convert_camera_to_JSON(const CameraInfo& cam, int id, Eigen::Matrix3d& R, const Eigen::Vector3d& T) {
 
     Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
     Rt.block<3, 3>(0, 0) = R.transpose();
@@ -75,7 +79,7 @@ inline nlohmann::json Convert_camera_to_JSON(const CameraInfo& cam, Eigen::Matri
     }
 
     nlohmann::json camera_entry = {
-        {"id", cam._camera_ID},
+        {"id", id},
         {"img_name", cam._image_name},
         {"width", cam._width},
         {"height", cam._height},

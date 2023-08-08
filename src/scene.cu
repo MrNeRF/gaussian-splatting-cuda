@@ -19,11 +19,12 @@ Scene::Scene(GaussianModel& gaussians, const ModelParameters& params) : _gaussia
     }
 
     _cameras.reserve(_scene_infos->_cameras.size());
+    std::vector<nlohmann::json> json_cams;
+    json_cams.reserve(_scene_infos->_cameras.size());
     int counter = 0;
-    std::vector<nlohmann::json> json_cams(_scene_infos->_cameras.size());
     for (auto& cam_info : _scene_infos->_cameras) {
         _cameras.emplace_back(loadCam(_params, counter++, cam_info));
-        json_cams.push_back(Convert_camera_to_JSON(cam_info, _cameras.back().Get_R(), _cameras.back().Get_T()));
+        json_cams.push_back(Convert_camera_to_JSON(cam_info, counter++, _cameras.back().Get_R(), _cameras.back().Get_T()));
     }
     dump_JSON(params.model_path / "cameras.json", json_cams);
     // TODO: json camera dumping for debugging purpose at least
