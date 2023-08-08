@@ -8,7 +8,6 @@
 #include <random>
 #include <torch/torch.h>
 
-
 std::vector<int> get_random_indices(int max_index) {
     std::vector<int> indices(max_index);
     std::iota(indices.begin(), indices.end(), 0);
@@ -71,10 +70,9 @@ int main(int argc, char* argv[]) {
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
 
-            // TODO: support saving
-            //          if (iteration in saving_iterations):
-            //             print("\n[ITER {}] Saving Gaussians".format(iteration))
-            //             scene.save(iteration)
+            if (iter == 7'000 || iter == 30'000) {
+                gaussians.Save_ply(modelParams.model_path, iter);
+            }
 
             // Densification
             if (iter < optimParams.densify_until_iter) {

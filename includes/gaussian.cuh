@@ -40,10 +40,10 @@ public:
     void Create_from_pcd(PointCloud& pcd, float spatial_lr_scale);
     void Training_setup(const OptimizationParameters& params);
     void Update_learning_rate(float iteration);
-    void Save_as_ply(const std::string& filename);
     void Reset_opacity();
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
     void Densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size);
+    void Save_ply(const std::filesystem::path& file_path, int iteration);
 
 public:
     // should not be public or it should maybe be pulled out here. Not sure yet
@@ -63,6 +63,7 @@ private:
 
     void densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent);
     void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, int N = 2);
+    std::vector<std::string> construct_list_of_attributes();
 
 private:
     int _active_sh_degree;

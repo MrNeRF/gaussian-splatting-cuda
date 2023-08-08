@@ -1,5 +1,6 @@
 #include "debug_utils.cuh"
 #include "gaussian.cuh"
+#include "read_utils.cuh"
 #include <exception>
 
 GaussianModel::GaussianModel(int sh_degree) : _max_sh_degree(sh_degree),
@@ -136,10 +137,6 @@ void GaussianModel::Update_learning_rate(float iteration) {
     auto lr = _xyz_scheduler_args(iteration);
     std::cout << "Setting lr to " << lr << std::endl;
     static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(lr);
-}
-
-void GaussianModel::Save_as_ply(const std::string& filename) {
-    throw std::runtime_error("Not implemented");
 }
 
 static const std::vector<std::string> mapping = {"xyz", "features_dc", "features_rest", "scaling", "rotation", "opacity"};
@@ -295,4 +292,46 @@ void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float e
 void GaussianModel::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {
     _xyz_gradient_accum.index_put_({update_filter}, _xyz_gradient_accum.index_select(0, update_filter.nonzero().squeeze()) + viewspace_point_tensor.grad().index_select(0, update_filter.nonzero().squeeze()).slice(1, 0, 2).norm(2, -1, true));
     _denom.index_put_({update_filter}, _denom.index_select(0, update_filter.nonzero().squeeze()) + 1);
+}
+
+std::vector<std::string> GaussianModel::construct_list_of_attributes() {
+    std::vector<std::string> attributes = {"x", "y", "z", "nx", "ny", "nz"};
+    ts::print_debug_info(_features_dc, "features_dc");
+    ts::print_debug_info(_features_rest, "features_rest");
+    ts::print_debug_info(_scaling, "scaling");
+    ts::print_debug_info(_rotation, "rotation");
+    ts::print_debug_info(_opacity, "opacity");
+
+    for (int i = 0; i < _features_dc.size(1) * _features_dc.size(2); ++i)
+        attributes.push_back("f_dc_" + std::to_string(i));
+
+    for (int i = 0; i < _features_rest.size(1) * _features_rest.size(2); ++i)
+        attributes.push_back("f_rest_" + std::to_string(i));
+
+    attributes.push_back("opacity");
+
+    for (int i = 0; i < _scaling.size(1); ++i)
+        attributes.push_back("scale_" + std::to_string(i));
+
+    for (int i = 0; i < _rotation.size(1); ++i)
+        attributes.push_back("rot_" + std::to_string(i));
+
+    return attributes;
+}
+
+void GaussianModel::Save_ply(const std::filesystem::path& file_path, int iteration) {
+    auto folder = file_path / ("point_cloud/iteration_" + std::to_string(iteration));
+    std::filesystem::create_directories(folder);
+
+    auto xyz = _xyz.cpu().contiguous();
+    auto normals = torch::zeros_like(xyz);
+    auto f_dc = _features_dc.transpose(1, 2).flatten(1).cpu().contiguous();
+    auto f_rest = _features_rest.transpose(1, 2).flatten(1).cpu().contiguous();
+    auto opacities = _opacity.cpu();
+    auto scale = _scaling.cpu();
+    auto rotation = _rotation.cpu();
+
+    std::vector<torch::Tensor> tensor_attributes = {xyz, normals, f_dc, f_rest, opacities, scale, rotation};
+
+    Write_output_ply(folder / "point_cloud.ply", tensor_attributes, construct_list_of_attributes());
 }

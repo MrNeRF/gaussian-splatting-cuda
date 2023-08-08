@@ -55,8 +55,24 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
     tinyply::PlyFile file;
     std::shared_ptr<tinyply::PlyData> vertices, normals, colors;
     file.parse_header(*ply_stream_buffer);
+
+    std::cout << "\t[ply_header] Type: " << (file.is_binary_file() ? "binary" : "ascii") << std::endl;
+    for (const auto& c : file.get_comments())
+        std::cout << "\t[ply_header] Comment: " << c << std::endl;
+    for (const auto& c : file.get_info())
+        std::cout << "\t[ply_header] Info: " << c << std::endl;
+
+    for (const auto& e : file.get_elements()) {
+        std::cout << "\t[ply_header] element: " << e.name << " (" << e.size << ")" << std::endl;
+        for (const auto& p : e.properties) {
+            std::cout << "\t[ply_header] \tproperty: " << p.name << " (type=" << tinyply::PropertyTable[p.propertyType].str << ")";
+            if (p.isList)
+                std::cout << " (list_type=" << tinyply::PropertyTable[p.listType].str << ")";
+            std::cout << std::endl;
+        }
+    }
     // The header information can be used to programmatically extract properties on elements
-    // known to exist in the header prior to reading the data. For brevity of this sample, properties
+    // known to exist in the header prior to reading the data. For brevity, properties
     // like vertex position are hard-coded:
     try {
         vertices = file.request_properties_from_element("vertex", {"x", "y", "z"});
@@ -78,14 +94,6 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
         try {
             point_cloud._points.resize(vertices->count);
             std::memcpy(point_cloud._points.data(), vertices->buffer.get(), vertices->buffer.size_bytes());
-
-            //            int counter = 0;
-            //            for (const auto& v : point_cloud._points) {
-            //                std::cout << "\tRead Vertex: " << v.x << " " << v.y << " " << v.z << std::endl;
-            //                if (counter++ > 9) {
-            //                    break;
-            //                }
-            //            }
         } catch (const std::exception& e) {
             std::cerr << "tinyply exception: " << e.what() << std::endl;
         }
@@ -99,14 +107,6 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
         try {
             point_cloud._normals.resize(normals->count);
             std::memcpy(point_cloud._normals.data(), normals->buffer.get(), normals->buffer.size_bytes());
-
-            //            int counter = 0;
-            //            for (const auto& n : point_cloud._normals) {
-            //                std::cout << "\tRead Colors: " << static_cast<int>(n.x) << " " << static_cast<int>(n.y) << " " << static_cast<int>(n.z) << std::endl;
-            //                if (counter++ > 9) {
-            //                    break;
-            //                }
-            //            }
         } catch (const std::exception& e) {
             std::cerr << "tinyply exception: " << e.what() << std::endl;
         }
@@ -117,14 +117,6 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
         try {
             point_cloud._colors.resize(colors->count);
             std::memcpy(point_cloud._colors.data(), colors->buffer.get(), colors->buffer.size_bytes());
-
-            //            int counter = 0;
-            //            for (const auto& c : point_cloud._colors) {
-            //                std::cout << "\tRead Colors: " << static_cast<int>(c.r) << " " << static_cast<int>(c.g) << " " << static_cast<int>(c.b) << std::endl;
-            //                if (counter++ > 9) {
-            //                    break;
-            //                }
-            //            }
         } catch (const std::exception& e) {
             std::cerr << "tinyply exception: " << e.what() << std::endl;
         }
@@ -134,6 +126,38 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
     }
 
     return point_cloud;
+}
+
+void Write_output_ply(const std::filesystem::path& file_path, const std::vector<torch::Tensor>& tensors, const std::vector<std::string>& attribute_names) {
+    tinyply::PlyFile plyFile;
+
+    size_t attribute_offset = 0; // An offset to track the attribute names
+
+    for (size_t i = 0; i < tensors.size(); ++i) {
+        // Calculate the number of columns in the tensor.
+        size_t columns = tensors[i].size(1);
+
+        std::vector<std::string> current_attributes;
+        for (size_t j = 0; j < columns; ++j) {
+            current_attributes.push_back(attribute_names[attribute_offset + j]);
+        }
+
+        plyFile.add_properties_to_element(
+            "vertex",
+            current_attributes,
+            tinyply::Type::FLOAT32,
+            tensors[i].size(0),
+            reinterpret_cast<uint8_t*>(tensors[i].data_ptr<float>()),
+            tinyply::Type::INVALID,
+            0);
+
+        attribute_offset += columns; // Increase the offset for the next tensor.
+    }
+
+    std::filebuf fb;
+    fb.open(file_path, std::ios::out | std::ios::binary);
+    std::ostream outputStream(&fb);
+    plyFile.write(outputStream, true); // 'true' for binary format
 }
 
 void write_ply_file(const std::filesystem::path& file_path, const PointCloud& point_cloud) {
