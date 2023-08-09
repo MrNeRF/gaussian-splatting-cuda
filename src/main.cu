@@ -96,8 +96,8 @@ int main(int argc, char* argv[]) {
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
         std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << " gaussian splats: " << gaussians.Get_xyz().size(0) << std::endl;
-
         loss.backward();
+
         {
             torch::NoGradGuard no_grad;
             auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);

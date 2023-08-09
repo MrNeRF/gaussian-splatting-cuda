@@ -52,7 +52,7 @@ struct Expon_lr_func {
     double lr_delay_steps;
     double lr_delay_mult;
     int64_t max_steps;
-    Expon_lr_func(double lr_init, double lr_final, double lr_delay_mult = 1.0, int64_t max_steps = 1000000, double lr_delay_steps = 0.)
+    Expon_lr_func(double lr_init = 0.0, double lr_final = 1.0, double lr_delay_mult = 1.0, int64_t max_steps = 1000000, double lr_delay_steps = 0.)
         : lr_init(lr_init),
           lr_final(lr_final),
           lr_delay_mult(lr_delay_mult),

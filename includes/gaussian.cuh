@@ -69,7 +69,6 @@ private:
     int _max_sh_degree;
     float _spatial_lr_scale{};
     float _percent_dense{};
-    std::vector<torch::optim::OptimizerParamGroup> _optimizer_params_groups;
 
     Expon_lr_func _xyz_scheduler_args;
     torch::Tensor _denom;
