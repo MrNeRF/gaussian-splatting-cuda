@@ -135,26 +135,26 @@ void GaussianModel::Update_learning_rate(float iteration) {
     // This is hacky because you cant change in libtorch individual parameter learning rate
     // xyz is added first, since _optimizer->param_groups() return a vector, we assume that xyz stays first
     auto lr = _xyz_scheduler_args(iteration);
-    std::cout << "Setting lr to " << lr << std::endl;
     static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(lr);
 }
 
 static const std::vector<std::string> mapping = {"xyz", "features_dc", "features_rest", "scaling", "rotation", "opacity"};
 void GaussianModel::Reset_opacity() {
     // opacitiy activation
-    auto new_opacity = inverse_sigmoid(torch::ones_like(Get_opacity(), torch::TensorOptions().dtype(torch::kFloat32)) * 0.01f);
+    auto new_opacity = inverse_sigmoid(torch::ones_like(_opacity, torch::TensorOptions().dtype(torch::kFloat32)) * 0.01f);
 
     auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(static_cast<torch::optim::AdamParamState&>(
         *_optimizer->state()[c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl())]));
+
     _optimizer->state().erase(c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl()));
 
-    // Zero params out
-    adamParamStates->exp_avg(torch::zeros_like(new_opacity));
-    adamParamStates->exp_avg_sq(torch::zeros_like(new_opacity));
-
+    auto& exp = adamParamStates->exp_avg();
+    exp = torch::zeros_like(new_opacity);
+    auto& exp_avg_sq = adamParamStates->exp_avg_sq();
+    exp_avg_sq = torch::zeros_like(new_opacity);
     // replace tensor
-    _optimizer->param_groups()[5].params()[0] = new_opacity.requires_grad_(true);
-    _opacity = new_opacity;
+    _optimizer->param_groups()[5].params()[0] = new_opacity.set_requires_grad(true);
+    _opacity = _optimizer->param_groups()[5].params()[0];
 
     _optimizer->state()[c10::guts::to_string(_optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl())] = std::move(adamParamStates);
 }
@@ -174,9 +174,11 @@ void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, t
     optimizer->state()[c10::guts::to_string(optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl())] = std::move(adamParamStates);
 }
 
-void GaussianModel::prune_points(const torch::Tensor& mask) {
-    torch::Tensor valid_points_mask = ~mask;
-    auto indices = torch::nonzero(valid_points_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
+void GaussianModel::prune_points(torch::Tensor mask) {
+    // reverse to keep points
+    auto valid_point_mask = ~mask;
+    auto indices = torch::nonzero(valid_point_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
+    ts::print_debug_info(indices, "pruning indices size");
     prune_optimizer(_optimizer.get(), indices, _xyz, 0);
     prune_optimizer(_optimizer.get(), indices, _features_dc, 1);
     prune_optimizer(_optimizer.get(), indices, _features_rest, 2);
@@ -234,23 +236,29 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
     padded_grad.slice(0, 0, grads.size(0)) = grads.squeeze();
     torch::Tensor selected_pts_mask = torch::where(padded_grad >= grad_threshold, torch::ones_like(padded_grad).to(torch::kBool), torch::zeros_like(padded_grad).to(torch::kBool));
     selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)) > _percent_dense * scene_extent);
+    auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
 
-    torch::Tensor stds = Get_scaling().index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0);
+    torch::Tensor stds = Get_scaling().index_select(0, indices).repeat({N, 1}, 0);
     torch::Tensor means = torch::zeros({stds.size(0), 3}).to(torch::kCUDA);
     torch::Tensor samples = torch::randn({stds.size(0), stds.size(1)}).to(torch::kCUDA) * stds + means;
-    torch::Tensor rots = build_rotation(_rotation.index_select(0, selected_pts_mask.nonzero().squeeze())).repeat({N, 1, 1}, 0);
+    torch::Tensor rots = build_rotation(_rotation.index_select(0, indices)).repeat({N, 1, 1}, 0);
 
-    torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _xyz.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0);
-    torch::Tensor new_scaling = torch::log(Get_scaling().index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0) / (0.8 * N));
-    torch::Tensor new_rotation = _rotation.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0);
-    torch::Tensor new_features_dc = _features_dc.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1, 1}, 0);
-    torch::Tensor new_features_rest = _features_rest.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1, 1}, 0);
-    torch::Tensor new_opacity = _opacity.index_select(0, selected_pts_mask.nonzero().squeeze()).repeat({N, 1}, 0);
+    torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _xyz.index_select(0, indices).repeat({N, 1}, 0);
+    torch::Tensor new_scaling = torch::log(Get_scaling().index_select(0, indices).repeat({N, 1}, 0) / (0.8 * N));
+    torch::Tensor new_rotation = _rotation.index_select(0, indices).repeat({N, 1}, 0);
+    torch::Tensor new_features_dc = _features_dc.index_select(0, indices).repeat({N, 1, 1}, 0);
+    torch::Tensor new_features_rest = _features_rest.index_select(0, indices).repeat({N, 1, 1}, 0);
+    torch::Tensor new_opacity = _opacity.index_select(0, indices).repeat({N, 1}, 0);
 
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 
-    torch::Tensor prune_filter = torch::cat({selected_pts_mask, torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kCUDA).to(torch::kBool)});
+    torch::Tensor prune_filter = torch::cat({selected_pts_mask.squeeze(-1), torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kBool).to(torch::kCUDA)});
+    int64_t true_count = prune_filter.sum().item<int>();
+    ts::print_debug_info(prune_filter, "prune_filter");
+    std::cout << "densify_and_split: True count before prune filter: " << true_count << std::endl;
+    ts::print_debug_info(_xyz, "densify_and_split: xyz before pruning");
     prune_points(prune_filter);
+    ts::print_debug_info(_xyz, "densify_and_split: xyz after pruninging");
 }
 
 void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent) {
@@ -280,13 +288,23 @@ void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float e
     densify_and_clone(grads, max_grad, extent);
     densify_and_split(grads, max_grad, extent);
 
-    torch::Tensor prune_mask = (Get_opacity() < min_opacity).squeeze();
+    ts::print_debug_info(Get_opacity(), "Get_opacity()");
+    std::cout << "min_opacity: " << min_opacity << std::endl;
+    torch::Tensor prune_mask = (Get_opacity() < min_opacity).squeeze().to(torch::kBool).to(torch::kCUDA);
+    int true_count = prune_mask.sum().item<int>();
+    std::cout << "densify_and_prune: True count before prune filter: " << true_count << std::endl;
     if (max_screen_size > 0) {
         torch::Tensor big_points_vs = _max_radii2D > max_screen_size;
         torch::Tensor big_points_ws = std::get<0>(Get_scaling().max(1)) > 0.1 * extent;
         prune_mask = torch::logical_or(prune_mask, torch::logical_or(big_points_vs, big_points_ws));
     }
+
+    true_count = prune_mask.sum().item<int>();
+    ts::print_debug_info(prune_mask, "prune_mask");
+    std::cout << "densify_and_prune: True count before prune filter: " << true_count << std::endl;
+    ts::print_debug_info(_xyz, "densify_and_prune: xyz before pruning");
     prune_points(prune_mask);
+    ts::print_debug_info(_xyz, "densify_and_prune: xyz after pruninging");
 }
 
 void GaussianModel::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {

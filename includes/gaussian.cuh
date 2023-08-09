@@ -50,10 +50,9 @@ public:
     // This is all public mostly for debugging purposes
     std::unique_ptr<torch::optim::Adam> _optimizer;
     torch::Tensor _max_radii2D;
-    torch::Tensor _opacity;
 
 private:
-    void prune_points(const torch::Tensor& mask);
+    void prune_points(torch::Tensor mask);
     void densification_postfix(torch::Tensor& new_xyz,
                                torch::Tensor& new_features_dc,
                                torch::Tensor& new_features_rest,
@@ -80,4 +79,5 @@ private:
     torch::Tensor _scaling;
     torch::Tensor _rotation;
     torch::Tensor _xyz_gradient_accum;
+    torch::Tensor _opacity;
 };

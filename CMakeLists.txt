@@ -63,6 +63,7 @@ set(SOURCES
         src/rasterize_points.cu
 )
 
+find_package(SFML 2.5 COMPONENTS graphics REQUIRED)
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu
 set_source_files_properties(src/utils.cu PROPERTIES COMPILE_FLAGS "-Xcudafe --diag_suppress=550")
 
@@ -133,6 +134,7 @@ target_link_libraries(${PROJECT_NAME}
         eigen3
         nlohmann_json::nlohmann_json
         CudaRasterizer # naming is in diff-gaussian-rasterization a bit inconsistent
+        sfml-graphics
 )
 
 # --------------------------------------

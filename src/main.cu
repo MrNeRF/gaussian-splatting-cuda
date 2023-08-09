@@ -52,15 +52,16 @@ int main(int argc, char* argv[]) {
         indices.pop_back(); // remove last element to iterate over all cameras randomly
         auto& cam = scene.Get_training_camera(camera_index);
         // Render
+        if (!gaussians.Get_opacity().requires_grad()) {
+            throw std::runtime_error("Opacity requires grad is false!");
+        }
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
         // Loss Computations
-        //        ts::print_debug_info(image, "image");
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
-        //        ts::print_debug_info(gt_image, "gt_image");
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
-        std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << std::endl;
+        std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << gaussians.Get_xyz().sizes() << std::endl;
 
         loss.backward();
         {
@@ -72,6 +73,7 @@ int main(int argc, char* argv[]) {
 
             if (iter == 7'000 || iter == 30'000) {
                 gaussians.Save_ply(modelParams.model_path, iter);
+                return 0;
             }
 
             // Densification
@@ -80,7 +82,7 @@ int main(int argc, char* argv[]) {
                 if (iter > optimParams.densify_from_iter && iter % optimParams.densification_interval == 0) {
                     // @TODO: Not sure about type
                     float size_threshold = iter > optimParams.opacity_reset_interval ? 20.f : -1.f;
-                    gaussians.Densify_and_prune(optimParams.densify_grad_threshold, 0.005, scene.Get_cameras_extent(), size_threshold);
+                    gaussians.Densify_and_prune(optimParams.densify_grad_threshold, 0.005f, scene.Get_cameras_extent(), size_threshold);
                 }
 
                 if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
