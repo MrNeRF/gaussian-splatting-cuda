@@ -178,7 +178,6 @@ void GaussianModel::prune_points(torch::Tensor mask) {
     // reverse to keep points
     auto valid_point_mask = ~mask;
     auto indices = torch::nonzero(valid_point_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
-    ts::print_debug_info(indices, "pruning indices size");
     prune_optimizer(_optimizer.get(), indices, _xyz, 0);
     prune_optimizer(_optimizer.get(), indices, _features_dc, 1);
     prune_optimizer(_optimizer.get(), indices, _features_rest, 2);
@@ -254,11 +253,7 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
 
     torch::Tensor prune_filter = torch::cat({selected_pts_mask.squeeze(-1), torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kBool).to(torch::kCUDA)});
     int64_t true_count = prune_filter.sum().item<int>();
-    ts::print_debug_info(prune_filter, "prune_filter");
-    std::cout << "densify_and_split: True count before prune filter: " << true_count << std::endl;
-    ts::print_debug_info(_xyz, "densify_and_split: xyz before pruning");
     prune_points(prune_filter);
-    ts::print_debug_info(_xyz, "densify_and_split: xyz after pruninging");
 }
 
 void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent) {
@@ -288,11 +283,8 @@ void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float e
     densify_and_clone(grads, max_grad, extent);
     densify_and_split(grads, max_grad, extent);
 
-    ts::print_debug_info(Get_opacity(), "Get_opacity()");
-    std::cout << "min_opacity: " << min_opacity << std::endl;
     torch::Tensor prune_mask = (Get_opacity() < min_opacity).squeeze().to(torch::kBool).to(torch::kCUDA);
     int true_count = prune_mask.sum().item<int>();
-    std::cout << "densify_and_prune: True count before prune filter: " << true_count << std::endl;
     if (max_screen_size > 0) {
         torch::Tensor big_points_vs = _max_radii2D > max_screen_size;
         torch::Tensor big_points_ws = std::get<0>(Get_scaling().max(1)) > 0.1 * extent;
@@ -300,11 +292,7 @@ void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float e
     }
 
     true_count = prune_mask.sum().item<int>();
-    ts::print_debug_info(prune_mask, "prune_mask");
-    std::cout << "densify_and_prune: True count before prune filter: " << true_count << std::endl;
-    ts::print_debug_info(_xyz, "densify_and_prune: xyz before pruning");
     prune_points(prune_mask);
-    ts::print_debug_info(_xyz, "densify_and_prune: xyz after pruninging");
 }
 
 void GaussianModel::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {
@@ -314,11 +302,6 @@ void GaussianModel::Add_densification_stats(torch::Tensor& viewspace_point_tenso
 
 std::vector<std::string> GaussianModel::construct_list_of_attributes() {
     std::vector<std::string> attributes = {"x", "y", "z", "nx", "ny", "nz"};
-    ts::print_debug_info(_features_dc, "features_dc");
-    ts::print_debug_info(_features_rest, "features_rest");
-    ts::print_debug_info(_scaling, "scaling");
-    ts::print_debug_info(_rotation, "rotation");
-    ts::print_debug_info(_opacity, "opacity");
 
     for (int i = 0; i < _features_dc.size(1) * _features_dc.size(2); ++i)
         attributes.push_back("f_dc_" + std::to_string(i));

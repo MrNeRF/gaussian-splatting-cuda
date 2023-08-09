@@ -63,7 +63,6 @@ set(SOURCES
         src/rasterize_points.cu
 )
 
-find_package(SFML 2.5 COMPONENTS graphics REQUIRED)
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu
 set_source_files_properties(src/utils.cu PROPERTIES COMPILE_FLAGS "-Xcudafe --diag_suppress=550")
 
@@ -90,13 +89,13 @@ find_package(Torch REQUIRED)
 # Build options based on CMAKE_BUILD_TYPE
 function(configure_build_type)
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        target_compile_options(${PROJECT_NAME} PRIVATE -g -G -Xcompiler -Werror)
+        target_compile_options(${PROJECT_NAME} PRIVATE -O0 -g -G -lineinfo -Xcompiler -Werror)
         set_target_properties(${PROJECT_NAME} PROPERTIES
                 CUDA_RESOLVE_DEVICE_SYMBOLS ON
                 CUDA_SEPARABLE_COMPILATION ON
         )
     elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-        target_compile_options(${PROJECT_NAME} PRIVATE -O3)
+        target_compile_options(${PROJECT_NAME} PRIVATE -O3 -use_fast_math -Xcompiler -Ofast )
     endif ()
 endfunction()
 configure_build_type()
@@ -134,7 +133,6 @@ target_link_libraries(${PROJECT_NAME}
         eigen3
         nlohmann_json::nlohmann_json
         CudaRasterizer # naming is in diff-gaussian-rasterization a bit inconsistent
-        sfml-graphics
 )
 
 # --------------------------------------

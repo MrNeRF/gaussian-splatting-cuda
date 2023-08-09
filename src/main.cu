@@ -52,16 +52,13 @@ int main(int argc, char* argv[]) {
         indices.pop_back(); // remove last element to iterate over all cameras randomly
         auto& cam = scene.Get_training_camera(camera_index);
         // Render
-        if (!gaussians.Get_opacity().requires_grad()) {
-            throw std::runtime_error("Opacity requires grad is false!");
-        }
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
         // Loss Computations
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
-        std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << gaussians.Get_xyz().sizes() << std::endl;
+        std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << " gaussian splats: " << gaussians.Get_xyz().size(0) << std::endl;
 
         loss.backward();
         {
