@@ -4,9 +4,43 @@
 #include "parameters.cuh"
 #include "render_utils.cuh"
 #include "scene.cuh"
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <random>
 #include <torch/torch.h>
+
+std::filesystem::path createOutputDirectoryInParent() {
+    std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
+    std::filesystem::path parentDir = executablePath.parent_path().parent_path();
+    std::filesystem::path outputDir = parentDir / "output";
+    std::filesystem::create_directory(outputDir);
+    return outputDir;
+}
+
+void Write_model_parameters_to_file(const ModelParameters& params) {
+    std::filesystem::path outputPath = params.model_path;
+    std::filesystem::create_directories(outputPath); // Make sure the directory exists
+
+    std::ofstream cfg_log_f(outputPath / "cfg_args");
+    if (!cfg_log_f.is_open()) {
+        std::cerr << "Failed to open file for writing!" << std::endl;
+        return;
+    }
+
+    // Write the parameters in the desired format
+    cfg_log_f << "Namespace(";
+    cfg_log_f << "eval=" << (params.eval ? "True" : "False") << ", ";
+    cfg_log_f << "images='" << params.images << "', ";
+    cfg_log_f << "model_path='" << params.model_path.string() << "', ";
+    cfg_log_f << "resolution=" << params.resolution << ", ";
+    cfg_log_f << "sh_degree=" << params.sh_degree << ", ";
+    cfg_log_f << "source_path='" << params.source_path.string() << "', ";
+    cfg_log_f << "white_background=" << (params.white_background ? "True" : "False") << ")";
+    cfg_log_f.close();
+
+    std::cout << "Output folder: " << params.model_path.string() << std::endl;
+}
 
 std::vector<int> get_random_indices(int max_index) {
     std::vector<int> indices(max_index);
@@ -25,6 +59,9 @@ int main(int argc, char* argv[]) {
     // TODO: read parameters from JSON file or command line
     auto modelParams = ModelParameters();
     modelParams.source_path = argv[1];
+    modelParams.model_path = createOutputDirectoryInParent();
+    Write_model_parameters_to_file(modelParams);
+
     const auto optimParams = OptimizationParameters();
     const auto pipelineParams = PipelineParameters();
     auto gaussians = GaussianModel(modelParams.sh_degree);

@@ -56,21 +56,21 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
     std::shared_ptr<tinyply::PlyData> vertices, normals, colors;
     file.parse_header(*ply_stream_buffer);
 
-    std::cout << "\t[ply_header] Type: " << (file.is_binary_file() ? "binary" : "ascii") << std::endl;
-    for (const auto& c : file.get_comments())
-        std::cout << "\t[ply_header] Comment: " << c << std::endl;
-    for (const auto& c : file.get_info())
-        std::cout << "\t[ply_header] Info: " << c << std::endl;
-
-    for (const auto& e : file.get_elements()) {
-        std::cout << "\t[ply_header] element: " << e.name << " (" << e.size << ")" << std::endl;
-        for (const auto& p : e.properties) {
-            std::cout << "\t[ply_header] \tproperty: " << p.name << " (type=" << tinyply::PropertyTable[p.propertyType].str << ")";
-            if (p.isList)
-                std::cout << " (list_type=" << tinyply::PropertyTable[p.listType].str << ")";
-            std::cout << std::endl;
-        }
-    }
+    //    std::cout << "\t[ply_header] Type: " << (file.is_binary_file() ? "binary" : "ascii") << std::endl;
+    //    for (const auto& c : file.get_comments())
+    //        std::cout << "\t[ply_header] Comment: " << c << std::endl;
+    //    for (const auto& c : file.get_info())
+    //        std::cout << "\t[ply_header] Info: " << c << std::endl;
+    //
+    //    for (const auto& e : file.get_elements()) {
+    //        std::cout << "\t[ply_header] element: " << e.name << " (" << e.size << ")" << std::endl;
+    //        for (const auto& p : e.properties) {
+    //            std::cout << "\t[ply_header] \tproperty: " << p.name << " (type=" << tinyply::PropertyTable[p.propertyType].str << ")";
+    //            if (p.isList)
+    //                std::cout << " (list_type=" << tinyply::PropertyTable[p.listType].str << ")";
+    //            std::cout << std::endl;
+    //        }
+    //    }
     // The header information can be used to programmatically extract properties on elements
     // known to exist in the header prior to reading the data. For brevity, properties
     // like vertex position are hard-coded:

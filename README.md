@@ -18,6 +18,7 @@ NVIDIA GeForce RTX 4090
 While completely unoptimized, the gains in performance, though modest, are noteworthy.
 
 => Next Goal: Achieve 60 seconds for 7000 iterations in my implementation
+
 ## libtorch
 Initially, I utilized libtorch to simplify the development process. Once the implementation is stable with libtorch, I will begin replacing torch elements with my custom CUDA implementation.
 
@@ -26,12 +27,65 @@ To download the libtorch library (cuda version), use the following command:
 wget https://download.pytorch.org/libtorch/test/cu118/libtorch-cxx11-abi-shared-with-deps-latest.zip  
 ```
 Then, extract the downloaded zip file with:
-
 ```bash
 unzip libtorch-cxx11-abi-shared-with-deps-latest.zip -d external/
 rm libtorch-cxx11-abi-shared-with-deps-latest.zip
 ```
 This will create a folder named `libtorch` in the `external` directory of your project.
+
+## Dataset
+The dataset is not included in this repository. You can download it from the original repository under the following link:
+[tanks & trains](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip)
+
+## Build and Execution instructions
+### Software Prerequisites 
+1. Linux (tested with Ubuntu 22.04), windows probably won't work.
+2. CMake 3.22 or higher.
+3. CUDA 12.0 or higher.
+4. Python with development headers.
+5. libtorch: You can find the setup instructions in the libtorch section of this README.
+6. Other dependencies will be handled by the CMake script.
+
+### Hardware Prerequisites
+1. NVIDIA GPU with CUDA support (tested with RTX 4090) 
+
+Not sure if it works with something smaller like RT 3080 Ti or similar hardware.
+
+### Build
+```bash
+git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+If you encounter any build problems with pybind11, you have to comment out the mentioned template. This won't affect the program.
+
+### Running the program
+```bash
+./build/gaussian-splatting-cuda dataset/tandt/truck
+```
+
+### View the results
+For now, you will need the SIBR view
+```bash
+git clone --recursive https://gitlab.inria.fr/sibr/sibr_core SIBR_core
+cd SIBR_viewers
+cmake -Bbuild .
+cmake --build build --target install --config RelWithDebInfo
+cd ..
+```
+
+Then, you can view the results with:
+```bash
+./SIBR_viewers/install/bin/SIBR_gaussianViewer_app -m output
+```
+
+## MISC
+Here is random collection of things that have to be described in README later on
+- Needed for simple-knn: 
+```bash sudo apt-get install python3-dev ```
+- Patch pybind in libtorch on Linux; nvcc encounters issues with a template definition. 
+- For glm in diff-gaussian-rasterization, run: ```bash git submodule update --init --recursive ```
+ 
 
 ## TODO (in no particular order, reminders for myself)
 - [x] Camera stuff is weird. Needs rework.
@@ -44,12 +98,8 @@ This will create a folder named `libtorch` in the `external` directory of your p
 - [x] Remove bugs. Important! Seems to train properly.
 - [x] Initially implement full 1:1 capable version minus some extra stuff.
 
-## MISC
-Here is random collection of things that have to be described in README later on
-- Needed for simple-knn: 
-```bash sudo apt-get install python3-dev ```
-- Patch pybind in libtorch on Linux; nvcc encounters issues with a template definition. 
-- For glm in diff-gaussian-rasterization, run: ```bash git submodule update --init --recursive ```
+## Contributions
+Contributions are welcome!
 
 ## Citation and References
 If you utilize this software or present results obtained using it, please reference the original work:
@@ -62,4 +112,4 @@ This will ensure the original authors receive the recognition they deserve.
 
 This project is licensed under the Gaussian-Splatting License - see the [LICENSE](LICENSE) file for details.
 
-Follow me on Twitter if you want to know about the current development: https://twitter.com/janusch_patas
+Follow me on Twitter if you want to know more about the latest development: https://twitter.com/janusch_patas

@@ -252,7 +252,6 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 
     torch::Tensor prune_filter = torch::cat({selected_pts_mask.squeeze(-1), torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kBool).to(torch::kCUDA)});
-    int64_t true_count = prune_filter.sum().item<int>();
     prune_points(prune_filter);
 }
 
@@ -284,14 +283,12 @@ void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float e
     densify_and_split(grads, max_grad, extent);
 
     torch::Tensor prune_mask = (Get_opacity() < min_opacity).squeeze().to(torch::kBool).to(torch::kCUDA);
-    int true_count = prune_mask.sum().item<int>();
     if (max_screen_size > 0) {
         torch::Tensor big_points_vs = _max_radii2D > max_screen_size;
         torch::Tensor big_points_ws = std::get<0>(Get_scaling().max(1)) > 0.1 * extent;
         prune_mask = torch::logical_or(prune_mask, torch::logical_or(big_points_vs, big_points_ws));
     }
 
-    true_count = prune_mask.sum().item<int>();
     prune_points(prune_mask);
 }
 
