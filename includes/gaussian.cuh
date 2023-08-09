@@ -61,7 +61,7 @@ private:
                                torch::Tensor& new_opacity);
 
     void densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent);
-    void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, int N = 2);
+    void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, float min_opacity, float max_screen_size);
     std::vector<std::string> construct_list_of_attributes();
 
 private:
