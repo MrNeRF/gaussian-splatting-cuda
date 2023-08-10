@@ -380,14 +380,19 @@ __global__ void preprocessCUDA(
         computeCov3D(idx, scales[idx], scale_modifier, rotations[idx], dL_dcov3D, dL_dscale, dL_drot);
 }
 
-// Backward version of the rendering procedure.
+// Constants for magic numbers
+__constant__ float ALPHA_THRESHOLD = 1.0f / 255.0f;
+__constant__ float ALPHA_LIMIT = 0.99f;
+
+__constant__ int d_W;
+__constant__ int d_H;
+__constant__ float d_bg_color[3]; // RGB
+
 template <uint32_t C>
 __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
     renderCUDA(
         const uint2* __restrict__ ranges,
         const uint32_t* __restrict__ point_list,
-        int W, int H,
-        const float* __restrict__ bg_color,
         const float2* __restrict__ points_xy_image,
         const float4* __restrict__ conic_opacity,
         const float* __restrict__ colors,
@@ -400,14 +405,14 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
         float* __restrict__ dL_dcolors) {
     // We rasterize again. Compute necessary block info.
     auto block = cg::this_thread_block();
-    const uint32_t horizontal_blocks = (W + BLOCK_X - 1) / BLOCK_X;
+    const uint32_t horizontal_blocks = (d_W + BLOCK_X - 1) / BLOCK_X;
     const uint2 pix_min = {block.group_index().x * BLOCK_X, block.group_index().y * BLOCK_Y};
-    const uint2 pix_max = {min(pix_min.x + BLOCK_X, W), min(pix_min.y + BLOCK_Y, H)};
+    const uint2 pix_max = {min(pix_min.x + BLOCK_X, d_W), min(pix_min.y + BLOCK_Y, d_H)};
     const uint2 pix = {pix_min.x + block.thread_index().x, pix_min.y + block.thread_index().y};
-    const uint32_t pix_id = W * pix.y + pix.x;
+    const uint32_t pix_id = d_W * pix.y + pix.x;
     const float2 pixf = {(float)pix.x, (float)pix.y};
 
-    const bool inside = pix.x < W && pix.y < H;
+    const bool inside = pix.x < d_W && pix.y < d_H;
     const uint2 range = ranges[block.group_index().y * horizontal_blocks + block.group_index().x];
 
     const int rounds = ((range.y - range.x + BLOCK_SIZE - 1) / BLOCK_SIZE);
@@ -434,15 +439,15 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
     float dL_dpixel[C];
     if (inside)
         for (int i = 0; i < C; i++)
-            dL_dpixel[i] = dL_dpixels[i * H * W + pix_id];
+            dL_dpixel[i] = dL_dpixels[i * d_H * d_W + pix_id];
 
     float last_alpha = 0;
     float last_color[C] = {0};
 
     // Gradient of pixel coordinate w.r.t. normalized
     // screen-space viewport corrdinates (-1 to 1)
-    const float ddelx_dx = 0.5 * W;
-    const float ddely_dy = 0.5 * H;
+    const float ddelx_dx = 0.5 * d_W;
+    const float ddely_dy = 0.5 * d_H;
 
     // Traverse all Gaussians
     for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE) {
@@ -477,8 +482,8 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
                 continue;
 
             const float G = exp(power);
-            const float alpha = min(0.99f, con_o.w * G);
-            if (alpha < 1.0f / 255.0f)
+            const float alpha = min(ALPHA_LIMIT, con_o.w * G);
+            if (alpha < ALPHA_THRESHOLD)
                 continue;
 
             T = T / (1.f - alpha);
@@ -510,7 +515,7 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // the background color is added if nothing left to blend
             float bg_dot_dpixel = 0;
             for (int i = 0; i < C; i++)
-                bg_dot_dpixel += bg_color[i] * dL_dpixel[i];
+                bg_dot_dpixel += d_bg_color[i] * dL_dpixel[i];
             dL_dalpha += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
 
             // Helpful reusable temporary variables
@@ -615,11 +620,13 @@ void BACKWARD::render(
     float4* dL_dconic2D,
     float* dL_dopacity,
     float* dL_dcolors) {
+
+    cudaMemcpyToSymbol(d_W, &W, sizeof(int));
+    cudaMemcpyToSymbol(d_H, &H, sizeof(int));
+    cudaMemcpyToSymbol(d_bg_color, bg_color, sizeof(float) * 3); // RGB
     renderCUDA<NUM_CHANNELS><<<grid, block>>>(
         ranges,
         point_list,
-        W, H,
-        bg_color,
         means2D,
         conic_opacity,
         colors,
