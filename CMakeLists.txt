@@ -48,6 +48,11 @@ set(HEADERS
         includes/rasterize_points.cuh
         includes/camera_info.cuh
         includes/debug_utils.cuh
+        cuda_rasterizer/backward.h
+        cuda_rasterizer/forward.h
+        cuda_rasterizer/auxiliary.h
+        cuda_rasterizer/rasterizer_impl.h
+        cuda_rasterizer/rasterizer.h
 )
 
 set(SOURCES
@@ -61,6 +66,9 @@ set(SOURCES
         src/general_utils.cu
         src/rasterizer.cu
         src/rasterize_points.cu
+        cuda_rasterizer/backward.cu
+        cuda_rasterizer/forward.cu
+        cuda_rasterizer/rasterizer_impl.cu
 )
 
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu
@@ -80,7 +88,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
         CXX_STANDARD_REQUIRED ON
 )
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/external/diff-gaussian-rasterization/cuda_rasterizer)
+target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/cuda_rasterizer)
 
 # Torch setup
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
@@ -132,7 +140,7 @@ target_link_libraries(${PROJECT_NAME}
         tinyply
         eigen3
         nlohmann_json::nlohmann_json
-        CudaRasterizer # naming is in diff-gaussian-rasterization a bit inconsistent
+        glm
 )
 
 # --------------------------------------
@@ -175,8 +183,6 @@ set(TEST_SOURCES
 # Add test executable
 add_executable(testing ${TEST_SOURCES})
 
-
-target_include_directories(testing PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/external/diff-gaussian-rasterization/cuda_rasterizer)
 set_target_properties(testing PROPERTIES
         CUDA_ARCHITECTURES 89
         CUDA_STANDARD 17
@@ -184,6 +190,7 @@ set_target_properties(testing PROPERTIES
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
 )
+target_include_directories(testing PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/cuda_rasterizer)
 
 target_link_libraries(testing
         PRIVATE
@@ -195,12 +202,5 @@ target_link_libraries(testing
         tinyply
         eigen3
         nlohmann_json::nlohmann_json
-        CudaRasterizer # naming is in diff-gaussian-rasterization a bit inconsistent
+        glm
 )
-
-# --------------------------------------
-# Source grouping
-# --------------------------------------
-
-source_group(TREE "${PROJECT_SOURCE_DIR}/includes" PREFIX "Header Files" FILES ${HEADERS})
-source_group(TREE "${PROJECT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${SOURCES})

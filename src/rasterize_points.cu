@@ -9,18 +9,10 @@
  * For inquiries contact  george.drettakis@inria.fr
  */
 
+#include "config.h"
 #include "rasterize_points.cuh"
-#include <config.h>
-#include <cstdio>
-#include <cuda_runtime_api.h>
-#include <fstream>
-#include <functional>
+#include "rasterizer.h"
 #include <iostream>
-#include <math.h>
-#include <memory>
-#include <rasterizer.h>
-#include <sstream>
-#include <stdio.h>
 #include <string>
 #include <torch/extension.h>
 #include <tuple>
