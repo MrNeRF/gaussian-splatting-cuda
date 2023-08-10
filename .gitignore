@@ -8,4 +8,6 @@ output*
 *.pt
 .venv/
 *.png
+*.sqlite
 test.py
+*.nsys-rep

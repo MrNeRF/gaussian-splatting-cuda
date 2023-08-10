@@ -90,15 +90,10 @@ Here is random collection of things that have to be described in README later on
  
 
 ## TODO (in no particular order, reminders for myself)
-- [x] Camera stuff is weird. Needs rework.
-- [x] The gaussian initialization is not correct. Differs from original implementation.
+- [ ] Speed up with shifting stuff to CUDA.
 - [ ] Need to think about the cameras. Separating camera and camera_info seems useless.
-- [x] The ply after x iterations cannot be saved. Need to implement this.
 - [ ] Proper logging. (Lets see, low prio)
 - [ ] Proper config file or cmd line config.
-- [x] Need to implement the rendering part. First sketch is there.
-- [x] Remove bugs. Important! Seems to train properly.
-- [x] Initially implement full 1:1 capable version minus some extra stuff.
 
 ## Contributions
 Contributions are welcome!
