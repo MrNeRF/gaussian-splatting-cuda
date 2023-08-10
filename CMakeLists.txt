@@ -10,6 +10,7 @@ set(LIBTORCH_DIR "${PROJ_ROOT_DIR}/external/libtorch")
 # Set CMAKE_PREFIX_PATH
 set(CMAKE_PREFIX_PATH ${LIBTORCH_DIR})
 
+#set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_89 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_89,code=compute_89")
 # --------------------------------------
 # Core count calculation
 # --------------------------------------
@@ -81,7 +82,7 @@ set_source_files_properties(src/utils.cu PROPERTIES COMPILE_FLAGS "-Xcudafe --di
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-        CUDA_ARCHITECTURES 89
+        #CUDA_ARCHITECTURES 89
         CUDA_STANDARD 17
         CUDA_STANDARD_REQUIRED ON
         CXX_STANDARD 17
@@ -113,7 +114,7 @@ find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 
 # Check CUDA version
-if (CUDAToolkit_VERSION VERSION_LESS "12.0")
+if (CUDAToolkit_VERSION VERSION_LESS "12.2")
     message(FATAL_ERROR "This project requires CUDA 12.0 or higher")
 endif ()
 
