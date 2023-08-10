@@ -3,7 +3,9 @@
 #include "camera.cuh"
 #include "point_cloud.cuh"
 #include <camera_info.cuh>
+#pragma diag_suppress code_of_warning
 #include <eigen3/Eigen/Dense>
+#pragma diag_default code_of_warning
 #include <filesystem>
 
 // Also here as in camera info. I guess this can be cleaned up and removed later on

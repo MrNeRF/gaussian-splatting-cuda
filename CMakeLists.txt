@@ -73,7 +73,7 @@ set(SOURCES
 )
 
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu
-set_source_files_properties(src/utils.cu PROPERTIES COMPILE_FLAGS "-Xcudafe --diag_suppress=550")
+set_source_files_properties(src/utils.cu PROPERTIES COMPILE_FLAGS "-Xcudafe --diag_suppress=550 ")
 
 # --------------------------------------
 # Project target

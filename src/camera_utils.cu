@@ -2,7 +2,6 @@
 #include "camera_utils.cuh"
 #include "stb_image.h"
 #include <cmath>
-#include <eigen3/Eigen/Dense>
 #include <filesystem>
 #include <iostream>
 

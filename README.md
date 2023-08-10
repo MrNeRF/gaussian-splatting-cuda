@@ -43,7 +43,7 @@ The dataset is not included in this repository. You can download it from the ori
 ### Software Prerequisites 
 1. Linux (tested with Ubuntu 22.04), windows probably won't work.
 2. CMake 3.22 or higher.
-3. CUDA 12.0 or higher.
+3. CUDA 12.2 or higher (might work with less, has to be manually set and tested).
 4. Python with development headers.
 5. libtorch: You can find the setup instructions in the libtorch section of this README.
 6. Other dependencies will be handled by the CMake script.

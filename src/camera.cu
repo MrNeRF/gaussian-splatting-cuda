@@ -2,7 +2,6 @@
 #include "camera_info.cuh"
 #include "camera_utils.cuh"
 #include "parameters.cuh"
-#include <eigen3/Eigen/Dense>
 #include <string>
 #include <torch/torch.h>
 

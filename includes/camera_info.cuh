@@ -3,7 +3,9 @@
 #pragma once
 #include "camera_utils.cuh"
 #include <algorithm>
+#pragma diag_suppress code_of_warning
 #include <eigen3/Eigen/Dense>
+#pragma diag_default code_of_warning
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <vector>

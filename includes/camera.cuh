@@ -1,6 +1,8 @@
 #pragma once
 
+#pragma diag_suppress code_of_warning
 #include <eigen3/Eigen/Dense>
+#pragma diag_default code_of_warning
 #include <memory>
 #include <string>
 #include <torch/torch.h>

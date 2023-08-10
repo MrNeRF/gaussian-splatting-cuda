@@ -1,7 +1,9 @@
 #pragma once
 
+#pragma diag_suppress code_of_warning
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/src/Geometry/Quaternion.h>
+#pragma diag_default code_of_warning
 #include <string>
 #include <vector>
 
