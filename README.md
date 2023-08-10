@@ -59,7 +59,6 @@ git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
-If you encounter any build problems with pybind11, you have to comment out the mentioned template. This won't affect the program.
 
 ### Running the program
 ```bash
@@ -85,8 +84,6 @@ Then, you can view the results with:
 Here is random collection of things that have to be described in README later on
 - Needed for simple-knn: 
 ```bash sudo apt-get install python3-dev ```
-- Patch pybind in libtorch on Linux; nvcc encounters issues with a template definition. 
-- For glm in diff-gaussian-rasterization, run: ```bash git submodule update --init --recursive ```
  
 
 ## TODO (in no particular order, reminders for myself)
