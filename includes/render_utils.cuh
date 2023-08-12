@@ -55,7 +55,7 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
     // This is nonsense. Background color not used? See orginal file colors_precomp=None line 70
     if (params.convert_SHs_python) {
         torch::Tensor shs_view = gaussianModel.Get_features().transpose(1, 2).view({-1, 3, static_cast<long>(std::pow(gaussianModel.Get_max_sh_degree() + 1, 2))});
-        torch::Tensor dir_pp = (gaussianModel.Get_xyz() - viewpoint_camera.Get_camera_center().repeat(gaussianModel.Get_features().sizes()[0], 1));
+        torch::Tensor dir_pp = (gaussianModel.Get_xyz() - viewpoint_camera.Get_camera_center().repeat({gaussianModel.Get_features().sizes()[0], 1}));
         torch::Tensor dir_pp_normalized = dir_pp / dir_pp.norm(1);
         torch::Tensor sh2rgb = Eval_sh(gaussianModel.Get_active_sh_degree(), shs_view, dir_pp_normalized);
         colors_precomp = torch::clamp_min(sh2rgb + 0.5, 0.0);

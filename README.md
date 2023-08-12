@@ -26,11 +26,11 @@ Initially, I utilized libtorch to simplify the development process. Once the imp
 
 To download the libtorch library (cuda version), use the following command:
 ```bash
-wget https://download.pytorch.org/libtorch/test/cu118/libtorch-cxx11-abi-shared-with-deps-latest.zip  
+wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-deps-2.0.1%2Bcu118.zip  
 ```
 Then, extract the downloaded zip file with:
 ```bash
-unzip libtorch-cxx11-abi-shared-with-deps-latest.zip -d external/
+unzip  libtorch-cxx11-abi-shared-with-deps-2.0.1+cu118.zip -d external/
 rm libtorch-cxx11-abi-shared-with-deps-latest.zip
 ```
 This will create a folder named `libtorch` in the `external` directory of your project.

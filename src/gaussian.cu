@@ -67,7 +67,7 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
 
     auto dist2 = torch::clamp_min(distCUDA2(torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA)), 0.0000001);
 
-    _scaling = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3}, 0);
+    _scaling = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3});
     _rotation = torch::zeros({_xyz.size(0), 4}).index_put_({torch::indexing::Slice(), 0}, 1);
     _opacity = inverse_sigmoid(0.5 * torch::ones({_xyz.size(0), 1}));
 
@@ -220,17 +220,17 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
     selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)) > _percent_dense * scene_extent);
     auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
 
-    torch::Tensor stds = Get_scaling().index_select(0, indices).repeat({N, 1}, 0);
+    torch::Tensor stds = Get_scaling().index_select(0, indices).repeat({N, 1});
     torch::Tensor means = torch::zeros({stds.size(0), 3}).to(torch::kCUDA);
     torch::Tensor samples = torch::randn({stds.size(0), stds.size(1)}).to(torch::kCUDA) * stds + means;
-    torch::Tensor rots = build_rotation(_rotation.index_select(0, indices)).repeat({N, 1, 1}, 0);
+    torch::Tensor rots = build_rotation(_rotation.index_select(0, indices)).repeat({N, 1, 1});
 
-    torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _xyz.index_select(0, indices).repeat({N, 1}, 0);
-    torch::Tensor new_scaling = torch::log(Get_scaling().index_select(0, indices).repeat({N, 1}, 0) / (0.8 * N));
-    torch::Tensor new_rotation = _rotation.index_select(0, indices).repeat({N, 1}, 0);
-    torch::Tensor new_features_dc = _features_dc.index_select(0, indices).repeat({N, 1, 1}, 0);
-    torch::Tensor new_features_rest = _features_rest.index_select(0, indices).repeat({N, 1, 1}, 0);
-    torch::Tensor new_opacity = _opacity.index_select(0, indices).repeat({N, 1}, 0);
+    torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _xyz.index_select(0, indices).repeat({N, 1});
+    torch::Tensor new_scaling = torch::log(Get_scaling().index_select(0, indices).repeat({N, 1}) / (0.8 * N));
+    torch::Tensor new_rotation = _rotation.index_select(0, indices).repeat({N, 1});
+    torch::Tensor new_features_dc = _features_dc.index_select(0, indices).repeat({N, 1, 1});
+    torch::Tensor new_features_rest = _features_rest.index_select(0, indices).repeat({N, 1, 1});
+    torch::Tensor new_opacity = _opacity.index_select(0, indices).repeat({N, 1});
 
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 
