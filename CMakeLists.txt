@@ -147,61 +147,64 @@ target_link_libraries(${PROJECT_NAME}
 # --------------------------------------
 # Add googletest
 # --------------------------------------
+option(BUILD_TESTS "Build tests" OFF)
 
-include(FetchContent)
-FetchContent_Declare(
-        googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG release-1.10.0
-)
+if(BUILD_TESTS)
+    include(FetchContent)
+    FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG release-1.10.0
+    )
 
-FetchContent_GetProperties(googletest)
-if (NOT googletest_POPULATED)
-    FetchContent_Populate(googletest)
-    add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
-endif ()
+    FetchContent_GetProperties(googletest)
+    if (NOT googletest_POPULATED)
+        FetchContent_Populate(googletest)
+        add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif ()
 
-# Remove -Werror from the compile options of Google Test
-set_target_properties(gtest gtest_main PROPERTIES
-        COMPILE_OPTIONS "-Wno-error"
-)
+    # Remove -Werror from the compile options of Google Test
+    set_target_properties(gtest gtest_main PROPERTIES
+            COMPILE_OPTIONS "-Wno-error"
+    )
 
-# Enable CTest
-enable_testing()
+    # Enable CTest
+    enable_testing()
 
-set(TEST_SOURCES
-        tests/testing.cu
-        src/read_utils.cu
-        src/gaussian.cu
-        src/camera.cu
-        src/image.cu
-        tests/camera_utils_test.cu
-        src/scene.cu
-        src/camera_utils.cu
-        src/general_utils.cu
-        tests/general_utils_test.cu
-)
-# Add test executable
-add_executable(testing ${TEST_SOURCES})
+    set(TEST_SOURCES
+            tests/testing.cu
+            src/read_utils.cu
+            src/gaussian.cu
+            src/camera.cu
+            src/image.cu
+            tests/camera_utils_test.cu
+            src/scene.cu
+            src/camera_utils.cu
+            src/general_utils.cu
+            tests/general_utils_test.cu
+    )
+    # Add test executable
+    add_executable(testing ${TEST_SOURCES})
 
-set_target_properties(testing PROPERTIES
-        CUDA_ARCHITECTURES 89
-        CUDA_STANDARD 17
-        CUDA_STANDARD_REQUIRED ON
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED ON
-)
-target_include_directories(testing PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/cuda_rasterizer ${PROJECT_SOURCE_DIR}/external/tinyply/source)
+    set_target_properties(testing PROPERTIES
+            CUDA_ARCHITECTURES 89
+            CUDA_STANDARD 17
+            CUDA_STANDARD_REQUIRED ON
+            CXX_STANDARD 17
+            CXX_STANDARD_REQUIRED ON
+    )
+    target_include_directories(testing PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/cuda_rasterizer ${PROJECT_SOURCE_DIR}/external/tinyply/source)
 
-target_link_libraries(testing
-        PRIVATE
-        ${TORCH_LIBRARIES}
-        gtest
-        gtest_main
-        simple-knn
-        TBB::tbb
-        tinyply
-        eigen3
-        nlohmann_json::nlohmann_json
-        glm
-)
+    target_link_libraries(testing
+            PRIVATE
+            ${TORCH_LIBRARIES}
+            gtest
+            gtest_main
+            simple-knn
+            TBB::tbb
+            tinyply
+            eigen3
+            nlohmann_json::nlohmann_json
+            glm
+    )
+endif()

@@ -43,7 +43,7 @@ wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-
 unzip  libtorch-cxx11-abi-shared-with-deps-2.0.1+cu118.zip -d external/
 rm libtorch-cxx11-abi-shared-with-deps-2.0.1+cu118.zip
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake --build build -- -j
 ```
 
 ### Dataset
