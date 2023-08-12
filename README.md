@@ -21,24 +21,6 @@ While completely unoptimized, the gains in performance, though modest, are notew
 
 => Next Goal: Achieve 60 seconds for 7000 iterations in my implementation
 
-## libtorch
-Initially, I utilized libtorch to simplify the development process. Once the implementation is stable with libtorch, I will begin replacing torch elements with my custom CUDA implementation.
-
-To download the libtorch library (cuda version), use the following command:
-```bash
-wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-deps-2.0.1%2Bcu118.zip  
-```
-Then, extract the downloaded zip file with:
-```bash
-unzip  libtorch-cxx11-abi-shared-with-deps-2.0.1+cu118.zip -d external/
-rm libtorch-cxx11-abi-shared-with-deps-latest.zip
-```
-This will create a folder named `libtorch` in the `external` directory of your project.
-
-## Dataset
-The dataset is not included in this repository. You can download it from the original repository under the following link:
-[tanks & trains](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip)
-
 ## Build and Execution instructions
 ### Software Prerequisites 
 1. Linux (tested with Ubuntu 22.04), windows probably won't work.
@@ -49,29 +31,39 @@ The dataset is not included in this repository. You can download it from the ori
 6. Other dependencies will be handled by the CMake script.
 
 ### Hardware Prerequisites
-1. NVIDIA GPU with CUDA support (tested with RTX 4090) 
+1. NVIDIA GPU with CUDA support (tested with RTX 4090 and RTX A5000) 
 
 Not sure if it works with something smaller like RT 3080 Ti or similar hardware.
 
 ### Build
 ```bash
 git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
+cd gaussian-splatting-cuda
+wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-deps-2.0.1%2Bcu118.zip  
+unzip  libtorch-cxx11-abi-shared-with-deps-2.0.1+cu118.zip -d external/
+rm libtorch-cxx11-abi-shared-with-deps-2.0.1+cu118.zip
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-### Running the program
+### Dataset
+The dataset is not included in this repository. You can download it from the original repository under the following link:
+[tanks & trains](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip).
+Then unzip it in the dataset folder.
+
+### Running the program (training on the dataset)
 ```bash
 ./build/gaussian-splatting-cuda dataset/tandt/truck
 ```
+The output is placed in the ouput folder in the root directory of this project.
 
 ### View the results
 For now, you will need the SIBR view
 ```bash
 git clone --recursive https://gitlab.inria.fr/sibr/sibr_core SIBR_core
 cd SIBR_viewers
-cmake -Bbuild .
-cmake --build build --target install --config RelWithDebInfo
+cmake -B build .
+cmake --build build --target install --config Release -- -j 
 cd ..
 ```
 
@@ -80,6 +72,8 @@ Then, you can view the results with:
 ./SIBR_viewers/install/bin/SIBR_gaussianViewer_app -m output
 ```
 
+## libtorch
+Initially, I utilized libtorch to simplify the development process. Once the implementation is stable with libtorch, I will begin replacing torch elements with my custom CUDA implementation.
 ## MISC
 Here is random collection of things that have to be described in README later on
 - Needed for simple-knn: 
@@ -93,7 +87,23 @@ Here is random collection of things that have to be described in README later on
 - [ ] Proper config file or cmd line config.
 
 ## Contributions
-Contributions are welcome!
+Contributions are welcome! I want to make this a community project. 
+
+Some ideas for relative straight forward contributions:
+- Revamp the README.
+- Add a proper config file or cmd line config.
+
+I want to get rid of some heavy dependencies:
+- Replace glm with custom matrix operations
+- Replace the few Eigen with some custom matrix operations
+
+Advanced contributions:
+- Build a renderer to view training output in real time and to replace SIBR viewer.
+- Look into [gtsfm](https://github.com/borglab/gtsfm) to replace colmap dependency
+- CUDA optimization
+- ...
+
+Own ideas are welcome as well!
 
 ## Citation and References
 If you utilize this software or present results obtained using it, please reference the original work:
