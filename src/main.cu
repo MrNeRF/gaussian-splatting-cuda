@@ -45,9 +45,9 @@ void Write_model_parameters_to_file(const ModelParameters& params) {
 std::vector<int> get_random_indices(int max_index) {
     std::vector<int> indices(max_index);
     std::iota(indices.begin(), indices.end(), 0);
-    std::reverse(indices.begin(), indices.end());
+    //    std::reverse(indices.begin(), indices.end());
     // Shuffle the vector
-    //    std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
+    std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
     return indices;
 }
 
