@@ -47,30 +47,30 @@ inline torch::Tensor ImageToTorch(torch::Tensor image, std::vector<int64_t> reso
  * @return The learning rate at the given step.
  */
 struct Expon_lr_func {
-    double lr_init;
-    double lr_final;
-    double lr_delay_steps;
-    double lr_delay_mult;
+    float lr_init;
+    float lr_final;
+    float lr_delay_steps;
+    float lr_delay_mult;
     int64_t max_steps;
-    Expon_lr_func(double lr_init = 0.0, double lr_final = 1.0, double lr_delay_mult = 1.0, int64_t max_steps = 1000000, double lr_delay_steps = 0.)
+    Expon_lr_func(float lr_init = 0.f, float lr_final = 1.f, float lr_delay_mult = 1.f, int64_t max_steps = 1000000, float lr_delay_steps = 0.f)
         : lr_init(lr_init),
           lr_final(lr_final),
           lr_delay_mult(lr_delay_mult),
           max_steps(max_steps),
           lr_delay_steps(lr_delay_steps) {}
 
-    double operator()(int64_t step) const {
+    float operator()(int64_t step) const {
         if (step < 0 || (lr_init == 0.0 && lr_final == 0.0)) {
             return 0.0;
         }
-        double delay_rate;
+        float delay_rate;
         if (lr_delay_steps > 0. && step != 0) {
-            delay_rate = lr_delay_mult + (1 - lr_delay_mult) * std::sin(0.5 * M_PI * std::clamp((double)step / lr_delay_steps, 0.0, 1.0));
+            delay_rate = lr_delay_mult + (1 - lr_delay_mult) * std::sin(0.5 * M_PI * std::clamp((float)step / lr_delay_steps, 0.f, 1.f));
         } else {
             delay_rate = 1.0;
         }
-        double t = std::clamp(static_cast<double>(step) / static_cast<double>(max_steps), 0.0, 1.0);
-        double log_lerp = std::exp(std::log(lr_init) * (1 - t) + std::log(lr_final) * t);
+        float t = std::clamp(static_cast<float>(step) / static_cast<float>(max_steps), 0.f, 1.f);
+        float log_lerp = std::exp(std::log(lr_init) * (1.f - t) + std::log(lr_final) * t);
         return delay_rate * log_lerp;
     }
 };

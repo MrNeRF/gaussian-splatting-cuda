@@ -8,26 +8,26 @@
 #include <filesystem>
 #include <torch/torch.h>
 
-torch::Tensor getWorld2View2(const Eigen::Matrix3d& R,
-                             const Eigen::Vector3d& t,
-                             const Eigen::Vector3d& translate = Eigen::Vector3d::Zero(),
+torch::Tensor getWorld2View2(const Eigen::Matrix3f& R,
+                             const Eigen::Vector3f& t,
+                             const Eigen::Vector3f& translate = Eigen::Vector3f::Zero(),
                              float scale = 1.0);
 
 // TODO: hacky. Find better way
-Eigen::Matrix4d getWorld2View2Eigen(const Eigen::Matrix3d& R,
-                                    const Eigen::Vector3d& t,
-                                    const Eigen::Vector3d& translate = Eigen::Vector3d::Zero(),
+Eigen::Matrix4f getWorld2View2Eigen(const Eigen::Matrix3f& R,
+                                    const Eigen::Vector3f& t,
+                                    const Eigen::Vector3f& translate = Eigen::Vector3f::Zero(),
                                     float scale = 1.0);
 
-torch::Tensor getProjectionMatrix(double znear, double zfar, double fovX, double fovY);
+torch::Tensor getProjectionMatrix(float znear, float zfar, float fovX, float fovY);
 
-double fov2focal(double fov, double pixels);
+float fov2focal(float fov, int pixels);
 
-double focal2fov(double focal, double pixels);
+float focal2fov(float focal, int pixels);
 
-Eigen::Matrix3d qvec2rotmat(const Eigen::Quaterniond& qvec);
+Eigen::Matrix3f qvec2rotmat(const Eigen::Quaternionf& qvec);
 
-Eigen::Quaterniond rotmat2qvec(const Eigen::Matrix3d& R);
+Eigen::Quaternionf rotmat2qvec(const Eigen::Matrix3f& R);
 
 std::tuple<unsigned char*, int, int, int> read_image(std::filesystem::path image_path);
 

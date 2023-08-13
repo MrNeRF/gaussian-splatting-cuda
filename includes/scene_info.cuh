@@ -13,7 +13,7 @@
 struct SceneInfo {
     std::vector<CameraInfo> _cameras;
     PointCloud _point_cloud;
-    double _nerf_norm_radius;
-    Eigen::Vector3d _nerf_norm_translation;
+    float _nerf_norm_radius;
+    Eigen::Vector3f _nerf_norm_translation;
     std::filesystem::path _ply_path;
 };

@@ -45,8 +45,9 @@ void Write_model_parameters_to_file(const ModelParameters& params) {
 std::vector<int> get_random_indices(int max_index) {
     std::vector<int> indices(max_index);
     std::iota(indices.begin(), indices.end(), 0);
+    std::reverse(indices.begin(), indices.end());
     // Shuffle the vector
-    std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
+    //    std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
     return indices;
 }
 
@@ -107,7 +108,7 @@ int main(int argc, char* argv[]) {
 
             if (iter == 7'000 || iter == 30'000) {
                 gaussians.Save_ply(modelParams.model_path, iter);
-                return 0;
+                /* return 0; */
             }
 
             // Densification

@@ -9,15 +9,11 @@ namespace gaussian_splatting {
         return torch::abs((network_output - gt)).mean();
     }
 
-    torch::Tensor l2_loss(const torch::Tensor& network_output, const torch::Tensor& gt) {
-        return torch::pow((network_output - gt), 2).mean();
-    }
-
     // 1D Gaussian kernel
-    torch::Tensor gaussian(int window_size, double sigma) {
+    torch::Tensor gaussian(int window_size, float sigma) {
         torch::Tensor gauss = torch::empty(window_size);
         for (int x = 0; x < window_size; ++x) {
-            gauss[x] = std::exp(-(x - window_size / 2) * (x - window_size / 2) / (2 * sigma * sigma));
+            gauss[x] = std::exp(-(std::pow(std::floor(static_cast<float>(x - window_size) / 2.f), 2)) / (2.f * sigma * sigma));
         }
         return gauss / gauss.sum();
     }
@@ -52,10 +48,10 @@ namespace gaussian_splatting {
         auto sigma2_sq = torch::nn::functional::conv2d(img2 * img2, window, torch::nn::functional::Conv2dFuncOptions().padding(window_size / 2).groups(channel)) - mu2_sq;
         auto sigma12 = torch::nn::functional::conv2d(img1 * img2, window, torch::nn::functional::Conv2dFuncOptions().padding(window_size / 2).groups(channel)) - mu1_mu2;
 
-        double C1 = 0.01 * 0.01;
-        double C2 = 0.03 * 0.03;
+        static const float C1 = 0.01 * 0.01;
+        static const float C2 = 0.03 * 0.03;
 
-        auto ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2));
+        auto ssim_map = ((2.f * mu1_mu2 + C1) * (2.f * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2));
 
         if (size_average) {
             return ssim_map.mean();

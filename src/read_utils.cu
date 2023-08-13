@@ -210,6 +210,11 @@ T read_binary_value(std::istream& file) {
 
 // TODO: Do something with the images vector
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
+struct ImagePoint { // we dont need this later
+    double _x;
+    double _y;
+    uint64_t _point_id;
+};
 std::vector<Image> read_images_binary(std::filesystem::path file_path) {
     auto image_stream_buffer = read_binary(file_path);
     const auto image_count = read_binary_value<uint64_t>(*image_stream_buffer);
@@ -220,15 +225,15 @@ std::vector<Image> read_images_binary(std::filesystem::path file_path) {
     for (size_t i = 0; i < image_count; ++i) {
         const auto image_ID = read_binary_value<uint32_t>(*image_stream_buffer);
         auto& img = images.emplace_back(image_ID);
-        img._qvec.x() = read_binary_value<double>(*image_stream_buffer);
-        img._qvec.y() = read_binary_value<double>(*image_stream_buffer);
-        img._qvec.z() = read_binary_value<double>(*image_stream_buffer);
-        img._qvec.w() = read_binary_value<double>(*image_stream_buffer);
+        img._qvec.x() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
+        img._qvec.y() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
+        img._qvec.z() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
+        img._qvec.w() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
         img._qvec.normalize();
 
-        img._tvec.x() = read_binary_value<double>(*image_stream_buffer);
-        img._tvec.y() = read_binary_value<double>(*image_stream_buffer);
-        img._tvec.z() = read_binary_value<double>(*image_stream_buffer);
+        img._tvec.x() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
+        img._tvec.y() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
+        img._tvec.z() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
 
         img._camera_id = read_binary_value<uint32_t>(*image_stream_buffer);
 
@@ -243,8 +248,8 @@ std::vector<Image> read_images_binary(std::filesystem::path file_path) {
         const auto number_points = read_binary_value<uint64_t>(*image_stream_buffer);
 
         // Read all the point data at once
-        img._points2D_ID.resize(number_points);
-        image_stream_buffer->read(reinterpret_cast<char*>(img._points2D_ID.data()), number_points * sizeof(ImagePoint));
+        std::vector<ImagePoint> points(number_points); // we throw this away
+        image_stream_buffer->read(reinterpret_cast<char*>(points.data()), number_points * sizeof(ImagePoint));
     }
 
     return images;
@@ -294,9 +299,9 @@ PointCloud read_point3D_binary(std::filesystem::path file_path) {
         // just ignore the point3D_ID
         read_binary_value<uint64_t>(*point3D_stream_buffer);
         // vertices
-        point_cloud._points[i].x = read_binary_value<double>(*point3D_stream_buffer);
-        point_cloud._points[i].y = read_binary_value<double>(*point3D_stream_buffer);
-        point_cloud._points[i].z = read_binary_value<double>(*point3D_stream_buffer);
+        point_cloud._points[i].x = static_cast<float>(read_binary_value<double>(*point3D_stream_buffer));
+        point_cloud._points[i].y = static_cast<float>(read_binary_value<double>(*point3D_stream_buffer));
+        point_cloud._points[i].z = static_cast<float>(read_binary_value<double>(*point3D_stream_buffer));
 
         // colors
         point_cloud._colors[i].r = read_binary_value<uint8_t>(*point3D_stream_buffer);
@@ -337,15 +342,16 @@ std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_pat
         camera_infos[image_ID]._T = image._tvec;
 
         if (camera_infos[image_ID]._camera_model == CAMERA_MODEL::SIMPLE_PINHOLE) {
-            double focal_length_x = camera_infos[image_ID]._params[0];
+            const float focal_length_x = camera_infos[image_ID]._params[0];
             camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID]._width);
             camera_infos[image_ID]._fov_y = focal2fov(focal_length_x, camera_infos[image_ID]._height);
         } else if (camera_infos[image_ID]._camera_model == CAMERA_MODEL::PINHOLE) {
-            double focal_length_x = camera_infos[image_ID]._params[0];
-            double focal_length_y = camera_infos[image_ID]._params[1];
+            const float focal_length_x = camera_infos[image_ID]._params[0];
+            const float focal_length_y = camera_infos[image_ID]._params[1];
             camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID]._width);
             camera_infos[image_ID]._fov_y = focal2fov(focal_length_y, camera_infos[image_ID]._height);
         } else {
+            // TODO: Better error handling. Inform user which camera model is not supported
             throw std::runtime_error("Camera model not supported");
         }
 
@@ -355,14 +361,14 @@ std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_pat
     return camera_infos;
 }
 
-std::pair<Eigen::Vector3d, double> get_center_and_diag(std::vector<Eigen::Vector3d>& cam_centers) {
-    Eigen::Vector3d avg_cam_center = Eigen::Vector3d::Zero();
+std::pair<Eigen::Vector3f, float> get_center_and_diag(std::vector<Eigen::Vector3f>& cam_centers) {
+    Eigen::Vector3f avg_cam_center = Eigen::Vector3f::Zero();
     for (const auto& center : cam_centers) {
         avg_cam_center += center;
     }
-    avg_cam_center /= static_cast<double>(cam_centers.size());
+    avg_cam_center /= static_cast<float>(cam_centers.size());
 
-    double max_dist = 0;
+    float max_dist = 0;
     for (const auto& center : cam_centers) {
         max_dist = std::max(max_dist, (center - avg_cam_center).norm());
     }
@@ -370,18 +376,18 @@ std::pair<Eigen::Vector3d, double> get_center_and_diag(std::vector<Eigen::Vector
     return {avg_cam_center, max_dist};
 }
 
-std::pair<Eigen::Vector3d, double> getNerfppNorm(std::vector<CameraInfo>& cam_info) {
-    std::vector<Eigen::Vector3d> cam_centers;
+std::pair<Eigen::Vector3f, float> getNerfppNorm(std::vector<CameraInfo>& cam_info) {
+    std::vector<Eigen::Vector3f> cam_centers;
     for (CameraInfo& cam : cam_info) {
-        Eigen::Matrix4d W2C = getWorld2View2Eigen(cam._R, cam._T);
-        Eigen::Matrix4d C2W = W2C.inverse();
+        Eigen::Matrix4f W2C = getWorld2View2Eigen(cam._R, cam._T);
+        Eigen::Matrix4f C2W = W2C.inverse();
         cam_centers.emplace_back(C2W.block<3, 1>(0, 3));
     }
 
     auto [center, diagonal] = get_center_and_diag(cam_centers);
 
-    double radius = diagonal * 1.1;
-    Eigen::Vector3d translate = -center;
+    float radius = diagonal * 1.1f;
+    Eigen::Vector3f translate = -center;
 
     return {translate, radius};
 }

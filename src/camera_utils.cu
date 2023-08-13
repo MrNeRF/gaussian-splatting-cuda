@@ -5,57 +5,56 @@
 #include <filesystem>
 #include <iostream>
 
-torch::Tensor getWorld2View2(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
-                             const Eigen::Vector3d& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
-    Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
+torch::Tensor getWorld2View2(const Eigen::Matrix3f& R, const Eigen::Vector3f& t,
+                             const Eigen::Vector3f& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
+    Eigen::Matrix4f Rt = Eigen::Matrix4f::Zero();
     Rt.block<3, 3>(0, 0) = R.transpose();
     Rt.block<3, 1>(0, 3) = t;
     Rt(3, 3) = 1.0;
 
-    Eigen::Matrix4d C2W = Rt.inverse();
-    Eigen::Vector3d cam_center = C2W.block<3, 1>(0, 3);
+    Eigen::Matrix4f C2W = Rt.inverse();
+    Eigen::Vector3f cam_center = C2W.block<3, 1>(0, 3);
     cam_center = (cam_center + translate) * scale;
     C2W.block<3, 1>(0, 3) = cam_center;
     Rt = C2W.inverse();
     // Here we create a torch::Tensor from the Eigen::Matrix
     // Note that the tensor will be on the CPU, you may want to move it to the desired device later
-    // TODO: get rid of double conversion
-    auto RtTensor = torch::from_blob(Rt.data(), {4, 4}, torch::kDouble).to(torch::kFloat);
+    auto RtTensor = torch::from_blob(Rt.data(), {4, 4}, torch::kFloat);
     // clone the tensor to allocate new memory, as from_blob shares the same memory
     // this step is important if Rt will go out of scope and the tensor will be used later
     return RtTensor.clone();
 }
 
-Eigen::Matrix4d getWorld2View2Eigen(const Eigen::Matrix3d& R, const Eigen::Vector3d& t,
-                                    const Eigen::Vector3d& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
-    Eigen::Matrix4d Rt = Eigen::Matrix4d::Zero();
+Eigen::Matrix4f getWorld2View2Eigen(const Eigen::Matrix3f& R, const Eigen::Vector3f& t,
+                                    const Eigen::Vector3f& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
+    Eigen::Matrix4f Rt = Eigen::Matrix4f::Zero();
     Rt.block<3, 3>(0, 0) = R.transpose();
     Rt.block<3, 1>(0, 3) = t;
     Rt(3, 3) = 1.0;
 
-    Eigen::Matrix4d C2W = Rt.inverse();
-    Eigen::Vector3d cam_center = C2W.block<3, 1>(0, 3);
+    Eigen::Matrix4f C2W = Rt.inverse();
+    Eigen::Vector3f cam_center = C2W.block<3, 1>(0, 3);
     cam_center = (cam_center + translate) * scale;
     C2W.block<3, 1>(0, 3) = cam_center;
     Rt = C2W.inverse();
     return Rt;
 }
 
-torch::Tensor getProjectionMatrix(double znear, double zfar, double fovX, double fovY) {
-    double tanHalfFovY = std::tan((fovY / 2));
-    double tanHalfFovX = std::tan((fovX / 2));
+torch::Tensor getProjectionMatrix(float znear, float zfar, float fovX, float fovY) {
+    float tanHalfFovY = std::tan((fovY / 2.f));
+    float tanHalfFovX = std::tan((fovX / 2.f));
 
-    double top = tanHalfFovY * znear;
-    double bottom = -top;
-    double right = tanHalfFovX * znear;
-    double left = -right;
+    float top = tanHalfFovY * znear;
+    float bottom = -top;
+    float right = tanHalfFovX * znear;
+    float left = -right;
 
-    Eigen::Matrix4d P = Eigen::Matrix4d::Zero();
+    Eigen::Matrix4f P = Eigen::Matrix4f::Zero();
 
-    double z_sign = 1.0;
+    float z_sign = 1.f;
 
-    P(0, 0) = 2.0 * znear / (right - left);
-    P(1, 1) = 2.0 * znear / (top - bottom);
+    P(0, 0) = 2.f * znear / (right - left);
+    P(1, 1) = 2.f * znear / (top - bottom);
     P(0, 2) = (right + left) / (right - left);
     P(1, 2) = (top + bottom) / (top - bottom);
     P(3, 2) = z_sign;
@@ -63,44 +62,43 @@ torch::Tensor getProjectionMatrix(double znear, double zfar, double fovX, double
     P(2, 3) = -(zfar * znear) / (zfar - znear);
 
     // create torch::Tensor from Eigen::Matrix
-    // TODO: Get rid of double conversion
-    auto PTensor = torch::from_blob(P.data(), {4, 4}, torch::kDouble).to(torch::kFloat);
+    auto PTensor = torch::from_blob(P.data(), {4, 4}, torch::kFloat);
 
     // clone the tensor to allocate new memory
     return PTensor.clone();
 }
 
-double fov2focal(double fov, double pixels) {
-    return pixels / (2 * std::tan(fov / 2));
+float fov2focal(float fov, int pixels) {
+    return static_cast<float>(pixels) / (2.f * std::tan(fov / 2.f));
 }
 
-double focal2fov(double focal, double pixels) {
-    return 2 * std::atan(pixels / (2 * focal));
+float focal2fov(float focal, int pixels) {
+    return 2 * std::atan(static_cast<float>(pixels) / (2.f * focal));
 }
 
-Eigen::Matrix3d qvec2rotmat(const Eigen::Quaterniond& q) {
-    Eigen::Vector4d qvec = q.coeffs(); // [x, y, z, w]
+Eigen::Matrix3f qvec2rotmat(const Eigen::Quaternionf& q) {
+    Eigen::Vector4f qvec = q.coeffs(); // [x, y, z, w]
 
-    Eigen::Matrix3d rotmat;
-    rotmat << 1 - 2 * qvec[2] * qvec[2] - 2 * qvec[3] * qvec[3],
-        2 * qvec[1] * qvec[2] - 2 * qvec[0] * qvec[3],
-        2 * qvec[3] * qvec[1] + 2 * qvec[0] * qvec[2],
-        2 * qvec[1] * qvec[2] + 2 * qvec[0] * qvec[3],
-        1 - 2 * qvec[1] * qvec[1] - 2 * qvec[3] * qvec[3],
-        2 * qvec[2] * qvec[3] - 2 * qvec[0] * qvec[1],
-        2 * qvec[3] * qvec[1] - 2 * qvec[0] * qvec[2],
-        2 * qvec[2] * qvec[3] + 2 * qvec[0] * qvec[1],
-        1 - 2 * qvec[1] * qvec[1] - 2 * qvec[2] * qvec[2];
+    Eigen::Matrix3f rotmat;
+    rotmat << 1.f - 2.f * qvec[2] * qvec[2] - 2.f * qvec[3] * qvec[3],
+        2.f * qvec[1] * qvec[2] - 2.f * qvec[0] * qvec[3],
+        2.f * qvec[3] * qvec[1] + 2.f * qvec[0] * qvec[2],
+        2.f * qvec[1] * qvec[2] + 2.f * qvec[0] * qvec[3],
+        1.f - 2.f * qvec[1] * qvec[1] - 2.f * qvec[3] * qvec[3],
+        2.f * qvec[2] * qvec[3] - 2.f * qvec[0] * qvec[1],
+        2.f * qvec[3] * qvec[1] - 2.f * qvec[0] * qvec[2],
+        2.f * qvec[2] * qvec[3] + 2.f * qvec[0] * qvec[1],
+        1.f - 2.f * qvec[1] * qvec[1] - 2.f * qvec[2] * qvec[2];
 
     return rotmat;
 }
 
-Eigen::Quaterniond rotmat2qvec(const Eigen::Matrix3d& R) {
-    Eigen::Quaterniond qvec(R);
+Eigen::Quaternionf rotmat2qvec(const Eigen::Matrix3f& R) {
+    Eigen::Quaternionf qvec(R);
     // the order of coefficients is different in python implementation.
     // Might be a bug here if data comes in wrong order! TODO: check
-    if (qvec.w() < 0) {
-        qvec.coeffs() *= -1;
+    if (qvec.w() < 0.f) {
+        qvec.coeffs() *= -1.f;
     }
     return qvec;
 }

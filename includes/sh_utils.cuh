@@ -29,10 +29,6 @@ static std::vector<double> C4 = {2.5033429417967046,
                                  0.6258357354491761};
 
 inline torch::Tensor Eval_sh(int deg, const torch::Tensor& sh, const torch::Tensor& dirs) {
-    assert(deg <= 4 && deg >= 0);
-    int coeff = (deg + 1) * (deg + 1);
-    assert(sh.size(-1) >= coeff);
-
     torch::Tensor result = C0 * sh.index({torch::indexing::Ellipsis, 0});
     if (deg > 0) {
         auto x = dirs.index({torch::indexing::Ellipsis, 0});
@@ -76,9 +72,9 @@ inline torch::Tensor Eval_sh(int deg, const torch::Tensor& sh, const torch::Tens
 }
 
 inline torch::Tensor RGB2SH(const torch::Tensor& rgb) {
-    return (rgb - 0.5) / C0;
+    return (rgb - 0.5f) / static_cast<float>(C0);
 }
 
 inline torch::Tensor SH2RGB(const torch::Tensor& sh) {
-    return sh * C0 + 0.5;
+    return sh * static_cast<float>(C0) + 0.5f;
 }
