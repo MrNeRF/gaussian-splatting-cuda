@@ -98,7 +98,7 @@ find_package(Torch REQUIRED)
 # Build options based on CMAKE_BUILD_TYPE
 function(configure_build_type)
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        target_compile_options(${PROJECT_NAME} PRIVATE -O0 -g -G -lineinfo -Xcompiler -Werror)
+        target_compile_options(${PROJECT_NAME} PRIVATE -O0 -g -G -Xcompiler -Werror)
         set_target_properties(${PROJECT_NAME} PROPERTIES
                 CUDA_RESOLVE_DEVICE_SYMBOLS ON
                 CUDA_SEPARABLE_COMPILATION ON
