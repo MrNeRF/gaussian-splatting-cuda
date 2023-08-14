@@ -4,6 +4,10 @@
 
 #include "debug_utils.cuh"
 #include "rasterize_points.cuh"
+#include "serialization.h"
+
+#undef WRITE_TEST_DATA
+#define WRITE_TEST_DATA
 
 struct GaussianRasterizationSettings {
     int image_height;
@@ -52,25 +56,6 @@ public:
                                                 torch::Tensor camera_center,
                                                 torch::Tensor prefiltered) {
 
-        //        ts::print_debug_info(means3D, "means3D");
-        //        ts::print_debug_info(sh, "sh");
-        //        ts::print_debug_info(colors_precomp, "colors_precomp");
-        //        ts::print_debug_info(opacities, "opacities");
-        //        ts::print_debug_info(scales, "scales");
-        //        ts::print_debug_info(rotations, "rotations");
-        //        ts::print_debug_info(cov3Ds_precomp, "cov3Ds_precomp");
-        //        ts::print_debug_info(image_height, "image_height");
-        //        ts::print_debug_info(image_width, "image_width");
-        //        ts::print_debug_info(tanfovx, "tanfovx");
-        //        ts::print_debug_info(tanfovy, "tanfovy");
-        //        ts::print_debug_info(bg, "bg");
-        //        ts::print_debug_info(scale_modifier, "scale_modifier");
-        //        ts::print_debug_info(viewmatrix, "viewmatrix");
-        //        ts::print_debug_info(projmatrix, "projmatrix");
-        //        ts::print_debug_info(sh_degree, "sh_degree");
-        //        ts::print_debug_info(camera_center, "camera_center");
-        //        ts::print_debug_info(prefiltered, "prefiltered");
-
         int image_height_val = image_height.item<int>();
         int image_width_val = image_width.item<int>();
         float tanfovx_val = tanfovx.item<float>();
@@ -101,7 +86,7 @@ public:
             sh_degree_val,
             camera_center,
             prefiltered_val,
-            true);
+            false);
 
         ctx->save_for_backward({colors_precomp, means3D, scales, rotations, cov3Ds_precomp, radii, sh, geomBuffer, binningBuffer, imgBuffer});
         // TODO: Clean up. Too much data saved.
@@ -137,6 +122,30 @@ public:
         auto binningBuffer = saved[8];
         auto imgBuffer = saved[9];
 
+#ifdef WRITE_TEST_DATA
+        auto grad_out_color_copy = grad_out_color.clone();
+        auto grad_out_radii_copy = grad_out_radii.clone();
+        auto num_rendered_copy = num_rendered;
+        auto colors_precomp_copy = colors_precomp.clone();
+        auto means3D_copy = means3D.clone();
+        auto scales_copy = scales.clone();
+        auto rotations_copy = rotations.clone();
+        auto cov3Ds_precomp_copy = cov3Ds_precomp.clone();
+        auto radii_copy = radii.clone();
+        auto sh_copy = sh.clone();
+        auto geomBuffer_copy = geomBuffer.clone();
+        auto binningBuffer_copy = binningBuffer.clone();
+        auto imgBuffer_copy = imgBuffer.clone();
+        auto background_copy = ctx->saved_data["background"].to<torch::Tensor>().clone();
+        auto scale_modifier_copy = ctx->saved_data["scale_modifier"].to<float>();
+        auto viewmatrix_copy = ctx->saved_data["viewmatrix"].to<torch::Tensor>();
+        auto projmatrix_copy = ctx->saved_data["projmatrix"].to<torch::Tensor>();
+        auto tanfovx_copy = ctx->saved_data["tanfovx"].to<float>();
+        auto tanfovy_copy = ctx->saved_data["tanfovy"].to<float>();
+        auto sh_degree_copy = ctx->saved_data["sh_degree"].to<int>();
+        auto camera_center_copy = ctx->saved_data["camera_center"].to<torch::Tensor>();
+#endif
+
         auto [grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations] = RasterizeGaussiansBackwardCUDA(
             ctx->saved_data["background"].to<torch::Tensor>(),
             means3D,
@@ -158,8 +167,39 @@ public:
             num_rendered,
             binningBuffer,
             imgBuffer,
-            true);
+            false);
 
+#ifdef WRITE_TEST_DATA
+        saveFunctionData("rasterize_backward_test_data.dat",
+                         grad_means2D,
+                         grad_colors_precomp,
+                         grad_opacities,
+                         grad_means3D,
+                         grad_cov3Ds_precomp,
+                         grad_sh,
+                         grad_scales,
+                         grad_rotations,
+                         background_copy,
+                         means3D_copy,
+                         radii_copy,
+                         colors_precomp_copy,
+                         scales_copy,
+                         rotations_copy,
+                         scale_modifier_copy,
+                         cov3Ds_precomp_copy,
+                         viewmatrix_copy,
+                         projmatrix_copy,
+                         tanfovx_copy,
+                         tanfovy_copy,
+                         grad_out_color_copy,
+                         sh_copy,
+                         sh_degree_copy,
+                         camera_center_copy,
+                         geomBuffer_copy,
+                         num_rendered_copy,
+                         binningBuffer_copy,
+                         imgBuffer_copy);
+#endif
         // return gradients for all inputs, 19 in total. :D
         return {grad_means3D,
                 grad_means2D,
@@ -231,9 +271,6 @@ public:
         if (!cov3D_precomp.defined()) {
             cov3D_precomp = torch::empty({0}, device);
         }
-
-        // match datalayout to python implementation
-        //        means3D = means3D.transpose(0, 1);
 
         auto result = rasterize_gaussians(
             means3D,

@@ -12,8 +12,6 @@
 #include "config.h"
 #include "rasterize_points.cuh"
 #include "rasterizer.h"
-#include <iostream>
-#include <string>
 #include <torch/extension.h>
 #include <tuple>
 
@@ -23,21 +21,6 @@ std::function<char*(size_t N)> resizeFunctional(torch::Tensor& t) {
         return reinterpret_cast<char*>(t.contiguous().data_ptr());
     };
     return lambda;
-}
-
-void print_tensor_info(torch::Tensor tensor, std::string tensor_name) {
-    std::cout << "------ " << tensor_name << " ------\n";
-    std::cout << "Device: " << (tensor.device().is_cuda() ? "CUDA" : "CPU") << "\n";
-    std::cout << "Data type: " << tensor.dtype() << "\n";
-    std::cout << "Is contiguous: " << (tensor.is_contiguous() ? "True" : "False") << "\n";
-    std::cout << "Is pinned: " << (tensor.is_pinned() ? "True" : "False") << "\n";
-    std::cout << "Size: " << tensor.sizes() << "\n";
-    std::cout << "Strides: " << tensor.strides() << "\n";
-    if (tensor.device().is_cuda()) {
-        auto ptr = tensor.data_ptr();
-        std::cout << "Data pointer: " << (ptr != nullptr ? "Not null" : "Null") << "\n";
-    }
-    std::cout << "----------------------------\n";
 }
 
 std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
@@ -90,72 +73,6 @@ RasterizeGaussiansCUDA(
         if (sh.size(0) != 0) {
             M = sh.size(1);
         }
-        //        print_tensor_info(background, "background");
-        //        print_tensor_info(means3D, "means3D");
-        //        print_tensor_info(colors, "colors");
-        //        print_tensor_info(opacity, "opacity");
-        //        print_tensor_info(scales, "scales");
-        //        print_tensor_info(rotations, "rotations");
-        //        print_tensor_info(cov3D_precomp, "cov3D_precomp");
-        //        print_tensor_info(viewmatrix, "viewmatrix");
-        //        print_tensor_info(projmatrix, "projmatrix");
-        //        print_tensor_info(sh, "sh");
-        //        print_tensor_info(campos, "campos");
-        //        print_tensor_info(out_color, "out_color");
-        //        print_tensor_info(radii, "radii");
-
-        //        if (!background.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: background"
-        //                      << "\n";
-        //        }
-        //        if (!means3D.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: means3D"
-        //                      << "\n";
-        //        }
-        //        if (!colors.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: colors"
-        //                      << "\n";
-        //        }
-        //        if (!opacity.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: opacity"
-        //                      << "\n";
-        //        }
-        //        if (!scales.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: scales"
-        //                      << "\n";
-        //        }
-        //        if (!rotations.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: rotations"
-        //                      << "\n";
-        //        }
-        //        if (!cov3D_precomp.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: cov3D_precomp"
-        //                      << "\n";
-        //        }
-        //        if (!viewmatrix.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: viewmatrix"
-        //                      << "\n";
-        //        }
-        //        if (!projmatrix.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: projmatrix"
-        //                      << "\n";
-        //        }
-        //        if (!sh.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: sh"
-        //                      << "\n";
-        //        }
-        //        if (!campos.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: campos"
-        //                      << "\n";
-        //        }
-        //        if (!out_color.data_ptr<float>()) {
-        //            std::cout << "Null data pointer: out_color"
-        //                      << "\n";
-        //        }
-        //        if (!radii.data_ptr<int>()) {
-        //            std::cout << "Null data pointer: radii"
-        //                      << "\n";
-        //        }
 
         rendered = CudaRasterizer::Rasterizer::forward(
             geomFunc,
@@ -228,6 +145,7 @@ RasterizeGaussiansBackwardCUDA(
     torch::Tensor dL_drotations = torch::zeros({P, 4}, means3D.options());
 
     if (P != 0) {
+
         CudaRasterizer::Rasterizer::backward(P, degree, M, R,
                                              background.contiguous().data_ptr<float>(),
                                              W, H,

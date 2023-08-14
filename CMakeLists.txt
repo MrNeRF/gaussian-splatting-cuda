@@ -54,6 +54,7 @@ set(HEADERS
         cuda_rasterizer/auxiliary.h
         cuda_rasterizer/rasterizer_impl.h
         cuda_rasterizer/rasterizer.h
+        cuda_rasterizer/serialization.h
 )
 
 set(SOURCES
@@ -172,16 +173,20 @@ if(BUILD_TESTS)
     enable_testing()
 
     set(TEST_SOURCES
-            tests/testing.cu
-            src/read_utils.cu
+            cuda_rasterizer/backward.cu
+            cuda_rasterizer/forward.cu
+            cuda_rasterizer/rasterizer_impl.cu
             src/gaussian.cu
             src/camera.cu
             src/image.cu
-            tests/camera_utils_test.cu
             src/scene.cu
             src/camera_utils.cu
             src/general_utils.cu
-            tests/general_utils_test.cu
+            src/rasterizer.cu
+            src/rasterize_points.cu
+            src/read_utils.cu
+            tests/render_test.cu
+            tests/testing.cu
     )
     # Add test executable
     add_executable(testing ${TEST_SOURCES})

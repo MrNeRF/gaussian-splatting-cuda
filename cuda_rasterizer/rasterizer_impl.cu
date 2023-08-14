@@ -204,8 +204,8 @@ int CudaRasterizer::Rasterizer::forward(
     float* out_color,
     int* radii,
     bool debug) {
-    const float focal_y = height / (2.0f * tan_fovy);
-    const float focal_x = width / (2.0f * tan_fovx);
+    const float focal_y = static_cast<float>(height) / (2.f * tan_fovy);
+    const float focal_x = static_cast<float>(width) / (2.f * tan_fovx);
 
     size_t chunk_size = required<GeometryState>(P);
     char* chunkptr = geometryBuffer(chunk_size);
