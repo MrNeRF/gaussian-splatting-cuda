@@ -9,7 +9,7 @@
 
 // Serialize a single tensor to an output stream
 inline void serializeTensor(std::ostream& os, const torch::Tensor& tensor) {
-    ts::print_debug_info(tensor, "tensor");
+    //    ts::print_debug_info(tensor, "tensor");
     if (!tensor.defined()) {
         // Handle error: e.g., throw an exception or return early
         throw std::runtime_error("Tensor is not defined!");

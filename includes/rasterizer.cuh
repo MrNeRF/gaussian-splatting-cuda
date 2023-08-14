@@ -6,8 +6,8 @@
 #include "rasterize_points.cuh"
 #include "serialization.h"
 
-#undef WRITE_TEST_DATA
 #define WRITE_TEST_DATA
+#undef WRITE_TEST_DATA
 
 struct GaussianRasterizationSettings {
     int image_height;

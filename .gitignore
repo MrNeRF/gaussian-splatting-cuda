@@ -11,3 +11,4 @@ output*
 *.sqlite
 test.py
 *.nsys-rep
+testdata
