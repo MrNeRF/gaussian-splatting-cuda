@@ -159,7 +159,6 @@ void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, t
 void GaussianModel::prune_points(torch::Tensor mask) {
     // reverse to keep points
     auto valid_point_mask = ~mask;
-    ts::print_debug_info(valid_point_mask, "valid_point_mask");
     int true_count = valid_point_mask.sum().item<int>();
     std::cout << "Pruning " << true_count << " points" << std::endl;
     auto indices = torch::nonzero(valid_point_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
@@ -234,17 +233,9 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
 
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 
-    torch::Tensor prune_filter = ~torch::cat({selected_pts_mask.squeeze(-1), torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kBool).to(torch::kCUDA)});
-    ts::print_debug_info(prune_filter, "prune_filter");
-    prune_filter = torch::logical_and(prune_filter, (Get_opacity() < min_opacity).squeeze(-1));
-    ts::print_debug_info(prune_filter, "prune_filter");
-
-    if (max_screen_size > 0) {
-        torch::Tensor big_points_vs = _max_radii2D > max_screen_size;
-        torch::Tensor big_points_ws = std::get<0>(Get_scaling().max(1)) > 0.1 * scene_extent;
-        prune_filter = torch::logical_or(prune_filter, torch::logical_or(big_points_vs, big_points_ws));
-    }
-    ts::print_debug_info(prune_filter, "prune_filter");
+    torch::Tensor prune_filter = torch::cat({selected_pts_mask.squeeze(-1), torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kBool).to(torch::kCUDA)});
+    // torch::Tensor prune_filter = torch::cat({selected_pts_mask.squeeze(-1), torch::zeros({N * selected_pts_mask.sum().item<int>()})}).to(torch::kBool).to(torch::kCUDA);
+    prune_filter = torch::logical_or(prune_filter, (Get_opacity() < min_opacity).squeeze(-1));
     prune_points(prune_filter);
 }
 

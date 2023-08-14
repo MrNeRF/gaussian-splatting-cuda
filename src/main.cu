@@ -45,7 +45,6 @@ void Write_model_parameters_to_file(const ModelParameters& params) {
 std::vector<int> get_random_indices(int max_index) {
     std::vector<int> indices(max_index);
     std::iota(indices.begin(), indices.end(), 0);
-    //    std::reverse(indices.begin(), indices.end());
     // Shuffle the vector
     std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
     return indices;
@@ -95,7 +94,7 @@ int main(int argc, char* argv[]) {
         // Loss Computations
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
-        auto loss = (1.0 - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.0 - gaussian_splatting::ssim(image, gt_image));
+        auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - gaussian_splatting::ssim(image, gt_image));
         std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << " gaussian splats: " << gaussians.Get_xyz().size(0) << std::endl;
         loss.backward();
 
@@ -106,9 +105,12 @@ int main(int argc, char* argv[]) {
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
 
-            if (iter == 7'000 || iter == 30'000) {
+            if (iter % 7'000 == 0) {
+                std::cout << "Saving at " << std::to_string(iter) << " iterations\n";
                 gaussians.Save_ply(modelParams.model_path, iter);
-                /* return 0; */
+            }
+            if (iter == 30'000) {
+                return 0;
             }
 
             // Densification
