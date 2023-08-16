@@ -10,12 +10,13 @@ This project is a derivative of the original Gaussian-Splatting software and is 
 
 Please be advised that the software in this repository cannot be used for commercial purposes without explicit consent from the original licensors, Inria and MPII.
 
-## Current Measurments as of 2023-08-09 
+## Current Measurments as of 2023-08-16 
 NVIDIA GeForce RTX 4090
 
     tandt/truck:
+        ~100 seconds for 7000 iterations (my initial 2023-08-16) 
+        ~120 seconds for 7000 iterations (my implementation 2023-08-16) 
         ~122 seconds for 7000 iterations (original PyTorch implementation)
-        ~120 seconds for 7000 iterations (my initial implementation)
 
 While completely unoptimized, the gains in performance, though modest, are noteworthy.
 

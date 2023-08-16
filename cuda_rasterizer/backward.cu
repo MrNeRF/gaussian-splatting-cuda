@@ -390,7 +390,7 @@ __constant__ float d_bg_color[3]; // RGB
 
 template <uint32_t C>
 __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
-    renderCUDA(
+    renderBackwardsCUDA(
         const uint2* __restrict__ ranges,
         const uint32_t* __restrict__ point_list,
         const float2* __restrict__ points_xy_image,
@@ -450,9 +450,11 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
     const float ddely_dy = 0.5 * d_H;
 
     // Traverse all Gaussians
+    __shared__ float2 s_dL_dmean2D[BLOCK_SIZE];
+    __shared__ float4 s_dL_dconic2D[BLOCK_SIZE];
+    __shared__ float s_dL_dopacity[BLOCK_SIZE];
+    //    __shared__ float s_dL_dcolors[BLOCK_SIZE * C];
     for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE) {
-        // Load auxiliary data into shared memory, start in the BACK
-        // and load them in revers order.
         block.sync();
         const int progress = i * BLOCK_SIZE + block.thread_rank();
         if (range.x + progress < range.y) {
@@ -460,16 +462,23 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             collected_id[block.thread_rank()] = coll_id;
             collected_xy[block.thread_rank()] = points_xy_image[coll_id];
             collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
-            for (int i = 0; i < C; i++)
-                collected_colors[i * BLOCK_SIZE + block.thread_rank()] = colors[coll_id * C + i];
+            for (int j = 0; j < C; j++) {
+                collected_colors[j * BLOCK_SIZE + block.thread_rank()] = colors[coll_id * C + j];
+                //                s_dL_dcolors[block.thread_rank() * C + j] = 0;
+            }
+
+            s_dL_dmean2D[block.thread_rank()] = float2{0, 0};
+            s_dL_dconic2D[block.thread_rank()] = float4{0, 0, 0, 0};
+            s_dL_dopacity[block.thread_rank()] = 0;
         }
         block.sync();
 
-        // Iterate over Gaussians
-        for (int j = 0; !done && j < min(BLOCK_SIZE, toDo); j++) {
+        const int max_iterations = min(BLOCK_SIZE, toDo);
+        for (int j = 0; !done && j < max_iterations; j++) {
             // Keep track of current Gaussian ID. Skip, if this one
             // is behind the last contributor for this pixel.
             contributor--;
+            const int global_id = collected_id[j];
             if (contributor >= last_contributor)
                 continue;
 
@@ -493,7 +502,6 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // gradients w.r.t. alpha (blending factor for a Gaussian/pixel
             // pair).
             float dL_dalpha = 0.0f;
-            const int global_id = collected_id[j];
             for (int ch = 0; ch < C; ch++) {
                 const float c = collected_colors[ch * BLOCK_SIZE + j];
                 // Update last color (to be used in the next iteration)
@@ -506,6 +514,7 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
                 // Atomic, since this pixel is just one of potentially
                 // many that were affected by this Gaussian.
                 atomicAdd(&(dL_dcolors[global_id * C + ch]), dchannel_dcolor * dL_dchannel);
+                //                atomicAdd(&s_dL_dcolors[j * C + ch], dchannel_dcolor * dL_dchannel);
             }
             dL_dalpha *= T;
             // Update last alpha (to be used in the next iteration)
@@ -514,8 +523,9 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // Account for fact that alpha also influences how much of
             // the background color is added if nothing left to blend
             float bg_dot_dpixel = 0;
-            for (int i = 0; i < C; i++)
-                bg_dot_dpixel += d_bg_color[i] * dL_dpixel[i];
+            for (int k = 0; k < C; k++) {
+                bg_dot_dpixel += d_bg_color[k] * dL_dpixel[k];
+            }
             dL_dalpha += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
 
             // Helpful reusable temporary variables
@@ -526,16 +536,40 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             const float dG_ddely = -gdy * con_o.z - gdx * con_o.y;
 
             // Update gradients w.r.t. 2D mean position of the Gaussian
-            atomicAdd(&dL_dmean2D[global_id].x, dL_dG * dG_ddelx * ddelx_dx);
-            atomicAdd(&dL_dmean2D[global_id].y, dL_dG * dG_ddely * ddely_dy);
+            //            atomicAdd(&dL_dmean2D[global_id].x, dL_dG * dG_ddelx * ddelx_dx);
+            //            atomicAdd(&dL_dmean2D[global_id].y, dL_dG * dG_ddely * ddely_dy);
 
             // Update gradients w.r.t. 2D covariance (2x2 matrix, symmetric)
-            atomicAdd(&dL_dconic2D[global_id].x, -0.5f * gdx * d.x * dL_dG);
-            atomicAdd(&dL_dconic2D[global_id].y, -0.5f * gdx * d.y * dL_dG);
-            atomicAdd(&dL_dconic2D[global_id].w, -0.5f * gdy * d.y * dL_dG);
+            //            atomicAdd(&dL_dconic2D[global_id].x, -0.5f * gdx * d.x * dL_dG);
+            //            atomicAdd(&dL_dconic2D[global_id].y, -0.5f * gdx * d.y * dL_dG);
+            //            atomicAdd(&dL_dconic2D[global_id].w, -0.5f * gdy * d.y * dL_dG);
 
             // Update gradients w.r.t. opacity of the Gaussian
-            atomicAdd(&(dL_dopacity[global_id]), G * dL_dalpha);
+            //            atomicAdd(&(dL_dopacity[global_id]), G * dL_dalpha);
+
+            atomicAdd(&s_dL_dmean2D[j].x, dL_dG * dG_ddelx * ddelx_dx);
+            atomicAdd(&s_dL_dmean2D[j].y, dL_dG * dG_ddely * ddely_dy);
+            //
+            //                // Update gradients w.r.t. 2D covariance (2x2 matrix, symmetric)
+            atomicAdd(&s_dL_dconic2D[j].x, -0.5f * gdx * d.x * dL_dG);
+            atomicAdd(&s_dL_dconic2D[j].y, -0.5f * gdx * d.y * dL_dG);
+            atomicAdd(&s_dL_dconic2D[j].w, -0.5f * gdy * d.y * dL_dG);
+            //
+            //                // Update gradients w.r.t. opacity of the Gaussian
+            atomicAdd(&(s_dL_dopacity[j]), G * dL_dalpha);
+        }
+        //        block.sync();
+        if (block.thread_rank() < max_iterations) {
+            const int coll_id = collected_id[block.thread_rank()];
+            atomicAdd(&(dL_dmean2D[coll_id].x), s_dL_dmean2D[block.thread_rank()].x);
+            atomicAdd(&(dL_dmean2D[coll_id].y), s_dL_dmean2D[block.thread_rank()].y);
+            atomicAdd(&(dL_dconic2D[coll_id].x), s_dL_dconic2D[block.thread_rank()].x);
+            atomicAdd(&(dL_dconic2D[coll_id].y), s_dL_dconic2D[block.thread_rank()].y);
+            atomicAdd(&(dL_dconic2D[coll_id].w), s_dL_dconic2D[block.thread_rank()].w);
+            atomicAdd(&(dL_dopacity[coll_id]), s_dL_dopacity[block.thread_rank()]);
+            //            for (int j = 0; j < C; j++) {
+            //                atomicAdd(&(dL_dcolors[coll_id * C + j]),  s_dL_dcolors[block.thread_rank() * C + j]);
+            //            }
         }
     }
 }
@@ -624,7 +658,8 @@ void BACKWARD::render(
     cudaMemcpyToSymbol(d_W, &W, sizeof(int));
     cudaMemcpyToSymbol(d_H, &H, sizeof(int));
     cudaMemcpyToSymbol(d_bg_color, bg_color, sizeof(float) * 3); // RGB
-    renderCUDA<NUM_CHANNELS><<<grid, block>>>(
+
+    renderBackwardsCUDA<NUM_CHANNELS><<<grid, block>>>(
         ranges,
         point_list,
         means2D,
