@@ -502,18 +502,33 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // gradients w.r.t. alpha (blending factor for a Gaussian/pixel
             // pair).
             float dL_dalpha = 0.0f;
-            for (int ch = 0; ch < C; ch++) {
-                const float c = collected_colors[ch * BLOCK_SIZE + j];
+            // Update color and alpha
+            {
+                const float red = collected_colors[0 * BLOCK_SIZE + j];
                 // Update last color (to be used in the next iteration)
-                accum_rec[ch] = last_alpha * last_color[ch] + (1.f - last_alpha) * accum_rec[ch];
-                last_color[ch] = c;
+                accum_rec[0] = last_alpha * last_color[0] + (1.f - last_alpha) * accum_rec[0];
+                last_color[0] = red;
 
-                const float dL_dchannel = dL_dpixel[ch];
-                dL_dalpha += (c - accum_rec[ch]) * dL_dchannel;
+                const float green = collected_colors[1 * BLOCK_SIZE + j];
+                // Update last color (to be used in the next iteration)
+                accum_rec[1] = last_alpha * last_color[1] + (1.f - last_alpha) * accum_rec[1];
+                last_color[1] = green;
+
+                const float blue = collected_colors[2 * BLOCK_SIZE + j];
+                // Update last color (to be used in the next iteration)
+                accum_rec[2] = last_alpha * last_color[2] + (1.f - last_alpha) * accum_rec[2];
+                last_color[2] = blue;
+                // const float dL_dchannel = dL_dpixel[0];
+
+                dL_dalpha += (red - accum_rec[0]) * dL_dpixel[0];
+                dL_dalpha += (green - accum_rec[1]) * dL_dpixel[1];
+                dL_dalpha += (blue - accum_rec[2]) * dL_dpixel[2];
                 // Update the gradients w.r.t. color of the Gaussian.
                 // Atomic, since this pixel is just one of potentially
                 // many that were affected by this Gaussian.
-                atomicAdd(&(dL_dcolors[global_id * C + ch]), dchannel_dcolor * dL_dchannel);
+                atomicAdd(&(dL_dcolors[global_id * C + 0]), dchannel_dcolor * dL_dpixel[0]);
+                atomicAdd(&(dL_dcolors[global_id * C + 1]), dchannel_dcolor * dL_dpixel[1]);
+                atomicAdd(&(dL_dcolors[global_id * C + 2]), dchannel_dcolor * dL_dpixel[2]);
                 //                atomicAdd(&s_dL_dcolors[j * C + ch], dchannel_dcolor * dL_dchannel);
             }
             dL_dalpha *= T;
