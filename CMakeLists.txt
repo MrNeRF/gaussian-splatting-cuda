@@ -113,6 +113,7 @@ configure_build_type()
 # Required packages
 find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
+find_package(Threads REQUIRED)
 
 # Check CUDA version
 if (CUDAToolkit_VERSION VERSION_LESS "12.2")
@@ -143,6 +144,7 @@ target_link_libraries(${PROJECT_NAME}
         eigen3
         nlohmann_json::nlohmann_json
         glm
+        Threads::Threads
 )
 
 # --------------------------------------
