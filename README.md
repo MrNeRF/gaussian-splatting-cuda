@@ -1,16 +1,4 @@
 # "3D Gaussian Splatting for Real-Time Radiance Field Rendering" Reproduction in C++ and CUDA
-
-
-#  NVIDIA GeForce RTX 3090
-    
-    tandt/truck:
-        ~180 seconds for 7000 iterations (Latest 2023-08-17)
-        ~200 seconds for 7000 iterations (2023-08-16)
-
-Investigation using NCU, to investigate performance bottlenecks.
-
-
-
 This repository contains a reproduction of the Gaussian-Splatting software, originally developed by Inria and the Max Planck Institut for Informatik (MPII). The reproduction is written in C++ and CUDA.
 I have used the source code from the original [repo](https://github.com/graphdeco-inria/gaussian-splatting) as blueprint for my first implementation. 
 The original code is written in Python and PyTorch.
@@ -22,13 +10,20 @@ This project is a derivative of the original Gaussian-Splatting software and is 
 
 Please be advised that the software in this repository cannot be used for commercial purposes without explicit consent from the original licensors, Inria and MPII.
 
-## Current Measurments as of 2023-08-16 
+## Current Measurments as of 2023-08-17 
 NVIDIA GeForce RTX 4090
 
     tandt/truck:
         ~100 seconds for 7000 iterations (my initial 2023-08-16) 
         ~120 seconds for 7000 iterations (my implementation 2023-08-16) 
         ~122 seconds for 7000 iterations (original PyTorch implementation)
+
+NVIDIA GeForce RTX 3090
+
+    tandt/truck:
+        ~180 seconds for 7000 iterations (Latest 2023-08-17)
+        ~200 seconds for 7000 iterations (2023-08-16)
+
 
 While completely unoptimized, the gains in performance, though modest, are noteworthy.
 
