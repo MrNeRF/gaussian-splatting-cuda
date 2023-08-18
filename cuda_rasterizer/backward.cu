@@ -551,8 +551,6 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             const float dG_ddelx = -gdx * con_o.x - gdy * con_o.y;
             const float dG_ddely = -gdy * con_o.z - gdx * con_o.y;
 
-
-
             int idx = (block.thread_rank() % D);
 
             atomicAdd(&s_dL_dmean2D[idx + j*D].x, dL_dG * dG_ddelx * ddelx_dx);
