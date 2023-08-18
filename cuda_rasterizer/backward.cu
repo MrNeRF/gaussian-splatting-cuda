@@ -430,14 +430,14 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
     uint32_t contributor = toDo;
     const int last_contributor = inside ? n_contrib[pix_id] : 0;
 
-    float accum_rec[C] = {0};
+    float accum_rec[C] = {0.f};
     float dL_dpixel[C];
     if (inside)
         for (int i = 0; i < C; i++)
             dL_dpixel[i] = dL_dpixels[i * d_H * d_W + pix_id];
 
-    float last_alpha = 0;
-    float last_color[C] = {0};
+    float last_alpha = 0.f;
+    float last_color[C] = {0.f};
 
     // Gradient of pixel coordinate w.r.t. normalized
     // screen-space viewport corrdinates (-1 to 1)
@@ -447,13 +447,13 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
     __shared__ int collected_id[BLOCK_SIZE];
     __shared__ float2 collected_xy[BLOCK_SIZE];
     __shared__ float4 collected_conic_opacity[BLOCK_SIZE];
-    __shared__ float collected_colors[C * BLOCK_SIZE];
+    __shared__ float4 collected_colors[BLOCK_SIZE];
 
-    const int D = 5;
+    const int D = 3;
     __shared__ float2 s_dL_dmean2D[D * BLOCK_SIZE];
     __shared__ float4 s_dL_dconic2D[D * BLOCK_SIZE];
     __shared__ float s_dL_dopacity[D * BLOCK_SIZE];
-    //    __shared__ float s_dL_dcolors[BLOCK_SIZE * C];
+    __shared__ float4 s_dL_dcolors[D * BLOCK_SIZE];
     // Traverse all Gaussians
     for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE) {
         block.sync();
@@ -463,14 +463,15 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             collected_id[block.thread_rank()] = coll_id;
             collected_xy[block.thread_rank()] = points_xy_image[coll_id];
             collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
-            for (int j = 0; j < C; j++) {
-                collected_colors[j * BLOCK_SIZE + block.thread_rank()] = colors[coll_id * C + j];
-                //                s_dL_dcolors[block.thread_rank() * C + j] = 0;
-            }
+            collected_colors[block.thread_rank()].x = colors[coll_id * C + 0];
+            collected_colors[block.thread_rank()].y = colors[coll_id * C + 1];
+            collected_colors[block.thread_rank()].z = colors[coll_id * C + 2];
+            //                s_dL_dcolors[block.thread_rank() * C + j] = 0;
             for (int d = 0; d < D; d++) {
-                s_dL_dmean2D[d + (block.thread_rank() * D)] = float2{0, 0};
-                s_dL_dconic2D[d + (block.thread_rank() * D)] = float4{0, 0, 0, 0};
+                s_dL_dmean2D[d + (block.thread_rank() * D)] = float2{0.f, 0.f};
+                s_dL_dconic2D[d + (block.thread_rank() * D)] = float4{0.f, 0.f, 0.f, 0.f};
                 s_dL_dopacity[d + (block.thread_rank() * D)] = 0;
+                s_dL_dcolors[d + (block.thread_rank() * D)] = float4{0.f, 0.f, 0.f, 0.f};
             }
         }
         block.sync();
@@ -504,32 +505,31 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // pair).
             float dL_dalpha = 0.0f;
             // Update color and alpha
+            int idx = (block.thread_rank() % D) + j * D;
             {
-                const float red = collected_colors[0 * BLOCK_SIZE + j];
+                const float4 rgb = collected_colors[j];
                 // Update last color (to be used in the next iteration)
                 accum_rec[0] = last_alpha * last_color[0] + (1.f - last_alpha) * accum_rec[0];
-                last_color[0] = red;
+                last_color[0] = rgb.x;
 
-                const float green = collected_colors[1 * BLOCK_SIZE + j];
                 // Update last color (to be used in the next iteration)
                 accum_rec[1] = last_alpha * last_color[1] + (1.f - last_alpha) * accum_rec[1];
-                last_color[1] = green;
+                last_color[1] = rgb.y;
 
-                const float blue = collected_colors[2 * BLOCK_SIZE + j];
                 // Update last color (to be used in the next iteration)
                 accum_rec[2] = last_alpha * last_color[2] + (1.f - last_alpha) * accum_rec[2];
-                last_color[2] = blue;
+                last_color[2] = rgb.z;
 
-                dL_dalpha += (red - accum_rec[0]) * dL_dpixel[0];
-                dL_dalpha += (green - accum_rec[1]) * dL_dpixel[1];
-                dL_dalpha += (blue - accum_rec[2]) * dL_dpixel[2];
+                dL_dalpha += (rgb.x - accum_rec[0]) * dL_dpixel[0];
+                dL_dalpha += (rgb.y - accum_rec[1]) * dL_dpixel[1];
+                dL_dalpha += (rgb.z - accum_rec[2]) * dL_dpixel[2];
                 // Update the gradients w.r.t. color of the Gaussian.
                 // Atomic, since this pixel is just one of potentially
                 // many that were affected by this Gaussian.
                 const int global_id = collected_id[j];
-                atomicAdd(&(dL_dcolors[global_id * C + 0]), dchannel_dcolor * dL_dpixel[0]);
-                atomicAdd(&(dL_dcolors[global_id * C + 1]), dchannel_dcolor * dL_dpixel[1]);
-                atomicAdd(&(dL_dcolors[global_id * C + 2]), dchannel_dcolor * dL_dpixel[2]);
+                atomicAdd(&(s_dL_dcolors[idx].x), dchannel_dcolor * dL_dpixel[0]);
+                atomicAdd(&(s_dL_dcolors[idx].y), dchannel_dcolor * dL_dpixel[1]);
+                atomicAdd(&(s_dL_dcolors[idx].z), dchannel_dcolor * dL_dpixel[2]);
                 // atomicAdd(&s_dL_dcolors[j * C + ch], dchannel_dcolor * dL_dchannel);
             }
             dL_dalpha *= T;
@@ -551,8 +551,6 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             const float dG_ddelx = -gdx * con_o.x - gdy * con_o.y;
             const float dG_ddely = -gdy * con_o.z - gdx * con_o.y;
 
-            int idx = (block.thread_rank() % D) + j * D;
-
             atomicAdd(&s_dL_dmean2D[idx].x, dL_dG * dG_ddelx * ddelx_dx);
             atomicAdd(&s_dL_dmean2D[idx].y, dL_dG * dG_ddely * ddely_dy);
             // Update gradients w.r.t. 2D covariance (2x2 matrix, symmetric)
@@ -565,12 +563,15 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
         if (block.thread_rank() < max_iterations) {
 
             const int coll_id = collected_id[block.thread_rank()];
-            float dL_dmean2D_x = 0;
-            float dL_dmean2D_y = 0;
-            float dL_dconic2D_x = 0;
-            float dL_dconic2D_y = 0;
-            float dL_dconic2D_w = 0;
-            float dL_dopacity_ = 0;
+            float dL_dmean2D_x = 0.f;
+            float dL_dmean2D_y = 0.f;
+            float dL_dconic2D_x = 0.f;
+            float dL_dconic2D_y = 0.f;
+            float dL_dconic2D_w = 0.f;
+            float dL_dopacity_ = 0.f;
+            float dL_dcolors_r = 0.f;
+            float dL_dcolors_g = 0.f;
+            float dL_dcolors_b = 0.f;
 
             for (int z = 0; z < D; z++) {
                 const int idx = z + block.thread_rank() * D;
@@ -580,6 +581,9 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
                 dL_dconic2D_y += s_dL_dconic2D[idx].y;
                 dL_dconic2D_w += s_dL_dconic2D[idx].w;
                 dL_dopacity_ += s_dL_dopacity[idx];
+                dL_dcolors_r += s_dL_dcolors[idx].x;
+                dL_dcolors_g += s_dL_dcolors[idx].y;
+                dL_dcolors_b += s_dL_dcolors[idx].z;
             }
 
             atomicAdd(&(dL_dmean2D[coll_id].x), dL_dmean2D_x);
@@ -588,6 +592,9 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             atomicAdd(&(dL_dconic2D[coll_id].y), dL_dconic2D_y);
             atomicAdd(&(dL_dconic2D[coll_id].w), dL_dconic2D_w);
             atomicAdd(&(dL_dopacity[coll_id]), dL_dopacity_);
+            atomicAdd(&(dL_dcolors[coll_id * C + 0]), dL_dcolors_r);
+            atomicAdd(&(dL_dcolors[coll_id * C + 1]), dL_dcolors_g);
+            atomicAdd(&(dL_dcolors[coll_id * C + 2]), dL_dcolors_b);
             //            for (int j = 0; j < C; j++) {
             //                atomicAdd(&(dL_dcolors[coll_id * C + j]),  s_dL_dcolors[block.thread_rank() * C + j]);
             //            }

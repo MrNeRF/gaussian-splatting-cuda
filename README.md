@@ -14,7 +14,9 @@ Please be advised that the software in this repository cannot be used for commer
 NVIDIA GeForce RTX 4090
 
     tandt/truck:
-        ~100 seconds for 7000 iterations (my initial 2023-08-16) 
+        ~87 seconds for 7000 iterations (my implementation 2023-08-18) 
+        ~90 seconds for 7000 iterations (my implementation 2023-08-17) 
+        ~100 seconds for 7000 iterations (my implementation 2023-08-16) 
         ~120 seconds for 7000 iterations (my implementation 2023-08-16) 
         ~122 seconds for 7000 iterations (original PyTorch implementation)
 
