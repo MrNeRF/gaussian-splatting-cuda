@@ -106,10 +106,10 @@ int main(int argc, char* argv[]) {
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
 
             if (iter % 7'000 == 0) {
-                std::cout << "Saving at " << std::to_string(iter) << " iterations\n";
-                gaussians.Save_ply(modelParams.model_path, iter);
+                gaussians.Save_ply(modelParams.model_path, iter, false);
             }
             if (iter == 30'000) {
+                gaussians.Save_ply(modelParams.model_path, iter, true);
                 return 0;
             }
 

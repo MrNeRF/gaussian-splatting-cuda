@@ -1,5 +1,6 @@
 #include "camera_info.cuh"
 #include "camera_utils.cuh"
+#include "future"
 #include "image.cuh"
 #include "point_cloud.cuh"
 #include "read_utils.cuh"
@@ -325,38 +326,53 @@ std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_pat
                                             const std::unordered_map<uint32_t, CameraInfo>& cameras,
                                             const std::vector<Image>& images) {
     std::vector<CameraInfo> camera_infos(images.size());
+    std::vector<uint32_t> keys(camera_infos.size());
+    std::generate(keys.begin(), keys.end(), [n = 0]() mutable { return n++; });
 
-    for (size_t image_ID = 0; image_ID < images.size(); ++image_ID) {
-        // Make a copy of the image object to avoid accessing the shared resource
-        Image image = images[image_ID];
-        auto it = cameras.find(image._camera_id);
-        camera_infos[image_ID] = it->second; // Make a copy
+    std::vector<std::future<void>> futures;
 
-        auto [img_data, width, height, channels] = read_image(file_path / image._name);
-        camera_infos[image_ID]._img_w = width;
-        camera_infos[image_ID]._img_h = height;
-        camera_infos[image_ID]._channels = channels;
-        camera_infos[image_ID]._img_data = img_data;
-
-        camera_infos[image_ID]._R = qvec2rotmat(image._qvec).transpose();
-        camera_infos[image_ID]._T = image._tvec;
-
-        if (camera_infos[image_ID]._camera_model == CAMERA_MODEL::SIMPLE_PINHOLE) {
-            const float focal_length_x = camera_infos[image_ID]._params[0];
-            camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID]._width);
-            camera_infos[image_ID]._fov_y = focal2fov(focal_length_x, camera_infos[image_ID]._height);
-        } else if (camera_infos[image_ID]._camera_model == CAMERA_MODEL::PINHOLE) {
-            const float focal_length_x = camera_infos[image_ID]._params[0];
-            const float focal_length_y = camera_infos[image_ID]._params[1];
-            camera_infos[image_ID]._fov_x = focal2fov(focal_length_x, camera_infos[image_ID]._width);
-            camera_infos[image_ID]._fov_y = focal2fov(focal_length_y, camera_infos[image_ID]._height);
-        } else {
-            // TODO: Better error handling. Inform user which camera model is not supported
-            throw std::runtime_error("Camera model not supported");
+    for (uint32_t image_ID : keys) {
+        const Image* image = images.data() + image_ID;
+        auto it = cameras.find(image->_camera_id);
+        if (it == cameras.end()) {
+            throw std::runtime_error("Camera ID " + std::to_string(image->_camera_id) + " not found");
         }
+        camera_infos[image_ID] = it->second; // Make a copy
+        futures.push_back(std::async(
+            std::launch::async, [](const std::filesystem::path& file_path, const Image* image, CameraInfo* camera_info) {
+                // Make a copy of the image object to avoid accessing the shared resource
 
-        camera_infos[image_ID]._image_name = image._name;
-        camera_infos[image_ID]._image_path = file_path / image._name;
+                auto [img_data, width, height, channels] = read_image(file_path / image->_name);
+                camera_info->_img_w = width;
+                camera_info->_img_h = height;
+                camera_info->_channels = channels;
+                camera_info->_img_data = img_data;
+
+                camera_info->_R = qvec2rotmat(image->_qvec).transpose();
+                camera_info->_T = image->_tvec;
+
+                if (camera_info->_camera_model == CAMERA_MODEL::SIMPLE_PINHOLE) {
+                    const float focal_length_x = camera_info->_params[0];
+                    camera_info->_fov_x = focal2fov(focal_length_x, camera_info->_width);
+                    camera_info->_fov_y = focal2fov(focal_length_x, camera_info->_height);
+                } else if (camera_info->_camera_model == CAMERA_MODEL::PINHOLE) {
+                    const float focal_length_x = camera_info->_params[0];
+                    const float focal_length_y = camera_info->_params[1];
+                    camera_info->_fov_x = focal2fov(focal_length_x, camera_info->_width);
+                    camera_info->_fov_y = focal2fov(focal_length_y, camera_info->_height);
+                } else {
+                    // TODO: Better error handling. Inform user which camera model is not supported
+                    throw std::runtime_error("Camera model not supported");
+                }
+
+                camera_info->_image_name = image->_name;
+                camera_info->_image_path = file_path / image->_name;
+            },
+            file_path, image, camera_infos.data() + image_ID));
+    }
+
+    for (auto& f : futures) {
+        f.get(); // Wait for this task to complete
     }
     return camera_infos;
 }

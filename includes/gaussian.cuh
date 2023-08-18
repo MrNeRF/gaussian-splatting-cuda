@@ -43,7 +43,7 @@ public:
     void Reset_opacity();
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
     void Densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size);
-    void Save_ply(const std::filesystem::path& file_path, int iteration);
+    void Save_ply(const std::filesystem::path& file_path, int iteration, bool isLastIteration);
 
 public:
     // should not be public or it should maybe be pulled out here. Not sure yet

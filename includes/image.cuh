@@ -8,8 +8,10 @@
 #include <vector>
 
 // This is basically a hack to speed up the reading of the points2D togther with its ID
+// TODO: Remove this class finally
 class Image {
 public:
+    Image() = default;
     Image(uint32_t image_ID) : _image_ID(image_ID) {}
     uint32_t GetImageID() const { return _image_ID; }
 

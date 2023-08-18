@@ -2,6 +2,7 @@
 #include "gaussian.cuh"
 #include "read_utils.cuh"
 #include <exception>
+#include <thread>
 
 GaussianModel::GaussianModel(int sh_degree) : _max_sh_degree(sh_degree) {
 }
@@ -292,7 +293,8 @@ std::vector<std::string> GaussianModel::construct_list_of_attributes() {
     return attributes;
 }
 
-void GaussianModel::Save_ply(const std::filesystem::path& file_path, int iteration) {
+void GaussianModel::Save_ply(const std::filesystem::path& file_path, int iteration, bool isLastIteration) {
+    std::cout << "Saving at " << std::to_string(iteration) << " iterations\n";
     auto folder = file_path / ("point_cloud/iteration_" + std::to_string(iteration));
     std::filesystem::create_directories(folder);
 
@@ -304,7 +306,21 @@ void GaussianModel::Save_ply(const std::filesystem::path& file_path, int iterati
     auto scale = _scaling.cpu();
     auto rotation = _rotation.cpu();
 
-    std::vector<torch::Tensor> tensor_attributes = {xyz, normals, f_dc, f_rest, opacities, scale, rotation};
+    std::vector<torch::Tensor> tensor_attributes = {xyz.clone(),
+                                                    normals.clone(),
+                                                    f_dc.clone(),
+                                                    f_rest.clone(),
+                                                    opacities.clone(),
+                                                    scale.clone(),
+                                                    rotation.clone()};
+    auto attributes = construct_list_of_attributes();
+    std::thread t = std::thread([folder, tensor_attributes, attributes]() {
+        Write_output_ply(folder / "point_cloud.ply", tensor_attributes, attributes);
+    });
 
-    Write_output_ply(folder / "point_cloud.ply", tensor_attributes, construct_list_of_attributes());
+    if (isLastIteration) {
+        t.join();
+    } else {
+        t.detach();
+    }
 }
