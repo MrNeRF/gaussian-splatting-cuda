@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <vector>
+#include <fstream>
 
 enum class CAMERA_MODEL {
     SIMPLE_PINHOLE = 0,
