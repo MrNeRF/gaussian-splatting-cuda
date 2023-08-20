@@ -459,6 +459,21 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
     __shared__ float s_dL_dopacity[D * BLOCK_SIZE];
     __shared__ float2 s_dL_dcolors_rg[D * BLOCK_SIZE];
     __shared__ float s_dL_dcolors_b[D * BLOCK_SIZE];
+
+    // By using local memory we have reached equivalent performance
+    // however local memory is actually in global memory, so reducing
+    // the number of access to this memory might allow us to push beyond.
+    // Using this local memory allows us to speed up the atomic adds by offsetting 
+    // when they are done.
+    float bg_dot_dpixel = 0;
+    for (int k = 0; k < C; k++) {
+        bg_dot_dpixel += d_bg_color[k] * dL_dpixel[k];
+    }
+
+    float dL_dalpha_res[BLOCK_SIZE];
+    short contributors[BLOCK_SIZE];
+    short contrib_count = 0;
+
     // Traverse all Gaussians
     for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE) {
         block.sync();
@@ -484,7 +499,11 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
         block.sync();
 
         const int max_iterations = min(BLOCK_SIZE, toDo);
-        for (int j = 0; !done && j < max_iterations; j++) {
+        const int max_iterations_opt = !done ? max_iterations : 0;
+        contrib_count = 0;
+        // We want to compute dl_alpha for each Gaussian, but
+        // on each thread, which we can then use 
+        for (int j = 0; j < max_iterations_opt; j++) {
             // Keep track of current Gaussian ID. Skip, if this one
             // is behind the last contributor for this pixel.
             --contributor;
@@ -506,61 +525,104 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             if (alpha < ALPHA_THRESHOLD) {
                 continue;
             }
+            contributors[contrib_count] = j;
+            contrib_count++;
+        }
+        
+        for (int l = 0; l < contrib_count; l++) {
+            const int j = contributors[l];
+
+
+            // Compute blending values, as before.
+            const float2 xy = collected_xy[j];
+            const float2 d = {xy.x - pixf.x, xy.y - pixf.y};
+            const float4 con_o = collected_conic_opacity[j];
+            const float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
+
+            const float G = exp(power);
+            const float alpha = min(ALPHA_LIMIT, con_o.w * G);
+
+
+            T = T / (1.f - alpha);
+            const float dchannel_dcolor = alpha * T;
 
             // Propagate gradients to per-Gaussian colors and keep
             // gradients w.r.t. alpha (blending factor for a Gaussian/pixel
             // pair).
-            accum_rec[0] = last_alpha * last_color[0] + (1.f - last_alpha) * accum_rec[0];
-            accum_rec[1] = last_alpha * last_color[1] + (1.f - last_alpha) * accum_rec[1];
-            accum_rec[2] = last_alpha * last_color[2] + (1.f - last_alpha) * accum_rec[2];
-            last_alpha = alpha;
-            const float2 rg = collected_colors_rg[j];
-            const float b = collected_colors_b[j];
-            float dL_dalpha = 0.0f;
-            dL_dalpha = (rg.x - accum_rec[0]) * dL_dpixel[0];
-            dL_dalpha += (rg.y - accum_rec[1]) * dL_dpixel[1];
-            dL_dalpha += (b - accum_rec[2]) * dL_dpixel[2];
-            // Update last color (to be used in the next iteration)
-            last_color[0] = rg.x;
-            last_color[1] = rg.y;
-            last_color[2] = b;
+            float dL_dalpha_curr = 0.0f;
+            // Update color and alpha
+            int idx = (block.thread_rank() % D)*BLOCK_SIZE + j;
+            {
+                const float2 rg = collected_colors_rg[j];
+                const float b = collected_colors_b[j];
+                // Update last color (to be used in the next iteration)
+                accum_rec[0] = last_alpha * last_color[0] + (1.f - last_alpha) * accum_rec[0];
+                last_color[0] = rg.x;
 
+                // Update last color (to be used in the next iteration)
+                accum_rec[1] = last_alpha * last_color[1] + (1.f - last_alpha) * accum_rec[1];
+                last_color[1] = rg.y;
+
+                // Update last color (to be used in the next iteration)
+                accum_rec[2] = last_alpha * last_color[2] + (1.f - last_alpha) * accum_rec[2];
+                last_color[2] = b;
+
+                dL_dalpha_curr += (rg.x - accum_rec[0]) * dL_dpixel[0];
+                dL_dalpha_curr += (rg.y - accum_rec[1]) * dL_dpixel[1];
+                dL_dalpha_curr += (b - accum_rec[2]) * dL_dpixel[2];
+                // Update the gradients w.r.t. color of the Gaussian.
+                // Atomic, since this pixel is just one of potentially
+                // many that were affected by this Gaussian.
+                atomicAdd(&(s_dL_dcolors_rg[idx].x), dchannel_dcolor * dL_dpixel[0]);
+                atomicAdd(&(s_dL_dcolors_rg[idx].y), dchannel_dcolor * dL_dpixel[1]);
+                atomicAdd(&(s_dL_dcolors_b[idx]), dchannel_dcolor * dL_dpixel[2]);
+            }
+            dL_dalpha_curr *= T;
+            // Update last alpha (to be used in the next iteration)
+            last_alpha = alpha;
+
+            // Account for fact that alpha also influences how much of
+            // the background color is added if nothing left to blend            
+            dL_dalpha_curr += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
+            dL_dalpha_res[l] = dL_dalpha_curr * G;
+        }
+        for (int l = 0; l < contrib_count; l++) {
+            // Keep track of current Gaussian ID. Skip, if this one
+            // is behind the last contributor for this pixel.
+            // Compute blending values, as before.
+            const int shifted_l = (l + (block.thread_rank())) % contrib_count;
+            const int j = contributors[shifted_l];
+
+                
+            const float2 xy = collected_xy[j];
+            const float2 d = {xy.x - pixf.x, xy.y - pixf.y};
+            const float4 con_o = collected_conic_opacity[j];
+
+            // Propagate gradients to per-Gaussian colors and keep
+            // gradients w.r.t. alpha (blending factor for a Gaussian/pixel
+            // pair).
+            // Update color and alpha
+            int idx = (block.thread_rank() % D)*BLOCK_SIZE + j;
             // Update the gradients w.r.t. color of the Gaussian.
             // Atomic, since this pixel is just one of potentially
             // many that were affected by this Gaussian.
-            T = T / (1.f - alpha);
-            const float dchannel_dcolor = alpha * T;
-            const int idx = (block.thread_rank() % D) + j * D;
-            atomicAdd(&(s_dL_dcolors_rg[idx].x), dchannel_dcolor * dL_dpixel[0]);
-            atomicAdd(&(s_dL_dcolors_rg[idx].y), dchannel_dcolor * dL_dpixel[1]);
-            atomicAdd(&(s_dL_dcolors_b[idx]), dchannel_dcolor * dL_dpixel[2]);
-            // Update last alpha (to be used in the next iteration)
-
-            // Account for fact that alpha also influences how much of
-            // the background color is added if nothing left to blend
-            float bg_dot_dpixel = 0;
-            bg_dot_dpixel = d_bg_color[0] * dL_dpixel[0];
-            bg_dot_dpixel += d_bg_color[1] * dL_dpixel[1];
-            bg_dot_dpixel += d_bg_color[2] * dL_dpixel[2];
-            dL_dalpha *= T;
-            dL_dalpha += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
-
             // Helpful reusable temporary variables
-            const float dL_dG = con_o.w * dL_dalpha;
-            const float gdx = G * d.x;
-            const float gdy = G * d.y;
-            const float dG_ddelx = -gdx * con_o.x - gdy * con_o.y;
-            const float dG_ddely = -gdy * con_o.z - gdx * con_o.y;
 
-            atomicAdd(&s_dL_dmean2D[idx].x, dL_dG * dG_ddelx * ddelx_dx);
-            atomicAdd(&s_dL_dmean2D[idx].y, dL_dG * dG_ddely * ddely_dy);
+
+
+            const float h = dL_dalpha_res[shifted_l];
+            const float tmp_1 = con_o.w * h;
+
+            atomicAdd(&s_dL_dmean2D[idx].x, tmp_1 * (- d.x * con_o.x - d.y * con_o.y) * ddelx_dx);
+            atomicAdd(&s_dL_dmean2D[idx].y, tmp_1 * (- d.y * con_o.z - d.x * con_o.y) * ddely_dy);
             // Update gradients w.r.t. 2D covariance (2x2 matrix, symmetric)
-            atomicAdd(&s_dL_dconic2D_xy[idx].x, -0.5f * gdx * d.x * dL_dG);
-            atomicAdd(&s_dL_dconic2D_xy[idx].y, -0.5f * gdx * d.y * dL_dG);
-            atomicAdd(&s_dL_dconic2D_w[idx], -0.5f * gdy * d.y * dL_dG);
+            atomicAdd(&s_dL_dconic2D_xy[idx].x, -0.5f * d.x * d.x * tmp_1);
+            atomicAdd(&s_dL_dconic2D_xy[idx].y, -0.5f * d.x * d.y * tmp_1);
+            atomicAdd(&s_dL_dconic2D_w[idx], -0.5f * d.y * d.y * tmp_1);
             // Update gradients w.r.t. opacity of the Gaussian
-            atomicAdd(&(s_dL_dopacity[idx]), G * dL_dalpha);
+            atomicAdd(&(s_dL_dopacity[idx]), h);
         }
+        block.sync();
         if (block.thread_rank() < max_iterations) {
 
             const int coll_id = collected_id[block.thread_rank()];
@@ -575,7 +637,7 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             float dL_dcolors_b = 0.f;
 
             for (int z = 0; z < D; z++) {
-                const int idx = z + block.thread_rank() * D;
+                const int idx = z*BLOCK_SIZE + (block.thread_rank()) ;
                 dL_dmean2D_x += s_dL_dmean2D[idx].x;
                 dL_dmean2D_y += s_dL_dmean2D[idx].y;
                 dL_dconic2D_x += s_dL_dconic2D_xy[idx].x;
