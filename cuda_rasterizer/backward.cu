@@ -551,7 +551,9 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // pair).
             float dL_dalpha_curr = 0.0f;
             // Update color and alpha
-            int idx = (block.thread_rank() % D)*BLOCK_SIZE + j;
+            const int idx = (block.thread_rank() % D) + j * D;
+
+            //int idx = (block.thread_rank() % D)*BLOCK_SIZE + j;
             {
                 const float2 rg = collected_colors_rg[j];
                 const float b = collected_colors_b[j];
@@ -602,7 +604,9 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // gradients w.r.t. alpha (blending factor for a Gaussian/pixel
             // pair).
             // Update color and alpha
-            int idx = (block.thread_rank() % D)*BLOCK_SIZE + j;
+            //int idx = (block.thread_rank() % D)*BLOCK_SIZE + j;
+            const int idx = (block.thread_rank() % D) + j * D;
+
             // Update the gradients w.r.t. color of the Gaussian.
             // Atomic, since this pixel is just one of potentially
             // many that were affected by this Gaussian.
@@ -638,7 +642,8 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             float dL_dcolors_b = 0.f;
 
             for (int z = 0; z < D; z++) {
-                const int idx = z*BLOCK_SIZE + (block.thread_rank()) ;
+                //const int idx = z*BLOCK_SIZE + (block.thread_rank()) ;
+                const int idx = z + block.thread_rank() * D;
                 dL_dmean2D_x += s_dL_dmean2D[idx].x;
                 dL_dmean2D_y += s_dL_dmean2D[idx].y;
                 dL_dconic2D_x += s_dL_dconic2D_xy[idx].x;
