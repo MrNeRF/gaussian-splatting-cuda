@@ -76,11 +76,33 @@ cmake -B build .
 cmake --build build --target install --config Release -- -j 
 cd ..
 ```
-
 Then, you can view the results with:
 ```bash
 ./SIBR_viewers/install/bin/SIBR_gaussianViewer_app -m output
 ```
+
+## Contribution Guidelines
+
+Thank you for considering a contribution! Below are some guidelines to help ensure our project remains effective and consistent.
+
+1. **Getting Started with Contributions**:
+    - I've marked several beginner-friendly issues as **good first issues**. If you're new to the project, these are great places to start.
+    - For those looking to contribute something not currently listed as an issue, feel free to create one, or you can direct message me on Twitter for a quick chat. Since there are not many contributors at the moment, I'm happy to discuss your ideas and help you get started.
+
+2. **Before Submitting Your Pull Request**:
+    - Please squash your commits for clarity and to make my life as reviewer way easier.
+    - Ensure you've applied `clang-format` to maintain consistent coding style.
+    - We aim to minimize dependencies. If you're introducing a new one, it's essential to raise an issue for discussion first. There are ongoing efforts to reduce the number of dependencies, and your understanding in this area is appreciated.
+
+3. **Key Principles for Contributions**:
+    - **Speed**: We want to be the fastest 3D gaussian splatting implementation on this planet. Being lightning fast is key! I want instant training!
+    - **Quality**: Always prioritize high-quality rendering output. Never compromise quality for speed.
+    - **Usability**: We want to have a nice user experience. We're still perfecting this, and your contribution can make a difference!
+
+4. **Dataset Contributions**:
+    - If you have a unique dataset that you believe will be an excellent addition and that is eye popping, we'd love to see it! Remember, we're aiming to showcase exceptional datasets. We want to show off the best of the best. If you're unsure, feel free to raise an issue for discussion first.
+
+Together, with your contributions, we can make this project stand out. Thank you for being a part of this journey!
 
 ## libtorch
 Initially, I utilized libtorch to simplify the development process. Once the implementation is stable with libtorch, I will begin replacing torch elements with my custom CUDA implementation.
