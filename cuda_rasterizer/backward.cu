@@ -470,7 +470,7 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
         bg_dot_dpixel += d_bg_color[k] * dL_dpixel[k];
     }
 
-    float dL_dalpha_res[BLOCK_SIZE];
+    float G_dL_dalpha_res[BLOCK_SIZE];
     short contributors[BLOCK_SIZE];
     short contrib_count = 0;
 
@@ -584,7 +584,7 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // Account for fact that alpha also influences how much of
             // the background color is added if nothing left to blend            
             dL_dalpha_curr += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
-            dL_dalpha_res[l] = dL_dalpha_curr * G;
+            G_dL_dalpha_res[l] = dL_dalpha_curr * G;
         }
         for (int l = 0; l < contrib_count; l++) {
             // Keep track of current Gaussian ID. Skip, if this one
@@ -610,17 +610,18 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
 
 
 
-            const float h = dL_dalpha_res[shifted_l];
-            const float tmp_1 = con_o.w * h;
+            const float G_dL_dalpha = G_dL_dalpha_res[shifted_l];
+            const float ow_G_dL_dalpha = con_o.w * G_dL_dalpha;
 
-            atomicAdd(&s_dL_dmean2D[idx].x, tmp_1 * (- d.x * con_o.x - d.y * con_o.y) * ddelx_dx);
-            atomicAdd(&s_dL_dmean2D[idx].y, tmp_1 * (- d.y * con_o.z - d.x * con_o.y) * ddely_dy);
+
+            atomicAdd(&s_dL_dmean2D[idx].x, ow_G_dL_dalpha * (-d.x * con_o.x - d.y * con_o.y) * ddelx_dx);
+            atomicAdd(&s_dL_dmean2D[idx].y, ow_G_dL_dalpha * (-d.y * con_o.z - d.x * con_o.y) * ddely_dy);
             // Update gradients w.r.t. 2D covariance (2x2 matrix, symmetric)
-            atomicAdd(&s_dL_dconic2D_xy[idx].x, -0.5f * d.x * d.x * tmp_1);
-            atomicAdd(&s_dL_dconic2D_xy[idx].y, -0.5f * d.x * d.y * tmp_1);
-            atomicAdd(&s_dL_dconic2D_w[idx], -0.5f * d.y * d.y * tmp_1);
+            atomicAdd(&s_dL_dconic2D_xy[idx].x, -0.5f * d.x * d.x * ow_G_dL_dalpha);
+            atomicAdd(&s_dL_dconic2D_xy[idx].y, -0.5f * d.x * d.y * ow_G_dL_dalpha);
+            atomicAdd(&s_dL_dconic2D_w[idx], -0.5f * d.y * d.y * ow_G_dL_dalpha);
             // Update gradients w.r.t. opacity of the Gaussian
-            atomicAdd(&(s_dL_dopacity[idx]), h);
+            atomicAdd(&(s_dL_dopacity[idx]), G_dL_dalpha);
         }
         block.sync();
         if (block.thread_rank() < max_iterations) {
