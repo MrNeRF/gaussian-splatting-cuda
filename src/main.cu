@@ -4,6 +4,7 @@
 #include "parameters.cuh"
 #include "render_utils.cuh"
 #include "scene.cuh"
+#include <args.hxx>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -52,6 +53,23 @@ std::vector<int> get_random_indices(int max_index) {
 
 int main(int argc, char* argv[]) {
 
+    args::ArgumentParser parser("Gaussian Splatting");
+    args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
+    args::ValueFlag<std::string> source_path(parser, "data_path", "Path to the training data", {'d', "data_path"});
+    args::CompletionFlag completion(parser, {"complete"});
+    try {
+        parser.ParseCLI(argc, argv);
+    } catch (const args::Completion& e) {
+        std::cout << e.what();
+        return 0;
+    } catch (const args::Help&) {
+        std::cout << parser;
+        return 0;
+    } catch (const args::ParseError& e) {
+        std::cerr << e.what() << std::endl;
+        std::cerr << parser;
+        return 1;
+    }
     if (argc != 2) {
         std::cout << "Usage: ./readPly <ply file>" << std::endl;
         return 1;
