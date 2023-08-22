@@ -362,7 +362,28 @@ std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_pat
                     camera_info->_fov_y = focal2fov(focal_length_y, camera_info->_height);
                 } else {
                     // TODO: Better error handling. Inform user which camera model is not supported
-                    throw std::runtime_error("Camera model not supported");
+                    switch (camera_info->_camera_model) {
+                    case CAMERA_MODEL::SIMPLE_RADIAL:
+                        throw std::runtime_error("Camera model SIMPLE_RADIAL not supported");
+                    case CAMERA_MODEL::RADIAL:
+                        throw std::runtime_error("Camera model RADIAL not supported");
+                    case CAMERA_MODEL::OPENCV:
+                        throw std::runtime_error("Camera model OPENCV not supported");
+                    case CAMERA_MODEL::OPENCV_FISHEYE:
+                        throw std::runtime_error("Camera model OPENCV_FISHEYE not supported");
+                    case CAMERA_MODEL::FULL_OPENCV:
+                        throw std::runtime_error("Camera model FULL_OPENCV not supported");
+                    case CAMERA_MODEL::FOV:
+                        throw std::runtime_error("Camera model FOV not supported");
+                    case CAMERA_MODEL::SIMPLE_RADIAL_FISHEYE:
+                        throw std::runtime_error("Camera model SIMPLE_RADIAL_FISHEYE not supported");
+                    case CAMERA_MODEL::RADIAL_FISHEYE:
+                        throw std::runtime_error("Camera model RADIAL_FISHEYE not supported");
+                    case CAMERA_MODEL::THIN_PRISM_FISHEYE:
+                        throw std::runtime_error("Camera model THIN_PRISM_FISHEYE not supported");
+                    case CAMERA_MODEL::UNDEFINED:
+                        throw std::runtime_error("Camera model UNDEFINED (and thus not supported)");
+                    }
                 }
 
                 camera_info->_image_name = image->_name;
