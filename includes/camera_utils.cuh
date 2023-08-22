@@ -2,8 +2,8 @@
 
 #include "camera.cuh"
 #pragma diag_suppress code_of_warning
-#include <eigen3/Eigen/Dense>
-#include <eigen3/Eigen/src/Geometry/Quaternion.h>
+#include <Eigen/Dense>
+#include <Eigen/src/Geometry/Quaternion.h>
 #pragma diag_default code_of_warning
 #include <filesystem>
 #include <torch/torch.h>
