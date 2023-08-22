@@ -4,7 +4,7 @@
 #include "point_cloud.cuh"
 #include <camera_info.cuh>
 #pragma diag_suppress code_of_warning
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #pragma diag_default code_of_warning
 #include <filesystem>
 
