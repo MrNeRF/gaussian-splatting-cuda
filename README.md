@@ -83,12 +83,12 @@ Use the following command-line options:
 ### Example
 
 ```bash
-$ your_program_name -d /path/to/data -o /path/to/output -i 1000
+$ ./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 1000
 ```
+If you don't specify an output path, the trained model will be saved to the "output" folder located in the root directory of this project.
 
-Replace `your_program_name` with the actual name or path to your program.
-
----
+According to the paper, the maximum number of iterations is set at 30k. However, you'll likely need far fewer. Starting with 6k or 7k iterations should give you a preliminary result. 
+The output is saved every 7k iterations and also at the end of the training. So, if you specify 5k iterations, you will still receive an output at the end of the training process.
 
 ### View the results
 For now, you will need the SIBR view
