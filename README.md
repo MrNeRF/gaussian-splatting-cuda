@@ -7,7 +7,7 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
 
 ## News
 
-- **[08-23-2023]**: 
+- **[2023-08-23]**: 
   - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
   - CUDA version restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
   - There are a lot good first issues to grab if you would like to contribute.
@@ -19,7 +19,8 @@ This project is a derivative of the original Gaussian-Splatting software and is 
 
 Please be advised that the software in this repository cannot be used for commercial purposes without explicit consent from the original licensors, Inria and MPII.
 
-## Current Measurments as of 2023-08-17
+## Current performance measurements as of 2023-08-17
+
 NVIDIA GeForce RTX 4090
 
     tandt/truck:
