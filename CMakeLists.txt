@@ -116,8 +116,8 @@ find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
 
 # Check CUDA version
-if (CUDAToolkit_VERSION VERSION_LESS "12.2")
-    message(FATAL_ERROR "This project requires CUDA 12.0 or higher")
+if (CUDAToolkit_VERSION VERSION_LESS "11.7")
+    message(FATAL_ERROR "This project requires CUDA 11.7 or higher")
 endif ()
 
 find_package(PythonLibs REQUIRED)
