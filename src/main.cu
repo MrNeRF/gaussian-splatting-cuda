@@ -12,7 +12,7 @@
 #include <torch/torch.h>
 
 void Write_model_parameters_to_file(const ModelParameters& params) {
-    std::filesystem::path outputPath = params.model_path;
+    std::filesystem::path outputPath = params.output_path;
     std::filesystem::create_directories(outputPath); // Make sure the directory exists
 
     std::ofstream cfg_log_f(outputPath / "cfg_args");
@@ -25,14 +25,14 @@ void Write_model_parameters_to_file(const ModelParameters& params) {
     cfg_log_f << "Namespace(";
     cfg_log_f << "eval=" << (params.eval ? "True" : "False") << ", ";
     cfg_log_f << "images='" << params.images << "', ";
-    cfg_log_f << "model_path='" << params.model_path.string() << "', ";
+    cfg_log_f << "model_path='" << params.output_path.string() << "', ";
     cfg_log_f << "resolution=" << params.resolution << ", ";
     cfg_log_f << "sh_degree=" << params.sh_degree << ", ";
     cfg_log_f << "source_path='" << params.source_path.string() << "', ";
     cfg_log_f << "white_background=" << (params.white_background ? "True" : "False") << ")";
     cfg_log_f.close();
 
-    std::cout << "Output folder: " << params.model_path.string() << std::endl;
+    std::cout << "Output folder: " << params.output_path.string() << std::endl;
 }
 
 std::vector<int> get_random_indices(int max_index) {
@@ -52,12 +52,13 @@ int parse_cmd_line_args(const std::vector<std::string>& args,
         return -1;
     }
     args::ArgumentParser parser("3D Gaussian Splatting CUDA Implementation\n",
-                                "This program is a lightning fast CUDA implementation of the 3D Gaussian Splatting algorithm for real-time radiance field rendering.");
+                                "This program provides a lightning-fast CUDA implementation of the 3D Gaussian Splatting algorithm for real-time radiance field rendering.");
     args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
     args::ValueFlag<std::string> data_path(parser, "data_path", "Path to the training data", {'d', "data_path"});
-    args::ValueFlag<std::string> model_path(parser, "model_path", "Path to the model", {'m', "model_path"});
-    args::ValueFlag<uint32_t> iterations(parser, "iterations", "Path to the images", {'i', "iter"});
+    args::ValueFlag<std::string> output_path(parser, "output_path", "Path to the training output", {'o', "output_path"});
+    args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations to train the model", {'i', "iter"});
     args::CompletionFlag completion(parser, {"complete"});
+
     try {
         parser.Prog(args.front());
         parser.ParseArgs(std::vector<std::string>(args.begin() + 1, args.end()));
@@ -80,19 +81,21 @@ int parse_cmd_line_args(const std::vector<std::string>& args,
         return -1;
     }
     std::cout << "ModelParams: " << modelParams.source_path << std::endl;
-    if (model_path) {
-        modelParams.model_path = args::get(model_path);
+    if (output_path) {
+        modelParams.output_path = args::get(output_path);
     } else {
         std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
         std::filesystem::path parentDir = executablePath.parent_path().parent_path();
         std::filesystem::path outputDir = parentDir / "output";
-        if (!std::filesystem::create_directory(outputDir)) {
+        try {
+            std::filesystem::create_directory(outputDir);
+        } catch (...) {
             std::cerr << "Failed to create output directory!" << std::endl;
             return -1;
         }
-        modelParams.model_path = outputDir;
+        modelParams.output_path = outputDir;
     }
-    std::cout << "ModelParams: " << modelParams.model_path << std::endl;
+    std::cout << "ModelParams: " << modelParams.output_path << std::endl;
     if (iterations) {
         optimParams.iterations = args::get(iterations);
     }
@@ -157,16 +160,16 @@ int main(int argc, char* argv[]) {
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
             if (iter == optimParams.iterations) {
-                gaussians.Save_ply(modelParams.model_path, iter, false);
+                gaussians.Save_ply(modelParams.output_path, iter, true);
                 return 0;
             }
-            if (optimParams.iterations % 7'000 == 0) {
-                gaussians.Save_ply(modelParams.model_path, iter, false);
+            if (iter % 7'000 == 0) {
+                gaussians.Save_ply(modelParams.output_path, iter, false);
             }
 
             // that should be the max. Stop iterating.
             if (iter == 30'000) {
-                gaussians.Save_ply(modelParams.model_path, iter, true);
+                gaussians.Save_ply(modelParams.output_path, iter, true);
                 return 0;
             }
 
