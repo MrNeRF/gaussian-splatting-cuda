@@ -243,8 +243,9 @@ __global__ void preprocessCUDA(int P, int D, int M,
     tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x);
 }
 
-__constant__ float ALPHA_THRESHOLD = 1.0f / 255.0f;
-__constant__ float ALPHA_MIN = 0.0001f;
+// TODO: Fix this to work globally defined.
+__constant__ float ALPHA_THRESHOLD_FWD = 1.0f / 255.0f;
+__constant__ float ALPHA_MIN_FWD = 0.0001f;
 // Main rasterization method. Collaboratively works on one tile per
 // block, each thread treats one pixel. Alternates between fetching
 // and rasterizing data.
@@ -328,10 +329,10 @@ __global__ void __launch_bounds__(BLOCK_X* BLOCK_Y)
             // and its exponential falloff from mean.
             // Avoid numerical instabilities (see paper appendix).
             float alpha = fminf(0.99f, __fmaf_rn(con_o.w, expf(power), 0.f));
-            if (alpha < ALPHA_THRESHOLD)
+            if (alpha < ALPHA_THRESHOLD_FWD)
                 continue;
             float test_T = __fmaf_rn(T, -alpha, T);
-            if (test_T < ALPHA_MIN) {
+            if (test_T < ALPHA_MIN_FWD) {
                 done = true;
                 continue;
             }

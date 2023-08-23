@@ -4,22 +4,15 @@
 #include "parameters.cuh"
 #include "render_utils.cuh"
 #include "scene.cuh"
+#include <args.hxx>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <random>
 #include <torch/torch.h>
 
-std::filesystem::path createOutputDirectoryInParent() {
-    std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
-    std::filesystem::path parentDir = executablePath.parent_path().parent_path();
-    std::filesystem::path outputDir = parentDir / "output";
-    std::filesystem::create_directory(outputDir);
-    return outputDir;
-}
-
 void Write_model_parameters_to_file(const ModelParameters& params) {
-    std::filesystem::path outputPath = params.model_path;
+    std::filesystem::path outputPath = params.output_path;
     std::filesystem::create_directories(outputPath); // Make sure the directory exists
 
     std::ofstream cfg_log_f(outputPath / "cfg_args");
@@ -32,14 +25,14 @@ void Write_model_parameters_to_file(const ModelParameters& params) {
     cfg_log_f << "Namespace(";
     cfg_log_f << "eval=" << (params.eval ? "True" : "False") << ", ";
     cfg_log_f << "images='" << params.images << "', ";
-    cfg_log_f << "model_path='" << params.model_path.string() << "', ";
+    cfg_log_f << "model_path='" << params.output_path.string() << "', ";
     cfg_log_f << "resolution=" << params.resolution << ", ";
     cfg_log_f << "sh_degree=" << params.sh_degree << ", ";
     cfg_log_f << "source_path='" << params.source_path.string() << "', ";
     cfg_log_f << "white_background=" << (params.white_background ? "True" : "False") << ")";
     cfg_log_f.close();
 
-    std::cout << "Output folder: " << params.model_path.string() << std::endl;
+    std::cout << "Output folder: " << params.output_path.string() << std::endl;
 }
 
 std::vector<int> get_random_indices(int max_index) {
@@ -50,20 +43,85 @@ std::vector<int> get_random_indices(int max_index) {
     return indices;
 }
 
-int main(int argc, char* argv[]) {
+int parse_cmd_line_args(const std::vector<std::string>& args,
+                        ModelParameters& modelParams,
+                        OptimizationParameters& optimParams,
+                        PipelineParameters& pipelineParams) {
+    if (args.empty()) {
+        std::cerr << "No command line arguments provided!" << std::endl;
+        return -1;
+    }
+    args::ArgumentParser parser("3D Gaussian Splatting CUDA Implementation\n",
+                                "This program provides a lightning-fast CUDA implementation of the 3D Gaussian Splatting algorithm for real-time radiance field rendering.");
+    args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
+    args::ValueFlag<std::string> data_path(parser, "data_path", "Path to the training data", {'d', "data_path"});
+    args::ValueFlag<std::string> output_path(parser, "output_path", "Path to the training output", {'o', "output_path"});
+    args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations to train the model", {'i', "iter"});
+    args::CompletionFlag completion(parser, {"complete"});
 
-    if (argc != 2) {
-        std::cout << "Usage: ./readPly <ply file>" << std::endl;
-        return 1;
+    try {
+        parser.Prog(args.front());
+        parser.ParseArgs(std::vector<std::string>(args.begin() + 1, args.end()));
+    } catch (const args::Completion& e) {
+        std::cout << e.what();
+        return 0;
+    } catch (const args::Help&) {
+        std::cout << parser;
+        return -1;
+    } catch (const args::ParseError& e) {
+        std::cerr << e.what() << std::endl;
+        std::cerr << parser;
+        return -1;
+    }
+
+    if (data_path) {
+        modelParams.source_path = args::get(data_path);
+    } else {
+        std::cerr << "No data path provided!" << std::endl;
+        return -1;
+    }
+    std::cout << "ModelParams: " << modelParams.source_path << std::endl;
+    if (output_path) {
+        modelParams.output_path = args::get(output_path);
+    } else {
+        std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
+        std::filesystem::path parentDir = executablePath.parent_path().parent_path();
+        std::filesystem::path outputDir = parentDir / "output";
+        try {
+            if (!std::filesystem::create_directory(outputDir)) {
+                std::cerr << "Directory already exists! Not overwriting it" << std::endl;
+                return -1;
+            }
+        } catch (...) {
+            std::cerr << "Failed to create output directory!" << std::endl;
+            return -1;
+        }
+        modelParams.output_path = outputDir;
+    }
+    std::cout << "ModelParams: " << modelParams.output_path << std::endl;
+    if (iterations) {
+        optimParams.iterations = args::get(iterations);
+    }
+    std::cout << "OptimParams: " << optimParams.iterations << std::endl;
+    return 0;
+}
+
+int main(int argc, char* argv[]) {
+    std::vector<std::string> args;
+    args.reserve(argc);
+
+    for (int i = 0; i < argc; ++i) {
+        args.emplace_back(argv[i]);
     }
     // TODO: read parameters from JSON file or command line
     auto modelParams = ModelParameters();
-    modelParams.source_path = argv[1];
-    modelParams.model_path = createOutputDirectoryInParent();
+    auto optimParams = OptimizationParameters();
+    auto pipelineParams = PipelineParameters();
+    if (parse_cmd_line_args(args, modelParams, optimParams, pipelineParams) < 0) {
+        return -1;
+    };
     Write_model_parameters_to_file(modelParams);
 
-    const auto optimParams = OptimizationParameters();
-    const auto pipelineParams = PipelineParameters();
     auto gaussians = GaussianModel(modelParams.sh_degree);
     auto scene = Scene(gaussians, modelParams);
     gaussians.Training_setup(optimParams);
@@ -104,12 +162,17 @@ int main(int argc, char* argv[]) {
             auto visible_radii = radii.masked_select(visibility_filter);
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
-
-            if (iter % 7'000 == 0) {
-                gaussians.Save_ply(modelParams.model_path, iter, false);
+            if (iter == optimParams.iterations) {
+                gaussians.Save_ply(modelParams.output_path, iter, true);
+                return 0;
             }
+            if (iter % 7'000 == 0) {
+                gaussians.Save_ply(modelParams.output_path, iter, false);
+            }
+
+            // that should be the max. Stop iterating.
             if (iter == 30'000) {
-                gaussians.Save_ply(modelParams.model_path, iter, true);
+                gaussians.Save_ply(modelParams.output_path, iter, true);
                 return 0;
             }
 
