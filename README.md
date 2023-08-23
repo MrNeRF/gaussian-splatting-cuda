@@ -51,7 +51,7 @@ While completely unoptimized, the gains in performance, though modest, are notew
 6. Other dependencies will be handled by the CMake script.
 
 ### Hardware Prerequisites
-1. NVIDIA GPU with CUDA support. Successfully tested so far are RTX 4090, RTX A5000, 3090Ti and A100. With 3080Ti there are some outstanding issues with larger datasets.
+1. NVIDIA GPU with CUDA support. Successfully tested so far are RTX 4090, RTX A5000, 3090Ti and A100. With 3080Ti there is an outstanding issue (#21) with larger datasets.
 2. So far, the lowest compute capability tested was 8.0.
 
 It might work with other NVIDIA GPUs as well, but these are mostly untested. If you do successfully run on such hardware please 
