@@ -59,13 +59,29 @@ cmake --build build -- -j
 ### Dataset
 The dataset is not included in this repository. You can download it from the original repository under the following link:
 [tanks & trains](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip).
-Then unzip it in the dataset folder.
+Then unzip it in the data folder.
 
-### Running the program (training on the dataset)
+### Usage
+
+Use the following command-line options:
+
+- **-h, --help**: Display this help menu.
+
+- **-d, --data_path [PATH]**: Specify the path to the training data.
+
+- **-o, --output_path [PATH]**: Specify the path to the model.
+
+- **-i, --iter [NUM]**: Specify the number of iterations to train the model.
+
+### Example
+
 ```bash
-./build/gaussian-splatting-cuda dataset/tandt/truck
+$ your_program_name -d /path/to/data -o /path/to/output -i 1000
 ```
-The output is placed in the ouput folder in the root directory of this project.
+
+Replace `your_program_name` with the actual name or path to your program.
+
+---
 
 ### View the results
 For now, you will need the SIBR view
