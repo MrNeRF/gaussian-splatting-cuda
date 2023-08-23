@@ -35,6 +35,7 @@ set(HEADERS
         includes/read_utils.cuh
         includes/gaussian.cuh
         includes/camera.cuh
+        includes/loss_monitor.cuh
         includes/image.cuh
         includes/stb_image.h
         includes/point_cloud.cuh
@@ -63,6 +64,7 @@ set(SOURCES
         src/read_utils.cu
         src/gaussian.cu
         src/camera.cu
+        src/loss_monitor.cu
         src/image.cu
         src/scene.cu
         src/camera_utils.cu
