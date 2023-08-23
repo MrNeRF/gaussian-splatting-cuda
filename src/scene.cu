@@ -27,7 +27,7 @@ Scene::Scene(GaussianModel& gaussians, const ModelParameters& params) : _gaussia
         json_cams.push_back(Convert_camera_to_JSON(cam_info, counter, _cameras.back().Get_R(), _cameras.back().Get_T()));
         ++counter;
     }
-    dump_JSON(params.model_path / "cameras.json", json_cams);
+    dump_JSON(params.output_path / "cameras.json", json_cams);
     // TODO: json camera dumping for debugging purpose at least
 
     // get the parameterr self.cameras.extent
