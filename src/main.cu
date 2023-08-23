@@ -88,7 +88,10 @@ int parse_cmd_line_args(const std::vector<std::string>& args,
         std::filesystem::path parentDir = executablePath.parent_path().parent_path();
         std::filesystem::path outputDir = parentDir / "output";
         try {
-            std::filesystem::create_directory(outputDir);
+            if (!std::filesystem::create_directory(outputDir)) {
+                std::cerr << "Directory already exists! Not overwriting it" << std::endl;
+                return -1;
+            }
         } catch (...) {
             std::cerr << "Failed to create output directory!" << std::endl;
             return -1;
