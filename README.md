@@ -6,8 +6,10 @@ The original code is written in Python and PyTorch.
 I embarked on this project to deepen my understanding of the groundbreaking paper on 3D Gaussian splatting, by reimplementing everything from scratch.
 
 ## News
+
 - **[08-23-2023]**: 
   - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
+  - CUDA versions restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
   - There are a lot good first issues to grab if you would like to contribute.
   
 If you encounter any problems or issues, please [open an issue](https://github.com/MrNeRF/gaussian-splatting-cuda/issues) on GitHub.
@@ -42,15 +44,16 @@ While completely unoptimized, the gains in performance, though modest, are notew
 ### Software Prerequisites 
 1. Linux (tested with Ubuntu 22.04), windows probably won't work.
 2. CMake 3.24 or higher.
-3. CUDA 11.7 or higher (might work with less, has to be manually set and tested).
+3. CUDA 11.7 or higher (might work with a lower version, has to be manually set and tested).
 4. Python with development headers.
 5. libtorch: You can find the setup instructions in the libtorch section of this README.
 6. Other dependencies will be handled by the CMake script.
 
 ### Hardware Prerequisites
-1. NVIDIA GPU with CUDA support (tested with RTX 4090, RTX A5000 and A100). So far, the lowest compute capability tested was 8.0.
+1. NVIDIA GPU with CUDA support. Successfully tested so far are RTX 4090, RTX A5000, 3090Ti and A100. With 3080Ti there are some outstanding issues with larger datasets.
+2. So far, the lowest compute capability tested was 8.0.
 
-Not sure if it works with something smaller like RT 3080 Ti or similar hardware. If you do successfully run on such hardware please 
+It might work with other NVIDIA GPUs as well, but these are mostly untested. If you do successfully run on such hardware please 
 post a message in the Discussions section of the repo.
 
 ### Build
