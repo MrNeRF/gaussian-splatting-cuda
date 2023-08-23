@@ -10,6 +10,7 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
 - **[2023-08-23]**: 
   - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
   - CUDA version restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
+  - Experimental feature to monitor the average convergence rate throughout training has been added (see the command-line options section for more details).
   - There are a lot good first issues to grab if you would like to contribute.
   
 If you encounter any problems or issues, please [open an issue](https://github.com/MrNeRF/gaussian-splatting-cuda/issues) on GitHub.
@@ -73,27 +74,42 @@ The dataset is not included in this repository. You can download it from the ori
 [tanks & trains](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip).
 Then unzip it in the data folder.
 
-### Usage
+### Command-Line Options
 
-Use the following command-line options:
+The `3D Gaussian Splatting CUDA Implementation` provides a suite of command-line options to facilitate easy and customizable execution. Below are the available options:
 
-- **-h, --help**: Display this help menu.
+### Core Options
 
-- **-d, --data_path [PATH]**: Specify the path to the training data.
+- **-h, --help**  
+  Display this help menu.
 
-- **-o, --output_path [PATH]**: Specify the path to the model.
+- **-d, --data_path [PATH]**  
+  Specify the path to the training data.
 
-- **-i, --iter [NUM]**: Specify the number of iterations to train the model.
+- **-o, --output_path [PATH]**  
+  Specify the path to save the trained model. If this option is not specified, the trained model will be saved to the "output" folder located in the root directory of the project.
+
+- **-i, --iter [NUM]**  
+  Specify the number of iterations to train the model. Although the paper sets the maximum number of iterations at 30k, you'll likely need far fewer. Starting with 6k or 7k iterations should yield preliminary results. Outputs are saved every 7k iterations and also at the end of the training. Therefore, even if you set it to 5k iterations, an output will be generated upon completion.
+
+### Advanced Options
+
+- **--enable-cr-monitoring**  
+  Enable monitoring of the average convergence rate throughout training. 
+  If done, it will stop optimizing when the average convergence rate is below 0.008 per default after 15k iterations. 
+  This is useful for speeding up the training process when the gain starts to dimish. 
+  If not enabled, the training will stop after the specified number of iterations `--iter`. Otherwise its stops when max 30k iterations are reached.
+
+- **-c, --convergence_rate [RATE]**  
+  Set custom average onvergence rate for the training process. Requires the flag `--enable-cr-monitoring` to be set.
 
 ### Example
+
+To run the `3D Gaussian Splatting CUDA Implementation` with specified data path, output path, and iterations, use the following command:
 
 ```bash
 $ ./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 1000
 ```
-If you don't specify an output path, the trained model will be saved to the "output" folder located in the root directory of this project.
-
-According to the paper, the maximum number of iterations is set at 30k. However, you'll likely need far fewer. Starting with 6k or 7k iterations should give you a preliminary result. 
-The output is saved every 7k iterations and also at the end of the training. So, if you specify 5k iterations, you will still receive an output at the end of the training process.
 
 ### View the results
 For now, you will need the SIBR view
