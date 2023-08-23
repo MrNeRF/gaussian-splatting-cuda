@@ -17,7 +17,7 @@ This project is a derivative of the original Gaussian-Splatting software and is 
 
 Please be advised that the software in this repository cannot be used for commercial purposes without explicit consent from the original licensors, Inria and MPII.
 
-## Current Measurments as of 2023-08-17 
+## Current Measurments as of 2023-08-17
 NVIDIA GeForce RTX 4090
 
     tandt/truck:
@@ -41,16 +41,17 @@ While completely unoptimized, the gains in performance, though modest, are notew
 ## Build and Execution instructions
 ### Software Prerequisites 
 1. Linux (tested with Ubuntu 22.04), windows probably won't work.
-2. CMake 3.22 or higher.
-3. CUDA 12.2 or higher (might work with less, has to be manually set and tested).
+2. CMake 3.24 or higher.
+3. CUDA 11.7 or higher (might work with less, has to be manually set and tested).
 4. Python with development headers.
 5. libtorch: You can find the setup instructions in the libtorch section of this README.
 6. Other dependencies will be handled by the CMake script.
 
 ### Hardware Prerequisites
-1. NVIDIA GPU with CUDA support (tested with RTX 4090 and RTX A5000) 
+1. NVIDIA GPU with CUDA support (tested with RTX 4090, RTX A5000 and A100). So far, the lowest compute capability tested was 8.0.
 
-Not sure if it works with something smaller like RT 3080 Ti or similar hardware.
+Not sure if it works with something smaller like RT 3080 Ti or similar hardware. If you do successfully run on such hardware please 
+post a message in the Discussions section of the repo.
 
 ### Build
 ```bash
