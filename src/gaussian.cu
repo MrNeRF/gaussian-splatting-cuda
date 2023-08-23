@@ -161,7 +161,7 @@ void GaussianModel::prune_points(torch::Tensor mask) {
     // reverse to keep points
     auto valid_point_mask = ~mask;
     int true_count = valid_point_mask.sum().item<int>();
-    std::cout << "Pruning " << true_count << " points" << std::endl;
+    //std::cout << "Pruning " << true_count << " points" << std::endl;
     auto indices = torch::nonzero(valid_point_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
     prune_optimizer(_optimizer.get(), indices, _xyz, 0);
     prune_optimizer(_optimizer.get(), indices, _features_dc, 1);
