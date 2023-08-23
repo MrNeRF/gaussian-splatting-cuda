@@ -9,7 +9,7 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
 
 - **[08-23-2023]**: 
   - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
-  - CUDA versions restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
+  - CUDA version restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
   - There are a lot good first issues to grab if you would like to contribute.
   
 If you encounter any problems or issues, please [open an issue](https://github.com/MrNeRF/gaussian-splatting-cuda/issues) on GitHub.
