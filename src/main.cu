@@ -135,6 +135,8 @@ int main(int argc, char* argv[]) {
 
     const int camera_count = scene.Get_camera_count();
     std::vector<int> indices;
+    int last_status_len = 0;
+    auto start_time = std::chrono::steady_clock::now();
     for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
         if (iter % 1000 == 0) {
             gaussians.One_up_sh_degree();
@@ -153,7 +155,29 @@ int main(int argc, char* argv[]) {
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - gaussian_splatting::ssim(image, gt_image));
-        std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << " gaussian splats: " << gaussians.Get_xyz().size(0) << std::endl;
+
+        // Update status line
+        auto cur_time = std::chrono::steady_clock::now();
+        std::chrono::duration<double> time_elapsed = cur_time - start_time;
+        // XXX shouldn't have to create a new stringstream, but resetting takes multiple calls
+        std::stringstream status_line;
+        // XXX Use thousand separators, but doesn't work for some reason
+        status_line.imbue(std::locale(""));
+        status_line
+            << "\rIteration: " << std::setw(5) << iter
+            << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>()
+            << "  Gaussian splats: " << std::setw(8) << (int)gaussians.Get_xyz().size(0)
+            << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
+            << "  Avg iter/s: " << std::fixed << std::setw(4) << std::setprecision(1) << 1.0*iter/time_elapsed.count()
+            << "  " // Some extra whitespace, in case a "Pruning ... points" message gets printed after
+            ;
+        const int curlen = status_line.str().length();
+        const int ws = last_status_len - curlen;
+        if (ws > 0)
+            status_line << std::string(ws, ' ');
+        std::cout << status_line.str() << std::flush;
+        last_status_len = curlen;
+
         loss.backward();
 
         {
@@ -163,8 +187,9 @@ int main(int argc, char* argv[]) {
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
             if (iter == optimParams.iterations) {
+                std::cout << std::endl;
                 gaussians.Save_ply(modelParams.output_path, iter, true);
-                return 0;
+                break;
             }
             if (iter % 7'000 == 0) {
                 gaussians.Save_ply(modelParams.output_path, iter, false);
@@ -172,8 +197,9 @@ int main(int argc, char* argv[]) {
 
             // that should be the max. Stop iterating.
             if (iter == 30'000) {
+                std::cout << std::endl;
                 gaussians.Save_ply(modelParams.output_path, iter, true);
-                return 0;
+                break;
             }
 
             // Densification
@@ -200,5 +226,14 @@ int main(int argc, char* argv[]) {
             }
         }
     }
+
+    auto cur_time = std::chrono::steady_clock::now();
+    std::chrono::duration<double> time_elapsed = cur_time - start_time;
+
+    std::cout << std::endl << "All done in "
+        << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "s, avg "
+        << std::fixed << std::setw(4) << std::setprecision(1) << 1.0*optimParams.iterations/time_elapsed.count() << " iter/s"
+        << std::endl;
+
     return 0;
 }
