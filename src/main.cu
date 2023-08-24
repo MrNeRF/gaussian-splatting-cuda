@@ -57,6 +57,7 @@ int parse_cmd_line_args(const std::vector<std::string>& args,
     args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
     args::ValueFlag<float> convergence_rate(parser, "convergence_rate", "Set convergence rate", {'c', "convergence_rate"});
     args::Flag enable_cr_monitoring(parser, "enable_cr_monitoring", "Enable convergence rate monitoring", {"enable-cr-monitoring"});
+    args::Flag force_overwrite_output_path(parser, "force", "Forces to overwrite output folder", {'f', "force"});
     args::ValueFlag<std::string> data_path(parser, "data_path", "Path to the training data", {'d', "data-path"});
     args::ValueFlag<std::string> output_path(parser, "output_path", "Path to the training output", {'o', "output-path"});
     args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations to train the model", {'i', "iter"});
@@ -90,9 +91,16 @@ int parse_cmd_line_args(const std::vector<std::string>& args,
         std::filesystem::path parentDir = executablePath.parent_path().parent_path();
         std::filesystem::path outputDir = parentDir / "output";
         try {
-            if (!std::filesystem::create_directory(outputDir)) {
-                std::cerr << "Directory already exists! Not overwriting it" << std::endl;
-                return -1;
+
+            bool isCreated = std::filesystem::create_directory(outputDir);
+            if (!isCreated) {
+                if (!force_overwrite_output_path) {
+                    std::cerr << "Directory already exists! Not overwriting it" << std::endl;
+                    return -1;
+                } else {
+                    std::filesystem::create_directory(outputDir);
+                    std::filesystem::remove_all(outputDir);
+                }
             }
         } catch (...) {
             std::cerr << "Failed to create output directory!" << std::endl;
@@ -177,13 +185,13 @@ int main(int argc, char* argv[]) {
                 << "\rIter: " << std::setw(6) << iter
                 << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>();
             if (optimParams.early_stopping) {
-                status_line 
+                status_line
                     << "  ACR: " << std::fixed << std::setw(9) << std::setprecision(6) << avg_converging_rate;
             }
             status_line
                 << "  Splats: " << std::setw(10) << (int)gaussians.Get_xyz().size(0)
                 << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
-                << "  Avg iter/s: " << std::fixed << std::setw(5) << std::setprecision(1) << 1.0*iter/time_elapsed.count()
+                << "  Avg iter/s: " << std::fixed << std::setw(5) << std::setprecision(1) << 1.0 * iter / time_elapsed.count()
                 << "  " // Some extra whitespace, in case a "Pruning ... points" message gets printed after
                 ;
             const int curlen = status_line.str().length();
@@ -250,10 +258,11 @@ int main(int argc, char* argv[]) {
     auto cur_time = std::chrono::steady_clock::now();
     std::chrono::duration<double> time_elapsed = cur_time - start_time;
 
-    std::cout << std::endl << "All done in "
-        << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "s, avg "
-        << std::fixed << std::setw(4) << std::setprecision(1) << 1.0*optimParams.iterations/time_elapsed.count() << " iter/s"
-        << std::endl;
+    std::cout << std::endl
+              << "All done in "
+              << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "s, avg "
+              << std::fixed << std::setw(4) << std::setprecision(1) << 1.0 * optimParams.iterations / time_elapsed.count() << " iter/s"
+              << std::endl;
 
     return 0;
 }

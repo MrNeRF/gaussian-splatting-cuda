@@ -10,6 +10,7 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
 - **[2023-08-24]**:
     - Added updating status line, instead of printing many lines of output during a run
     - In tools folder there is pre-commit hook to run clang-format before every commit. See Contribution section.
+    - Added -f flag to force overwriting of output folder
 - **[2023-08-23]**: 
   - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
   - CUDA version restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
@@ -88,7 +89,10 @@ The `3D Gaussian Splatting CUDA Implementation` provides a suite of command-line
 
 - **-d, --data_path [PATH]**  
   Specify the path to the training data.
-
+ 
+- **-f, --force**  
+    Force overwriting of output folder. If not set, the program will exit if the output folder already exists.
+ 
 - **-o, --output_path [PATH]**  
   Specify the path to save the trained model. If this option is not specified, the trained model will be saved to the "output" folder located in the root directory of the project.
 
