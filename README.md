@@ -7,11 +7,13 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
 
 ## News
 
+- **[2023-08-24]**:
+    - Added updating status line, instead of printing many lines of output during a run
+    - In tools folder there is pre-commit hook to run clang-format before every commit. See Contribution section.
 - **[2023-08-23]**: 
   - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
   - CUDA version restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
   - Experimental feature to monitor the average convergence rate throughout training has been added (see the command-line options section for more details).
-  - Added updating status line, instead of printing many lines of output during a run
   - There are a lot good first issues to grab if you would like to contribute.
   
 If you encounter any problems or issues, please [open an issue](https://github.com/MrNeRF/gaussian-splatting-cuda/issues) on GitHub.
@@ -126,17 +128,35 @@ Then, you can view the results with:
 ./SIBR_viewers/install/bin/SIBR_gaussianViewer_app -m output
 ```
 
-## Contribution Guidelines
+## Contributions
+Contributions are welcome! I want to make this a community project.
 
-Thank you for considering a contribution! Below are some guidelines to help ensure our project remains effective and consistent.
+Some ideas for relative straight forward contributions:
+- Revamp the README.
+- Add a proper config file or cmd line config.
+
+I want to get rid of some heavy dependencies:
+- Replace glm with custom matrix operations
+- Replace the few Eigen with some custom matrix operations
+
+Advanced contributions or long term goals:
+- Build a renderer to view training output in real time and to replace SIBR viewer.
+- Look into [gtsfm](https://github.com/borglab/gtsfm) to replace colmap dependency
+- CUDA optimization
+- Build a proper viewer for the training output (maybe with XR support?).
+
+Own ideas are welcome as well!
+
+### Contribution Guidelines
+
+Below are some guidelines to help ensure our project remains effective and consistent.
 
 1. **Getting Started with Contributions**:
     - I've marked several beginner-friendly issues as **good first issues**. If you're new to the project, these are great places to start.
-    - For those looking to contribute something not currently listed as an issue, feel free to create one, or you can direct message me on Twitter for a quick chat. Since there are not many contributors at the moment, I'm happy to discuss your ideas and help you get started.
+    - For those looking to contribute something not currently listed as an issue or propose something in the discussion section. You can direct message me on Twitter for a quick chat. Since there are not many contributors at the moment, I'm happy to discuss your ideas and help you get started.
 
 2. **Before Submitting Your Pull Request**:
-    - Please squash your commits for clarity and to make my life as reviewer way easier.
-    - Ensure you've applied `clang-format` to maintain consistent coding style.
+    - Ensure you've applied `clang-format` to maintain consistent coding style. There is in tools folder a git pre-commit hook. You can just copy it to .git/hooks/pre-commit. It will run clang-format before every commit.
     - We aim to minimize dependencies. If you're introducing a new one, it's essential to raise an issue for discussion first. There are ongoing efforts to reduce the number of dependencies, and your understanding in this area is appreciated.
 
 3. **Key Principles for Contributions**:
@@ -156,32 +176,6 @@ Here is random collection of things that have to be described in README later on
 - Needed for simple-knn: 
 ```bash sudo apt-get install python3-dev ```
  
-
-## TODO (in no particular order, reminders for myself)
-- [ ] Speed up with shifting stuff to CUDA.
-- [ ] Need to think about the cameras. Separating camera and camera_info seems useless.
-- [ ] Proper logging. (Lets see, low prio)
-- [ ] Proper config file or cmd line config.
-
-## Contributions
-Contributions are welcome! I want to make this a community project. 
-
-Some ideas for relative straight forward contributions:
-- Revamp the README.
-- Add a proper config file or cmd line config.
-
-I want to get rid of some heavy dependencies:
-- Replace glm with custom matrix operations
-- Replace the few Eigen with some custom matrix operations
-
-Advanced contributions:
-- Build a renderer to view training output in real time and to replace SIBR viewer.
-- Look into [gtsfm](https://github.com/borglab/gtsfm) to replace colmap dependency
-- CUDA optimization
-- ...
-
-Own ideas are welcome as well!
-
 ## Citation and References
 If you utilize this software or present results obtained using it, please reference the original work:
 
