@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Run clang-format on the files being committed
+git diff --name-only --cached --diff-filter=ACM | grep -vE "external/" | grep -E '\.(cpp|c|cu|cuh|h|hpp)$' | while read file; do clang-format -i $file && git add $file; done
+
+# Continue with the commit
+exit 0
+
