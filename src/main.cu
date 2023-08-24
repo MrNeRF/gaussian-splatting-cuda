@@ -222,12 +222,11 @@ int main(int argc, char* argv[]) {
                 gaussians.Add_densification_stats(viewspace_point_tensor, visibility_filter);
                 if (iter > optimParams.densify_from_iter && iter % optimParams.densification_interval == 0) {
                     // @TODO: Not sure about type
-                    float size_threshold = iter > optimParams.opacity_reset_interval ? 20.f : -1.f;                    
+                    float size_threshold = iter > optimParams.opacity_reset_interval ? 20.f : -1.f;
                     gaussians.Densify_and_prune(optimParams.densify_grad_threshold, 0.005f, scene.Get_cameras_extent(), size_threshold);
                 }
 
                 if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
-                    //std::cout << "iteration " << iter << " resetting opacity" << std::endl;
                     gaussians.Reset_opacity();
                 }
             }
