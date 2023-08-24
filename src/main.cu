@@ -139,6 +139,8 @@ int main(int argc, char* argv[]) {
 
     const int camera_count = scene.Get_camera_count();
     std::vector<int> indices;
+    int last_status_len = 0;
+    auto start_time = std::chrono::steady_clock::now();
     float loss_add = 0.f;
 
     LossMonitor loss_monitor(200);
@@ -162,7 +164,36 @@ int main(int argc, char* argv[]) {
         auto gt_image = cam.Get_original_image().to(torch::kCUDA);
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - gaussian_splatting::ssim(image, gt_image));
-        //        std::cout << "Iteration: " << iter << " Loss: " << loss.item<float>() << " gaussian splats: " << gaussians.Get_xyz().size(0) << std::endl;
+
+        // Update status line
+        if (iter % 100 == 0) {
+            auto cur_time = std::chrono::steady_clock::now();
+            std::chrono::duration<double> time_elapsed = cur_time - start_time;
+            // XXX shouldn't have to create a new stringstream, but resetting takes multiple calls
+            std::stringstream status_line;
+            // XXX Use thousand separators, but doesn't work for some reason
+            status_line.imbue(std::locale(""));
+            status_line
+                << "\rIter: " << std::setw(6) << iter
+                << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>();
+            if (optimParams.early_stopping) {
+                status_line 
+                    << "  ACR: " << std::fixed << std::setw(9) << std::setprecision(6) << avg_converging_rate;
+            }
+            status_line
+                << "  Splats: " << std::setw(10) << (int)gaussians.Get_xyz().size(0)
+                << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
+                << "  Avg iter/s: " << std::fixed << std::setw(5) << std::setprecision(1) << 1.0*iter/time_elapsed.count()
+                << "  " // Some extra whitespace, in case a "Pruning ... points" message gets printed after
+                ;
+            const int curlen = status_line.str().length();
+            const int ws = last_status_len - curlen;
+            if (ws > 0)
+                status_line << std::string(ws, ' ');
+            std::cout << status_line.str() << std::flush;
+            last_status_len = curlen;
+        }
+
         if (optimParams.early_stopping) {
             avg_converging_rate = loss_monitor.Update(loss.item<float>());
         }
@@ -177,21 +208,15 @@ int main(int argc, char* argv[]) {
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
 
             if (iter == optimParams.iterations) {
+                std::cout << std::endl;
                 gaussians.Save_ply(modelParams.output_path, iter, true);
-                return 0;
+                break;
             }
 
             if (iter % 7'000 == 0) {
                 gaussians.Save_ply(modelParams.output_path, iter, false);
             }
 
-            if (iter % 100 == 0) {
-                std::cout << "Iteration: " << iter
-                          << " Loss: " << loss_add / 100.f
-                          << " Average Convergence rate: " << avg_converging_rate
-                          << " gaussian splats: " << gaussians.Get_xyz().size(0) << "\n";
-                loss_add = 0.f;
-            }
             // Densification
             if (iter < optimParams.densify_until_iter) {
                 gaussians.Add_densification_stats(viewspace_point_tensor, visibility_filter);
@@ -202,7 +227,6 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
-                    std::cout << "iteration " << iter << " resetting opacity" << std::endl;
                     gaussians.Reset_opacity();
                 }
             }
@@ -210,7 +234,7 @@ int main(int argc, char* argv[]) {
             if (iter >= optimParams.densify_until_iter && loss_monitor.IsConverging(optimParams.convergence_threshold)) {
                 std::cout << "Converged after " << iter << " iterations!" << std::endl;
                 gaussians.Save_ply(modelParams.output_path, iter, true);
-                return 0;
+                break;
             }
 
             //  Optimizer step
@@ -222,5 +246,14 @@ int main(int argc, char* argv[]) {
             }
         }
     }
+
+    auto cur_time = std::chrono::steady_clock::now();
+    std::chrono::duration<double> time_elapsed = cur_time - start_time;
+
+    std::cout << std::endl << "All done in "
+        << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "s, avg "
+        << std::fixed << std::setw(4) << std::setprecision(1) << 1.0*optimParams.iterations/time_elapsed.count() << " iter/s"
+        << std::endl;
+
     return 0;
 }

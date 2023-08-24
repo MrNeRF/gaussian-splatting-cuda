@@ -157,11 +157,10 @@ void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, t
     optimizer->state()[c10::guts::to_string(optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl())] = std::move(adamParamStates);
 }
 
-void GaussianModel::prune_points(torch::Tensor mask) {
+void GaussianModel::prune_points(torch::Tensor mask) {    
     // reverse to keep points
     auto valid_point_mask = ~mask;
     int true_count = valid_point_mask.sum().item<int>();
-    std::cout << "Pruning " << true_count << " points" << std::endl;
     auto indices = torch::nonzero(valid_point_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
     prune_optimizer(_optimizer.get(), indices, _xyz, 0);
     prune_optimizer(_optimizer.get(), indices, _features_dc, 1);
