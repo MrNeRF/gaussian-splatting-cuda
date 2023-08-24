@@ -11,6 +11,7 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
   - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
   - CUDA version restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
   - Experimental feature to monitor the average convergence rate throughout training has been added (see the command-line options section for more details).
+  - Added updating status line, instead of printing many lines of output during a run
   - There are a lot good first issues to grab if you would like to contribute.
   
 If you encounter any problems or issues, please [open an issue](https://github.com/MrNeRF/gaussian-splatting-cuda/issues) on GitHub.
