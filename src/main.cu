@@ -174,14 +174,14 @@ int main(int argc, char* argv[]) {
             // XXX Use thousand separators, but doesn't work for some reason
             status_line.imbue(std::locale(""));
             status_line
-                << "\rIter: " << std::setw(5) << iter
+                << "\rIter: " << std::setw(6) << iter
                 << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>();
             if (optimParams.early_stopping) {
                 status_line 
                     << "  ACR: " << std::fixed << std::setw(9) << std::setprecision(6) << avg_converging_rate;
             }
             status_line
-                << "  Splats: " << std::setw(8) << (int)gaussians.Get_xyz().size(0)
+                << "  Splats: " << std::setw(10) << (int)gaussians.Get_xyz().size(0)
                 << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
                 << "  Avg iter/s: " << std::fixed << std::setw(5) << std::setprecision(1) << 1.0*iter/time_elapsed.count()
                 << "  " // Some extra whitespace, in case a "Pruning ... points" message gets printed after
