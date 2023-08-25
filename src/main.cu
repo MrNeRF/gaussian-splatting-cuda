@@ -5,7 +5,9 @@
 #include "parameters.cuh"
 #include "render_utils.cuh"
 #include "scene.cuh"
+#include <ATen/cuda/CUDAContext.h>
 #include <args.hxx>
+#include <c10/cuda/CUDAGuard.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -145,7 +147,11 @@ int main(int argc, char* argv[]) {
     auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
     auto background = modelParams.white_background ? torch::tensor({1.f, 1.f, 1.f}) : torch::tensor({0.f, 0.f, 0.f}, pointType).to(torch::kCUDA);
 
+    const int window_size = 11;
+    const int channel = 3;
+    const auto conv_window = gaussian_splatting::create_window(window_size, channel).to(torch::kFloat32).to(torch::kCUDA, true);
     const int camera_count = scene.Get_camera_count();
+
     std::vector<int> indices;
     int last_status_len = 0;
     auto start_time = std::chrono::steady_clock::now();
@@ -170,7 +176,8 @@ int main(int argc, char* argv[]) {
 
         // Loss Computations
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
-        auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - gaussian_splatting::ssim(image, gt_image));
+        auto ssim_loss = gaussian_splatting::ssim(image, gt_image, conv_window, window_size, channel);
+        auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - ssim_loss);
 
         // Update status line
         if (iter % 100 == 0) {

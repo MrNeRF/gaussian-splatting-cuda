@@ -1,10 +1,15 @@
 // Copyright (c) 2023 Janusch Patas.
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
+#include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <cmath>
 #include <torch/torch.h>
 
 namespace gaussian_splatting {
+    static const float C1 = 0.01 * 0.01;
+    static const float C2 = 0.03 * 0.03;
+
     torch::Tensor l1_loss(const torch::Tensor& network_output, const torch::Tensor& gt) {
         return torch::abs((network_output - gt)).mean();
     }
@@ -29,14 +34,8 @@ namespace gaussian_splatting {
     // The SSIM value lies between -1 and 1, where 1 means perfect similarity.
     // It's considered a better metric than mean squared error for perceptual image quality as it considers changes in structural information,
     // luminance, and contrast.
-    torch::Tensor ssim(const torch::Tensor& img1, const torch::Tensor& img2, int window_size = 11, bool size_average = true) {
-        int channel = img1.size(0); // first dimension is channel
-        auto window = create_window(window_size, channel);
+    torch::Tensor ssim(const torch::Tensor& img1, const torch::Tensor& img2, const torch::Tensor& window, int window_size, int channel) {
 
-        if (img1.is_cuda()) {
-            window = window.to(img1.device());
-        }
-        window = window.to(img1.dtype());
         auto mu1 = torch::nn::functional::conv2d(img1, window, torch::nn::functional::Conv2dFuncOptions().padding(window_size / 2).groups(channel));
         auto mu2 = torch::nn::functional::conv2d(img2, window, torch::nn::functional::Conv2dFuncOptions().padding(window_size / 2).groups(channel));
 
@@ -53,10 +52,6 @@ namespace gaussian_splatting {
 
         auto ssim_map = ((2.f * mu1_mu2 + C1) * (2.f * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2));
 
-        if (size_average) {
-            return ssim_map.mean();
-        } else {
-            return ssim_map.mean({1}).mean({1}).mean({1});
-        }
+        return ssim_map.mean();
     }
 } // namespace gaussian_splatting
