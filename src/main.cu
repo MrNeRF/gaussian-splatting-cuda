@@ -5,9 +5,7 @@
 #include "parameters.cuh"
 #include "render_utils.cuh"
 #include "scene.cuh"
-#include <ATen/cuda/CUDAContext.h>
 #include <args.hxx>
-#include <c10/cuda/CUDAGuard.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
