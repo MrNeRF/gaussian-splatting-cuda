@@ -7,6 +7,10 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
 
 ## News
 
+- **[2023-08-25]**:
+    - Small update on README
+    - Optimized out the window creation for loss calculation.
+    - Some progress translating libtorch to CUDA.
 - **[2023-08-24]**:
     - Added updating status line, instead of printing many lines of output during a run
     - In tools folder there is pre-commit hook to run clang-format before every commit. See Contribution section.
