@@ -155,21 +155,20 @@ int main(int argc, char* argv[]) {
     float avg_converging_rate = 0.f;
 
     for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
-        if (iter % 1000 == 0) {
-            gaussians.One_up_sh_degree();
-        }
-
         if (indices.empty()) {
             indices = get_random_indices(camera_count);
         }
         const int camera_index = indices.back();
-        indices.pop_back(); // remove last element to iterate over all cameras randomly
         auto& cam = scene.Get_training_camera(camera_index);
+        auto gt_image = cam.Get_original_image();
+        indices.pop_back(); // remove last element to iterate over all cameras randomly
+        if (iter % 1000 == 0) {
+            gaussians.One_up_sh_degree();
+        }
         // Render
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
 
         // Loss Computations
-        auto gt_image = cam.Get_original_image().to(torch::kCUDA);
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
         auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - gaussian_splatting::ssim(image, gt_image));
 
