@@ -51,9 +51,13 @@ void GaussianModel::One_up_sh_degree() {
 void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     _spatial_lr_scale = spatial_lr_scale;
 
-    // coordinates
-    auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
-    _xyz = torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType);
+    const auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
+    _xyz = torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA).set_requires_grad(true);
+    auto dist2 = torch::clamp_min(distCUDA2(_xyz), 0.0000001);
+    _scaling = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3}).to(torch::kCUDA, true).set_requires_grad(true);
+    _rotation = torch::zeros({_xyz.size(0), 4}).index_put_({torch::indexing::Slice(), 0}, 1).to(torch::kCUDA, true).set_requires_grad(true);
+    _opacity = inverse_sigmoid(0.5 * torch::ones({_xyz.size(0), 1})).to(torch::kCUDA, true).set_requires_grad(true);
+    _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA, true);
 
     // colors
     auto colorType = torch::TensorOptions().dtype(torch::kUInt8);
@@ -63,24 +67,8 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
     auto features = torch::zeros({fused_color.size(0), 3, static_cast<long>(std::pow((_max_sh_degree + 1), 2))}).to(torch::kCUDA);
     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(torch::indexing::None, 3), 0}, fused_color);
     features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(3, torch::indexing::None), torch::indexing::Slice(1, torch::indexing::None)}, 0.0);
-    _features_dc = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(0, 1)}).transpose(1, 2).contiguous();
-    _features_rest = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(1, torch::indexing::None)}).transpose(1, 2).contiguous();
-
-    auto dist2 = torch::clamp_min(distCUDA2(torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA)), 0.0000001);
-
-    _scaling = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3});
-    _rotation = torch::zeros({_xyz.size(0), 4}).index_put_({torch::indexing::Slice(), 0}, 1);
-    _opacity = inverse_sigmoid(0.5 * torch::ones({_xyz.size(0), 1}));
-
-    // Move to GPU and set requires_grad to true
-    _xyz = _xyz.to(torch::kCUDA).set_requires_grad(true);
-    _features_dc = _features_dc.to(torch::kCUDA).set_requires_grad(true);
-    _features_rest = _features_rest.to(torch::kCUDA).set_requires_grad(true);
-    _scaling = _scaling.to(torch::kCUDA).set_requires_grad(true);
-    _rotation = _rotation.to(torch::kCUDA).set_requires_grad(true);
-    _opacity = _opacity.to(torch::kCUDA).set_requires_grad(true);
-
-    _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
+    _features_dc = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(0, 1)}).transpose(1, 2).contiguous().set_requires_grad(true);
+    _features_rest = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(1, torch::indexing::None)}).transpose(1, 2).contiguous().set_requires_grad(true);
 }
 
 /**
@@ -157,7 +145,7 @@ void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, t
     optimizer->state()[c10::guts::to_string(optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl())] = std::move(adamParamStates);
 }
 
-void GaussianModel::prune_points(torch::Tensor mask) {    
+void GaussianModel::prune_points(torch::Tensor mask) {
     // reverse to keep points
     auto valid_point_mask = ~mask;
     int true_count = valid_point_mask.sum().item<int>();
