@@ -7,19 +7,22 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
 
 ## News
 
+- **[2023-08-27]**:
+    - Added ```--empty-gpu-cache``` flag to release CUDA memory after ever 100 iterations. 
+      Should mitigate/fix problems with GPUs that have low VRAM. ***Attention! This has a considerable performance impact.***
 - **[2023-08-25]**:
     - Small update on README
     - Optimized out the window creation for loss calculation.
-    - Some progress translating libtorch to CUDA (you can sneak peak on the branch cuda-streaming)
+    - Some progress translating libtorch to CUDA (you can have a look on the branch cuda-streaming)
 - **[2023-08-24]**:
     - Added updating status line, instead of printing many lines of output during a run
     - In tools folder there is pre-commit hook to run clang-format before every commit. See Contribution section.
-    - Added -f flag to force overwriting of output folder
+    - Added ```--force``` flag to force overwriting of output folder
 - **[2023-08-23]**: 
-  - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
-  - CUDA version restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
-  - Experimental feature to monitor the average convergence rate throughout training has been added (see the command-line options section for more details).
-  - There are a lot good first issues to grab if you would like to contribute.
+    - Command-line parameters have been added to specify the training data path and the output path. Note that the output path will not be automatically overwritten anymore.
+    - CUDA version restrictions have been relaxed a bit to 11.7 or higher. The CUDA architecture of the system on which the software is being compiled is now auto-detected automatically.
+    - Experimental feature to monitor the average convergence rate throughout training has been added (see the command-line options section for more details).
+    - There are lots of good first issues to grab if you would like to contribute.
   
 If you encounter any problems or issues, please [open an issue](https://github.com/MrNeRF/gaussian-splatting-cuda/issues) on GitHub.
 
@@ -105,7 +108,9 @@ The `3D Gaussian Splatting CUDA Implementation` provides a suite of command-line
   Specify the number of iterations to train the model. Although the paper sets the maximum number of iterations at 30k, you'll likely need far fewer. Starting with 6k or 7k iterations should yield preliminary results. Outputs are saved every 7k iterations and also at the end of the training. Therefore, even if you set it to 5k iterations, an output will be generated upon completion.
 
 ### Advanced Options
-
+- **--empty-gpu-cache**
+  Empty CUDA memory after ever 100 iterations. __Attention!__ This has a considerable performance impact
+   
 - **--enable-cr-monitoring**  
   Enable monitoring of the average convergence rate throughout training. 
   If done, it will stop optimizing when the average convergence rate is below 0.008 per default after 15k iterations. 

@@ -23,6 +23,7 @@ struct OptimizationParameters {
     float densify_grad_threshold = 0.0002f;
     bool early_stopping = false;
     float convergence_threshold = 0.007f;
+    bool empty_gpu_cache = false;
 };
 
 struct ModelParameters {
