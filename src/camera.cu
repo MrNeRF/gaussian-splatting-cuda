@@ -21,7 +21,7 @@ Camera::Camera(int imported_colmap_id,
                               _uid(uid),
                               _scale(scale) {
 
-    this->_original_image = torch::clamp(image, 0.f, 1.f).to(torch::kCUDA, true);
+    this->_original_image = torch::clamp(image, 0.f, 1.f);
     this->_image_width = this->_original_image.size(2);
     this->_image_height = this->_original_image.size(1);
 
