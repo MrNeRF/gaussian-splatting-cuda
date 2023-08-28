@@ -12,7 +12,6 @@
 
 inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(Camera& viewpoint_camera,
                                                                                      GaussianModel& gaussianModel,
-                                                                                     const PipelineParameters& params,
                                                                                      torch::Tensor& bg_color,
                                                                                      float scaling_modifier = 1.0,
                                                                                      torch::Tensor override_color = torch::empty({})) {
@@ -43,25 +42,13 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
     auto rotations = torch::Tensor();
     auto cov3D_precomp = torch::Tensor();
 
-    if (params.compute_cov3D_python) {
-        cov3D_precomp = gaussianModel.Get_covariance(scaling_modifier);
-    } else {
-        scales = gaussianModel.Get_scaling();
-        rotations = gaussianModel.Get_rotation();
-    }
+    scales = gaussianModel.Get_scaling();
+    rotations = gaussianModel.Get_rotation();
 
     auto shs = torch::Tensor();
     torch::Tensor colors_precomp = torch::Tensor();
     // This is nonsense. Background color not used? See orginal file colors_precomp=None line 70
-    if (params.convert_SHs_python) {
-        torch::Tensor shs_view = gaussianModel.Get_features().transpose(1, 2).view({-1, 3, static_cast<long>(std::pow(gaussianModel.Get_max_sh_degree() + 1, 2))});
-        torch::Tensor dir_pp = (gaussianModel.Get_xyz() - viewpoint_camera.Get_camera_center().repeat({gaussianModel.Get_features().sizes()[0], 1}));
-        torch::Tensor dir_pp_normalized = dir_pp / dir_pp.norm(1);
-        torch::Tensor sh2rgb = Eval_sh(gaussianModel.Get_active_sh_degree(), shs_view, dir_pp_normalized);
-        colors_precomp = torch::clamp_min(sh2rgb + 0.5, 0.0);
-    } else {
-        shs = gaussianModel.Get_features();
-    }
+    shs = gaussianModel.Get_features();
 
     torch::cuda::synchronize();
 
