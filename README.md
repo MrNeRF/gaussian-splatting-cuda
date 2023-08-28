@@ -6,7 +6,14 @@ The original code is written in Python and PyTorch.
 I embarked on this project to deepen my understanding of the groundbreaking paper on 3D Gaussian splatting, by reimplementing everything from scratch.
 
 ## News
-
+- **[2023-08-28]**:
+    - Most of the ongoing work is currently on the cuda-streaming branch. 
+     If you're interested, please check it out. The primary objective is to replace the stepwise 
+     libtorch API with my custom CUDA implementation. This is a significant undertaking that will undoubtedly require time. 
+     However, the results so far are promising. I anticipate merging a preliminary version by either Wednesday or Thursday. 
+     This merge is a prerequisite for the subsequent phase, where the focus will be on parallelizing and fusing computations. 
+     Furthermore, I have plans to incorporate CUDA graphs. There are many optimizations I haven't considered yet, 
+     but my ultimate goal is to always be the fastest implementation available. Any support is very appreciated. Stay tuned.
 - **[2023-08-27]**:
     - Added ```--empty-gpu-cache``` flag to release CUDA memory after ever 100 iterations. 
       Should mitigate/fix problems with GPUs that have low VRAM. ***Attention! This has a considerable performance impact.***
