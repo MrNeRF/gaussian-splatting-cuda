@@ -14,6 +14,7 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
      This merge is a prerequisite for the subsequent phase, where the focus will be on parallelizing and fusing computations. 
      Furthermore, I have plans to incorporate CUDA graphs. There are many optimizations I haven't considered yet, 
      but my ultimate goal is to always be the fastest implementation available. Any support is very appreciated. Stay tuned.
+    - Fix stable version v0.1.3 before major refactoring.
 - **[2023-08-27]**:
     - Added ```--empty-gpu-cache``` flag to release CUDA memory after ever 100 iterations. 
       Should mitigate/fix problems with GPUs that have low VRAM. ***Attention! This has a considerable performance impact.***
