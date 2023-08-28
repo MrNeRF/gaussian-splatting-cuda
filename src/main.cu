@@ -47,8 +47,7 @@ std::vector<int> get_random_indices(int max_index) {
 
 int parse_cmd_line_args(const std::vector<std::string>& args,
                         ModelParameters& modelParams,
-                        OptimizationParameters& optimParams,
-                        PipelineParameters& pipelineParams) {
+                        OptimizationParameters& optimParams) {
     if (args.empty()) {
         std::cerr << "No command line arguments provided!" << std::endl;
         return -1;
@@ -133,8 +132,7 @@ int main(int argc, char* argv[]) {
     // TODO: read parameters from JSON file or command line
     auto modelParams = ModelParameters();
     auto optimParams = OptimizationParameters();
-    auto pipelineParams = PipelineParameters();
-    if (parse_cmd_line_args(args, modelParams, optimParams, pipelineParams) < 0) {
+    if (parse_cmd_line_args(args, modelParams, optimParams) < 0) {
         return -1;
     };
     Write_model_parameters_to_file(modelParams);
@@ -175,7 +173,7 @@ int main(int argc, char* argv[]) {
             gaussians.One_up_sh_degree();
         }
         // Render
-        auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, pipelineParams, background);
+        auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, background);
 
         // Loss Computations
         auto l1l = gaussian_splatting::l1_loss(image, gt_image);
