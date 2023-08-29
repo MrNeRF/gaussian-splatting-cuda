@@ -7,7 +7,7 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
 
 ## News
 - **[2023-08-29]**:
-    - Better Image loading error description by @paulmelis
+    - Better Image loading error description by [paulmelis](https://github.com/paulmelis)
     - I've spent some time working on manual loss derivatives with the aim of completely eliminating the need for autograd. 
       The derivation appears to be accurate, as confirmed by a comparison with a Python implementation. The transition to our custom Adam implementation is still underway, but I hope to complete it by tomorrow. 
     - Bug fixing :(
