@@ -6,6 +6,11 @@ The original code is written in Python and PyTorch.
 I embarked on this project to deepen my understanding of the groundbreaking paper on 3D Gaussian splatting, by reimplementing everything from scratch.
 
 ## News
+- **[2023-08-29]**:
+    - Better Image loading error description by @paulmelis
+    - I've spent some time working on manual loss derivatives with the aim of completely eliminating the need for autograd. 
+      The derivation appears to be accurate, as confirmed by a comparison with a Python implementation. The transition to our custom Adam implementation is still underway, but I hope to complete it by tomorrow. 
+    - Bug fixing :(
 - **[2023-08-28]**:
     - Most of the ongoing work is currently on the cuda-streaming branch. 
      If you're interested, please check it out. The primary objective is to replace the stepwise 
