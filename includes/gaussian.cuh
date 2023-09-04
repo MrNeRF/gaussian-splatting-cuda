@@ -65,10 +65,10 @@ private:
     std::vector<std::string> construct_list_of_attributes();
 
 private:
-    int _active_sh_degree;
-    int _max_sh_degree;
-    float _spatial_lr_scale{};
-    float _percent_dense{};
+    int _active_sh_degree = 0;
+    int _max_sh_degree = 0;
+    float _spatial_lr_scale = 0.f;
+    float _percent_dense = 0.f;
 
     Expon_lr_func _xyz_scheduler_args;
     torch::Tensor _denom;
