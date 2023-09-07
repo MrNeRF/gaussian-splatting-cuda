@@ -6,6 +6,14 @@ The original code is written in Python and PyTorch.
 I embarked on this project to deepen my understanding of the groundbreaking paper on 3D Gaussian splatting, by reimplementing everything from scratch.
 
 ## News
+- **[2023-09-07]**:
+    - Introduced the PSNR metric for a more accurate comparison of image quality relative to the reference implementation.
+    - There hasn't been much activity on the master branch lately. 
+      I've been focusing intently on the cuda-optimizer branch to eliminate autograd. 
+      I faced challenges with disrupted training and encountered several bugs. 
+      However, I've now successfully removed autograd, and everything appears to be in order. 
+      Additionally, the image quality has improved. Yet, these changes—coupled with optimizations removed for debugging purposes—have significantly impacted performance. 
+      I won't merge back until the performance matches or surpasses that of the master branch.
 - **[2023-08-29]**:
     - Better Image loading error description by [paulmelis](https://github.com/paulmelis)
     - I've spent some time working on manual loss derivatives with the aim of completely eliminating the need for autograd. 
