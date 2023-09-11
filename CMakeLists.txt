@@ -69,6 +69,7 @@ set(SOURCES
         src/scene.cu
         src/camera_utils.cu
         src/general_utils.cu
+        src/parameters.cu
         src/rasterizer.cu
         src/rasterize_points.cu
         cuda_rasterizer/backward.cu

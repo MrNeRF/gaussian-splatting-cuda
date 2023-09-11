@@ -79,7 +79,7 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
  *
  * @param params The OptimizationParameters object providing the settings for training
  */
-void GaussianModel::Training_setup(const OptimizationParameters& params) {
+void GaussianModel::Training_setup(const gs::param::OptimizationParameters& params) {
     this->_percent_dense = params.percent_dense;
     this->_xyz_gradient_accum = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
     this->_denom = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);

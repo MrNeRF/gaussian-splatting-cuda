@@ -35,7 +35,7 @@ Camera::Camera(int imported_colmap_id,
 }
 
 // TODO: I have skipped the resolution for now.
-Camera loadCam(const ModelParameters& params, int id, CameraInfo& cam_info) {
+Camera loadCam(const gs::param::ModelParameters& params, int id, CameraInfo& cam_info) {
     // Create a torch::Tensor from the image data
     torch::Tensor original_image_tensor = torch::from_blob(cam_info._img_data,
                                                            {cam_info._img_h, cam_info._img_w, cam_info._channels},        // img size

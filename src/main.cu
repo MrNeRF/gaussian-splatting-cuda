@@ -13,7 +13,7 @@
 #include <random>
 #include <torch/torch.h>
 
-void Write_model_parameters_to_file(const ModelParameters& params) {
+void Write_model_parameters_to_file(const gs::param::ModelParameters& params) {
     std::filesystem::path outputPath = params.output_path;
     std::filesystem::create_directories(outputPath); // Make sure the directory exists
 
@@ -47,8 +47,8 @@ std::vector<int> get_random_indices(int max_index) {
 }
 
 int parse_cmd_line_args(const std::vector<std::string>& args,
-                        ModelParameters& modelParams,
-                        OptimizationParameters& optimParams) {
+                        gs::param::ModelParameters& modelParams,
+                        gs::param::OptimizationParameters& optimParams) {
     if (args.empty()) {
         std::cerr << "No command line arguments provided!" << std::endl;
         return -1;
@@ -138,8 +138,8 @@ int main(int argc, char* argv[]) {
         args.emplace_back(argv[i]);
     }
     // TODO: read parameters from JSON file or command line
-    auto modelParams = ModelParameters();
-    auto optimParams = OptimizationParameters();
+    auto modelParams = gs::param::ModelParameters();
+    auto optimParams = gs::param::read_optim_params_from_json();
     if (parse_cmd_line_args(args, modelParams, optimParams) < 0) {
         return -1;
     };
@@ -248,7 +248,7 @@ int main(int argc, char* argv[]) {
                 if (iter > optimParams.densify_from_iter && iter % optimParams.densification_interval == 0) {
                     // @TODO: Not sure about type
                     float size_threshold = iter > optimParams.opacity_reset_interval ? 20.f : -1.f;
-                    gaussians.Densify_and_prune(optimParams.densify_grad_threshold, 0.005f, scene.Get_cameras_extent(), size_threshold);
+                    gaussians.Densify_and_prune(optimParams.densify_grad_threshold, optimParams.min_opacity, scene.Get_cameras_extent(), size_threshold);
                 }
 
                 if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
