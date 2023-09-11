@@ -5,6 +5,11 @@ The original code is written in Python and PyTorch.
 
 I embarked on this project to deepen my understanding of the groundbreaking paper on 3D Gaussian splatting, by reimplementing everything from scratch.
 
+## 🚫 Commercial Use Disclaimer
+
+The materials, code, and assets within this repository are intended solely for educational, training, or research purposes. They may not be utilized for commercial activities without explicit authorization. Any unauthorized commercial usage, distribution, or licensing of this repository's content is strictly forbidden. I am not the license holder for the original implementation. This is derived work. For detailed terms, please refer to the license section.
+
+
 ## News
 - **[2023-09-11]**:
     - Optimization parameters can be now configured in the `opitimization_params.json` located in parameter folder.
@@ -23,10 +28,6 @@ I embarked on this project to deepen my understanding of the groundbreaking pape
       The derivation appears to be accurate, as confirmed by a comparison with a Python implementation. The transition to our custom Adam implementation is still underway, but I hope to complete it by tomorrow. 
     - Bug fixing :(
   
-## 🚫 Commercial Use Disclaimer
-
-The materials, code, and assets within this repository are intended solely for educational, training, or research purposes. They may not be utilized for commercial activities without explicit authorization. Any unauthorized commercial usage, distribution, or licensing of this repository's content is strictly forbidden. I am not the license holder for the original implementation. This is derived work. For detailed terms, please refer to the license section.
-
 ## About this Project
 This project is a derivative of the original Gaussian-Splatting software and is governed by the Gaussian-Splatting License, which can be found in the LICENSE file in this repository. The original software was developed by Inria and MPII.
 
