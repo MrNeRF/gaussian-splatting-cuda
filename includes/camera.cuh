@@ -57,5 +57,8 @@ private:
 };
 
 struct CameraInfo;
+namespace gs::param {
+    struct ModelParameters;
+}
 struct ModelParameters;
-Camera loadCam(const ModelParameters& params, int id, CameraInfo& cam_info);
+Camera loadCam(const gs::param::ModelParameters& params, int id, CameraInfo& cam_info);

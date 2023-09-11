@@ -38,7 +38,7 @@ public:
     // Methods
     void One_up_sh_degree();
     void Create_from_pcd(PointCloud& pcd, float spatial_lr_scale);
-    void Training_setup(const OptimizationParameters& params);
+    void Training_setup(const gs::param::OptimizationParameters& params);
     void Update_learning_rate(float iteration);
     void Reset_opacity();
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
