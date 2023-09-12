@@ -1,6 +1,8 @@
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "camera_utils.cuh"
 #include "stb_image.h"
+#include "stb_image_resize.h"
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -103,11 +105,26 @@ Eigen::Quaternionf rotmat2qvec(const Eigen::Matrix3f& R) {
     return qvec;
 }
 
-std::tuple<unsigned char*, int, int, int> read_image(std::filesystem::path image_path) {
+std::tuple<unsigned char*, int, int, int> read_image(std::filesystem::path image_path, int resolution) {
     int width, height, channels;
     unsigned char* img = stbi_load(image_path.string().c_str(), &width, &height, &channels, 0);
     if (img == nullptr) {
         throw std::runtime_error("Could not load image " + image_path.string() + ": " + stbi_failure_reason());
+    }
+
+    if (resolution == 2 || resolution == 4 || resolution == 8) {
+        int new_width = width / resolution;
+        int new_height = height / resolution;
+        unsigned char* rescaled_data = (unsigned char*)malloc(new_width * new_height * channels);
+
+        if (!stbir_resize_uint8(img, width, height, 0, rescaled_data, new_width, new_height, 0, channels)) {
+            throw std::runtime_error("Failed to resize image " + image_path.string() + ": " + stbi_failure_reason() + " with -r " + std::to_string(resolution));
+        } else {
+            stbi_image_free(img);
+            img = rescaled_data;
+            width = new_width;
+            height = new_height;
+        }
     }
 
     return {img, width, height, channels};

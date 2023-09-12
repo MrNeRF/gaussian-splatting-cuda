@@ -38,6 +38,7 @@ set(HEADERS
         includes/loss_monitor.cuh
         includes/image.cuh
         includes/stb_image.h
+        includes/stb_image_resize.h
         includes/point_cloud.cuh
         includes/scene.cuh
         includes/scene_info.cuh

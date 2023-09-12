@@ -12,7 +12,7 @@ Scene::Scene(GaussianModel& gaussians, const gs::param::ModelParameters& params)
                                                                                    _params(params) {
     // Right now there is only support for colmap
     if (std::filesystem::exists(_params.source_path)) {
-        _scene_infos = read_colmap_scene_info(_params.source_path);
+        _scene_infos = read_colmap_scene_info(_params.source_path, _params.resolution);
     } else {
         std::cout << "Error: " << _params.source_path << " does not exist!" << std::endl;
         exit(-1);
