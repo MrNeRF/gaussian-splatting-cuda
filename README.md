@@ -12,6 +12,8 @@ The materials, code, and assets within this repository are intended solely for e
 
 ## News
 - **[2023-09-11]**:
+    - Resolution parameter -r [2,4,8] introduced. For instance, truck scene trains now in about 52 seconds.
+- **[2023-09-11]**:
     - Optimization parameters can be now configured in the `opitimization_params.json` located in parameter folder.
     - Still struggling with more floaters without autograd. Its harder to get it right than I thought.
 - **[2023-09-07]**:
