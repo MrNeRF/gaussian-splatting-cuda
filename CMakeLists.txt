@@ -144,7 +144,6 @@ target_link_libraries(${PROJECT_NAME}
         CUDA::curand
         CUDA::cublas
         simple-knn
-        TBB::tbb # parallel reading and writing optimization
         tinyply
         eigen3
         nlohmann_json::nlohmann_json
@@ -214,7 +213,6 @@ if(BUILD_TESTS)
             gtest
             gtest_main
             simple-knn
-            TBB::tbb
             tinyply
             eigen3
             nlohmann_json::nlohmann_json
