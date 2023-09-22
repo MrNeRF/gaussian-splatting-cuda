@@ -64,8 +64,7 @@ While completely unoptimized, the gains in performance, though modest, are notew
 3. CUDA 11.7 or higher (might work with a lower version, has to be manually set and tested).
 4. Python with development headers.
 5. libtorch: You can find the setup instructions in the libtorch section of this README.
-6. TBB
-7. Other dependencies will be handled by the CMake script.
+6. Other dependencies will be handled by the CMake script.
 
 ### Hardware Prerequisites
 1. NVIDIA GPU with CUDA support. Successfully tested so far are RTX 4090, RTX A5000, 3090Ti and A100. With 3080Ti there is an outstanding issue (#21) with larger datasets.
