@@ -52,6 +52,11 @@ NVIDIA GeForce RTX 3090
         ~180 seconds for 7000 iterations (Latest 2023-08-17)
         ~200 seconds for 7000 iterations (2023-08-16)
 
+NVIDIA GeForce RTX 3050 (Ubuntu 20.04)
+
+    tandt/truck:
+        ~725.400sec seconds for 7000 iterations (Latest 2023-12-26)
+
 
 While completely unoptimized, the gains in performance, though modest, are noteworthy.
 
