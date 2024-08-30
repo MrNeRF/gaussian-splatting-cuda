@@ -32,6 +32,7 @@ message(STATUS "Building with ${used_cores} out of ${total_cores} available core
 # --------------------------------------
 
 set(HEADERS
+        includes/args_parser.cuh
         includes/read_utils.cuh
         includes/gaussian.cuh
         includes/camera.cuh
@@ -62,6 +63,7 @@ set(HEADERS
 )
 
 set(SOURCES
+        src/args_parser.cu
         src/main.cu
         src/read_utils.cu
         src/gaussian.cu

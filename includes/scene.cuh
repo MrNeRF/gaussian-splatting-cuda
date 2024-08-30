@@ -10,7 +10,6 @@ class Camera;
 namespace gs::param {
     struct ModelParameters;
 }
-struct ModelParameters;
 
 class Scene {
 public:
