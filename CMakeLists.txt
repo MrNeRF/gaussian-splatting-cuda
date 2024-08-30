@@ -40,7 +40,7 @@ set(HEADERS
         includes/stb_image.h
         includes/stb_image_resize.h
         includes/point_cloud.cuh
-        includes/scene.cuh
+        includes/training_data.cuh
         includes/scene_info.cuh
         includes/camera_utils.cuh
         includes/general_utils.cuh
@@ -68,7 +68,7 @@ set(SOURCES
         src/gaussian.cu
         src/camera.cu
         src/image.cu
-        src/scene.cu
+        src/training_data.cu
         src/camera_utils.cu
         src/general_utils.cu
         src/parameters.cu
@@ -190,7 +190,7 @@ if(BUILD_TESTS)
             src/gaussian.cu
             src/camera.cu
             src/image.cu
-            src/scene.cu
+            src/training_data.cu
             src/camera_utils.cu
             src/general_utils.cu
             src/rasterizer.cu

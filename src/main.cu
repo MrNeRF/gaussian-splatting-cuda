@@ -2,23 +2,12 @@
 #include "gaussian.cuh"
 #include "loss_utils.cuh"
 #include "parameters.cuh"
-#include "render_utils.cuh"
 #include "progess_stats.cuh"
-#include "scene.cuh"
+#include "render_utils.cuh"
+#include "training_data.cuh"
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <iostream>
-#include <random>
 #include <torch/torch.h>
-
-std::vector<int> get_random_indices(int max_index) {
-    std::vector<int> indices(max_index);
-    std::iota(indices.begin(), indices.end(), 0);
-    // Shuffle the vector
-    std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
-    std::reverse(indices.begin(), indices.end());
-    return indices;
-}
-
 
 float psnr_metric(const torch::Tensor& rendered_img, const torch::Tensor& gt_img) {
 
@@ -38,8 +27,10 @@ int main(int argc, const char* argv[]) {
     ArgsParser::Dump(modelParams);
 
     auto gaussians = GaussianModel(modelParams.sh_degree);
-    auto scene = Scene(gaussians, modelParams);
+    auto training_data = TrainingData(modelParams);
+    training_data.Init_model(gaussians);
     gaussians.Training_setup(optimParams);
+
     if (!torch::cuda::is_available()) {
         // At the moment, I want to make sure that my GPU is utilized.
         std::cout << "CUDA is not available! Training on CPU." << std::endl;
@@ -51,20 +42,12 @@ int main(int argc, const char* argv[]) {
     const int window_size = 11;
     const int channel = 3;
     const auto conv_window = gaussian_splatting::create_window(window_size, channel).to(torch::kFloat32).to(torch::kCUDA, true);
-    const int camera_count = scene.Get_camera_count();
-
 
     float psnr_value = 0.f;
     auto progress_stats = ProgressStats();
-    std::vector<int> indices;
     for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
-        if (indices.empty()) {
-            indices = get_random_indices(camera_count);
-        }
-        const int camera_index = indices.back();
-        auto& cam = scene.Get_training_camera(camera_index);
+        auto& cam = training_data.Get_training_camera();
         auto gt_image = cam.Get_original_image().to(torch::kCUDA, true);
-        indices.pop_back(); // remove last element to iterate over all cameras randomly
         if (iter % 1000 == 0) {
             gaussians.One_up_sh_degree();
         }
@@ -107,7 +90,7 @@ int main(int argc, const char* argv[]) {
                 if (iter > optimParams.densify_from_iter && iter % optimParams.densification_interval == 0) {
                     // @TODO: Not sure about type
                     float size_threshold = iter > optimParams.opacity_reset_interval ? 20.f : -1.f;
-                    gaussians.Densify_and_prune(optimParams.densify_grad_threshold, optimParams.min_opacity, scene.Get_cameras_extent(), size_threshold);
+                    gaussians.Densify_and_prune(optimParams.densify_grad_threshold, optimParams.min_opacity, training_data.Get_cameras_extent(), size_threshold);
                 }
 
                 if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {

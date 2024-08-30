@@ -1,14 +1,20 @@
 #include "camera.cuh"
 #include "gaussian.cuh"
 #include "parameters.cuh"
+#include <random>
 #include "read_utils.cuh"
-#include "scene.cuh"
+#include "training_data.cuh"
 
-// TODO: support start from later iterations. Compare original code
-// We also have only training, no testing
-// TODO: support also testing
-Scene::Scene(GaussianModel& gaussians, const gs::param::ModelParameters& params) : _gaussians(gaussians),
-                                                                                   _params(params) {
+std::vector<int> get_random_indices(int max_index) {
+    std::vector<int> indices(max_index);
+    std::iota(indices.begin(), indices.end(), 0);
+    // Shuffle the vector
+    std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
+    std::reverse(indices.begin(), indices.end());
+    return indices;
+}
+
+TrainingData::TrainingData(const gs::param::ModelParameters& params): _params(params) {
     // Right now there is only support for colmap
     if (std::filesystem::exists(_params.source_path)) {
         _scene_infos = read_colmap_scene_info(_params.source_path, _params.resolution);
@@ -27,8 +33,18 @@ Scene::Scene(GaussianModel& gaussians, const gs::param::ModelParameters& params)
         ++counter;
     }
     dump_JSON(params.output_path / "cameras.json", json_cams);
-    // TODO: json camera dumping for debugging purpose at least
+}
 
-    // get the parameterr self.cameras.extent
-    _gaussians.Create_from_pcd(_scene_infos->_point_cloud, _scene_infos->_nerf_norm_radius);
+void TrainingData::Init_model(GaussianModel& gaussians) {
+    gaussians.Create_from_pcd(_scene_infos->_point_cloud, _scene_infos->_nerf_norm_radius);
+}
+
+Camera& TrainingData::Get_training_camera() {
+    if (_indices.empty()) {
+        _indices = get_random_indices(_cameras.size());
+    }
+
+    const int camera_index = _indices.back();
+    _indices.pop_back(); // remove last element to iterate over all cameras randomly
+    return _cameras[camera_index];
 }
