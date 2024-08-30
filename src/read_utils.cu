@@ -1,5 +1,7 @@
 #include "camera_info.cuh"
 #include "camera_utils.cuh"
+#include <tbb/parallel_for.h>
+#include <tbb/blocked_range.h>
 #include "future"
 #include "image.cuh"
 #include "point_cloud.cuh"
@@ -192,14 +194,14 @@ T read_binary_value(std::istream& file) {
     return value;
 }
 
-// TODO: Do something with the images vector
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
-struct ImagePoint { // we dont need this later
-    double _x;
-    double _y;
-    uint64_t _point_id;
-};
 std::vector<Image> read_images_binary(std::filesystem::path file_path) {
+    struct ImagePoint { // we dont need this later
+        double _x;
+        double _y;
+        uint64_t _point_id;
+    };
+
     auto image_stream_buffer = read_binary(file_path);
     const auto image_count = read_binary_value<uint64_t>(*image_stream_buffer);
 
@@ -337,82 +339,76 @@ PointCloud read_point3D_binary(std::filesystem::path file_path) {
 }
 
 
-std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_path,
+std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path& file_path,
                                             const std::unordered_map<uint32_t, CameraInfo>& cameras,
                                             const std::vector<Image>& images,
                                             int resolution) {
     std::vector<CameraInfo> camera_infos(images.size());
-    std::vector<uint32_t> keys(camera_infos.size());
-    std::generate(keys.begin(), keys.end(), [n = 0]() mutable { return n++; });
 
-    std::vector<std::future<void>> futures;
+    // Use TBB's parallel_for to process images in parallel
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, images.size()),
+                      [&](const tbb::blocked_range<size_t>& range) {
+                          for (size_t i = range.begin(); i < range.end(); ++i) {
+                              const Image& image = images[i];
+                              auto it = cameras.find(image._camera_id);
+                              if (it == cameras.end()) {
+                                  throw std::runtime_error("Camera ID " + std::to_string(image._camera_id) + " not found");
+                              }
 
-    for (uint32_t image_ID : keys) {
-        const Image* image = images.data() + image_ID;
-        auto it = cameras.find(image->_camera_id);
-        if (it == cameras.end()) {
-            throw std::runtime_error("Camera ID " + std::to_string(image->_camera_id) + " not found");
-        }
-        camera_infos[image_ID] = it->second; // Make a copy
-        futures.push_back(std::async(
-            std::launch::async, [resolution](const std::filesystem::path& file_path, const Image* image, CameraInfo* camera_info) {
-                // Make a copy of the image object to avoid accessing the shared resource
+                              CameraInfo& camera_info = camera_infos[i];
+                              camera_info = it->second;  // Copy the CameraInfo
 
-                auto [img_data, width, height, channels] = read_image(file_path / image->_name, resolution);
-                camera_info->_img_w = width;
-                camera_info->_img_h = height;
-                camera_info->_channels = channels;
-                camera_info->_img_data = img_data;
+                              // Load and process the image
+                              auto [img_data, width, height, channels] = read_image(file_path / image._name, resolution);
+                              camera_info._img_w = width;
+                              camera_info._img_h = height;
+                              camera_info._channels = channels;
+                              camera_info._img_data = img_data;
 
-                camera_info->_R = qvec2rotmat(image->_qvec).transpose();
-                camera_info->_T = image->_tvec;
+                              camera_info._R = qvec2rotmat(image._qvec).transpose();
+                              camera_info._T = image._tvec;
 
-                camera_info->_image_name = image->_name;
-                camera_info->_image_path = file_path / image->_name;
+                              camera_info._image_name = image._name;
+                              camera_info._image_path = file_path / image._name;
 
-                switch (camera_info->_camera_model) {
-                case CAMERA_MODEL::SIMPLE_PINHOLE: {
-                    const float focal_length_x = camera_info->_params[0];
-                    camera_info->_fov_x = focal2fov(focal_length_x, camera_info->_width);
-                    camera_info->_fov_y = focal2fov(focal_length_x, camera_info->_height);
-                } break;
-                case CAMERA_MODEL::PINHOLE: {
-                    const float focal_length_x = camera_info->_params[0];
-                    const float focal_length_y = camera_info->_params[1];
-                    camera_info->_fov_x = focal2fov(focal_length_x, camera_info->_width);
-                    camera_info->_fov_y = focal2fov(focal_length_y, camera_info->_height);
-                } break;
-                case CAMERA_MODEL::SIMPLE_RADIAL:
-                    throw std::runtime_error("Camera model SIMPLE_RADIAL not supported");
-                case CAMERA_MODEL::RADIAL:
-                    throw std::runtime_error("Camera model RADIAL not supported");
-                case CAMERA_MODEL::OPENCV:
-                    throw std::runtime_error("Camera model OPENCV not supported");
-                case CAMERA_MODEL::OPENCV_FISHEYE:
-                    throw std::runtime_error("Camera model OPENCV_FISHEYE not supported");
-                case CAMERA_MODEL::FULL_OPENCV:
-                    throw std::runtime_error("Camera model FULL_OPENCV not supported");
-                case CAMERA_MODEL::FOV:
-                    throw std::runtime_error("Camera model FOV not supported");
-                case CAMERA_MODEL::SIMPLE_RADIAL_FISHEYE:
-                    throw std::runtime_error("Camera model SIMPLE_RADIAL_FISHEYE not supported");
-                case CAMERA_MODEL::RADIAL_FISHEYE:
-                    throw std::runtime_error("Camera model RADIAL_FISHEYE not supported");
-                case CAMERA_MODEL::THIN_PRISM_FISHEYE:
-                    throw std::runtime_error("Camera model THIN_PRISM_FISHEYE not supported");
-                case CAMERA_MODEL::UNDEFINED:
-                    throw std::runtime_error("Camera model UNDEFINED (and thus not supported)");
-                default:
-                    // in case there is something new
-                    throw std::runtime_error("Camera model not supported");
-                }
-            },
-            file_path, image, camera_infos.data() + image_ID));
-    }
+                              switch (camera_info._camera_model) {
+                              case CAMERA_MODEL::SIMPLE_PINHOLE: {
+                                  const float focal_length_x = camera_info._params[0];
+                                  camera_info._fov_x = focal2fov(focal_length_x, camera_info._width);
+                                  camera_info._fov_y = focal2fov(focal_length_x, camera_info._height);
+                              } break;
+                              case CAMERA_MODEL::PINHOLE: {
+                                  const float focal_length_x = camera_info._params[0];
+                                  const float focal_length_y = camera_info._params[1];
+                                  camera_info._fov_x = focal2fov(focal_length_x, camera_info._width);
+                                  camera_info._fov_y = focal2fov(focal_length_y, camera_info._height);
+                              } break;
+                              case CAMERA_MODEL::SIMPLE_RADIAL:
+                                  throw std::runtime_error("Camera model SIMPLE_RADIAL not supported");
+                              case CAMERA_MODEL::RADIAL:
+                                  throw std::runtime_error("Camera model RADIAL not supported");
+                              case CAMERA_MODEL::OPENCV:
+                                  throw std::runtime_error("Camera model OPENCV not supported");
+                              case CAMERA_MODEL::OPENCV_FISHEYE:
+                                  throw std::runtime_error("Camera model OPENCV_FISHEYE not supported");
+                              case CAMERA_MODEL::FULL_OPENCV:
+                                  throw std::runtime_error("Camera model FULL_OPENCV not supported");
+                              case CAMERA_MODEL::FOV:
+                                  throw std::runtime_error("Camera model FOV not supported");
+                              case CAMERA_MODEL::SIMPLE_RADIAL_FISHEYE:
+                                  throw std::runtime_error("Camera model SIMPLE_RADIAL_FISHEYE not supported");
+                              case CAMERA_MODEL::RADIAL_FISHEYE:
+                                  throw std::runtime_error("Camera model RADIAL_FISHEYE not supported");
+                              case CAMERA_MODEL::THIN_PRISM_FISHEYE:
+                                  throw std::runtime_error("Camera model THIN_PRISM_FISHEYE not supported");
+                              case CAMERA_MODEL::UNDEFINED:
+                                  throw std::runtime_error("Camera model UNDEFINED (and thus not supported)");
+                              default:
+                                  throw std::runtime_error("Camera model not supported");
+                              }
+                          }
+                      });
 
-    for (auto& f : futures) {
-        f.get(); // Wait for this task to complete
-    }
     return camera_infos;
 }
 
@@ -431,9 +427,9 @@ std::pair<Eigen::Vector3f, float> get_center_and_diag(std::vector<Eigen::Vector3
     return {avg_cam_center, max_dist};
 }
 
-std::pair<Eigen::Vector3f, float> getNerfppNorm(std::vector<CameraInfo>& cam_info) {
+void getNerfppNorm(SceneInfo* scene_info) {
     std::vector<Eigen::Vector3f> cam_centers;
-    for (CameraInfo& cam : cam_info) {
+    for (CameraInfo& cam : scene_info->_cameras) {
         Eigen::Matrix4f W2C = getWorld2View2Eigen(cam._R, cam._T);
         Eigen::Matrix4f C2W = W2C.inverse();
         cam_centers.emplace_back(C2W.block<3, 1>(0, 3));
@@ -441,10 +437,8 @@ std::pair<Eigen::Vector3f, float> getNerfppNorm(std::vector<CameraInfo>& cam_inf
 
     auto [center, diagonal] = get_center_and_diag(cam_centers);
 
-    float radius = diagonal * 1.1f;
-    Eigen::Vector3f translate = -center;
-
-    return {translate, radius};
+    scene_info->_nerf_norm_radius = diagonal * 1.1f;
+    scene_info->_nerf_norm_translation = -center;
 }
 
 std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_path, int resolution) {
@@ -457,17 +451,20 @@ std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_pat
     sceneInfos->_ply_path = file_path / "sparse/0/points3D.ply";
     sceneInfos->_cameras = read_colmap_cameras(file_path / "images", cameras, images, resolution);
 
-    auto& cam0 = sceneInfos->_cameras[0];
-    auto ncams = sceneInfos->_cameras.size();
-    const float image_mpixels = cam0._img_w * cam0._img_h / 1'000'000.0f;
-    const std::string resized = resolution == 2 || resolution == 4 || resolution == 8 ? " (resized) " : "";
-    std::cout << "Training with " << ncams << " images of "
-              << cam0._img_w << " x " << cam0._img_h << resized + " pixels ("
-              << std::fixed << std::setprecision(3) << image_mpixels << " Mpixel per image, "
-              << std::fixed << std::setprecision(1) << image_mpixels * ncams << " Mpixel total)" << std::endl;
+    getNerfppNorm(sceneInfos.get());
 
-    auto [translate, radius] = getNerfppNorm(sceneInfos->_cameras);
-    sceneInfos->_nerf_norm_radius = radius;
-    sceneInfos->_nerf_norm_translation = translate;
+    const auto print_stats = [&]() {
+        const auto& cam_0 = sceneInfos->_cameras[0];
+        const auto n_cams = sceneInfos->_cameras.size();
+
+        const float image_mpixels = cam_0._img_w * cam_0._img_h / 1'000'000.0f;
+        const std::string resized = resolution == 2 || resolution == 4 || resolution == 8 ? " (resized) " : "";
+        std::cout << "Training with " << n_cams << " images of "
+                  << cam_0._img_w << " x " << cam_0._img_h << resized + " pixels ("
+                  << std::fixed << std::setprecision(3) << image_mpixels << " Mpixel per image, "
+                  << std::fixed << std::setprecision(1) << image_mpixels * n_cams << " Mpixel total)" << std::endl;
+    };
+
+    print_stats();
     return sceneInfos;
 }
