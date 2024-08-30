@@ -6,6 +6,11 @@
 #include "read_utils.cuh"
 #include <algorithm>
 #include <exception>
+#include <thread>
+#include <filesystem>
+#include <cstring>
+#include <sstream>
+#include <iomanip>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -50,31 +55,13 @@ float file_in_mb(std::istream* file_stream) {
     return size_mb;
 }
 
-// Reads ply file and prints header
+
 PointCloud read_ply_file(std::filesystem::path file_path) {
     auto ply_stream_buffer = read_binary(file_path);
     tinyply::PlyFile file;
     std::shared_ptr<tinyply::PlyData> vertices, normals, colors;
     file.parse_header(*ply_stream_buffer);
 
-    //    std::cout << "\t[ply_header] Type: " << (file.is_binary_file() ? "binary" : "ascii") << std::endl;
-    //    for (const auto& c : file.get_comments())
-    //        std::cout << "\t[ply_header] Comment: " << c << std::endl;
-    //    for (const auto& c : file.get_info())
-    //        std::cout << "\t[ply_header] Info: " << c << std::endl;
-    //
-    //    for (const auto& e : file.get_elements()) {
-    //        std::cout << "\t[ply_header] element: " << e.name << " (" << e.size << ")" << std::endl;
-    //        for (const auto& p : e.properties) {
-    //            std::cout << "\t[ply_header] \tproperty: " << p.name << " (type=" << tinyply::PropertyTable[p.propertyType].str << ")";
-    //            if (p.isList)
-    //                std::cout << " (list_type=" << tinyply::PropertyTable[p.listType].str << ")";
-    //            std::cout << std::endl;
-    //        }
-    //    }
-    // The header information can be used to programmatically extract properties on elements
-    // known to exist in the header prior to reading the data. For brevity, properties
-    // like vertex position are hard-coded:
     try {
         vertices = file.request_properties_from_element("vertex", {"x", "y", "z"});
     } catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
@@ -90,41 +77,37 @@ PointCloud read_ply_file(std::filesystem::path file_path) {
     file.read(*ply_stream_buffer);
 
     PointCloud point_cloud;
-    if (vertices) {
-        std::cout << "\tRead " << vertices->count << " total vertices " << std::endl;
-        try {
-            point_cloud._points.resize(vertices->count);
-            std::memcpy(point_cloud._points.data(), vertices->buffer.get(), vertices->buffer.size_bytes());
-        } catch (const std::exception& e) {
-            std::cerr << "tinyply exception: " << e.what() << std::endl;
-        }
-    } else {
-        std::cerr << "Error: vertices not found" << std::endl;
-        exit(0);
-    }
 
-    if (normals) {
-        std::cout << "\tRead " << normals->count << " total vertex normals " << std::endl;
-        try {
-            point_cloud._normals.resize(normals->count);
-            std::memcpy(point_cloud._normals.data(), normals->buffer.get(), normals->buffer.size_bytes());
-        } catch (const std::exception& e) {
-            std::cerr << "tinyply exception: " << e.what() << std::endl;
+    // Lambda function to handle copying data in parallel
+    auto copy_data = [](std::shared_ptr<tinyply::PlyData> ply_data, auto& destination, const std::string& name) {
+        if (ply_data) {
+            std::cout << "\tRead " << ply_data->count << " total " << name << std::endl;
+            try {
+                destination.resize(ply_data->count);
+                std::memcpy(destination.data(), ply_data->buffer.get(), ply_data->buffer.size_bytes());
+            } catch (const std::exception& e) {
+                std::cerr << "tinyply exception: " << e.what() << std::endl;
+            }
+        } else {
+            std::cerr << "Error: " << name << " not found" << std::endl;
         }
-    }
+    };
 
-    if (colors) {
-        std::cout << "\tRead " << colors->count << " total vertex colors " << std::endl;
-        try {
-            point_cloud._colors.resize(colors->count);
-            std::memcpy(point_cloud._colors.data(), colors->buffer.get(), colors->buffer.size_bytes());
-        } catch (const std::exception& e) {
-            std::cerr << "tinyply exception: " << e.what() << std::endl;
-        }
-    } else {
-        std::cerr << "Error: colors not found" << std::endl;
-        exit(0);
-    }
+    // Launch parallel tasks
+
+    auto vertices_future = std::async(std::launch::async,
+                                      [copy_data, vertices, &capture0 = point_cloud._points] { return copy_data(vertices, capture0, "vertices"); });
+
+    auto normals_future = std::async(std::launch::async,
+                                     [copy_data, normals, &capture0 = point_cloud._normals] { return copy_data(normals, capture0, "vertex normals"); });
+
+    auto colors_future = std::async(std::launch::async,
+                                    [copy_data, colors, &capture0 = point_cloud._colors] { return copy_data(colors, capture0, "vertex colors"); });
+
+    // Wait for all tasks to complete
+    vertices_future.get();
+    normals_future.get();
+    colors_future.get();
 
     return point_cloud;
 }
@@ -284,8 +267,11 @@ std::unordered_map<uint32_t, CameraInfo> read_cameras_binary(std::filesystem::pa
 // adapted from https://github.com/colmap/colmap/blob/dev/src/colmap/base/reconstruction.cc
 // TODO: There should be points3D data returned
 PointCloud read_point3D_binary(std::filesystem::path file_path) {
-    auto point3D_stream_buffer = read_binary(file_path);
-    const size_t point3D_count = read_binary_value<uint64_t>(*point3D_stream_buffer);
+    auto point3D_stream = read_binary(file_path);
+
+    // Read point count
+    uint64_t point3D_count;
+    point3D_stream->read(reinterpret_cast<char*>(&point3D_count), sizeof(uint64_t));
 
     struct Track {
         uint32_t _image_ID;
@@ -293,34 +279,63 @@ PointCloud read_point3D_binary(std::filesystem::path file_path) {
     };
 
     PointCloud point_cloud;
-    point_cloud._points = std::vector<Point>(point3D_count);
-    point_cloud._colors = std::vector<Color>(point3D_count);
-    //  point_cloud._normals.reserve(point3D_count); <- no normals saved. Just ignore.
-    for (size_t i = 0; i < point3D_count; ++i) {
-        // just ignore the point3D_ID
-        read_binary_value<uint64_t>(*point3D_stream_buffer);
-        // vertices
-        point_cloud._points[i].x = static_cast<float>(read_binary_value<double>(*point3D_stream_buffer));
-        point_cloud._points[i].y = static_cast<float>(read_binary_value<double>(*point3D_stream_buffer));
-        point_cloud._points[i].z = static_cast<float>(read_binary_value<double>(*point3D_stream_buffer));
+    point_cloud._points.resize(point3D_count);
+    point_cloud._colors.resize(point3D_count);
 
-        // colors
-        point_cloud._colors[i].r = read_binary_value<uint8_t>(*point3D_stream_buffer);
-        point_cloud._colors[i].g = read_binary_value<uint8_t>(*point3D_stream_buffer);
-        point_cloud._colors[i].b = read_binary_value<uint8_t>(*point3D_stream_buffer);
+    // Read the entire file into a vector
+    std::vector<char> buffer(std::istreambuf_iterator<char>(*point3D_stream), {});
 
-        // the rest can be ignored.
-        read_binary_value<double>(*point3D_stream_buffer); // ignore
+    // Process the data in parallel
+    const size_t num_threads = std::thread::hardware_concurrency();
+    const size_t chunk_size = point3D_count / num_threads;
 
-        const auto track_length = read_binary_value<uint64_t>(*point3D_stream_buffer);
-        std::vector<Track> tracks;
-        tracks.resize(track_length);
-        point3D_stream_buffer->read(reinterpret_cast<char*>(tracks.data()), track_length * sizeof(Track));
+    std::vector<std::future<void>> futures;
+
+    auto process_chunk = [&](size_t start, size_t end) {
+        const char* data = buffer.data();
+        for (size_t i = start; i < end; ++i) {
+            // Skip point3D_ID
+            data += sizeof(uint64_t);
+
+            // Read vertices
+            point_cloud._points[i].x = static_cast<float>(*reinterpret_cast<const double*>(data));
+            data += sizeof(double);
+            point_cloud._points[i].y = static_cast<float>(*reinterpret_cast<const double*>(data));
+            data += sizeof(double);
+            point_cloud._points[i].z = static_cast<float>(*reinterpret_cast<const double*>(data));
+            data += sizeof(double);
+
+            // Read colors
+            point_cloud._colors[i].r = static_cast<uint8_t>(*data++);
+            point_cloud._colors[i].g = static_cast<uint8_t>(*data++);
+            point_cloud._colors[i].b = static_cast<uint8_t>(*data++);
+
+            // Skip error
+            data += sizeof(double);
+
+            // Skip track data
+            uint64_t track_length;
+            std::memcpy(&track_length, data, sizeof(uint64_t));
+            data += sizeof(uint64_t);
+            data += track_length * sizeof(Track);
+        }
+    };
+
+    for (size_t t = 0; t < num_threads; ++t) {
+        size_t start = t * chunk_size;
+        size_t end = (t == num_threads - 1) ? point3D_count : (t + 1) * chunk_size;
+        futures.emplace_back(std::async(std::launch::async, process_chunk, start, end));
     }
 
-    write_ply_file(file_path.parent_path() / "points3D.ply", point_cloud);
+    for (auto& future : futures) {
+        future.wait();
+    }
+
+    // We will make this optional for debugging
+    // write_ply_file(file_path.parent_path() / "points3D.ply", point_cloud);
     return point_cloud;
 }
+
 
 std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_path,
                                             const std::unordered_map<uint32_t, CameraInfo>& cameras,
@@ -437,11 +452,8 @@ std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_pat
     auto images = read_images_binary(file_path / "sparse/0/images.bin");
 
     auto sceneInfos = std::make_unique<SceneInfo>();
-    if (!std::filesystem::exists(file_path / "sparse/0/points3D.ply")) {
-        sceneInfos->_point_cloud = read_point3D_binary(file_path / "sparse/0/points3D.bin");
-    } else {
-        sceneInfos->_point_cloud = read_ply_file(file_path / "sparse/0/points3D.ply");
-    }
+    sceneInfos->_point_cloud = read_point3D_binary(file_path / "sparse/0/points3D.bin");
+
     sceneInfos->_ply_path = file_path / "sparse/0/points3D.ply";
     sceneInfos->_cameras = read_colmap_cameras(file_path / "images", cameras, images, resolution);
 
