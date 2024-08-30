@@ -4,6 +4,7 @@
 #include "loss_utils.cuh"
 #include "parameters.cuh"
 #include "render_utils.cuh"
+#include "progess_stats.cuh"
 #include "scene.cuh"
 #include <args.hxx>
 #include <c10/cuda/CUDACachingAllocator.h>
@@ -148,6 +149,7 @@ int main(int argc, char* argv[]) {
     if (parse_cmd_line_args(args, modelParams, optimParams) < 0) {
         return -1;
     };
+
     Write_model_parameters_to_file(modelParams);
 
     auto gaussians = GaussianModel(modelParams.sh_degree);
@@ -167,14 +169,11 @@ int main(int argc, char* argv[]) {
     const int camera_count = scene.Get_camera_count();
 
     std::vector<int> indices;
-    int last_status_len = 0;
-    auto start_time = std::chrono::steady_clock::now();
-    float loss_add = 0.f;
-
     LossMonitor loss_monitor(200);
     float avg_converging_rate = 0.f;
 
     float psnr_value = 0.f;
+    auto progress_stats = ProgressStats();
     for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
         if (indices.empty()) {
             indices = get_random_indices(camera_count);
@@ -195,38 +194,10 @@ int main(int argc, char* argv[]) {
         auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - ssim_loss);
 
         // Update status line
-        if (iter % 100 == 0) {
-            auto cur_time = std::chrono::steady_clock::now();
-            std::chrono::duration<double> time_elapsed = cur_time - start_time;
-            // XXX shouldn't have to create a new stringstream, but resetting takes multiple calls
-            std::stringstream status_line;
-            // XXX Use thousand separators, but doesn't work for some reason
-            status_line.imbue(std::locale(""));
-            status_line
-                << "\rIter: " << std::setw(6) << iter
-                << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>();
-            if (optimParams.early_stopping) {
-                status_line
-                    << "  ACR: " << std::fixed << std::setw(9) << std::setprecision(6) << avg_converging_rate;
-            }
-            status_line
-                << "  Splats: " << std::setw(10) << (int)gaussians.Get_xyz().size(0)
-                << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
-                << "  Avg iter/s: " << std::fixed << std::setw(5) << std::setprecision(1) << 1.0 * iter / time_elapsed.count()
-                << "  " // Some extra whitespace, in case a "Pruning ... points" message gets printed after
-                ;
-            const int curlen = status_line.str().length();
-            const int ws = last_status_len - curlen;
-            if (ws > 0)
-                status_line << std::string(ws, ' ');
-            std::cout << status_line.str() << std::flush;
-            last_status_len = curlen;
+        if (iter % 10 == 0) {
+            progress_stats.print(iter, (int)gaussians.Get_xyz().size(0), loss.item<float>());
         }
 
-        if (optimParams.early_stopping) {
-            avg_converging_rate = loss_monitor.Update(loss.item<float>());
-        }
-        loss_add += loss.item<float>();
         loss.backward();
 
         {
@@ -281,17 +252,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    auto cur_time = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = cur_time - start_time;
-
-    std::cout << std::endl
-              << "All done in "
-              << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "sec, avg "
-              << std::fixed << std::setw(4) << std::setprecision(1) << 1.0 * optimParams.iterations / time_elapsed.count() << " iter/sec, "
-              << gaussians.Get_xyz().size(0) << " splats, "
-              << std::fixed << std::setw(7) << std::setprecision(6) << " psrn: " << psnr_value << std::endl
-              << std::endl
-              << std::endl;
+    progress_stats.stop(optimParams.iterations, gaussians.Get_xyz().size(0), psnr_value);
 
     return 0;
 }

@@ -52,6 +52,7 @@ set(HEADERS
         includes/rasterize_points.cuh
         includes/camera_info.cuh
         includes/debug_utils.cuh
+        includes/progess_stats.cuh
         cuda_rasterizer/backward.h
         cuda_rasterizer/forward.h
         cuda_rasterizer/auxiliary.h
@@ -71,6 +72,7 @@ set(SOURCES
         src/camera_utils.cu
         src/general_utils.cu
         src/parameters.cu
+        src/progress_stats.cu
         src/rasterizer.cu
         src/rasterize_points.cu
         cuda_rasterizer/backward.cu
