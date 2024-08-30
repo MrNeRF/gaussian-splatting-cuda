@@ -87,10 +87,6 @@ int ArgsParser::Parse(const int argc, const char* argv[],
     if (iterations) {
         optimParams.iterations = args::get(iterations);
     }
-    optimParams.early_stopping = args::get(enable_cr_monitoring);
-    if (optimParams.early_stopping && convergence_rate) {
-        optimParams.convergence_threshold = args::get(convergence_rate);
-    }
 
     if (resolution) {
         modelParams.resolution = args::get(resolution);

@@ -8,7 +8,7 @@
 #include <torch/torch.h>
 #include <vector>
 
-class Camera : torch::nn::Module {
+class Camera{
 public:
     Camera(int imported_colmap_id,
            Eigen::Matrix3f R, Eigen::Vector3f T,

@@ -102,6 +102,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/include
 # Torch setup
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 find_package(Torch REQUIRED)
+find_package(TBB REQUIRED)
 
 # Build options based on CMAKE_BUILD_TYPE
 function(configure_build_type)
@@ -145,6 +146,7 @@ target_link_libraries(${PROJECT_NAME}
         CUDA::cudart
         CUDA::curand
         CUDA::cublas
+        TBB::tbb
         simple-knn
         tinyply
         eigen3
