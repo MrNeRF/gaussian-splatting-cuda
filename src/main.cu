@@ -1,6 +1,5 @@
 #include "args_parser.cuh"
 #include "gaussian.cuh"
-#include "loss_monitor.cuh"
 #include "loss_utils.cuh"
 #include "parameters.cuh"
 #include "render_utils.cuh"
@@ -54,12 +53,10 @@ int main(int argc, const char* argv[]) {
     const auto conv_window = gaussian_splatting::create_window(window_size, channel).to(torch::kFloat32).to(torch::kCUDA, true);
     const int camera_count = scene.Get_camera_count();
 
-    std::vector<int> indices;
-    LossMonitor loss_monitor(200);
-    float avg_converging_rate = 0.f;
 
     float psnr_value = 0.f;
     auto progress_stats = ProgressStats();
+    std::vector<int> indices;
     for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
         if (indices.empty()) {
             indices = get_random_indices(camera_count);
@@ -118,7 +115,7 @@ int main(int argc, const char* argv[]) {
                 }
             }
 
-            if (iter >= optimParams.densify_until_iter && loss_monitor.IsConverging(optimParams.convergence_threshold)) {
+            if (iter >= optimParams.densify_until_iter) {
                 std::cout << "Converged after " << iter << " iterations!" << std::endl;
                 gaussians.Save_ply(modelParams.output_path, iter, true);
                 break;
