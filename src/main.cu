@@ -98,8 +98,7 @@ int main(int argc, const char* argv[]) {
                 }
             }
 
-            if (iter >= optimParams.densify_until_iter) {
-                std::cout << "Converged after " << iter << " iterations!" << std::endl;
+            if (iter >= optimParams.iterations) {
                 gaussians.Save_ply(modelParams.output_path, iter, true);
                 break;
             }

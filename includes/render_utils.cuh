@@ -51,6 +51,7 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
     // This is nonsense. Background color not used? See orginal file colors_precomp=None line 70
     shs = gaussianModel.Get_features();
 
+    torch::cuda::synchronize();
     // Rasterize visible Gaussians to image, obtain their radii (on screen).
     auto [rendererd_image, radii] = rasterizer.forward(
         means3D,
