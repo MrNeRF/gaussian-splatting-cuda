@@ -44,6 +44,8 @@ set(HEADERS
         includes/scene_info.cuh
         includes/camera_utils.cuh
         includes/general_utils.cuh
+        includes/nanoflann.hpp
+        includes/nano_kdtree.cuh
         includes/sh_utils.cuh
         includes/parameters.cuh
         includes/loss_utils.cuh
@@ -68,6 +70,7 @@ set(SOURCES
         src/gaussian.cu
         src/camera.cu
         src/image.cu
+        src/nano_kdtree.cu
         src/training_data.cu
         src/camera_utils.cu
         src/general_utils.cu
@@ -78,6 +81,9 @@ set(SOURCES
         cuda_rasterizer/backward.cu
         cuda_rasterizer/forward.cu
         cuda_rasterizer/rasterizer_impl.cu
+        includes/nanoflann.hpp
+        src/nano_kdtree.cu
+        includes/nano_kdtree.cuh
 )
 
 # Get rid of pesky warnings from stb_image.h produced in src/utils.cu

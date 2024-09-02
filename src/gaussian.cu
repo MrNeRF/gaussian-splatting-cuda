@@ -1,6 +1,7 @@
 #include "debug_utils.cuh"
 #include "gaussian.cuh"
 #include "read_utils.cuh"
+#include "nano_kdtree.cuh"
 #include <exception>
 #include <thread>
 
@@ -46,8 +47,7 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
 
     const auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
     _xyz = torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA).set_requires_grad(true);
-    auto dist2 = torch::clamp_min(distCUDA2(_xyz), 0.0000001);
-    _scaling = torch::log(torch::sqrt(dist2)).unsqueeze(-1).repeat({1, 3}).to(torch::kCUDA, true).set_requires_grad(true);
+    _scaling = Nano_kdtree(torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCPU)).compute_scales().repeat({1, 3}).log().to(torch::kCUDA).set_requires_grad(true);
     _rotation = torch::zeros({_xyz.size(0), 4}).index_put_({torch::indexing::Slice(), 0}, 1).to(torch::kCUDA, true).set_requires_grad(true);
     _opacity = inverse_sigmoid(0.5 * torch::ones({_xyz.size(0), 1})).to(torch::kCUDA, true).set_requires_grad(true);
     _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA, true);
