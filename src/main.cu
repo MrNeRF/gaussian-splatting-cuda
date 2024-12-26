@@ -138,7 +138,6 @@ float psnr_metric(const torch::Tensor& rendered_img, const torch::Tensor& gt_img
 int main(int argc, char* argv[]) {
     std::vector<std::string> args;
     args.reserve(argc);
-
     for (int i = 0; i < argc; ++i) {
         args.emplace_back(argv[i]);
     }
@@ -183,7 +182,7 @@ int main(int argc, char* argv[]) {
         auto& cam = scene.Get_training_camera(camera_index);
         auto gt_image = cam.Get_original_image().to(torch::kCUDA, true);
         indices.pop_back(); // remove last element to iterate over all cameras randomly
-        if (iter % 1000 == 0) {
+        if (iter % 1 == 0) {// 1000
             gaussians.One_up_sh_degree();
         }
         // Render
@@ -195,7 +194,7 @@ int main(int argc, char* argv[]) {
         auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - ssim_loss);
 
         // Update status line
-        if (iter % 100 == 0) {
+        if (iter % 1 == 0) {//100
             auto cur_time = std::chrono::steady_clock::now();
             std::chrono::duration<double> time_elapsed = cur_time - start_time;
             // XXX shouldn't have to create a new stringstream, but resetting takes multiple calls
@@ -243,7 +242,7 @@ int main(int argc, char* argv[]) {
                 break;
             }
 
-            if (iter % 7'000 == 0) {
+            if (iter % 1== 0) {//7'000
                 gaussians.Save_ply(modelParams.output_path, iter, false);
             }
 
@@ -275,7 +274,7 @@ int main(int argc, char* argv[]) {
                 gaussians.Update_learning_rate(iter);
             }
 
-            if (optimParams.empty_gpu_cache && iter % 100) {
+            if (optimParams.empty_gpu_cache && iter % 1) {//100
                 c10::cuda::CUDACachingAllocator::emptyCache();
             }
         }
