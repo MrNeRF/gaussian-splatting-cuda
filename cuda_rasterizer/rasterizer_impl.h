@@ -12,6 +12,7 @@
 #pragma once
 
 #include "rasterizer.h"
+#include <cstdint>
 #include <cuda_runtime_api.h>
 #include <iostream>
 #include <vector>
