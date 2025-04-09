@@ -139,7 +139,7 @@ $ ./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 1000
 ### View the results
 For now, you will need the SIBR view
 ```bash
-git clone --recursive https://gitlab.inria.fr/sibr/sibr_core SIBR_core
+git clone --recursive https://gitlab.inria.fr/sibr/sibr_core SIBR_viewers
 cd SIBR_viewers
 cmake -B build .
 cmake --build build --target install --config Release -- -j 
