@@ -4,11 +4,8 @@ project(gaussian_splatting_cuda LANGUAGES CUDA CXX)
 # Determine the project root directory
 get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 
-# Define the absolute path to libtorch
-set(LIBTORCH_DIR "${PROJ_ROOT_DIR}/external/libtorch")
-
-# Set CMAKE_PREFIX_PATH
-set(CMAKE_PREFIX_PATH ${LIBTORCH_DIR})
+# Define Torch_DIR for find_package() to find libtorch
+set(Torch_DIR "${PROJ_ROOT_DIR}/external/libtorch/share/cmake/Torch")
 
 #set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_89 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_89,code=compute_89")
 
