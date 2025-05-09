@@ -79,20 +79,7 @@ float focal2fov(float focal, int pixels) {
 }
 
 Eigen::Matrix3f qvec2rotmat(const Eigen::Quaternionf& q) {
-    Eigen::Vector4f qvec = q.coeffs(); // [x, y, z, w]
-
-    Eigen::Matrix3f rotmat;
-    rotmat << 1.f - 2.f * qvec[2] * qvec[2] - 2.f * qvec[3] * qvec[3],
-        2.f * qvec[1] * qvec[2] - 2.f * qvec[0] * qvec[3],
-        2.f * qvec[3] * qvec[1] + 2.f * qvec[0] * qvec[2],
-        2.f * qvec[1] * qvec[2] + 2.f * qvec[0] * qvec[3],
-        1.f - 2.f * qvec[1] * qvec[1] - 2.f * qvec[3] * qvec[3],
-        2.f * qvec[2] * qvec[3] - 2.f * qvec[0] * qvec[1],
-        2.f * qvec[3] * qvec[1] - 2.f * qvec[0] * qvec[2],
-        2.f * qvec[2] * qvec[3] + 2.f * qvec[0] * qvec[1],
-        1.f - 2.f * qvec[1] * qvec[1] - 2.f * qvec[2] * qvec[2];
-
-    return rotmat;
+    return q.toRotationMatrix();
 }
 
 Eigen::Quaternionf rotmat2qvec(const Eigen::Matrix3f& R) {
