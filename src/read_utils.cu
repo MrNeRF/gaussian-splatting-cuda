@@ -226,10 +226,10 @@ std::vector<Image> read_images_binary(std::filesystem::path file_path) {
     for (size_t i = 0; i < image_count; ++i) {
         const auto image_ID = read_binary_value<uint32_t>(*image_stream_buffer);
         auto& img = images.emplace_back(image_ID);
+        img._qvec.w() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
         img._qvec.x() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
         img._qvec.y() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
         img._qvec.z() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
-        img._qvec.w() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
         img._qvec.normalize();
 
         img._tvec.x() = static_cast<float>(read_binary_value<double>(*image_stream_buffer));
