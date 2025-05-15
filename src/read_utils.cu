@@ -349,7 +349,7 @@ std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_pat
                 camera_info->_channels = channels;
                 camera_info->_img_data = img_data;
 
-                camera_info->_R = qvec2rotmat(image->_qvec).transpose();
+                camera_info->_R = qvec2rotmat(image->_qvec);
                 camera_info->_T = image->_tvec;
 
                 camera_info->_image_name = image->_name;

@@ -10,7 +10,7 @@
 torch::Tensor getWorld2View2(const Eigen::Matrix3f& R, const Eigen::Vector3f& t,
                              const Eigen::Vector3f& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
     Eigen::Matrix4f Rt = Eigen::Matrix4f::Zero();
-    Rt.block<3, 3>(0, 0) = R.transpose();
+    Rt.block<3, 3>(0, 0) = R;
     Rt.block<3, 1>(0, 3) = t;
     Rt(3, 3) = 1.0;
 
@@ -30,7 +30,7 @@ torch::Tensor getWorld2View2(const Eigen::Matrix3f& R, const Eigen::Vector3f& t,
 Eigen::Matrix4f getWorld2View2Eigen(const Eigen::Matrix3f& R, const Eigen::Vector3f& t,
                                     const Eigen::Vector3f& translate /*= Eigen::Vector3d::Zero()*/, float scale /*= 1.0*/) {
     Eigen::Matrix4f Rt = Eigen::Matrix4f::Zero();
-    Rt.block<3, 3>(0, 0) = R.transpose();
+    Rt.block<3, 3>(0, 0) = R;
     Rt.block<3, 1>(0, 3) = t;
     Rt(3, 3) = 1.0;
 
