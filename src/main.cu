@@ -42,7 +42,6 @@ std::vector<int> get_random_indices(int max_index) {
     std::iota(indices.begin(), indices.end(), 0);
     // Shuffle the vector
     std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
-    std::reverse(indices.begin(), indices.end());
     return indices;
 }
 
