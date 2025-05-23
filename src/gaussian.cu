@@ -149,7 +149,7 @@ void GaussianModel::prune_points(torch::Tensor mask) {
     // reverse to keep points
     auto valid_point_mask = ~mask;
     int true_count = valid_point_mask.sum().item<int>();
-    auto indices = torch::nonzero(valid_point_mask == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
+    auto indices = torch::nonzero(valid_point_mask == true).squeeze(-1);
     prune_optimizer(_optimizer.get(), indices, _xyz, 0);
     prune_optimizer(_optimizer.get(), indices, _features_dc, 1);
     prune_optimizer(_optimizer.get(), indices, _features_rest, 2);
@@ -205,7 +205,7 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
     padded_grad.slice(0, 0, grads.size(0)) = grads.squeeze();
     torch::Tensor selected_pts_mask = torch::where(padded_grad >= grad_threshold, torch::ones_like(padded_grad).to(torch::kBool), torch::zeros_like(padded_grad).to(torch::kBool));
     selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)) > _percent_dense * scene_extent);
-    auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
+    auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).squeeze(-1);
 
     torch::Tensor stds = Get_scaling().index_select(0, indices).repeat({N, 1});
     torch::Tensor means = torch::zeros({stds.size(0), 3}).to(torch::kCUDA);
@@ -235,7 +235,7 @@ void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold
 
     selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)).unsqueeze(-1) <= _percent_dense * scene_extent);
 
-    auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).index({torch::indexing::Slice(torch::indexing::None, torch::indexing::None), torch::indexing::Slice(torch::indexing::None, 1)}).squeeze(-1);
+    auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).squeeze(-1);
     torch::Tensor new_xyz = _xyz.index_select(0, indices);
     torch::Tensor new_features_dc = _features_dc.index_select(0, indices);
     torch::Tensor new_features_rest = _features_rest.index_select(0, indices);
