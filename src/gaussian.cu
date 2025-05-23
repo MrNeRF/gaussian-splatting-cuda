@@ -231,8 +231,7 @@ void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold
     // Extract points that satisfy the gradient condition
     torch::Tensor selected_pts_mask = torch::where(torch::linalg::vector_norm(grads, {2}, 1, true, torch::kFloat32) >= grad_threshold,
                                                    torch::ones_like(grads.index({torch::indexing::Slice()})).to(torch::kBool),
-                                                   torch::zeros_like(grads.index({torch::indexing::Slice()})).to(torch::kBool))
-                                          .to(torch::kLong);
+                                                   torch::zeros_like(grads.index({torch::indexing::Slice()})).to(torch::kBool));
 
     selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)).unsqueeze(-1) <= _percent_dense * scene_extent);
 
