@@ -7,9 +7,9 @@
 #include <Eigen/Dense>
 #pragma diag_default code_of_warning
 #include <filesystem>
+#include <fstream>
 #include <nlohmann/json.hpp>
 #include <vector>
-#include <fstream>
 
 enum class CAMERA_MODEL {
     SIMPLE_PINHOLE = 0,

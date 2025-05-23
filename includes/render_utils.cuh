@@ -6,7 +6,6 @@
 #include "gaussian.cuh"
 #include "parameters.cuh"
 #include "rasterizer.cuh"
-#include "sh_utils.cuh"
 #include <cmath>
 #include <torch/torch.h>
 
