@@ -61,7 +61,10 @@ void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
 
     // colors
     auto colorType = torch::TensorOptions().dtype(torch::kUInt8);
-    auto fused_color = RGB2SH(torch::from_blob(pcd._colors.data(), {static_cast<long>(pcd._colors.size()), 3}, colorType).to(pointType) / 255.f).to(torch::kCUDA);
+    auto rgb2sh = [](const torch::Tensor& rgb) {
+        return (rgb - 0.5f) / static_cast<float>(0.28209479177387814);
+    };
+    auto fused_color = rgb2sh(torch::from_blob(pcd._colors.data(), {static_cast<long>(pcd._colors.size()), 3}, colorType).to(pointType) / 255.f).to(torch::kCUDA);
 
     // features
     auto features = torch::zeros({fused_color.size(0), 3, static_cast<long>(std::pow((_max_sh_degree + 1), 2))}).to(torch::kCUDA);

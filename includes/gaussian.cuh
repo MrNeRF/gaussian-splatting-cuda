@@ -6,7 +6,6 @@
 #include "general_utils.cuh"
 #include "parameters.cuh"
 #include "point_cloud.cuh"
-#include "sh_utils.cuh"
 #include "spatial.h"
 #include <memory>
 #include <string>

@@ -41,7 +41,6 @@ set(HEADERS
         includes/scene_info.cuh
         includes/camera_utils.cuh
         includes/general_utils.cuh
-        includes/sh_utils.cuh
         includes/parameters.cuh
         includes/loss_utils.cuh
         includes/render_utils.cuh
