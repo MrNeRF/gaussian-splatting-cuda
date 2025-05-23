@@ -42,7 +42,7 @@ public:
     void Update_learning_rate(float iteration);
     void Reset_opacity();
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
-    void Densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size);
+    void Densify_and_prune(float max_grad, float min_opacity, float extent);
     void Save_ply(const std::filesystem::path& file_path, int iteration, bool isLastIteration);
 
 public:
@@ -61,7 +61,7 @@ private:
                                torch::Tensor& new_opacity);
 
     void densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent);
-    void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, float min_opacity, float max_screen_size);
+    void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, float min_opacity);
     std::vector<std::string> construct_list_of_attributes();
 
 private:
