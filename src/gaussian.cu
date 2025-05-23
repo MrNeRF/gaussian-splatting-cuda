@@ -197,7 +197,7 @@ void GaussianModel::densification_postfix(torch::Tensor& new_xyz,
     _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
 }
 
-void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, float min_opacity, float max_screen_size) {
+void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, float min_opacity) {
     static const int N = 2;
     const int n_init_points = _xyz.size(0);
     // Extract points that satisfy the gradient condition
@@ -246,12 +246,12 @@ void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 }
 
-void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float extent, float max_screen_size) {
+void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float extent) {
     torch::Tensor grads = _xyz_gradient_accum / _denom;
     grads.index_put_({grads.isnan()}, 0.0);
 
     densify_and_clone(grads, max_grad, extent);
-    densify_and_split(grads, max_grad, extent, min_opacity, max_screen_size);
+    densify_and_split(grads, max_grad, extent, min_opacity);
 }
 
 void GaussianModel::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {
