@@ -208,7 +208,7 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
     padded_grad.slice(0, 0, grads.size(0)) = grads.squeeze();
     torch::Tensor selected_pts_mask = torch::where(padded_grad >= grad_threshold, torch::ones_like(padded_grad).to(torch::kBool), torch::zeros_like(padded_grad).to(torch::kBool));
     selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)) > _percent_dense * scene_extent);
-    auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).squeeze(-1);
+    auto indices = torch::nonzero(selected_pts_mask == true).squeeze(-1);
 
     torch::Tensor stds = Get_scaling().index_select(0, indices).repeat({N, 1});
     torch::Tensor means = torch::zeros({stds.size(0), 3}).to(torch::kCUDA);
