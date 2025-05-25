@@ -1,8 +1,8 @@
-#include <torch/extension.h>
-#include <cooperative_groups.h>
 #include <algorithm>
-#include <iostream>
 #include <c10/cuda/CUDAGuard.h>
+#include <cooperative_groups.h>
+#include <iostream>
+#include <torch/extension.h>
 
 namespace cg = cooperative_groups;
 
@@ -20,8 +20,7 @@ __constant__ float cGauss[11] = {
     0.10936068743467331f,
     0.036000773310661316f,
     0.0075987582094967365f,
-    0.001028380123898387f
-};
+    0.001028380123898387f};
 
 // ------------------------------------------
 // Block and Shared Memory Dimensions
@@ -41,10 +40,9 @@ __constant__ float cGauss[11] = {
 // Utility: Safe pixel fetch w/ zero padding
 // ------------------------------------------
 __device__ __forceinline__ float get_pix_value(
-    const float* img, 
+    const float* img,
     int b, int c, int y, int x,
-    int CH, int H, int W
-) {
+    int CH, int H, int W) {
     if (x < 0 || x >= W || y < 0 || y >= H) {
         return 0.0f;
     }
@@ -70,12 +68,11 @@ __global__ void fusedssimCUDA(
     float* __restrict__ ssim_map,
     float* __restrict__ dm_dmu1,
     float* __restrict__ dm_dsigma1_sq,
-    float* __restrict__ dm_dsigma12
-) {
+    float* __restrict__ dm_dsigma12) {
     auto block = cg::this_thread_block();
-    const int bIdx   = block.group_index().z;  // batch index
-    const int pix_y  = block.group_index().y * BLOCK_Y + block.thread_index().y;
-    const int pix_x  = block.group_index().x * BLOCK_X + block.thread_index().x;
+    const int bIdx = block.group_index().z; // batch index
+    const int pix_y = block.group_index().y * BLOCK_Y + block.thread_index().y;
+    const int pix_x = block.group_index().x * BLOCK_X + block.thread_index().x;
     const int pix_id = pix_y * W + pix_x;
     const int num_pix = H * W;
 
@@ -122,26 +119,26 @@ __global__ void fusedssimCUDA(
         // ------------------------------------------------------------
         {
             int ly = threadIdx.y;
-            int lx = threadIdx.x + HALO;  // skip left halo
+            int lx = threadIdx.x + HALO; // skip left halo
 
-            float sumX   = 0.f;
-            float sumX2  = 0.f;
-            float sumY   = 0.f;
-            float sumY2  = 0.f;
-            float sumXY  = 0.f;
+            float sumX = 0.f;
+            float sumX2 = 0.f;
+            float sumY = 0.f;
+            float sumY2 = 0.f;
+            float sumXY = 0.f;
 
             // #pragma unroll for those 5 pairs
 #pragma unroll
             for (int d = 1; d <= HALO; ++d) {
                 float w = cGauss[HALO - d];
-                float Xleft  = sTile[ly][lx - d][0];
-                float Yleft  = sTile[ly][lx - d][1];
+                float Xleft = sTile[ly][lx - d][0];
+                float Yleft = sTile[ly][lx - d][1];
                 float Xright = sTile[ly][lx + d][0];
                 float Yright = sTile[ly][lx + d][1];
 
-                sumX  += (Xleft + Xright) * w;
+                sumX += (Xleft + Xright) * w;
                 sumX2 += ((Xleft * Xleft) + (Xright * Xright)) * w;
-                sumY  += (Yleft + Yright) * w;
+                sumY += (Yleft + Yright) * w;
                 sumY2 += ((Yleft * Yleft) + (Yright * Yright)) * w;
                 sumXY += ((Xleft * Yleft) + (Xright * Yright)) * w;
             }
@@ -150,9 +147,9 @@ __global__ void fusedssimCUDA(
                 float centerX = sTile[ly][lx][0];
                 float centerY = sTile[ly][lx][1];
                 float wc = cGauss[HALO];
-                sumX  += centerX * wc;
+                sumX += centerX * wc;
                 sumX2 += (centerX * centerX) * wc;
-                sumY  += centerY * wc;
+                sumY += centerY * wc;
                 sumY2 += (centerY * centerY) * wc;
                 sumXY += (centerX * centerY) * wc;
             }
@@ -167,21 +164,23 @@ __global__ void fusedssimCUDA(
             // Possibly handle second row in same warp
             int ly2 = ly + BLOCK_Y;
             if (ly2 < CONV_Y) {
-                sumX   = 0.f; sumX2  = 0.f;
-                sumY   = 0.f; sumY2  = 0.f;
-                sumXY  = 0.f;
+                sumX = 0.f;
+                sumX2 = 0.f;
+                sumY = 0.f;
+                sumY2 = 0.f;
+                sumXY = 0.f;
 
 #pragma unroll
                 for (int d = 1; d <= HALO; ++d) {
                     float w = cGauss[HALO - d];
-                    float Xleft  = sTile[ly2][lx - d][0];
-                    float Yleft  = sTile[ly2][lx - d][1];
+                    float Xleft = sTile[ly2][lx - d][0];
+                    float Yleft = sTile[ly2][lx - d][1];
                     float Xright = sTile[ly2][lx + d][0];
                     float Yright = sTile[ly2][lx + d][1];
 
-                    sumX  += (Xleft + Xright) * w;
+                    sumX += (Xleft + Xright) * w;
                     sumX2 += ((Xleft * Xleft) + (Xright * Xright)) * w;
-                    sumY  += (Yleft + Yright) * w;
+                    sumY += (Yleft + Yright) * w;
                     sumY2 += ((Yleft * Yleft) + (Yright * Yright)) * w;
                     sumXY += ((Xleft * Yleft) + (Xright * Yright)) * w;
                 }
@@ -190,9 +189,9 @@ __global__ void fusedssimCUDA(
                     float cx = sTile[ly2][lx][0];
                     float cy = sTile[ly2][lx][1];
                     float wc = cGauss[HALO];
-                    sumX  += cx * wc;
+                    sumX += cx * wc;
                     sumX2 += (cx * cx) * wc;
-                    sumY  += cy * wc;
+                    sumY += cy * wc;
                     sumY2 += (cy * cy) * wc;
                     sumXY += (cx * cy) * wc;
                 }
@@ -245,7 +244,7 @@ __global__ void fusedssimCUDA(
 
                 float sigma1_sq = out1 - mu1_sq;
                 float sigma2_sq = out3 - mu2_sq;
-                float sigma12   = out4 - mu1 * mu2;
+                float sigma12 = out4 - mu1 * mu2;
 
                 float A = mu1_sq + mu2_sq + C1;
                 float B = sigma1_sq + sigma2_sq + C2;
@@ -259,18 +258,13 @@ __global__ void fusedssimCUDA(
 
                 if (dm_dmu1) {
                     // partial derivatives
-                    float d_m_dmu1 = (
-                        (mu2 * 2.f * D_) / (A * B)
-                        - (mu2 * 2.f * C_) / (A * B)
-                        - (mu1 * 2.f * C_ * D_) / (A * A * B)
-                        + (mu1 * 2.f * C_ * D_) / (A * B * B)
-                    );
+                    float d_m_dmu1 = ((mu2 * 2.f * D_) / (A * B) - (mu2 * 2.f * C_) / (A * B) - (mu1 * 2.f * C_ * D_) / (A * A * B) + (mu1 * 2.f * C_ * D_) / (A * B * B));
                     float d_m_dsigma1_sq = (-C_ * D_) / (A * B * B);
-                    float d_m_dsigma12   = (2.f * C_) / (A * B);
+                    float d_m_dsigma12 = (2.f * C_) / (A * B);
 
-                    dm_dmu1[global_idx]       = d_m_dmu1;
+                    dm_dmu1[global_idx] = d_m_dmu1;
                     dm_dsigma1_sq[global_idx] = d_m_dsigma1_sq;
-                    dm_dsigma12[global_idx]   = d_m_dsigma12;
+                    dm_dsigma12[global_idx] = d_m_dsigma12;
                 }
             }
         }
@@ -295,15 +289,14 @@ __global__ void fusedssim_backwardCUDA(
     float* __restrict__ dL_dimg1,
     const float* __restrict__ dm_dmu1,
     const float* __restrict__ dm_dsigma1_sq,
-    const float* __restrict__ dm_dsigma12
-) {
+    const float* __restrict__ dm_dsigma12) {
     auto block = cg::this_thread_block();
 
-    const int pix_y  = block.group_index().y * BLOCK_Y + block.thread_index().y;
-    const int pix_x  = block.group_index().x * BLOCK_X + block.thread_index().x;
+    const int pix_y = block.group_index().y * BLOCK_Y + block.thread_index().y;
+    const int pix_x = block.group_index().x * BLOCK_X + block.thread_index().x;
     const int pix_id = pix_y * W + pix_x;
     const int num_pix = H * W;
-    const int bIdx   = block.group_index().z;
+    const int bIdx = block.group_index().z;
 
     // Shared memory for the fused data:
     // [0]: dm_dmu1*dL, [1]: dm_dsigma1_sq*dL, [2]: dm_dsigma12*dL
@@ -333,13 +326,13 @@ __global__ void fusedssim_backwardCUDA(
                 for (int col = lane_id; col < SHARED_X; col += 32) {
                     int gx = start_x + col - HALO;
 
-                    float chain = get_pix_value(dL_dmap,      bIdx, c, gy, gx, CH, H, W);
-                    float vmu   = get_pix_value(dm_dmu1,      bIdx, c, gy, gx, CH, H, W);
-                    float vs1   = get_pix_value(dm_dsigma1_sq,bIdx, c, gy, gx, CH, H, W);
-                    float vs12  = get_pix_value(dm_dsigma12,  bIdx, c, gy, gx, CH, H, W);
+                    float chain = get_pix_value(dL_dmap, bIdx, c, gy, gx, CH, H, W);
+                    float vmu = get_pix_value(dm_dmu1, bIdx, c, gy, gx, CH, H, W);
+                    float vs1 = get_pix_value(dm_dsigma1_sq, bIdx, c, gy, gx, CH, H, W);
+                    float vs12 = get_pix_value(dm_dsigma12, bIdx, c, gy, gx, CH, H, W);
 
-                    sData[0][row][col] = vmu  * chain;
-                    sData[1][row][col] = vs1  * chain;
+                    sData[0][row][col] = vmu * chain;
+                    sData[1][row][col] = vs1 * chain;
                     sData[2][row][col] = vs12 * chain;
                 }
             }
@@ -359,9 +352,9 @@ __global__ void fusedssim_backwardCUDA(
 #pragma unroll
                     for (int d = 1; d <= HALO; ++d) {
                         float w = cGauss[HALO - d];
-                        float left0  = sData[0][yy][lx - d];
-                        float left1  = sData[1][yy][lx - d];
-                        float left2  = sData[2][yy][lx - d];
+                        float left0 = sData[0][yy][lx - d];
+                        float left1 = sData[1][yy][lx - d];
+                        float left2 = sData[2][yy][lx - d];
 
                         float right0 = sData[0][yy][lx + d];
                         float right1 = sData[1][yy][lx + d];
@@ -417,7 +410,7 @@ __global__ void fusedssim_backwardCUDA(
             }
 
             // final accumulation
-            float dL_dpix = sum0 + (2.f * p1) * sum1 + (p2) * sum2;
+            float dL_dpix = sum0 + (2.f * p1) * sum1 + (p2)*sum2;
 
             int out_idx = bIdx * CH * num_pix + c * num_pix + pix_id;
             dL_dimg1[out_idx] = dL_dpix;
@@ -435,15 +428,14 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fusedssim(
     float C1,
     float C2,
-    torch::Tensor &img1,
-    torch::Tensor &img2,
-    bool train
-) {
+    torch::Tensor& img1,
+    torch::Tensor& img2,
+    bool train) {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(img1));
-    int B  = img1.size(0);
+    int B = img1.size(0);
     int CH = img1.size(1);
-    int H  = img1.size(2);
-    int W  = img1.size(3);
+    int H = img1.size(2);
+    int W = img1.size(3);
 
     // Launch config
     dim3 grid((W + BLOCK_X - 1) / BLOCK_X,
@@ -455,19 +447,18 @@ fusedssim(
     auto ssim_map = torch::zeros_like(img1, img1.options()).contiguous();
 
     // Optionally allocate derivative Tensors
-    auto dm_dmu1       = train ? torch::zeros_like(img1) : torch::empty({0}, img1.options());
+    auto dm_dmu1 = train ? torch::zeros_like(img1) : torch::empty({0}, img1.options());
     auto dm_dsigma1_sq = train ? torch::zeros_like(img1) : torch::empty({0}, img1.options());
-    auto dm_dsigma12   = train ? torch::zeros_like(img1) : torch::empty({0}, img1.options());
+    auto dm_dsigma12 = train ? torch::zeros_like(img1) : torch::empty({0}, img1.options());
 
     fusedssimCUDA<<<grid, block>>>(
         H, W, CH, C1, C2,
         img1.contiguous().data_ptr<float>(),
         img2.contiguous().data_ptr<float>(),
         ssim_map.data_ptr<float>(),
-        train ? dm_dmu1.data_ptr<float>()       : nullptr,
+        train ? dm_dmu1.data_ptr<float>() : nullptr,
         train ? dm_dsigma1_sq.data_ptr<float>() : nullptr,
-        train ? dm_dsigma12.data_ptr<float>()   : nullptr
-    );
+        train ? dm_dsigma12.data_ptr<float>() : nullptr);
 
     return std::make_tuple(ssim_map, dm_dmu1, dm_dsigma1_sq, dm_dsigma12);
 }
@@ -482,18 +473,17 @@ torch::Tensor
 fusedssim_backward(
     float C1,
     float C2,
-    torch::Tensor &img1,
-    torch::Tensor &img2,
-    torch::Tensor &dL_dmap,
-    torch::Tensor &dm_dmu1,
-    torch::Tensor &dm_dsigma1_sq,
-    torch::Tensor &dm_dsigma12
-) {
+    torch::Tensor& img1,
+    torch::Tensor& img2,
+    torch::Tensor& dL_dmap,
+    torch::Tensor& dm_dmu1,
+    torch::Tensor& dm_dsigma1_sq,
+    torch::Tensor& dm_dsigma12) {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(img1));
-    int B  = img1.size(0);
+    int B = img1.size(0);
     int CH = img1.size(1);
-    int H  = img1.size(2);
-    int W  = img1.size(3);
+    int H = img1.size(2);
+    int W = img1.size(3);
 
     auto dL_dimg1 = torch::zeros_like(img1);
 
@@ -510,8 +500,7 @@ fusedssim_backward(
         dL_dimg1.data_ptr<float>(),
         dm_dmu1.contiguous().data_ptr<float>(),
         dm_dsigma1_sq.contiguous().data_ptr<float>(),
-        dm_dsigma12.contiguous().data_ptr<float>()
-    );
+        dm_dsigma12.contiguous().data_ptr<float>());
 
     return dL_dimg1;
 }

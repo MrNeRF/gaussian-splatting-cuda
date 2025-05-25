@@ -1,9 +1,9 @@
 #include "debug_utils.cuh"
+#include "fused_ssim.cuh"
 #include "gaussian.cuh"
 #include "loss_monitor.cuh"
 #include "loss_utils.cuh"
 #include "parameters.cuh"
-#include "fused_ssim.cuh"
 #include "render_utils.cuh"
 #include "scene.cuh"
 #include <args.hxx>
@@ -188,10 +188,10 @@ int main(int argc, char* argv[]) {
 
         // Ensure both images are 4D tensors [N, C, H, W] for SSIM
         if (image.dim() == 3) {
-            image = image.unsqueeze(0);  // Add batch dimension: [C,H,W] -> [1,C,H,W]
+            image = image.unsqueeze(0); // Add batch dimension: [C,H,W] -> [1,C,H,W]
         }
         if (gt_image.dim() == 3) {
-            gt_image = gt_image.unsqueeze(0);  // Add batch dimension: [C,H,W] -> [1,C,H,W]
+            gt_image = gt_image.unsqueeze(0); // Add batch dimension: [C,H,W] -> [1,C,H,W]
         }
 
         // Verify tensor shapes
