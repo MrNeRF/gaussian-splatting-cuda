@@ -3,6 +3,7 @@
 #include "loss_monitor.cuh"
 #include "loss_utils.cuh"
 #include "parameters.cuh"
+#include "fused_ssim.cuh"
 #include "render_utils.cuh"
 #include "scene.cuh"
 #include <args.hxx>
@@ -160,9 +161,6 @@ int main(int argc, char* argv[]) {
     auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
     auto background = modelParams.white_background ? torch::tensor({1.f, 1.f, 1.f}) : torch::tensor({0.f, 0.f, 0.f}, pointType).to(torch::kCUDA);
 
-    const int window_size = 11;
-    const int channel = 3;
-    const auto conv_window = gaussian_splatting::create_window(window_size, channel).to(torch::kFloat32).to(torch::kCUDA, true);
     const int camera_count = scene.Get_camera_count();
 
     std::vector<int> indices;
@@ -188,9 +186,28 @@ int main(int argc, char* argv[]) {
         // Render
         auto [image, viewspace_point_tensor, visibility_filter, radii] = render(cam, gaussians, background);
 
+        // Ensure both images are 4D tensors [N, C, H, W] for SSIM
+        if (image.dim() == 3) {
+            image = image.unsqueeze(0);  // Add batch dimension: [C,H,W] -> [1,C,H,W]
+        }
+        if (gt_image.dim() == 3) {
+            gt_image = gt_image.unsqueeze(0);  // Add batch dimension: [C,H,W] -> [1,C,H,W]
+        }
+
+        // Verify tensor shapes
+        if (image.sizes() != gt_image.sizes()) {
+            std::cerr << "ERROR: Image size mismatch - rendered: " << image.sizes()
+                      << ", ground truth: " << gt_image.sizes() << std::endl;
+            exit(-1);
+        }
+
         // Loss Computations
-        auto l1l = gaussian_splatting::l1_loss(image, gt_image);
-        auto ssim_loss = gaussian_splatting::ssim(image, gt_image, conv_window, window_size, channel);
+        // For L1 loss, we need to squeeze back to 3D if it was originally 3D
+        auto image_for_l1 = image.dim() == 4 && image.size(0) == 1 ? image.squeeze(0) : image;
+        auto gt_for_l1 = gt_image.dim() == 4 && gt_image.size(0) == 1 ? gt_image.squeeze(0) : gt_image;
+
+        auto l1l = gaussian_splatting::l1_loss(image_for_l1, gt_for_l1);
+        auto ssim_loss = fused_ssim(image, gt_image, /*padding=*/"same", /*train=*/true);
         auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - ssim_loss);
 
         // Update status line
