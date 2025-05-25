@@ -38,6 +38,8 @@ set(HEADERS
         includes/stb_image_resize.h
         includes/point_cloud.cuh
         includes/scene.cuh
+        includes/ssim.cuh
+        includes/fused_ssim.cuh
         includes/scene_info.cuh
         includes/camera_utils.cuh
         includes/general_utils.cuh
@@ -68,6 +70,7 @@ set(SOURCES
         src/general_utils.cu
         src/parameters.cu
         src/rasterizer.cu
+        src/ssim.cu
         src/rasterize_points.cu
         cuda_rasterizer/backward.cu
         cuda_rasterizer/forward.cu
