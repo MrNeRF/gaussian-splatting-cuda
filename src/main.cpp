@@ -1,7 +1,6 @@
 #include "core/argument_parser.hpp"
 #include "core/debug_utils.hpp"
 #include "core/gaussian.hpp"
-#include "core/loss_monitor.hpp"
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
 #include "core/scene.hpp"
@@ -22,12 +21,6 @@ std::vector<int> get_random_indices(int max_index) {
     return indices;
 }
 
-float psnr_metric(const torch::Tensor& rendered_img, const torch::Tensor& gt_img) {
-
-    torch::Tensor squared_diff = (rendered_img - gt_img).pow(2);
-    torch::Tensor mse_val = squared_diff.view({rendered_img.size(0), -1}).mean(1, true);
-    return (20.f * torch::log10(1.0 / mse_val.sqrt())).mean().item<float>();
-}
 
 int main(int argc, char* argv[]) {
 
@@ -55,12 +48,7 @@ int main(int argc, char* argv[]) {
     std::vector<int> indices;
     int last_status_len = 0;
     auto start_time = std::chrono::steady_clock::now();
-    float loss_add = 0.f;
 
-    LossMonitor loss_monitor(200);
-    float avg_converging_rate = 0.f;
-
-    float psnr_value = 0.f;
     for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
         if (indices.empty()) {
             indices = get_random_indices(camera_count);
@@ -110,10 +98,6 @@ int main(int argc, char* argv[]) {
             status_line
                 << "\rIter: " << std::setw(6) << iter
                 << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>();
-            if (optimParams.early_stopping) {
-                status_line
-                    << "  ACR: " << std::fixed << std::setw(9) << std::setprecision(6) << avg_converging_rate;
-            }
             status_line
                 << "  Splats: " << std::setw(10) << (int)gaussians.Get_xyz().size(0)
                 << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
@@ -128,10 +112,6 @@ int main(int argc, char* argv[]) {
             last_status_len = curlen;
         }
 
-        if (optimParams.early_stopping) {
-            avg_converging_rate = loss_monitor.Update(loss.item<float>());
-        }
-        loss_add += loss.item<float>();
         loss.backward();
 
         {
@@ -144,7 +124,6 @@ int main(int argc, char* argv[]) {
             if (iter == optimParams.iterations) {
                 std::cout << std::endl;
                 gaussians.Save_ply(modelParams.output_path, iter, true);
-                psnr_value = psnr_metric(image, gt_image);
                 break;
             }
 
@@ -162,12 +141,6 @@ int main(int argc, char* argv[]) {
                 if (iter % optimParams.opacity_reset_interval == 0 || (modelParams.white_background && iter == optimParams.densify_from_iter)) {
                     gaussians.Reset_opacity();
                 }
-            }
-
-            if (iter >= optimParams.densify_until_iter && loss_monitor.IsConverging(optimParams.convergence_threshold)) {
-                std::cout << "Converged after " << iter << " iterations!" << std::endl;
-                gaussians.Save_ply(modelParams.output_path, iter, true);
-                break;
             }
 
             //  Optimizer step
@@ -192,7 +165,6 @@ int main(int argc, char* argv[]) {
               << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "sec, avg "
               << std::fixed << std::setw(4) << std::setprecision(1) << 1.0 * optimParams.iterations / time_elapsed.count() << " iter/sec, "
               << gaussians.Get_xyz().size(0) << " splats, "
-              << std::fixed << std::setw(7) << std::setprecision(6) << " psrn: " << psnr_value << std::endl
               << std::endl
               << std::endl;
 
