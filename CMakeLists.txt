@@ -43,7 +43,7 @@ set(HOST_SOURCES
         src/main.cpp
         src/gaussian.cpp
         src/camera.cpp
-        src/scene.cpp
+        src/dataset.cpp
         src/mean_neighbor_dist.cpp
         src/camera_utils.cpp
         src/rasterizer.cpp
