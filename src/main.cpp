@@ -47,7 +47,6 @@ int main(int argc, char* argv[]) {
     std::vector<int> indices;
     float loss_add = 0.f;
 
-    // 🎯 CLEAN PROGRESS TRACKER - Just one line!
     TrainingProgress progress(optimParams.iterations, 100);
 
     // Training loop
@@ -134,9 +133,6 @@ int main(int argc, char* argv[]) {
                 gaussians.Update_learning_rate(iter);
             }
 
-            if (optimParams.empty_gpu_cache && iter % 100) {
-                c10::cuda::CUDACachingAllocator::emptyCache();
-            }
         }
     }
 

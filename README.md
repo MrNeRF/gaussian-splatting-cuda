@@ -18,33 +18,6 @@ This project is a derivative of the original Gaussian-Splatting software and is 
 
 Please be advised that the software in this repository cannot be used for commercial purposes without explicit consent from the original licensors, Inria and MPII.
 
-## Current performance measurements as of 2023-08-17
-
-NVIDIA GeForce RTX 4090
-
-    tandt/truck:
-        ~87 seconds for 7000 iterations (my implementation 2023-08-18) 
-        ~90 seconds for 7000 iterations (my implementation 2023-08-17) 
-        ~100 seconds for 7000 iterations (my implementation 2023-08-16) 
-        ~120 seconds for 7000 iterations (my implementation 2023-08-16) 
-        ~122 seconds for 7000 iterations (original PyTorch implementation)
-
-NVIDIA GeForce RTX 3090
-
-    tandt/truck:
-        ~180 seconds for 7000 iterations (Latest 2023-08-17)
-        ~200 seconds for 7000 iterations (2023-08-16)
-
-NVIDIA GeForce RTX 3050 (Ubuntu 20.04)
-
-    tandt/truck:
-        ~725.400sec seconds for 7000 iterations (Latest 2023-12-26)
-
-
-While completely unoptimized, the gains in performance, though modest, are noteworthy.
-
-=> Next Goal: Achieve 60 seconds for 7000 iterations in my implementation
-
 ## Build and Execution instructions
 ### Software Prerequisites 
 1. Linux (tested with Ubuntu 22.04), windows probably won't work.
@@ -97,19 +70,6 @@ The `3D Gaussian Splatting CUDA Implementation` provides a suite of command-line
 
 - **-i, --iter [NUM]**  
   Specify the number of iterations to train the model. Although the paper sets the maximum number of iterations at 30k, you'll likely need far fewer. Starting with 6k or 7k iterations should yield preliminary results. Outputs are saved every 7k iterations and also at the end of the training. Therefore, even if you set it to 5k iterations, an output will be generated upon completion.
-
-### Advanced Options
-- **--empty-gpu-cache**
-  Empty CUDA memory after ever 100 iterations. __Attention!__ This has a considerable performance impact
-   
-- **--enable-cr-monitoring**  
-  Enable monitoring of the average convergence rate throughout training. 
-  If done, it will stop optimizing when the average convergence rate is below 0.008 per default after 15k iterations. 
-  This is useful for speeding up the training process when the gain starts to dimish. 
-  If not enabled, the training will stop after the specified number of iterations `--iter`. Otherwise its stops when max 30k iterations are reached.
-
-- **-c, --convergence_rate [RATE]**  
-  Set custom average onvergence rate for the training process. Requires the flag `--enable-cr-monitoring` to be set.
 
 ### Example
 

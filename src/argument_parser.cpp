@@ -108,9 +108,6 @@ namespace gs {
                 modelParams.resolution = ::args::get(resolution);
             }
 
-            // GPU cache setting
-            optimParams.empty_gpu_cache = ::args::get(empty_gpu_memory);
-
             return 0; // Success
         }
     } // namespace args
