@@ -1,6 +1,6 @@
 // Copyright (c) 2023 Janusch Patas.
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
-#include "rasterizer.cuh"
+#include "core/rasterizer.hpp"
 
 torch::autograd::tensor_list rasterize_gaussians(torch::Tensor means3D,
                                                  torch::Tensor means2D,

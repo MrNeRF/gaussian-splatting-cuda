@@ -3,7 +3,7 @@
  * No external dependencies, reasonable performance for typical datasets
  */
 
-#include "mean_neighbor_dist.cuh"
+#include "core/mean_neighbor_dist.hpp"
 #include <algorithm>
 #include <cmath>
 #include <torch/torch.h>
