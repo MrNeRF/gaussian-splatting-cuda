@@ -39,6 +39,7 @@ set(HEADERS
         includes/point_cloud.cuh
         includes/scene.cuh
         includes/ssim.cuh
+        includes/mean_neighbor_dist.cuh
         includes/fused_ssim.cuh
         includes/scene_info.cuh
         includes/camera_utils.cuh
@@ -71,6 +72,7 @@ set(SOURCES
         src/parameters.cu
         src/rasterizer.cu
         src/ssim.cu
+        src/mean_neighbor_dist.cu
         src/rasterize_points.cu
         cuda_rasterizer/backward.cu
         cuda_rasterizer/forward.cu
@@ -142,7 +144,6 @@ target_link_libraries(${PROJECT_NAME}
         CUDA::cudart
         CUDA::curand
         CUDA::cublas
-        simple-knn
         tinyply
         eigen3
         nlohmann_json::nlohmann_json
