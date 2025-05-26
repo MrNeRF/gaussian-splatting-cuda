@@ -50,6 +50,7 @@ set(HOST_SOURCES
         src/read_utils.cpp
         src/parameters.cpp
         src/loss_monitor.cpp
+        src/argument_parser.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
