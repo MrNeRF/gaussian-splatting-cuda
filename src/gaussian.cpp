@@ -1,5 +1,5 @@
-#include "core/debug_utils.hpp"
 #include "core/gaussian.hpp"
+#include "core/debug_utils.hpp"
 #include "core/mean_neighbor_dist.hpp"
 #include "core/read_utils.hpp"
 #include <exception>

@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "kernels/general_utils.cuh"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
+#include "kernels/general_utils.cuh"
 #include <memory>
 #include <string>
 #include <torch/torch.h>
