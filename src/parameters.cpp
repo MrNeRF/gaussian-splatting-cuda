@@ -50,8 +50,6 @@ namespace gs {
             params.densify_from_iter = json["densify_from_iter"];
             params.densify_until_iter = json["densify_until_iter"];
             params.densify_grad_threshold = json["densify_grad_threshold"];
-            params.convergence_threshold = json["convergence_threshold"];
-            params.empty_gpu_cache = json["empty_gpu_cache"];
 
             return params;
         }
