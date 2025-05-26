@@ -1,7 +1,7 @@
-#include "debug_utils.cuh"
-#include "gaussian.cuh"
-#include "mean_neighbor_dist.cuh"
-#include "read_utils.cuh"
+#include "core/debug_utils.hpp"
+#include "core/gaussian.hpp"
+#include "core/mean_neighbor_dist.hpp"
+#include "core/read_utils.hpp"
 #include <exception>
 #include <thread>
 

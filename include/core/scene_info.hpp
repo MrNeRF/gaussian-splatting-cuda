@@ -1,8 +1,8 @@
 #pragma once
 
-#include "camera.cuh"
-#include "point_cloud.cuh"
-#include <camera_info.cuh>
+#include "core/camera.hpp"
+#include "core/point_cloud.hpp"
+#include "core/camera_info.hpp"
 #pragma diag_suppress code_of_warning
 #include <Eigen/Dense>
 #pragma diag_default code_of_warning

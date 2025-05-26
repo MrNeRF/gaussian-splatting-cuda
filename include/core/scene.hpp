@@ -1,6 +1,6 @@
 #pragma once
 
-#include "scene_info.cuh"
+#include "core/scene_info.hpp"
 #include <memory>
 #include <vector>
 
