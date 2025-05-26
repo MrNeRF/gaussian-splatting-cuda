@@ -1,13 +1,41 @@
 /*
- * Simple CPU-based k-nearest neighbor distance computation
- * No external dependencies, reasonable performance for typical datasets
+ * Efficient k-nearest neighbor distance computation using nanoflann
  */
 
 #include "core/mean_neighbor_dist.hpp"
+#include "external/nanoflann.hpp"
 #include <algorithm>
 #include <cmath>
 #include <torch/torch.h>
 #include <vector>
+
+// Point cloud adaptor for nanoflann
+struct PointCloudAdaptor {
+    const float* points;
+    size_t num_points;
+
+    PointCloudAdaptor(const float* pts, size_t n) : points(pts),
+                                                    num_points(n) {}
+
+    // Must return the number of data points
+    inline size_t kdtree_get_point_count() const { return num_points; }
+
+    // Returns the dim'th component of the idx'th point in the class
+    inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
+        return points[idx * 3 + dim];
+    }
+
+    // Optional bounding-box computation: return false to default to a standard bbox computation loop
+    template <class BBOX>
+    bool kdtree_get_bbox(BBOX& /* bb */) const { return false; }
+};
+
+// Define the KD-tree type
+using KDTree = nanoflann::KDTreeSingleIndexAdaptor<
+    nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>,
+    PointCloudAdaptor,
+    3 /* dimensionality */
+    >;
 
 torch::Tensor compute_mean_neighbor_distances(const torch::Tensor& points) {
     // Move to CPU for processing
@@ -28,6 +56,11 @@ torch::Tensor compute_mean_neighbor_distances(const torch::Tensor& points) {
     // Get raw data pointer for efficient access
     const float* data = cpu_points.data_ptr<float>();
 
+    // Create point cloud adaptor and build KD-tree
+    PointCloudAdaptor cloud(data, num_points);
+    KDTree index(3, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
+    index.buildIndex();
+
     // Allocate result
     auto result = torch::zeros({num_points}, torch::kFloat32);
     float* result_data = result.data_ptr<float>();
@@ -35,41 +68,33 @@ torch::Tensor compute_mean_neighbor_distances(const torch::Tensor& points) {
 // Process each point
 #pragma omp parallel for if (num_points > 1000)
     for (int i = 0; i < num_points; i++) {
-        // Current point coordinates
-        float px = data[i * 3 + 0];
-        float py = data[i * 3 + 1];
-        float pz = data[i * 3 + 2];
+        // Query point
+        const float query_pt[3] = {data[i * 3 + 0], data[i * 3 + 1], data[i * 3 + 2]};
 
-        // Find 3 nearest neighbors using partial sorting
-        std::vector<float> distances;
-        distances.reserve(num_points - 1);
+        // We need 4 nearest neighbors (including self) to get 3 actual neighbors
+        const size_t num_results = std::min(4, num_points);
+        std::vector<size_t> ret_indices(num_results);
+        std::vector<float> out_dists_sqr(num_results);
 
-        // Compute distances to all other points
-        for (int j = 0; j < num_points; j++) {
-            if (i == j)
-                continue; // Skip self
+        nanoflann::KNNResultSet<float> resultSet(num_results);
+        resultSet.init(&ret_indices[0], &out_dists_sqr[0]);
+        index.findNeighbors(resultSet, &query_pt[0], nanoflann::SearchParameters(10));
 
-            float dx = px - data[j * 3 + 0];
-            float dy = py - data[j * 3 + 1];
-            float dz = pz - data[j * 3 + 2];
-            float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+        // Calculate mean distance to 3 nearest neighbors (excluding self at distance 0)
+        float sum_dist = 0.0f;
+        int valid_neighbors = 0;
 
-            distances.push_back(dist);
+        for (size_t j = 0; j < num_results && valid_neighbors < 3; j++) {
+            if (out_dists_sqr[j] > 1e-8f) { // Skip self (distance ~0)
+                sum_dist += std::sqrt(out_dists_sqr[j]);
+                valid_neighbors++;
+            }
         }
 
-        // Find mean of 3 smallest distances
-        if (distances.size() >= 3) {
-            std::partial_sort(distances.begin(), distances.begin() + 3, distances.end());
-            result_data[i] = (distances[0] + distances[1] + distances[2]) / 3.0f;
-        } else if (distances.size() > 0) {
-            // Less than 3 neighbors, use what we have
-            float sum = 0.0f;
-            for (float d : distances) {
-                sum += d;
-            }
-            result_data[i] = sum / distances.size();
+        if (valid_neighbors > 0) {
+            result_data[i] = sum_dist / valid_neighbors;
         } else {
-            result_data[i] = 0.01f; // Fallback
+            result_data[i] = 0.01f; // Fallback for edge cases
         }
     }
 
