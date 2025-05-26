@@ -1,9 +1,9 @@
-#include "camera_info.cuh"
-#include "camera_utils.cuh"
+#include "core/read_utils.hpp"
+#include "core/camera_info.hpp"
+#include "core/camera_utils.hpp"
+#include "core/image.hpp"
+#include "core/point_cloud.hpp"
 #include "future"
-#include "image.cuh"
-#include "point_cloud.cuh"
-#include "read_utils.cuh"
 #include <algorithm>
 #include <exception>
 #include <fstream>

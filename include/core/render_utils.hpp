@@ -2,10 +2,10 @@
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
 
-#include "camera.cuh"
-#include "gaussian.cuh"
-#include "parameters.cuh"
-#include "rasterizer.cuh"
+#include "core/camera.hpp"
+#include "core/gaussian.hpp"
+#include "core/parameters.hpp"
+#include "core/rasterizer.hpp"
 #include <cmath>
 #include <torch/torch.h>
 

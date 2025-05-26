@@ -1,6 +1,6 @@
 #pragma once
 
-#include "camera.cuh"
+#include "core/camera.hpp"
 #pragma diag_suppress code_of_warning
 #include <Eigen/Dense>
 #include <Eigen/src/Geometry/Quaternion.h>

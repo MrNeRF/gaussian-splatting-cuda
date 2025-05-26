@@ -1,7 +1,7 @@
-#include "camera.cuh"
-#include "camera_info.cuh"
-#include "camera_utils.cuh"
-#include "parameters.cuh"
+#include "core/camera.hpp"
+#include "core/camera_info.hpp"
+#include "core/camera_utils.hpp"
+#include "core/parameters.hpp"
 #include <string>
 #include <torch/torch.h>
 #include <utility>

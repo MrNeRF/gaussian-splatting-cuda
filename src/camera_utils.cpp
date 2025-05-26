@@ -1,8 +1,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
-#include "camera_utils.cuh"
-#include "stb_image.h"
-#include "stb_image_resize.h"
+#include "core/camera_utils.hpp"
+#include "external/stb_image.h"
+#include "external/stb_image_resize.h"
 #include <cmath>
 #include <filesystem>
 #include <iostream>
