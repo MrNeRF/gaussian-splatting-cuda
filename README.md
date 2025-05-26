@@ -11,7 +11,7 @@ The materials, code, and assets within this repository are intended solely for e
 
 
 ## News
-- **[2023-09-11]**: The current goal of this repo is to move towards a permissive licens. Some works has been done in this direction. However, as the major work package we must remove the rasterizer and replace it with the gsplat implementation.
+- **[2025-05-26]**: The current goal of this repo is to move towards a permissive licens. Some works has been done in this direction. However, as the major work package we must remove the rasterizer and replace it with the gsplat implementation.
   
 ## About this Project
 This project is a derivative of the original Gaussian-Splatting software and is governed by the Gaussian-Splatting License, which can be found in the LICENSE file in this repository. The original software was developed by Inria and MPII.
