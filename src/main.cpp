@@ -1,11 +1,11 @@
 #include "core/debug_utils.hpp"
-#include "kernels/fused_ssim.cuh"
 #include "core/gaussian.hpp"
 #include "core/loss_monitor.hpp"
-#include "kernels/loss_utils.cuh"
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
 #include "core/scene.hpp"
+#include "kernels/fused_ssim.cuh"
+#include "kernels/loss_utils.cuh"
 #include <args.hxx>
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <filesystem>

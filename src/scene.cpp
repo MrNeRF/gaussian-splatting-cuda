@@ -1,9 +1,9 @@
+#include "core/scene.hpp"
 #include "core/camera.hpp"
 #include "core/camera_utils.hpp"
 #include "core/gaussian.hpp"
 #include "core/parameters.hpp"
 #include "core/read_utils.hpp"
-#include "core/scene.hpp"
 
 // TODO: support start from later iterations. Compare original code
 // We also have only training, no testing
