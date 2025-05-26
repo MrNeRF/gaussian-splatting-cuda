@@ -1,221 +1,221 @@
 ﻿cmake_minimum_required(VERSION 3.24)
 project(gaussian_splatting_cuda LANGUAGES CUDA CXX)
 
-# Determine the project root directory
+# Setup
 get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
-
-# Define Torch_DIR for find_package() to find libtorch
 set(Torch_DIR "${PROJ_ROOT_DIR}/external/libtorch/share/cmake/Torch")
 
-#set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_89 -gencode=arch=compute_89,code=sm_89 -gencode=arch=compute_89,code=compute_89")
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-# --------------------------------------
-# Core count calculation
-# --------------------------------------
-
+# Parallel build
 include(ProcessorCount)
 ProcessorCount(total_cores)
-if (NOT DEFINED total_cores OR total_cores EQUAL 0)
-    set(total_cores 1)
-    set(used_cores 1)
-elseif (total_cores GREATER 1)
-    math(EXPR used_cores "${total_cores} - 2") # use total_cores-2 if total_cores > 1
-endif ()
-set(ENV{MAKEFLAGS} "-j${used_cores}")
-message(STATUS "Building with ${used_cores} out of ${total_cores} available cores")
+if(total_cores GREATER 1)
+    math(EXPR used_cores "${total_cores} - 2")
+    set(ENV{MAKEFLAGS} "-j${used_cores}")
+    message(STATUS "Building with ${used_cores} cores")
+endif()
 
-# --------------------------------------
-# Files
-# --------------------------------------
-
-set(HEADERS
-        includes/read_utils.cuh
-        includes/gaussian.cuh
-        includes/camera.cuh
-        includes/loss_monitor.cuh
-        includes/image.cuh
-        includes/stb_image.h
-        includes/stb_image_resize.h
-        includes/point_cloud.cuh
-        includes/scene.cuh
-        includes/ssim.cuh
-        includes/mean_neighbor_dist.cuh
-        includes/fused_ssim.cuh
-        includes/scene_info.cuh
-        includes/camera_utils.cuh
-        includes/general_utils.cuh
-        includes/parameters.cuh
-        includes/loss_utils.cuh
-        includes/render_utils.cuh
-        includes/rasterizer.cuh
-        includes/rasterize_points.cuh
-        includes/camera_info.cuh
-        includes/debug_utils.cuh
-        cuda_rasterizer/backward.h
-        cuda_rasterizer/forward.h
-        cuda_rasterizer/auxiliary.h
-        cuda_rasterizer/rasterizer_impl.h
-        cuda_rasterizer/rasterizer.h
-        cuda_rasterizer/serialization.h
-)
-
-set(SOURCES
-        src/main.cu
-        src/read_utils.cu
-        src/gaussian.cu
-        src/camera.cu
-        src/loss_monitor.cu
-        src/image.cu
-        src/scene.cu
-        src/camera_utils.cu
-        src/general_utils.cu
-        src/parameters.cu
-        src/rasterizer.cu
-        src/ssim.cu
-        src/mean_neighbor_dist.cu
-        src/rasterize_points.cu
-        cuda_rasterizer/backward.cu
-        cuda_rasterizer/forward.cu
-        cuda_rasterizer/rasterizer_impl.cu
-)
-
-# Get rid of pesky warnings from stb_image.h produced in src/utils.cu
-set_source_files_properties(src/utils.cu PROPERTIES COMPILE_FLAGS "-Xcudafe --diag_suppress=550 ")
-
-# --------------------------------------
-# Project target
-# --------------------------------------
-
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
-
-set_target_properties(${PROJECT_NAME} PROPERTIES
-        CUDA_ARCHITECTURES native
-        CUDA_STANDARD 17
-        CUDA_STANDARD_REQUIRED ON
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED ON
-)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/cuda_rasterizer ${PROJECT_SOURCE_DIR}/external/tinyply/source)
-
-# Torch setup
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+# Packages
 find_package(Torch REQUIRED)
-
-# Build options based on CMAKE_BUILD_TYPE
-function(configure_build_type)
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        target_compile_options(${PROJECT_NAME} PRIVATE -O0 -g -G -Xcompiler -Werror)
-        set_target_properties(${PROJECT_NAME} PROPERTIES
-                CUDA_RESOLVE_DEVICE_SYMBOLS ON
-                CUDA_SEPARABLE_COMPILATION ON
-        )
-    elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-        target_compile_options(${PROJECT_NAME} PRIVATE -O3 -use_fast_math -Xcompiler -Ofast )
-    endif ()
-endfunction()
-configure_build_type()
-
-# Required packages
 find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
 
-# Check CUDA version
-if (CUDAToolkit_VERSION VERSION_LESS "11.7")
-    message(FATAL_ERROR "This project requires CUDA 11.7 or higher")
-endif ()
-
+# Python packages - CRITICAL for linking
 find_package(PythonLibs REQUIRED)
-include_directories(${PYTHON_INCLUDE_DIRS})
-# --------------------------------------
-# External Libraries
-# --------------------------------------
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+
+if(CUDAToolkit_VERSION VERSION_LESS "11.7")
+    message(FATAL_ERROR "Requires CUDA 11.7+")
+endif()
 
 add_subdirectory(external)
 
-# --------------------------------------
-# Linking
-# --------------------------------------
+# =============================================================================
+# HOST LIBRARY - Compiled with g++ (fast!)
+# =============================================================================
 
-target_link_libraries(${PROJECT_NAME}
+set(HOST_SOURCES
+        src/main.cpp
+        src/gaussian.cpp
+        src/camera.cpp
+        src/scene.cpp
+        src/mean_neighbor_dist.cpp
+        src/camera_utils.cpp
+        src/rasterizer.cpp
+        src/read_utils.cpp
+        src/parameters.cpp
+        src/loss_monitor.cpp
+)
+
+add_library(gaussian_host STATIC ${HOST_SOURCES})
+
+# Set up include directories for host library
+target_include_directories(gaussian_host
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include  # This allows #include "core/header.hpp"
         PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source  # For tinyply.h
+        ${PYTHON_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
+)
+
+target_link_libraries(gaussian_host
+        PUBLIC
         ${TORCH_LIBRARIES}
-        CUDA::cudart
-        CUDA::curand
-        CUDA::cublas
+        nlohmann_json::nlohmann_json
         tinyply
         eigen3
-        nlohmann_json::nlohmann_json
         glm
         Threads::Threads
         args
+        # CRITICAL: Add Python libraries for pybind11
+        ${PYTHON_LIBRARIES}
+        Python3::Python
 )
 
-# --------------------------------------
-# Add googletest
-# --------------------------------------
+# Fast C++ compilation
+target_compile_options(gaussian_host PRIVATE
+        $<$<CONFIG:Debug>:-O0 -g -Wall>
+        $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
+)
+
+# =============================================================================
+# KERNEL LIBRARY - Compiled with nvcc (only what needs it!)
+# =============================================================================
+
+set(KERNEL_SOURCES
+        kernels/ssim.cu
+        kernels/rasterize_points.cu
+        kernels/cuda_rasterizer/forward.cu
+        kernels/cuda_rasterizer/backward.cu
+        kernels/cuda_rasterizer/rasterizer_impl.cu
+)
+
+add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
+
+set_target_properties(gaussian_kernels PROPERTIES
+        CUDA_ARCHITECTURES native
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+)
+
+# Set up include directories correctly for CUDA kernels
+target_include_directories(gaussian_kernels
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include          # For kernels/header.cuh and core/header.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels  # So kernels can find headers directly as "config.h"
+        PRIVATE
+        ${PYTHON_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
+)
+
+target_link_libraries(gaussian_kernels
+        PUBLIC
+        CUDA::cudart
+        CUDA::curand
+        CUDA::cublas
+        ${TORCH_LIBRARIES}  # This provides c10/cuda/CUDAGuard.h
+        # simple-knn  # Commented out - not available
+)
+
+# CUDA optimizations
+target_compile_options(gaussian_kernels PRIVATE
+        $<$<CONFIG:Debug>:-O0 -g -G -lineinfo>
+        $<$<CONFIG:Release>:-O3 -use_fast_math --ptxas-options=-v>
+)
+
+# =============================================================================
+# MAIN EXECUTABLE
+# =============================================================================
+
+add_executable(${PROJECT_NAME} src/main.cpp)
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+        CUDA_ARCHITECTURES native
+)
+
+target_include_directories(${PROJECT_NAME}
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source  # For tinyply.h in main.cpp
+        ${PYTHON_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
+)
+
+target_link_libraries(${PROJECT_NAME}
+        PRIVATE
+        gaussian_host
+        gaussian_kernels
+        # Add Python libraries to main executable too
+        ${PYTHON_LIBRARIES}
+        Python3::Python
+)
+
+# Build type configuration
+function(configure_build_type target)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_definitions(${target} PRIVATE DEBUG_BUILD)
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_definitions(${target} PRIVATE RELEASE_BUILD)
+    endif()
+endfunction()
+
+configure_build_type(gaussian_host)
+configure_build_type(gaussian_kernels)
+configure_build_type(${PROJECT_NAME})
+
+# =============================================================================
+# TESTING (Optional)
+# =============================================================================
+
 option(BUILD_TESTS "Build tests" OFF)
-
 if(BUILD_TESTS)
-    include(FetchContent)
-    FetchContent_Declare(
-            googletest
-            GIT_REPOSITORY https://github.com/google/googletest.git
-            GIT_TAG release-1.10.0
-    )
-
-    FetchContent_GetProperties(googletest)
-    if (NOT googletest_POPULATED)
-        FetchContent_Populate(googletest)
-        add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
-    endif ()
-
-    # Remove -Werror from the compile options of Google Test
-    set_target_properties(gtest gtest_main PROPERTIES
-            COMPILE_OPTIONS "-Wno-error"
-    )
-
-    # Enable CTest
     enable_testing()
 
-    set(TEST_SOURCES
-            cuda_rasterizer/backward.cu
-            cuda_rasterizer/forward.cu
-            cuda_rasterizer/rasterizer_impl.cu
-            src/gaussian.cu
-            src/camera.cu
-            src/image.cu
-            src/scene.cu
-            src/camera_utils.cu
-            src/general_utils.cu
-            src/rasterizer.cu
-            src/rasterize_points.cu
-            src/read_utils.cu
-            tests/render_test.cu
-            tests/testing.cu
-    )
-    # Add test executable
-    add_executable(testing ${TEST_SOURCES})
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host.cpp")
+        add_executable(test_host tests/test_host.cpp)
+        target_include_directories(test_host PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source
+        )
+        target_link_libraries(test_host PRIVATE gaussian_host)
+        add_test(NAME HostTests COMMAND test_host)
+    endif()
 
-    set_target_properties(testing PROPERTIES
-            CUDA_ARCHITECTURES native
-            CUDA_STANDARD 17
-            CUDA_STANDARD_REQUIRED ON
-            CXX_STANDARD 17
-            CXX_STANDARD_REQUIRED ON
-    )
-    target_include_directories(testing PRIVATE ${PROJECT_SOURCE_DIR}/includes ${PROJECT_SOURCE_DIR}/cuda_rasterizer ${PROJECT_SOURCE_DIR}/external/tinyply/source)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kernels.cu")
+        add_executable(test_kernels tests/test_kernels.cu)
+        set_target_properties(test_kernels PROPERTIES CUDA_ARCHITECTURES native)
+        target_include_directories(test_kernels PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source
+        )
+        target_link_libraries(test_kernels PRIVATE gaussian_kernels gaussian_host)
+        add_test(NAME KernelTests COMMAND test_kernels)
+    endif()
+endif()
 
-    target_link_libraries(testing
-            PRIVATE
-            ${TORCH_LIBRARIES}
-            gtest
-            gtest_main
-            simple-knn
-            tinyply
-            eigen3
-            nlohmann_json::nlohmann_json
-            glm
-    )
+# =============================================================================
+# BUILD INFO & OPTIMIZATIONS
+# =============================================================================
+
+message(STATUS "CUDA Version: ${CUDAToolkit_VERSION}")
+message(STATUS "Torch Version: ${Torch_VERSION}")
+message(STATUS "Python Version: ${Python3_VERSION}")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "Include paths:")
+message(STATUS "  - Main: ${CMAKE_CURRENT_SOURCE_DIR}/include")
+message(STATUS "  - Kernels: ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels")
+message(STATUS "  - TinyPLY: ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source")
+message(STATUS "  - Python: ${PYTHON_INCLUDE_DIRS}")
+
+# Enable ccache if available
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+    message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
 endif()

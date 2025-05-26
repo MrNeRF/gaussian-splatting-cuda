@@ -5,7 +5,7 @@
 //  – The implementation is compiled **only** on the host side
 //    (i.e. when __CUDA_ARCH__ is *not* defined or equals 0).
 // -----------------------------------------------------------------------------
-#include "ssim.cuh" // declares fusedssim & fusedssim_backward
+#include "kernels/ssim.cuh" // declares fusedssim & fusedssim_backward
 #include <torch/torch.h>
 #include <tuple>
 

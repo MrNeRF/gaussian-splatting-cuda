@@ -2,9 +2,9 @@
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
 
-#include "debug_utils.cuh"
-#include "rasterize_points.cuh"
-#include "serialization.h"
+#include "core/debug_utils.hpp"
+#include "kernels/rasterize_points.cuh"
+#include "kernels/serialization.h"
 
 #define WRITE_TEST_DATA
 #undef WRITE_TEST_DATA

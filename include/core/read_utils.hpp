@@ -1,6 +1,6 @@
 #pragma once
-#include "point_cloud.cuh"
-#include "scene_info.cuh"
+#include "core/point_cloud.hpp"
+#include "core/scene_info.hpp"
 #include <filesystem>
 #include <memory>
 #include <string>

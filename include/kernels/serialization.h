@@ -1,7 +1,7 @@
 // Copyright (c) 2023 Janusch Patas.
 #pragma once
 
-#include "debug_utils.cuh"
+#include "core/debug_utils.hpp"
 #include <fstream>
 #include <iostream>
 #include <torch/torch.h>

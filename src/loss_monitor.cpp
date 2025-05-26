@@ -1,6 +1,6 @@
 // Copyright (c) 2023 Janusch Patas.
 
-#include "loss_monitor.cuh"
+#include "core/loss_monitor.hpp"
 #include <numeric>
 
 float LossMonitor::Update(float newLoss) {

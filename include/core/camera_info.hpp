@@ -1,7 +1,7 @@
 // Copyright (c) 2023 Janusch Patas.
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
-#include "camera_utils.cuh"
+#include "core/camera_utils.hpp"
 #include <algorithm>
 #pragma diag_suppress code_of_warning
 #include <Eigen/Dense>
