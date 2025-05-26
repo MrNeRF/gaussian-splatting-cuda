@@ -11,24 +11,7 @@ The materials, code, and assets within this repository are intended solely for e
 
 
 ## News
-- **[2023-09-11]**:
-    - Resolution parameter -r [2,4,8] introduced. For instance, truck scene trains now in about 52 seconds.
-- **[2023-09-11]**:
-    - Optimization parameters can be now configured in the `opitimization_params.json` located in parameter folder.
-    - Still struggling with more floaters without autograd. Its harder to get it right than I thought.
-- **[2023-09-07]**:
-    - Introduced the PSNR metric for a more accurate comparison of image quality relative to the reference implementation.
-    - There hasn't been much activity on the master branch lately. 
-      I've been focusing intently on the cuda-optimizer branch to eliminate autograd. 
-      I faced challenges with disrupted training and encountered several bugs. 
-      However, I've now successfully removed autograd, and everything appears to be in order. 
-      Additionally, the image quality has improved. Yet, these changes—coupled with optimizations removed for debugging purposes—have significantly impacted performance. 
-      I won't merge back until the performance matches or surpasses that of the master branch.
-- **[2023-08-29]**:
-    - Better Image loading error description by [paulmelis](https://github.com/paulmelis)
-    - I've spent some time working on manual loss derivatives with the aim of completely eliminating the need for autograd. 
-      The derivation appears to be accurate, as confirmed by a comparison with a Python implementation. The transition to our custom Adam implementation is still underway, but I hope to complete it by tomorrow. 
-    - Bug fixing :(
+- **[2023-09-11]**: The current goal of this repo is to move towards a permissive licens. Some works has been done in this direction. However, as the major work package we must remove the rasterizer and replace it with the gsplat implementation.
   
 ## About this Project
 This project is a derivative of the original Gaussian-Splatting software and is governed by the Gaussian-Splatting License, which can be found in the LICENSE file in this repository. The original software was developed by Inria and MPII.
