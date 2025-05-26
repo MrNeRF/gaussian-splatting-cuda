@@ -108,12 +108,6 @@ namespace gs {
                 modelParams.resolution = ::args::get(resolution);
             }
 
-            // Early stopping configuration
-            optimParams.early_stopping = ::args::get(enable_cr_monitoring);
-            if (optimParams.early_stopping && convergence_rate) {
-                optimParams.convergence_threshold = ::args::get(convergence_rate);
-            }
-
             // GPU cache setting
             optimParams.empty_gpu_cache = ::args::get(empty_gpu_memory);
 

@@ -49,7 +49,6 @@ set(HOST_SOURCES
         src/rasterizer.cpp
         src/read_utils.cpp
         src/parameters.cpp
-        src/loss_monitor.cpp
         src/argument_parser.cpp
 )
 
