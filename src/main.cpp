@@ -4,11 +4,11 @@
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
 #include "core/scene.hpp"
+#include "core/training_progress.hpp"
 #include "kernels/fused_ssim.cuh"
 #include "kernels/loss_utils.cuh"
 #include <args.hxx>
 #include <c10/cuda/CUDACachingAllocator.h>
-#include <filesystem>
 #include <iostream>
 #include <random>
 #include <torch/torch.h>
@@ -20,7 +20,6 @@ std::vector<int> get_random_indices(int max_index) {
     std::shuffle(indices.begin(), indices.end(), std::default_random_engine());
     return indices;
 }
-
 
 int main(int argc, char* argv[]) {
 
@@ -46,9 +45,12 @@ int main(int argc, char* argv[]) {
     const int camera_count = scene.Get_camera_count();
 
     std::vector<int> indices;
-    int last_status_len = 0;
-    auto start_time = std::chrono::steady_clock::now();
+    float loss_add = 0.f;
 
+    // 🎯 CLEAN PROGRESS TRACKER - Just one line!
+    TrainingProgress progress(optimParams.iterations, 100);
+
+    // Training loop
     for (int iter = 1; iter < optimParams.iterations + 1; ++iter) {
         if (indices.empty()) {
             indices = get_random_indices(camera_count);
@@ -87,31 +89,7 @@ int main(int argc, char* argv[]) {
         auto ssim_loss = fused_ssim(image, gt_image, /*padding=*/"same", /*train=*/true);
         auto loss = (1.f - optimParams.lambda_dssim) * l1l + optimParams.lambda_dssim * (1.f - ssim_loss);
 
-        // Update status line
-        if (iter % 100 == 0) {
-            auto cur_time = std::chrono::steady_clock::now();
-            std::chrono::duration<double> time_elapsed = cur_time - start_time;
-            // XXX shouldn't have to create a new stringstream, but resetting takes multiple calls
-            std::stringstream status_line;
-            // XXX Use thousand separators, but doesn't work for some reason
-            status_line.imbue(std::locale(""));
-            status_line
-                << "\rIter: " << std::setw(6) << iter
-                << "  Loss: " << std::fixed << std::setw(9) << std::setprecision(6) << loss.item<float>();
-            status_line
-                << "  Splats: " << std::setw(10) << (int)gaussians.Get_xyz().size(0)
-                << "  Time: " << std::fixed << std::setw(8) << std::setprecision(3) << time_elapsed.count() << "s"
-                << "  Avg iter/s: " << std::fixed << std::setw(5) << std::setprecision(1) << 1.0 * iter / time_elapsed.count()
-                << "  " // Some extra whitespace, in case a "Pruning ... points" message gets printed after
-                ;
-            const int curlen = status_line.str().length();
-            const int ws = last_status_len - curlen;
-            if (ws > 0)
-                status_line << std::string(ws, ' ');
-            std::cout << status_line.str() << std::flush;
-            last_status_len = curlen;
-        }
-
+        loss_add += loss.item<float>();
         loss.backward();
 
         {
@@ -121,8 +99,14 @@ int main(int argc, char* argv[]) {
             auto max_radii = torch::max(visible_max_radii, visible_radii);
             gaussians._max_radii2D.masked_scatter_(visibility_filter, max_radii);
 
+            // Check for densification to show (+) indicator
+            bool is_densifying = (iter < optimParams.densify_until_iter &&
+                                  iter > optimParams.densify_from_iter &&
+                                  iter % optimParams.densification_interval == 0);
+
+            progress.update(iter, loss.item<float>(), static_cast<int>(gaussians.Get_xyz().size(0)), 0.0f, is_densifying);
+
             if (iter == optimParams.iterations) {
-                std::cout << std::endl;
                 gaussians.Save_ply(modelParams.output_path, iter, true);
                 break;
             }
@@ -134,7 +118,7 @@ int main(int argc, char* argv[]) {
             // Densification
             if (iter < optimParams.densify_until_iter) {
                 gaussians.Add_densification_stats(viewspace_point_tensor, visibility_filter);
-                if (iter > optimParams.densify_from_iter && iter % optimParams.densification_interval == 0) {
+                if (is_densifying) {
                     gaussians.Densify_and_prune(optimParams.densify_grad_threshold, optimParams.min_opacity, scene.Get_cameras_extent());
                 }
 
@@ -147,7 +131,6 @@ int main(int argc, char* argv[]) {
             if (iter < optimParams.iterations) {
                 gaussians._optimizer->step();
                 gaussians._optimizer->zero_grad(true);
-                // @TODO: Not sure about type
                 gaussians.Update_learning_rate(iter);
             }
 
@@ -157,16 +140,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    auto cur_time = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = cur_time - start_time;
-
-    std::cout << std::endl
-              << "All done in "
-              << std::fixed << std::setw(7) << std::setprecision(3) << time_elapsed.count() << "sec, avg "
-              << std::fixed << std::setw(4) << std::setprecision(1) << 1.0 * optimParams.iterations / time_elapsed.count() << " iter/sec, "
-              << gaussians.Get_xyz().size(0) << " splats, "
-              << std::endl
-              << std::endl;
+    progress.print_final_summary(static_cast<int>(gaussians.Get_xyz().size(0)));
 
     return 0;
 }
