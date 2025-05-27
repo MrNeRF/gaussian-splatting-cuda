@@ -12,9 +12,7 @@
 //    translate : (3) shift applied to camera centre in world space
 // ---------------------------------------------------------------------------
 torch::Tensor getWorld2View2(const torch::Tensor& R,
-                             const torch::Tensor& t,
-                             const torch::Tensor& translate = torch::Tensor(),
-                             float scale = 1.0f);
+                             const torch::Tensor& t);
 
 // Classic OpenGL-style perspective matrix (z-forward, right-handed)
 torch::Tensor getProjectionMatrix(float znear, float zfar,
