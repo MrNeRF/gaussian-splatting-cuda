@@ -1,83 +1,92 @@
 #pragma once
 
-#pragma diag_suppress code_of_warning
-#include <Eigen/Dense>
-#pragma diag_default code_of_warning
-#include <memory>
+#include "core/torch_shapes.hpp"
 #include <string>
 #include <torch/torch.h>
-#include <vector>
 
-class Camera : torch::nn::Module {
+class Camera : public torch::nn::Module {
 public:
     Camera(int imported_colmap_id,
-           Eigen::Matrix3f R, Eigen::Vector3f T,
+           const torch::Tensor& R, // 3×3  (CPU, float32/64)
+           const torch::Tensor& T, // 3    (CPU)
            float FoVx, float FoVy,
-           torch::Tensor image,
+           const torch::Tensor& image, // H×W×C 0-1 float32 or uint8
            std::string image_name,
            int image_id,
-           float scale = 1.f);
+           float scale = 1.0f);
 
-    // Initialize CUDA tensors - call this in the main thread after loading
+    // Allocate GPU copies & matrices
     void initialize_cuda_tensors();
+    [[nodiscard]] bool is_cuda_initialized() const noexcept { return _cuda_initialized; }
 
-    // Check if CUDA tensors have been initialized
-    bool is_cuda_initialized() const { return _cuda_initialized; }
+    // --- modern accessors --------------------------------------------------
+    int uid() const noexcept { return _uid; }
+    int colmap_id() const noexcept { return _colmap_id; }
+    torch::Tensor& R() { return _R; }
+    torch::Tensor& T() { return _T; }
+    float FoVx() const noexcept { return _FoVx; }
+    float FoVy() const noexcept { return _FoVy; }
+    const std::string& image_name() const noexcept { return _image_name; }
+    const torch::Tensor& original_image() const { return _original_image; }
+    int image_width() const noexcept { return _image_width; }
+    int image_height() const noexcept { return _image_height; }
+    float zfar() const noexcept { return _zfar; }
+    float znear() const noexcept { return _znear; }
 
-    // Getters
-    int Get_uid() const { return _uid; }
-    int Get_colmap_id() const { return _colmap_id; }
-    Eigen::Matrix3f& Get_R() { return _R; }
-    Eigen::Vector3f& Get_T() { return _T; }
-    float Get_FoVx() const { return static_cast<float>(_FoVx); }
-    float Get_FoVy() const { return static_cast<float>(_FoVy); }
-    std::string Get_image_name() const { return _image_name; }
-    const torch::Tensor& Get_original_image() { return _original_image; }
-    int Get_image_width() const { return _image_width; }
-    int Get_image_height() const { return _image_height; }
-    float Get_zfar() const { return _zfar; }
-    float Get_znear() const { return _znear; }
-    torch::Tensor& Get_world_view_transform() {
-        assert(_cuda_initialized && "CUDA tensors not initialized! Call initialize_cuda_tensors() first");
-        return _world_view_transform;
-    }
-    torch::Tensor& Get_projection_matrix() {
-        assert(_cuda_initialized && "CUDA tensors not initialized! Call initialize_cuda_tensors() first");
-        return _projection_matrix;
-    }
-    torch::Tensor& Get_full_proj_transform() {
-        assert(_cuda_initialized && "CUDA tensors not initialized! Call initialize_cuda_tensors() first");
-        return _full_proj_transform;
-    }
-    torch::Tensor& Get_camera_center() {
-        assert(_cuda_initialized && "CUDA tensors not initialized! Call initialize_cuda_tensors() first");
-        return _camera_center;
-    }
+    torch::Tensor& world_view_transform();
+    torch::Tensor& projection_matrix();
+    torch::Tensor& full_proj_transform();
+    torch::Tensor& camera_center();
+
+    // -----------------------------------------------------------------------
+    //  *** compatibility wrappers ***
+    //  (keeps legacy code unchanged)
+    // -----------------------------------------------------------------------
+    int Get_image_height() const noexcept { return image_height(); }
+    int Get_image_width() const noexcept { return image_width(); }
+    float Get_FoVx() const noexcept { return FoVx(); }
+    float Get_FoVy() const noexcept { return FoVy(); }
+    torch::Tensor& Get_world_view_transform() { return world_view_transform(); }
+    torch::Tensor& Get_full_proj_transform() { return full_proj_transform(); }
+    torch::Tensor& Get_camera_center() { return camera_center(); }
+    const torch::Tensor& Get_original_image() const { return original_image(); }
 
 private:
-    int _uid;
-    int _colmap_id;
-    Eigen::Matrix3f _R; // rotation  matrix
-    Eigen::Vector3f _T; // translation vector
-    float _FoVx;
-    float _FoVy;
+    // ids
+    int _uid = -1;
+    int _colmap_id = -1;
+
+    // extrinsics / intrinsics
+    torch::Tensor _R = torch::eye(3);
+    torch::Tensor _T = torch::zeros({3});
+    float _FoVx = 0.f;
+    float _FoVy = 0.f;
+
+    // image
     std::string _image_name;
-    torch::Tensor _original_image;
-    int _image_width;
-    int _image_height;
-    float _zfar;
-    float _znear;
-    torch::Tensor _trans;
-    float _scale;
+    torch::Tensor _original_image; // CPU tensor
+    int _image_width = 0;
+    int _image_height = 0;
+
+    // clip planes
+    float _zfar = 100.f;
+    float _znear = 0.01f;
+
+    // NeRF++ translate/scale
+    torch::Tensor _trans = torch::zeros({3});
+    float _scale = 1.f;
+
+    // GPU copies (filled by initialize_cuda_tensors)
     torch::Tensor _world_view_transform;
     torch::Tensor _projection_matrix;
     torch::Tensor _full_proj_transform;
     torch::Tensor _camera_center;
+
     bool _cuda_initialized = false;
 };
 
+// Forward decls
 struct CameraInfo;
 namespace gs::param {
     struct ModelParameters;
 }
-struct ModelParameters;
