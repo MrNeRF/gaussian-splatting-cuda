@@ -81,4 +81,3 @@ namespace gs::param {
     struct ModelParameters;
 }
 struct ModelParameters;
-Camera loadCam(const gs::param::ModelParameters& params, int id, CameraInfo& cam_info);

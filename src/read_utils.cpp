@@ -42,93 +42,6 @@ std::unique_ptr<std::istream> read_binary(std::filesystem::path file_path) {
     return file_stream;
 }
 
-// Returns the file size of a given ifstream in MB
-float file_in_mb(std::istream* file_stream) {
-    file_stream->seekg(0, std::ios::end);
-    const float size_mb = file_stream->tellg() * 1e-6f;
-    file_stream->seekg(0, std::ios::beg);
-    return size_mb;
-}
-
-// Reads ply file and prints header
-PointCloud read_ply_file(std::filesystem::path file_path) {
-    auto ply_stream_buffer = read_binary(file_path);
-    tinyply::PlyFile file;
-    std::shared_ptr<tinyply::PlyData> vertices, normals, colors;
-    file.parse_header(*ply_stream_buffer);
-
-    //    std::cout << "\t[ply_header] Type: " << (file.is_binary_file() ? "binary" : "ascii") << std::endl;
-    //    for (const auto& c : file.get_comments())
-    //        std::cout << "\t[ply_header] Comment: " << c << std::endl;
-    //    for (const auto& c : file.get_info())
-    //        std::cout << "\t[ply_header] Info: " << c << std::endl;
-    //
-    //    for (const auto& e : file.get_elements()) {
-    //        std::cout << "\t[ply_header] element: " << e.name << " (" << e.size << ")" << std::endl;
-    //        for (const auto& p : e.properties) {
-    //            std::cout << "\t[ply_header] \tproperty: " << p.name << " (type=" << tinyply::PropertyTable[p.propertyType].str << ")";
-    //            if (p.isList)
-    //                std::cout << " (list_type=" << tinyply::PropertyTable[p.listType].str << ")";
-    //            std::cout << std::endl;
-    //        }
-    //    }
-    // The header information can be used to programmatically extract properties on elements
-    // known to exist in the header prior to reading the data. For brevity, properties
-    // like vertex position are hard-coded:
-    try {
-        vertices = file.request_properties_from_element("vertex", {"x", "y", "z"});
-    } catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
-
-    try {
-        normals = file.request_properties_from_element("vertex", {"nx", "ny", "nz"});
-    } catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
-
-    try {
-        colors = file.request_properties_from_element("vertex", {"red", "green", "blue"});
-    } catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
-
-    file.read(*ply_stream_buffer);
-
-    PointCloud point_cloud;
-    if (vertices) {
-        std::cout << "\tRead " << vertices->count << " total vertices " << std::endl;
-        try {
-            point_cloud._points.resize(vertices->count);
-            std::memcpy(point_cloud._points.data(), vertices->buffer.get(), vertices->buffer.size_bytes());
-        } catch (const std::exception& e) {
-            std::cerr << "tinyply exception: " << e.what() << std::endl;
-        }
-    } else {
-        std::cerr << "Error: vertices not found" << std::endl;
-        exit(0);
-    }
-
-    if (normals) {
-        std::cout << "\tRead " << normals->count << " total vertex normals " << std::endl;
-        try {
-            point_cloud._normals.resize(normals->count);
-            std::memcpy(point_cloud._normals.data(), normals->buffer.get(), normals->buffer.size_bytes());
-        } catch (const std::exception& e) {
-            std::cerr << "tinyply exception: " << e.what() << std::endl;
-        }
-    }
-
-    if (colors) {
-        std::cout << "\tRead " << colors->count << " total vertex colors " << std::endl;
-        try {
-            point_cloud._colors.resize(colors->count);
-            std::memcpy(point_cloud._colors.data(), colors->buffer.get(), colors->buffer.size_bytes());
-        } catch (const std::exception& e) {
-            std::cerr << "tinyply exception: " << e.what() << std::endl;
-        }
-    } else {
-        std::cerr << "Error: colors not found" << std::endl;
-        exit(0);
-    }
-
-    return point_cloud;
-}
-
 void Write_output_ply(const std::filesystem::path& file_path, const std::vector<torch::Tensor>& tensors, const std::vector<std::string>& attribute_names) {
     tinyply::PlyFile plyFile;
 
@@ -159,47 +72,6 @@ void Write_output_ply(const std::filesystem::path& file_path, const std::vector<
     fb.open(file_path, std::ios::out | std::ios::binary);
     std::ostream outputStream(&fb);
     plyFile.write(outputStream, true); // 'true' for binary format
-}
-
-void write_ply_file(const std::filesystem::path& file_path, const PointCloud& point_cloud) {
-
-    std::filebuf fb_binary;
-    fb_binary.open(file_path.c_str(), std::ios::out | std::ios::binary);
-    std::ostream outstream_binary(&fb_binary);
-    if (outstream_binary.fail()) {
-        throw std::runtime_error("failed to open " + file_path.string());
-    } else if (point_cloud._points.empty()) {
-        throw std::runtime_error("point cloud is empty");
-    }
-
-    tinyply::PlyFile binary_point3D_file;
-
-    if (!point_cloud._points.empty()) {
-        binary_point3D_file.add_properties_to_element("vertex", {"x", "y", "z"},
-                                                      tinyply::Type::FLOAT32, point_cloud._points.size(),
-                                                      const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._points.data())),
-                                                      tinyply::Type::INVALID,
-                                                      0);
-    }
-
-    if (!point_cloud._normals.empty()) {
-        binary_point3D_file.add_properties_to_element("vertex", {"nx", "ny", "nz"},
-                                                      tinyply::Type::FLOAT32,
-                                                      point_cloud._normals.size(),
-                                                      const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._normals.data())),
-                                                      tinyply::Type::INVALID,
-                                                      0);
-    }
-
-    if (!point_cloud._colors.empty()) {
-
-        binary_point3D_file.add_properties_to_element("vertex", {"red", "green", "blue"},
-                                                      tinyply::Type::UINT8, point_cloud._colors.size(),
-                                                      const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(point_cloud._colors.data())),
-                                                      tinyply::Type::INVALID,
-                                                      0);
-    }
-    binary_point3D_file.write(outstream_binary, true);
 }
 
 template <typename T>
@@ -318,7 +190,6 @@ PointCloud read_point3D_binary(std::filesystem::path file_path) {
         point3D_stream_buffer->read(reinterpret_cast<char*>(tracks.data()), track_length * sizeof(Track));
     }
 
-    write_ply_file(file_path.parent_path() / "points3D.ply", point_cloud);
     return point_cloud;
 }
 
@@ -416,7 +287,7 @@ std::pair<Eigen::Vector3f, float> get_center_and_diag(std::vector<Eigen::Vector3
     return {avg_cam_center, max_dist};
 }
 
-std::pair<Eigen::Vector3f, float> getNerfppNorm(std::vector<CameraInfo>& cam_info) {
+float getNerfppNorm(std::vector<CameraInfo>& cam_info) {
     std::vector<Eigen::Vector3f> cam_centers;
     for (CameraInfo& cam : cam_info) {
         Eigen::Matrix4f W2C = getWorld2View2Eigen(cam._R, cam._T);
@@ -427,9 +298,8 @@ std::pair<Eigen::Vector3f, float> getNerfppNorm(std::vector<CameraInfo>& cam_inf
     auto [center, diagonal] = get_center_and_diag(cam_centers);
 
     float radius = diagonal * 1.1f;
-    Eigen::Vector3f translate = -center;
 
-    return {translate, radius};
+    return radius;
 }
 
 std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_path, int resolution) {
@@ -437,12 +307,7 @@ std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_pat
     auto images = read_images_binary(file_path / "sparse/0/images.bin");
 
     auto sceneInfos = std::make_unique<SceneInfo>();
-    if (!std::filesystem::exists(file_path / "sparse/0/points3D.ply")) {
-        sceneInfos->_point_cloud = read_point3D_binary(file_path / "sparse/0/points3D.bin");
-    } else {
-        sceneInfos->_point_cloud = read_ply_file(file_path / "sparse/0/points3D.ply");
-    }
-    sceneInfos->_ply_path = file_path / "sparse/0/points3D.ply";
+    sceneInfos->_point_cloud = read_point3D_binary(file_path / "sparse/0/points3D.bin");
     sceneInfos->_cameras = read_colmap_cameras(file_path / "images", cameras, images, resolution);
 
     auto& cam0 = sceneInfos->_cameras[0];
@@ -454,8 +319,6 @@ std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_pat
               << std::fixed << std::setprecision(3) << image_mpixels << " Mpixel per image, "
               << std::fixed << std::setprecision(1) << image_mpixels * ncams << " Mpixel total)" << std::endl;
 
-    auto [translate, radius] = getNerfppNorm(sceneInfos->_cameras);
-    sceneInfos->_nerf_norm_radius = radius;
-    sceneInfos->_nerf_norm_translation = translate;
+    sceneInfos->_nerf_norm_radius = getNerfppNorm(sceneInfos->_cameras);
     return sceneInfos;
 }
