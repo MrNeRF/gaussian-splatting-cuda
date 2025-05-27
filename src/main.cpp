@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
         return -1;
 
     //----------------------------------------------------------------------
-    // 2. Initialize CUDA before creating DataLoader
+    // 2. Initialize CUDA
     //----------------------------------------------------------------------
     if (!torch::cuda::is_available()) {
         std::cerr << "CUDA is not available – aborting.\n";
@@ -30,22 +30,18 @@ int main(int argc, char* argv[]) {
     }
 
     //----------------------------------------------------------------------
-    // 3. Dataset + DataLoader
+    // 3. Create dataset
     //----------------------------------------------------------------------
-    auto [unused_loader, dataset] = create_torch_dataloader(modelParams, /*num_workers=*/4);
-    const auto& scene             = dataset->get_scene_info();
+    auto dataset = create_camera_dataset(modelParams);
+    const auto& scene = dataset->get_scene_info();
     const std::size_t dataset_size = dataset->size().value();
 
-    const auto make_loader = [&](int workers = 4) {
-        return torch::data::make_data_loader(
-            *dataset,
-            torch::data::samplers::RandomSampler(dataset_size),
-            torch::data::DataLoaderOptions()
-                .batch_size(1)
-                .workers(workers)
-                .enforce_ordering(false));
+    // Helper to create fresh dataloaders as needed
+    const auto make_dataloader = [&](int workers = 4) {
+        return create_dataloader_from_dataset(dataset, workers);
     };
-    auto train_dataloader = make_loader();
+
+    auto train_dataloader = make_dataloader();
 
     //----------------------------------------------------------------------
     // 4. Model initialisation
@@ -156,7 +152,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Re-shuffle for the next epoch
-        train_dataloader = make_loader();
+        train_dataloader = make_dataloader();
     }
 
     progress.print_final_summary(static_cast<int>(gaussians.Get_xyz().size(0)));

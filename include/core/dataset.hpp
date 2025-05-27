@@ -112,12 +112,8 @@ private:
     const gs::param::ModelParameters& _params;
 };
 
-// -----------------------------------------------------------------------------
-// Factory function to create a LibTorch DataLoader
-// -----------------------------------------------------------------------------
-inline auto create_torch_dataloader(
-    const gs::param::ModelParameters& params,
-    int num_workers = 4) {
+inline std::shared_ptr<CameraDataset> create_camera_dataset(
+    const gs::param::ModelParameters& params) {
 
     if (!std::filesystem::exists(params.source_path)) {
         throw std::runtime_error("Data path does not exist: " +
@@ -127,22 +123,21 @@ inline auto create_torch_dataloader(
     // Read scene info
     auto scene_info = read_colmap_scene_info(params.source_path, params.resolution);
 
-    // Create dataset
-    auto dataset = std::make_shared<CameraDataset>(std::move(scene_info), params);
+    // Create and return dataset
+    return std::make_shared<CameraDataset>(std::move(scene_info), params);
+}
 
-    // Store dataset size before moving
+inline auto create_dataloader_from_dataset(
+    std::shared_ptr<CameraDataset> dataset,
+    int num_workers = 4) {
+
     const size_t dataset_size = dataset->size().value();
 
-    // DataLoader options
-    auto options = torch::data::DataLoaderOptions()
-                       .batch_size(1)      // We want one camera at a time
-                       .workers(num_workers)
-                       .enforce_ordering(false);  // Allow out‑of‑order delivery
-
-    // Build dataloader with the desired sampler
-    auto dataloader = torch::data::make_data_loader<CameraDataset>(
+    return torch::data::make_data_loader(
         *dataset,
         torch::data::samplers::RandomSampler(dataset_size),
-        options);
-    return std::make_tuple(std::move(dataloader), dataset);
+        torch::data::DataLoaderOptions()
+            .batch_size(1)
+            .workers(num_workers)
+            .enforce_ordering(false));
 }
