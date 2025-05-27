@@ -73,7 +73,6 @@ target_link_libraries(gaussian_host
         glm
         Threads::Threads
         args
-        # CRITICAL: Add Python libraries for pybind11
         ${PYTHON_LIBRARIES}
         Python3::Python
 )
@@ -119,9 +118,8 @@ target_link_libraries(gaussian_kernels
         CUDA::cudart
         CUDA::curand
         CUDA::cublas
-        ${TORCH_LIBRARIES}  # This provides c10/cuda/CUDAGuard.h
+        ${TORCH_LIBRARIES}
         glm
-        # simple-knn  # Commented out - not available
 )
 
 # CUDA optimizations
