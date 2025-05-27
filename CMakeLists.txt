@@ -120,6 +120,7 @@ target_link_libraries(gaussian_kernels
         CUDA::curand
         CUDA::cublas
         ${TORCH_LIBRARIES}  # This provides c10/cuda/CUDAGuard.h
+        glm
         # simple-knn  # Commented out - not available
 )
 
