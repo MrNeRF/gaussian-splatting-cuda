@@ -7,10 +7,8 @@
 #include "core/training_progress.hpp"
 #include "kernels/fused_ssim.cuh"
 #include "kernels/loss_utils.cuh"
-#include <args.hxx>
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <iostream>
-#include <random>
 #include <torch/torch.h>
 
 int main(int argc, char* argv[]) {
