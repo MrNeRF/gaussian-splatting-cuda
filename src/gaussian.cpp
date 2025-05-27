@@ -5,9 +5,20 @@
 #include <exception>
 #include <thread>
 
-GaussianModel::GaussianModel(int sh_degree) : _max_sh_degree(sh_degree) {
-}
+GaussianModel::GaussianModel(int sh_degree,
+                             float spatial_lr_scale,
+                             gauss::init::InitTensors&& init)
+    : _max_sh_degree{sh_degree},
+      _spatial_lr_scale{spatial_lr_scale} {
+    _xyz = std::move(init.xyz);
+    _scaling = std::move(init.scaling);
+    _rotation = std::move(init.rotation);
+    _opacity = std::move(init.opacity);
+    _features_dc = std::move(init.features_dc);
+    _features_rest = std::move(init.features_rest);
 
+    _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA, /*copy=*/true);
+}
 /**
  * @brief Fetches the features of the Gaussian model
  *
@@ -30,42 +41,6 @@ void GaussianModel::One_up_sh_degree() {
     if (_active_sh_degree < _max_sh_degree) {
         _active_sh_degree++;
     }
-}
-
-/**
- * @brief Initialize Gaussian Model from a Point Cloud.
- *
- * This function creates a Gaussian model from a given PointCloud object. It also sets
- * the spatial learning rate scale. The model's features, scales, rotations, and opacities
- * are initialized based on the input point cloud.
- *
- * @param pcd The input point cloud
- * @param spatial_lr_scale The spatial learning rate scale
- */
-void GaussianModel::Create_from_pcd(PointCloud& pcd, float spatial_lr_scale) {
-    _spatial_lr_scale = spatial_lr_scale;
-
-    const auto pointType = torch::TensorOptions().dtype(torch::kFloat32);
-    _xyz = torch::from_blob(pcd._points.data(), {static_cast<long>(pcd._points.size()), 3}, pointType).to(torch::kCUDA).set_requires_grad(true);
-    auto distances = torch::clamp_min(compute_mean_neighbor_distances(_xyz), 0.0000001);
-    _scaling = torch::log(torch::sqrt(distances)).unsqueeze(-1).repeat({1, 3}).to(torch::kCUDA, true).set_requires_grad(true);
-    _rotation = torch::zeros({_xyz.size(0), 4}).index_put_({torch::indexing::Slice(), 0}, 1).to(torch::kCUDA, true).set_requires_grad(true);
-    _opacity = inverse_sigmoid(0.5 * torch::ones({_xyz.size(0), 1})).to(torch::kCUDA, true).set_requires_grad(true);
-    _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA, true);
-
-    // colors
-    auto colorType = torch::TensorOptions().dtype(torch::kUInt8);
-    auto rgb2sh = [](const torch::Tensor& rgb) {
-        return (rgb - 0.5f) / static_cast<float>(0.28209479177387814);
-    };
-    auto fused_color = rgb2sh(torch::from_blob(pcd._colors.data(), {static_cast<long>(pcd._colors.size()), 3}, colorType).to(pointType) / 255.f).to(torch::kCUDA);
-
-    // features
-    auto features = torch::zeros({fused_color.size(0), 3, static_cast<long>(std::pow((_max_sh_degree + 1), 2))}).to(torch::kCUDA);
-    features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(torch::indexing::None, 3), 0}, fused_color);
-    features.index_put_({torch::indexing::Slice(), torch::indexing::Slice(3, torch::indexing::None), torch::indexing::Slice(1, torch::indexing::None)}, 0.0);
-    _features_dc = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(0, 1)}).transpose(1, 2).contiguous().set_requires_grad(true);
-    _features_rest = features.index({torch::indexing::Slice(), torch::indexing::Slice(), torch::indexing::Slice(1, torch::indexing::None)}).transpose(1, 2).contiguous().set_requires_grad(true);
 }
 
 /**

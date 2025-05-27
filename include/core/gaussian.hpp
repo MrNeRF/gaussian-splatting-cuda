@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "core/gaussian_init.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
 #include "kernels/general_utils.cuh"
@@ -12,7 +13,10 @@
 
 class GaussianModel {
 public:
-    explicit GaussianModel(int sh_degree);
+    GaussianModel() = delete;
+    GaussianModel(int sh_degree,
+                  float spatial_lr_scale,
+                  gauss::init::InitTensors&& init);
     // Copy constructor
     GaussianModel(const GaussianModel& other) = delete;
     // Copy assignment operator
