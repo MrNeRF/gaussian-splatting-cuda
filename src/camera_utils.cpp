@@ -15,36 +15,26 @@
 //  World → view (NeRF++ translate / scale variant)
 // -----------------------------------------------------------------------------
 torch::Tensor getWorld2View2(const torch::Tensor& R,
-                             const torch::Tensor& t,
-                             const torch::Tensor& translate,
-                             float scale)
+                             const torch::Tensor& t)
 {
-    assert_mat(R,3,3,"R");
-    assert_vec(t,3,"t");
-    assert_vec(translate,3,"translate");
+    assert_mat(R, 3, 3, "R");
+    assert_vec(t, 3, "t");
 
     const auto dev = R.device();
     torch::Tensor Rt = torch::eye(4,
                                   torch::TensorOptions().dtype(torch::kFloat32).device(dev));
 
-    /* 1. copy **transposed** => Eigen(col-major) → Torch(row-major) */
+    // 1. Put R^T in the top-left block
     Rt.index_put_({torch::indexing::Slice(0,3),
-                   torch::indexing::Slice(0,3)}, R.t());
+                   torch::indexing::Slice(0,3)},
+                  R.t());
 
-    /* 2. copy translation exactly like the Eigen path did                *
-     *    (it will be handled when we go W2C → C2W → W2C again).          */
-    Rt.index_put_({torch::indexing::Slice(0,3), 3}, t);
+    // 2. Copy translation exactly
+    Rt.index_put_({3, torch::indexing::Slice(0,3)}, t);
 
-    /* 3. identical two-step trick: W2C ➜ C2W ➜ adjust centre ➜ W2C      */
-    torch::Tensor C2W = torch::linalg_inv(Rt);
-
-    auto centre = C2W.index({torch::indexing::Slice(0,3), 3});
-    centre = (centre + translate) * scale;
-    C2W.index_put_({torch::indexing::Slice(0,3), 3}, centre);
-
-    return torch::linalg_inv(C2W).clone();   // final World→View
+    // 3. No final transpose needed
+    return Rt;
 }
-
 
 // -----------------------------------------------------------------------------
 //  Projection matrix (OpenGL style, z-forward)

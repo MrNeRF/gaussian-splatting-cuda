@@ -39,10 +39,7 @@ void Camera::initialize_cuda_tensors() {
     auto R_cuda = _R.to(torch::kCUDA, /*non_blocking=*/true);
     auto T_cuda = _T.to(torch::kCUDA, /*non_blocking=*/true);
 
-    _world_view_transform = getWorld2View2(R_cuda, T_cuda,
-                                           torch::zeros({3}, torch::kFloat32)
-                                               .to(torch::kCUDA),
-                                           _scale);
+    _world_view_transform = getWorld2View2(R_cuda, T_cuda);
 
     _projection_matrix = getProjectionMatrix(_znear, _zfar,
                                              _FoVx,  _FoVy)
