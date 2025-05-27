@@ -22,7 +22,15 @@ int main(int argc, char* argv[]) {
         return -1;
 
     //----------------------------------------------------------------------
-    // 2. Dataset + DataLoader
+    // 2. Initialize CUDA before creating DataLoader
+    //----------------------------------------------------------------------
+    if (!torch::cuda::is_available()) {
+        std::cerr << "CUDA is not available – aborting.\n";
+        return -1;
+    }
+
+    //----------------------------------------------------------------------
+    // 3. Dataset + DataLoader
     //----------------------------------------------------------------------
     auto [unused_loader, dataset] = create_torch_dataloader(modelParams, /*num_workers=*/4);
     const auto& scene             = dataset->get_scene_info();
@@ -40,18 +48,13 @@ int main(int argc, char* argv[]) {
     auto train_dataloader = make_loader();
 
     //----------------------------------------------------------------------
-    // 3. Model initialisation
+    // 4. Model initialisation
     //----------------------------------------------------------------------
     auto gaussians = GaussianModel(modelParams.sh_degree);
 
     PointCloud point_cloud_copy = scene._point_cloud;
     gaussians.Create_from_pcd(point_cloud_copy, scene._nerf_norm_radius);
     gaussians.Training_setup(optimParams);
-
-    if (!torch::cuda::is_available()) {
-        std::cerr << "CUDA is not available – aborting.\n";
-        return -1;
-    }
 
     auto background = modelParams.white_background
                           ? torch::tensor({1.f, 1.f, 1.f})
@@ -62,11 +65,6 @@ int main(int argc, char* argv[]) {
     const float cameras_extent = scene._nerf_norm_radius;
     TrainingProgress progress(optimParams.iterations, /*bar_width=*/100);
 
-    //----------------------------------------------------------------------
-    // 4. Training loop
-    //----------------------------------------------------------------------
-    std::cout << "Starting training with LibTorch DataLoader …\n";
-
     int iter          = 1;
     int epochs_needed = (optimParams.iterations + dataset_size - 1) / dataset_size;
 
@@ -74,11 +72,11 @@ int main(int argc, char* argv[]) {
         for (auto& batch : *train_dataloader) {          // batch = std::vector<CameraExample>
             if (iter > optimParams.iterations) break;
 
-            //------------------------------------------------------------------
-            // Example == one camera (batch_size == 1)
-            //------------------------------------------------------------------
             auto&  example  = batch[0];
             Camera  cam      = std::move(example.data);   // <-- no ()
+
+            // Initialize CUDA tensors in the main thread
+            cam.initialize_cuda_tensors();
 
             auto   gt_image = cam.Get_original_image().to(torch::kCUDA, /*non_blocking=*/true);
 
@@ -161,9 +159,6 @@ int main(int argc, char* argv[]) {
         train_dataloader = make_loader();
     }
 
-    //----------------------------------------------------------------------
-    // 5. Wrap-up
-    //----------------------------------------------------------------------
     progress.print_final_summary(static_cast<int>(gaussians.Get_xyz().size(0)));
     return 0;
 }

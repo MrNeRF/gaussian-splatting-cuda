@@ -17,6 +17,13 @@ public:
            std::string image_name,
            int image_id,
            float scale = 1.f);
+
+    // Initialize CUDA tensors - call this in the main thread after loading
+    void initialize_cuda_tensors();
+
+    // Check if CUDA tensors have been initialized
+    bool is_cuda_initialized() const { return _cuda_initialized; }
+
     // Getters
     int Get_uid() const { return _uid; }
     int Get_colmap_id() const { return _colmap_id; }
@@ -30,10 +37,22 @@ public:
     int Get_image_height() const { return _image_height; }
     float Get_zfar() const { return _zfar; }
     float Get_znear() const { return _znear; }
-    torch::Tensor& Get_world_view_transform() { return _world_view_transform; }
-    torch::Tensor& Get_projection_matrix() { return _projection_matrix; }
-    torch::Tensor& Get_full_proj_transform() { return _full_proj_transform; }
-    torch::Tensor& Get_camera_center() { return _camera_center; }
+    torch::Tensor& Get_world_view_transform() {
+        assert(_cuda_initialized && "CUDA tensors not initialized! Call initialize_cuda_tensors() first");
+        return _world_view_transform;
+    }
+    torch::Tensor& Get_projection_matrix() {
+        assert(_cuda_initialized && "CUDA tensors not initialized! Call initialize_cuda_tensors() first");
+        return _projection_matrix;
+    }
+    torch::Tensor& Get_full_proj_transform() {
+        assert(_cuda_initialized && "CUDA tensors not initialized! Call initialize_cuda_tensors() first");
+        return _full_proj_transform;
+    }
+    torch::Tensor& Get_camera_center() {
+        assert(_cuda_initialized && "CUDA tensors not initialized! Call initialize_cuda_tensors() first");
+        return _camera_center;
+    }
 
 private:
     int _uid;
@@ -54,6 +73,7 @@ private:
     torch::Tensor _projection_matrix;
     torch::Tensor _full_proj_transform;
     torch::Tensor _camera_center;
+    bool _cuda_initialized = false;
 };
 
 struct CameraInfo;
