@@ -23,6 +23,7 @@ endif()
 find_package(Torch REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
+find_package(OpenMP)
 find_package(Threads REQUIRED)
 
 # Python packages - CRITICAL for linking
@@ -75,6 +76,13 @@ target_link_libraries(gaussian_host
         ${PYTHON_LIBRARIES}
         Python3::Python
 )
+
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(gaussian_host PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP found – compiling with parallel point-cloud loader")
+else()
+    message(STATUS "OpenMP NOT found – falling back to single-thread loader")
+endif()
 
 # Fast C++ compilation
 target_compile_options(gaussian_host PRIVATE
