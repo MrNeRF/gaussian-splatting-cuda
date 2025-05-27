@@ -4,7 +4,8 @@
 #include "core/image.hpp"
 #include "core/point_cloud.hpp"
 
-#include <Eigen/Core>
+#include "core/torch_shapes.hpp"
+#include <torch/torch.h>
 
 #include <algorithm>
 #include <cstring>
@@ -14,11 +15,58 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <omp.h>
 #include <unordered_map>
 #include <vector>
 
+namespace F = torch::nn::functional; // <-- correct namespace alias
+
 // -----------------------------------------------------------------------------
-//  Small POD read helpers (zero‑overhead after inlining)
+//  Quaternion → rotation matrix
+// -----------------------------------------------------------------------------
+inline torch::Tensor qvec2rotmat(const torch::Tensor& qraw) {
+    assert_vec(qraw, 4, "qvec");
+
+    namespace F = torch::nn::functional;
+    auto q = F::normalize(qraw.to(torch::kFloat32),
+                          F::NormalizeFuncOptions().dim(0));
+
+    auto w = q[0], x = q[1], y = q[2], z = q[3];
+
+    torch::Tensor R = torch::empty({3, 3}, torch::kFloat32);
+    R[0][0] = 1 - 2 * (y * y + z * z);
+    R[0][1] = 2 * (x * y - z * w);
+    R[0][2] = 2 * (x * z + y * w);
+
+    R[1][0] = 2 * (x * y + z * w);
+    R[1][1] = 1 - 2 * (x * x + z * z);
+    R[1][2] = 2 * (y * z - x * w);
+
+    R[2][0] = 2 * (x * z - y * w);
+    R[2][1] = 2 * (y * z + x * w);
+    R[2][2] = 1 - 2 * (x * x + y * y);
+    return R; // ←  **do NOT transpose here**
+}
+
+// -----------------------------------------------------------------------------
+//  Build 4 × 4 world-to-camera matrix
+// -----------------------------------------------------------------------------
+inline torch::Tensor getWorld2View(const torch::Tensor& R,
+                                   const torch::Tensor& T) {
+    assert_mat(R, 3, 3, "R");
+    assert_vec(T, 3, "T");
+
+    torch::Tensor M = torch::eye(4, torch::kFloat32);
+    M.index_put_({torch::indexing::Slice(0, 3),
+                  torch::indexing::Slice(0, 3)},
+                 R);
+    M.index_put_({torch::indexing::Slice(0, 3), 3},
+                 (-torch::matmul(R, T)).reshape({3}));
+    return M;
+}
+
+// -----------------------------------------------------------------------------
+//  POD read helpers
 // -----------------------------------------------------------------------------
 static inline uint64_t read_u64(const char*& p) {
     uint64_t v;
@@ -46,9 +94,9 @@ static inline double read_f64(const char*& p) {
 }
 
 // -----------------------------------------------------------------------------
-//  Mapping of COLMAP camera model IDs → (enum, parameter‑count)
+//  COLMAP camera-model map
 // -----------------------------------------------------------------------------
-std::unordered_map<int, std::pair<CAMERA_MODEL, int32_t>> camera_model_ids = {
+static const std::unordered_map<int, std::pair<CAMERA_MODEL, int32_t>> camera_model_ids = {
     {0, {CAMERA_MODEL::SIMPLE_PINHOLE, 3}},
     {1, {CAMERA_MODEL::PINHOLE, 4}},
     {2, {CAMERA_MODEL::SIMPLE_RADIAL, 4}},
@@ -63,239 +111,233 @@ std::unordered_map<int, std::pair<CAMERA_MODEL, int32_t>> camera_model_ids = {
     {11, {CAMERA_MODEL::UNDEFINED, -1}}};
 
 // -----------------------------------------------------------------------------
-//  File helpers
+//  Binary-file loader
 // -----------------------------------------------------------------------------
-std::unique_ptr<std::vector<char>> read_binary(const std::filesystem::path& file_path) {
-    std::ifstream f(file_path, std::ios::binary | std::ios::ate);
+static std::unique_ptr<std::vector<char>>
+read_binary(const std::filesystem::path& p) {
+    std::ifstream f(p, std::ios::binary | std::ios::ate);
     if (!f)
-        throw std::runtime_error("Failed to open " + file_path.string());
+        throw std::runtime_error("Failed to open " + p.string());
 
-    const auto size = static_cast<std::streamsize>(f.tellg());
-    auto buffer = std::make_unique<std::vector<char>>(static_cast<size_t>(size));
+    auto sz = static_cast<std::streamsize>(f.tellg());
+    auto buf = std::make_unique<std::vector<char>>(static_cast<size_t>(sz));
 
     f.seekg(0, std::ios::beg);
-    f.read(buffer->data(), size);
+    f.read(buf->data(), sz);
     if (!f)
-        throw std::runtime_error("Short read on " + file_path.string());
-
-    return buffer; // one allocation, one read, zero extra copies
+        throw std::runtime_error("Short read on " + p.string());
+    return buf;
 }
 
 // -----------------------------------------------------------------------------
-//  COLMAP binary parsers
+//  images.bin
 // -----------------------------------------------------------------------------
 std::vector<Image> read_images_binary(const std::filesystem::path& file_path) {
     auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
 
-    const uint64_t n_images = read_u64(cur);
+    uint64_t n_images = read_u64(cur);
     std::vector<Image> images;
     images.reserve(n_images);
 
     for (uint64_t i = 0; i < n_images; ++i) {
-        const uint32_t id = read_u32(cur);
+        uint32_t id = read_u32(cur);
         auto& img = images.emplace_back(id);
 
-        img._qvec.w() = static_cast<float>(read_f64(cur));
-        img._qvec.x() = static_cast<float>(read_f64(cur));
-        img._qvec.y() = static_cast<float>(read_f64(cur));
-        img._qvec.z() = static_cast<float>(read_f64(cur));
-        img._qvec.normalize();
+        torch::Tensor q = torch::empty({4}, torch::kFloat32);
+        for (int k = 0; k < 4; ++k)
+            q[k] = static_cast<float>(read_f64(cur));
 
-        img._tvec.x() = static_cast<float>(read_f64(cur));
-        img._tvec.y() = static_cast<float>(read_f64(cur));
-        img._tvec.z() = static_cast<float>(read_f64(cur));
+        img._qvec = F::normalize(q, F::NormalizeFuncOptions().dim(0));
+
+        torch::Tensor t = torch::empty({3}, torch::kFloat32);
+        for (int k = 0; k < 3; ++k)
+            t[k] = static_cast<float>(read_f64(cur));
+        img._tvec = t;
 
         img._camera_id = read_u32(cur);
 
-        // null‑terminated filename
         img._name.assign(cur);
-        cur += img._name.size() + 1;
+        cur += img._name.size() + 1; // skip '\0'
 
-        // skip 2‑D points
-        const uint64_t npts = read_u64(cur);
+        uint64_t npts = read_u64(cur); // skip 2-D points
         cur += npts * (sizeof(double) * 2 + sizeof(uint64_t));
     }
-
     if (cur != end)
-        throw std::runtime_error("images.bin: unexpected trailing bytes");
-
+        throw std::runtime_error("images.bin: trailing bytes");
     return images;
 }
 
+// -----------------------------------------------------------------------------
+//  cameras.bin
+// -----------------------------------------------------------------------------
 std::unordered_map<uint32_t, CameraInfo>
 read_cameras_binary(const std::filesystem::path& file_path) {
     auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
 
-    const uint64_t n_cams = read_u64(cur);
+    uint64_t n_cams = read_u64(cur);
     std::unordered_map<uint32_t, CameraInfo> cams;
     cams.reserve(n_cams);
 
     for (uint64_t i = 0; i < n_cams; ++i) {
-        CameraInfo cam; // default ctor
+        CameraInfo cam;
         cam._camera_ID = read_u32(cur);
-        const int32_t model_id = read_i32(cur);
+
+        int32_t model_id = read_i32(cur);
         cam._width = read_u64(cur);
         cam._height = read_u64(cur);
 
-        const auto it = camera_model_ids.find(model_id);
+        auto it = camera_model_ids.find(model_id);
         if (it == camera_model_ids.end() || it->second.second < 0)
-            throw std::runtime_error("Unsupported camera model id " + std::to_string(model_id));
+            throw std::runtime_error("Unsupported camera-model id " + std::to_string(model_id));
 
         cam._camera_model = it->second.first;
-        const int32_t param_cnt = it->second.second;
-        cam._params.resize(param_cnt);
-        std::memcpy(cam._params.data(), cur, param_cnt * sizeof(double));
+        int32_t param_cnt = it->second.second;
+        cam._params = torch::from_blob(const_cast<char*>(cur),
+                                       {param_cnt}, torch::kFloat64)
+                          .clone()
+                          .to(torch::kFloat32);
         cur += param_cnt * sizeof(double);
 
         cams.emplace(cam._camera_ID, std::move(cam));
     }
-
     if (cur != end)
-        throw std::runtime_error("cameras.bin: unexpected trailing bytes");
-
+        throw std::runtime_error("cameras.bin: trailing bytes");
     return cams;
 }
 
+// -----------------------------------------------------------------------------
+//  points3D.bin  – PointCloud stays POD
+// -----------------------------------------------------------------------------
 PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
     auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
 
-    const uint64_t N = read_u64(cur);
-    struct Packed {
+    uint64_t N = read_u64(cur);
+    struct P {
         float x, y, z;
         uint8_t r, g, b;
     };
-    std::vector<Packed> tmp;
+    std::vector<P> tmp;
     tmp.reserve(N);
 
     for (uint64_t i = 0; i < N; ++i) {
-        cur += 8; // skip point id
+        cur += 8; // point ID
         double dx = read_f64(cur), dy = read_f64(cur), dz = read_f64(cur);
         uint8_t r = *cur++, g = *cur++, b = *cur++;
-        cur += 8; // reprojection error (ignored)
-        const uint64_t tlen = read_u64(cur);
-        cur += tlen * sizeof(uint32_t) * 2;
+        cur += 8;                                    // reprojection error
+        cur += read_u64(cur) * sizeof(uint32_t) * 2; // track
         tmp.push_back({float(dx), float(dy), float(dz), r, g, b});
     }
-
     if (cur != end)
-        throw std::runtime_error("points3D.bin: unexpected trailing bytes");
+        throw std::runtime_error("points3D.bin: trailing bytes");
 
     PointCloud pc;
     pc._points.resize(N);
     pc._colors.resize(N);
+
 #pragma omp parallel for schedule(static)
     for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(N); ++i) {
-        const auto& p = tmp[i];
-        pc._points[i] = {p.x, p.y, p.z};
-        pc._colors[i] = {p.r, p.g, p.b};
+        pc._points[i] = {tmp[i].x, tmp[i].y, tmp[i].z};
+        pc._colors[i] = {tmp[i].r, tmp[i].g, tmp[i].b};
     }
     return pc;
 }
 
 // -----------------------------------------------------------------------------
-//  High‑level helpers
+//  Assemble per-image camera information
 // -----------------------------------------------------------------------------
+std::vector<CameraInfo>
+read_colmap_cameras(const std::filesystem::path file_path,
+                    const std::unordered_map<uint32_t, CameraInfo>& cams,
+                    const std::vector<Image>& images) {
+    std::vector<CameraInfo> out(images.size());
 
-std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_path,
-                                            const std::unordered_map<uint32_t, CameraInfo>& cameras,
-                                            const std::vector<Image>& images) {
-    std::vector<CameraInfo> cam_infos(images.size());
+    for (size_t i = 0; i < images.size(); ++i) {
+        const Image& img = images[i];
+        auto it = cams.find(img._camera_id);
+        if (it == cams.end())
+            throw std::runtime_error("Camera ID " + std::to_string(img._camera_id) + " not found");
 
-    // No longer use async futures since we're not loading images here
-    for (size_t idx = 0; idx < images.size(); ++idx) {
-        const Image* img = &images[idx];
-        auto it = cameras.find(img->_camera_id);
-        if (it == cameras.end())
-            throw std::runtime_error("Camera ID " + std::to_string(img->_camera_id) + " not found");
+        out[i] = it->second;
+        out[i]._image_path = file_path / img._name;
+        out[i]._image_name = img._name;
 
-        cam_infos[idx] = it->second; // copy base parameters
+        out[i]._R = qvec2rotmat(img._qvec);
+        out[i]._T = img._tvec.clone();
 
-        // Set image path but don't load the image data yet
-        cam_infos[idx]._image_path = file_path / img->_name;
-        cam_infos[idx]._image_name = img->_name;
-
-        // Set transformation matrices
-        cam_infos[idx]._R = qvec2rotmat(img->_qvec);
-        cam_infos[idx]._T = img->_tvec;
-
-        // Calculate FOV based on camera model
-        switch (cam_infos[idx]._camera_model) {
+        switch (out[i]._camera_model) {
         case CAMERA_MODEL::SIMPLE_PINHOLE: {
-            const float fx = cam_infos[idx]._params[0];
-            cam_infos[idx]._fov_x = focal2fov(fx, cam_infos[idx]._width);
-            cam_infos[idx]._fov_y = focal2fov(fx, cam_infos[idx]._height);
+            float fx = out[i]._params[0].item<float>();
+            out[i]._fov_x = focal2fov(fx, out[i]._width);
+            out[i]._fov_y = focal2fov(fx, out[i]._height);
             break;
         }
         case CAMERA_MODEL::PINHOLE: {
-            const float fx = cam_infos[idx]._params[0];
-            const float fy = cam_infos[idx]._params[1];
-            cam_infos[idx]._fov_x = focal2fov(fx, cam_infos[idx]._width);
-            cam_infos[idx]._fov_y = focal2fov(fy, cam_infos[idx]._height);
+            float fx = out[i]._params[0].item<float>();
+            float fy = out[i]._params[1].item<float>();
+            out[i]._fov_x = focal2fov(fx, out[i]._width);
+            out[i]._fov_y = focal2fov(fy, out[i]._height);
             break;
         }
         default:
-            throw std::runtime_error("Camera model not supported in read_colmap_cameras");
+            throw std::runtime_error("Unsupported camera model");
         }
 
-        // Initialize image dimensions and data pointer to null
-        // These will be set when the image is actually loaded in the dataloader
-        cam_infos[idx]._img_w = 0;
-        cam_infos[idx]._img_h = 0;
-        cam_infos[idx]._channels = 0;
-        cam_infos[idx]._img_data = nullptr;
+        out[i]._img_w = out[i]._img_h = out[i]._channels = 0;
+        out[i]._img_data = nullptr;
     }
-
-    return cam_infos;
+    return out;
 }
 
-static std::pair<Eigen::Vector3f, float> get_center_and_diag(const std::vector<Eigen::Vector3f>& centers) {
-    Eigen::Vector3f avg = Eigen::Vector3f::Zero();
-    for (const auto& c : centers)
-        avg += c;
-    avg /= static_cast<float>(centers.size());
-
-    float max_d = 0.f;
-    for (const auto& c : centers)
-        max_d = std::max(max_d, (c - avg).norm());
-
-    return {avg, max_d};
+// -----------------------------------------------------------------------------
+//  Scene-scale helper
+// -----------------------------------------------------------------------------
+static std::pair<torch::Tensor, float>
+center_and_diag(const std::vector<torch::Tensor>& pts) {
+    auto stack = torch::stack(pts); // N×3
+    torch::Tensor avg = stack.mean(0);
+    float diag = torch::norm(stack - avg, 2, 1).max().item<float>();
+    return {avg, diag};
 }
 
 float getNerfppNorm(std::vector<CameraInfo>& cams) {
-    std::vector<Eigen::Vector3f> centers;
+    std::vector<torch::Tensor> centers;
     centers.reserve(cams.size());
-    for (auto& cam : cams) {
-        Eigen::Matrix4f W2C = getWorld2View2Eigen(cam._R, cam._T);
-        Eigen::Matrix4f C2W = W2C.inverse();
-        centers.emplace_back(C2W.block<3, 1>(0, 3));
+    for (auto& c : cams) {
+        torch::Tensor W2C = getWorld2View(c._R, c._T);
+        torch::Tensor C2W = torch::linalg_inv(W2C);
+        centers.emplace_back(C2W.index({torch::indexing::Slice(0, 3), 3}));
     }
-    return get_center_and_diag(centers).second * 1.1f; // 10 % margin
+    return center_and_diag(centers).second * 1.1f; // +10 %
 }
 
-std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_path, int resolution) {
-    auto cameras = read_cameras_binary(file_path / "sparse/0/cameras.bin");
-    auto images = read_images_binary(file_path / "sparse/0/images.bin");
+// -----------------------------------------------------------------------------
+//  Top-level helper
+// -----------------------------------------------------------------------------
+std::unique_ptr<SceneInfo>
+read_colmap_scene_info(const std::filesystem::path& base, int resolution) {
+    auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");
+    auto images = read_images_binary(base / "sparse/0/images.bin");
 
     auto scene = std::make_unique<SceneInfo>();
-    scene->_point_cloud = read_point3D_binary(file_path / "sparse/0/points3D.bin");
-    scene->_cameras = read_colmap_cameras(file_path / "images", cameras, images);
+    scene->_point_cloud = read_point3D_binary(base / "sparse/0/points3D.bin");
+    scene->_cameras = read_colmap_cameras(base / "images", cams, images);
 
-    const auto& cam0 = scene->_cameras.front();
-    const size_t n = scene->_cameras.size();
-    const float mpix = cam0._img_w * cam0._img_h / 1'000'000.f;
-    const bool resized = (resolution == 2 || resolution == 4 || resolution == 8);
+    const auto& first = scene->_cameras.front();
+    float mpix = first._img_w * first._img_h / 1'000'000.f;
+    bool resized = (resolution == 2 || resolution == 4 || resolution == 8);
 
-    std::cout << "Training with " << n << " images of "
-              << cam0._img_w << " x " << cam0._img_h
+    std::cout << "Training with " << scene->_cameras.size() << " images of "
+              << first._img_w << " × " << first._img_h
               << (resized ? " (resized) " : " ")
-              << "pixels (" << std::fixed << std::setprecision(3) << mpix << " Mpixel per image, "
-              << std::fixed << std::setprecision(1) << mpix * n << " Mpixel total)" << std::endl;
+              << "pixels (" << std::fixed << std::setprecision(3) << mpix
+              << " MP per image, "
+              << mpix * scene->_cameras.size() << " MP total)\n";
 
     scene->_nerf_norm_radius = getNerfppNorm(scene->_cameras);
     return scene;

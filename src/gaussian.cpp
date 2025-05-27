@@ -51,32 +51,56 @@ void GaussianModel::One_up_sh_degree() {
  *
  * @param params The OptimizationParameters object providing the settings for training
  */
+// ─── GaussianModel::Training_setup ──────────────────────────────────────────
 void GaussianModel::Training_setup(const gs::param::OptimizationParameters& params) {
-    this->_percent_dense = params.percent_dense;
-    this->_xyz_gradient_accum = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
-    this->_denom = torch::zeros({this->_xyz.size(0), 1}).to(torch::kCUDA);
-    this->_xyz_scheduler_args = Expon_lr_func(params.position_lr_init * this->_spatial_lr_scale,
-                                              params.position_lr_final * this->_spatial_lr_scale,
-                                              params.position_lr_delay_mult,
-                                              params.position_lr_max_steps);
+    // ------------------------------------------------------------------
+    // 0. Move all tensors to CUDA *first* and mark them trainable
+    // ------------------------------------------------------------------
+    const auto dev = torch::kCUDA;
 
-    std::vector<torch::optim::OptimizerParamGroup> optimizer_params_groups;
-    optimizer_params_groups.reserve(6);
-    optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_xyz}, std::make_unique<torch::optim::AdamOptions>(params.position_lr_init * this->_spatial_lr_scale)));
-    optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_features_dc}, std::make_unique<torch::optim::AdamOptions>(params.feature_lr)));
-    optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_features_rest}, std::make_unique<torch::optim::AdamOptions>(params.feature_lr / 20.)));
-    optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_scaling}, std::make_unique<torch::optim::AdamOptions>(params.scaling_lr * this->_spatial_lr_scale)));
-    optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_rotation}, std::make_unique<torch::optim::AdamOptions>(params.rotation_lr)));
-    optimizer_params_groups.push_back(torch::optim::OptimizerParamGroup({_opacity}, std::make_unique<torch::optim::AdamOptions>(params.opacity_lr)));
+    _xyz = _xyz.to(dev).set_requires_grad(true);
+    _scaling = _scaling.to(dev).set_requires_grad(true);
+    _rotation = _rotation.to(dev).set_requires_grad(true);
+    _opacity = _opacity.to(dev).set_requires_grad(true);
+    _features_dc = _features_dc.to(dev).set_requires_grad(true);
+    _features_rest = _features_rest.to(dev).set_requires_grad(true);
 
-    static_cast<torch::optim::AdamOptions&>(optimizer_params_groups[0].options()).eps(1e-15);
-    static_cast<torch::optim::AdamOptions&>(optimizer_params_groups[1].options()).eps(1e-15);
-    static_cast<torch::optim::AdamOptions&>(optimizer_params_groups[2].options()).eps(1e-15);
-    static_cast<torch::optim::AdamOptions&>(optimizer_params_groups[3].options()).eps(1e-15);
-    static_cast<torch::optim::AdamOptions&>(optimizer_params_groups[4].options()).eps(1e-15);
-    static_cast<torch::optim::AdamOptions&>(optimizer_params_groups[5].options()).eps(1e-15);
+    // aux buffers (no grad)
+    _percent_dense = params.percent_dense;
+    _xyz_gradient_accum = torch::zeros({_xyz.size(0), 1}, torch::kFloat32).to(dev);
+    _denom = torch::zeros({_xyz.size(0), 1}, torch::kFloat32).to(dev);
+    _max_radii2D = torch::zeros({_xyz.size(0)}, torch::kFloat32).to(dev);
 
-    _optimizer = std::make_unique<torch::optim::Adam>(optimizer_params_groups, torch::optim::AdamOptions(0.f).eps(1e-15));
+    _xyz_scheduler_args = Expon_lr_func(
+        params.position_lr_init * _spatial_lr_scale,
+        params.position_lr_final * _spatial_lr_scale,
+        params.position_lr_delay_mult,
+        params.position_lr_max_steps);
+
+    // ------------------------------------------------------------------
+    // 1. Build Adam param-groups with the CUDA tensors
+    // ------------------------------------------------------------------
+    using torch::optim::AdamOptions;
+    std::vector<torch::optim::OptimizerParamGroup> groups;
+
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_xyz},
+                                                          std::make_unique<AdamOptions>(params.position_lr_init * _spatial_lr_scale)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_features_dc},
+                                                          std::make_unique<AdamOptions>(params.feature_lr)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_features_rest},
+                                                          std::make_unique<AdamOptions>(params.feature_lr / 20.f)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_scaling},
+                                                          std::make_unique<AdamOptions>(params.scaling_lr * _spatial_lr_scale)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_rotation},
+                                                          std::make_unique<AdamOptions>(params.rotation_lr)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_opacity},
+                                                          std::make_unique<AdamOptions>(params.opacity_lr)));
+
+    for (auto& g : groups)
+        static_cast<AdamOptions&>(g.options()).eps(1e-15);
+
+    _optimizer = std::make_unique<torch::optim::Adam>(
+        groups, AdamOptions(0.f).eps(1e-15));
 }
 
 void GaussianModel::Update_learning_rate(float iteration) {
