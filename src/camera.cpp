@@ -28,7 +28,6 @@ Camera::Camera(int imported_colmap_id,
 
     this->_zfar = 100.f;
     this->_znear = 0.01f;
-
 }
 
 void Camera::initialize_cuda_tensors() {

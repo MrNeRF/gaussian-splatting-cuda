@@ -1,13 +1,13 @@
 #pragma once
 
-#include "core/camera_info.hpp"
 #include "core/camera.hpp"
-#include "core/scene_info.hpp"
-#include "core/parameters.hpp"
+#include "core/camera_info.hpp"
 #include "core/camera_utils.hpp"
+#include "core/parameters.hpp"
 #include "core/read_utils.hpp"
-#include <torch/torch.h>
+#include "core/scene_info.hpp"
 #include <memory>
+#include <torch/torch.h>
 #include <vector>
 
 // Example type that wraps Camera
@@ -76,7 +76,8 @@ public:
         // Convert to float and normalize
         image_tensor = image_tensor.to(torch::kFloat32)
                            .permute({2, 0, 1})
-                           .clone() / 255.0f;
+                           .clone() /
+                       255.0f;
 
         // Free the image data
         free_image(img_data);
@@ -108,7 +109,7 @@ public:
 
 private:
     std::unique_ptr<SceneInfo> _scene_info;
-    std::vector<CameraInfo>    _camera_infos;
+    std::vector<CameraInfo> _camera_infos;
     const gs::param::ModelParameters& _params;
 };
 
