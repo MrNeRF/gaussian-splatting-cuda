@@ -82,16 +82,6 @@ Eigen::Matrix3f qvec2rotmat(const Eigen::Quaternionf& q) {
     return q.toRotationMatrix();
 }
 
-Eigen::Quaternionf rotmat2qvec(const Eigen::Matrix3f& R) {
-    Eigen::Quaternionf qvec(R);
-    // the order of coefficients is different in python implementation.
-    // Might be a bug here if data comes in wrong order! TODO: check
-    if (qvec.w() < 0.f) {
-        qvec.coeffs() *= -1.f;
-    }
-    return qvec;
-}
-
 std::tuple<unsigned char*, int, int, int> read_image(std::filesystem::path image_path, int resolution) {
     int width, height, channels;
     unsigned char* img = stbi_load(image_path.string().c_str(), &width, &height, &channels, 0);

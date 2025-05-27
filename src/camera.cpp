@@ -43,19 +43,3 @@ void Camera::initialize_cuda_tensors() {
 
     _cuda_initialized = true;
 }
-
-// TODO: I have skipped the resolution for now.
-Camera loadCam(const gs::param::ModelParameters& params, int id, CameraInfo& cam_info) {
-    // Create a torch::Tensor from the image data
-    torch::Tensor original_image_tensor = torch::from_blob(cam_info._img_data,
-                                                           {cam_info._img_h, cam_info._img_w, cam_info._channels},        // img size
-                                                           {cam_info._img_w * cam_info._channels, cam_info._channels, 1}, // stride
-                                                           torch::kUInt8);
-    original_image_tensor = original_image_tensor.to(torch::kFloat32).permute({2, 0, 1}).clone() / 255.f;
-
-    free_image(cam_info._img_data); // we dont longer need the image here.
-    cam_info._img_data = nullptr;   // Assure that we dont use the image data anymore.
-
-    return Camera(cam_info._camera_ID, cam_info._R, cam_info._T, cam_info._fov_x, cam_info._fov_y, original_image_tensor,
-                  cam_info._image_name, id);
-}
