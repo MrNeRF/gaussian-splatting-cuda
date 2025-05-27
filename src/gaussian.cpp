@@ -8,13 +8,6 @@
 GaussianModel::GaussianModel(int sh_degree) : _max_sh_degree(sh_degree) {
 }
 
-torch::Tensor GaussianModel::Get_covariance(float scaling_modifier) {
-    auto L = build_scaling_rotation(scaling_modifier * Get_scaling(), _rotation);
-    auto actual_covariance = torch::mm(L, L.transpose(1, 2));
-    auto symm = strip_symmetric(actual_covariance);
-    return symm;
-}
-
 /**
  * @brief Fetches the features of the Gaussian model
  *
