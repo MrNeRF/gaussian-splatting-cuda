@@ -28,9 +28,7 @@ public:
     inline torch::Tensor Get_opacity() const { return torch::sigmoid(_opacity); }
     inline torch::Tensor Get_rotation() const { return torch::nn::functional::normalize(_rotation); }
     torch::Tensor Get_features() const;
-    torch::Tensor Get_covariance(float scaling_modifier = 1.0);
     int Get_active_sh_degree() const { return _active_sh_degree; }
-    int Get_max_sh_degree() const { return _max_sh_degree; }
     torch::Tensor Get_scaling() { return torch::exp(_scaling); }
 
     // Methods
