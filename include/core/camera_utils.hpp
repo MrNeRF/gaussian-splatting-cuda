@@ -27,8 +27,6 @@ float focal2fov(float focal, int pixels);
 
 Eigen::Matrix3f qvec2rotmat(const Eigen::Quaternionf& qvec);
 
-Eigen::Quaternionf rotmat2qvec(const Eigen::Matrix3f& R);
-
 std::tuple<unsigned char*, int, int, int> read_image(std::filesystem::path image_path, int resolution);
 
 void free_image(unsigned char* image);
