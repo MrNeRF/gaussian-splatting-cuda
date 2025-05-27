@@ -43,6 +43,7 @@ add_subdirectory(external)
 set(HOST_SOURCES
         src/main.cpp
         src/gaussian.cpp
+        src/gaussian_init.cpp
         src/camera.cpp
         src/mean_neighbor_dist.cpp
         src/camera_utils.cpp

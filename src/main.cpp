@@ -2,6 +2,7 @@
 #include "core/dataset.hpp"
 #include "core/debug_utils.hpp"
 #include "core/gaussian.hpp"
+#include "core/gaussian_init.hpp"
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
 #include "core/training_progress.hpp"
@@ -33,7 +34,7 @@ int main(int argc, char* argv[]) {
     // 3. Create dataset
     //----------------------------------------------------------------------
     auto dataset = create_camera_dataset(modelParams);
-    const auto& scene = dataset->get_scene_info();
+    auto scene = dataset->get_scene_info();
     const std::size_t dataset_size = dataset->size().value();
 
     // Helper to create fresh dataloaders as needed
@@ -46,10 +47,13 @@ int main(int argc, char* argv[]) {
     //----------------------------------------------------------------------
     // 4. Model initialisation
     //----------------------------------------------------------------------
-    auto gaussians = GaussianModel(modelParams.sh_degree);
+    auto init = gauss::init::build_from_point_cloud(scene._point_cloud,
+                                                    modelParams.sh_degree,
+                                                    scene._nerf_norm_radius);
 
-    PointCloud point_cloud_copy = scene._point_cloud;
-    gaussians.Create_from_pcd(point_cloud_copy, scene._nerf_norm_radius);
+    GaussianModel gaussians(modelParams.sh_degree,
+                            scene._nerf_norm_radius,
+                            std::move(init));
     gaussians.Training_setup(optimParams);
 
     auto background = modelParams.white_background
