@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
     //----------------------------------------------------------------------
     // 1. Parse command-line arguments
     //----------------------------------------------------------------------
-    auto args        = gs::args::convert_args(argc, argv);
+    auto args = gs::args::convert_args(argc, argv);
     auto modelParams = gs::param::ModelParameters();
     auto optimParams = gs::param::read_optim_params_from_json();
     if (gs::args::parse_arguments(args, modelParams, optimParams) < 0)
@@ -61,28 +61,32 @@ int main(int argc, char* argv[]) {
     const float cameras_extent = scene._nerf_norm_radius;
     TrainingProgress progress(optimParams.iterations, /*bar_width=*/100);
 
-    int iter          = 1;
+    int iter = 1;
     int epochs_needed = (optimParams.iterations + dataset_size - 1) / dataset_size;
 
     for (int epoch = 0; epoch < epochs_needed && iter <= optimParams.iterations; ++epoch) {
-        for (auto& batch : *train_dataloader) {          // batch = std::vector<CameraExample>
-            if (iter > optimParams.iterations) break;
+        for (auto& batch : *train_dataloader) { // batch = std::vector<CameraExample>
+            if (iter > optimParams.iterations)
+                break;
 
-            auto&  example  = batch[0];
-            Camera  cam      = std::move(example.data);   // <-- no ()
+            auto& example = batch[0];
+            Camera cam = std::move(example.data); // <-- no ()
 
             // Initialize CUDA tensors in the main thread
             cam.initialize_cuda_tensors();
 
-            auto   gt_image = cam.Get_original_image().to(torch::kCUDA, /*non_blocking=*/true);
+            auto gt_image = cam.Get_original_image().to(torch::kCUDA, /*non_blocking=*/true);
 
-            if (iter % 1000 == 0) gaussians.One_up_sh_degree();
+            if (iter % 1000 == 0)
+                gaussians.One_up_sh_degree();
 
             auto [image, viewspace_point_tensor, visibility_filter, radii] =
                 render(cam, gaussians, background);
 
-            if (image.dim() == 3)    image    = image.unsqueeze(0);   // NCHW for SSIM
-            if (gt_image.dim() == 3) gt_image = gt_image.unsqueeze(0);
+            if (image.dim() == 3)
+                image = image.unsqueeze(0); // NCHW for SSIM
+            if (gt_image.dim() == 3)
+                gt_image = gt_image.unsqueeze(0);
 
             if (image.sizes() != gt_image.sizes()) {
                 std::cerr << "ERROR: size mismatch – rendered " << image.sizes()
@@ -93,9 +97,9 @@ int main(int argc, char* argv[]) {
             //------------------------------------------------------------------
             // Loss = (1-λ)·L1 + λ·DSSIM
             //------------------------------------------------------------------
-            auto l1l       = gaussian_splatting::l1_loss(image.squeeze(0), gt_image.squeeze(0));
+            auto l1l = gaussian_splatting::l1_loss(image.squeeze(0), gt_image.squeeze(0));
             auto ssim_loss = fused_ssim(image, gt_image, "same", /*train=*/true);
-            auto loss      = (1.f - optimParams.lambda_dssim) * l1l +
+            auto loss = (1.f - optimParams.lambda_dssim) * l1l +
                         optimParams.lambda_dssim * (1.f - ssim_loss);
             loss.backward();
 
@@ -106,7 +110,7 @@ int main(int argc, char* argv[]) {
                 torch::NoGradGuard no_grad;
 
                 auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
-                auto visible_radii     = radii.masked_select(visibility_filter);
+                auto visible_radii = radii.masked_select(visibility_filter);
                 gaussians._max_radii2D.masked_scatter_(
                     visibility_filter, torch::max(visible_max_radii, visible_radii));
 
