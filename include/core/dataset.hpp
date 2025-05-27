@@ -35,7 +35,7 @@ public:
     /**
      * Deep‑copy constructor.
      *
-     * LibTorch’s stateless dataloader takes the dataset **by value**, so a
+     * LibTorch's stateless dataloader takes the dataset **by value**, so a
      * copy is required.  The SceneInfo held through a unique_ptr is deep‑copied
      * here to keep ownership semantics intact.  The parameters object is
      * *not* copied (it is an immutable external object) – the reference is
@@ -59,28 +59,27 @@ public:
             throw std::out_of_range("Camera index out of range");
         }
 
-        const auto& cam_info = _camera_infos[index];
+        auto& cam_info = _camera_infos[index];
 
-        // Load image on demand
-        auto [img_data, width, height, channels] = read_image(
-            cam_info._image_path,
-            _params.resolution);
+        // Load image on demand using the helper method
+        cam_info.load_image_data(_params.resolution);
 
-        // Create tensor from image data
+        // Create tensor from the loaded image data
         torch::Tensor image_tensor = torch::from_blob(
-            img_data,
-            {height, width, channels},
-            {width * channels, channels, 1},
+            cam_info._img_data,
+            {cam_info._img_h, cam_info._img_w, cam_info._channels},
+            {cam_info._img_w * cam_info._channels, cam_info._channels, 1},
             torch::kUInt8);
 
         // Convert to float and normalize
         image_tensor = image_tensor.to(torch::kFloat32)
                            .permute({2, 0, 1})
-                           .clone() /
+                           .clone() / // Clone to own the memory before freeing
                        255.0f;
 
-        // Free the image data
-        free_image(img_data);
+        // Free the image data immediately after cloning to tensor
+        // This helps keep memory usage low
+        cam_info.free_image_data();
 
         // Create Camera object
         Camera camera(
@@ -121,7 +120,7 @@ inline std::shared_ptr<CameraDataset> create_camera_dataset(
                                  params.source_path.string());
     }
 
-    // Read scene info
+    // Read scene info (now without loading image data)
     auto scene_info = read_colmap_scene_info(params.source_path, params.resolution);
 
     // Create and return dataset

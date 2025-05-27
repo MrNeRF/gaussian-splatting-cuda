@@ -25,6 +25,7 @@ enum class CAMERA_MODEL {
     THIN_PRISM_FISHEYE = 10,
     UNDEFINED = 11
 };
+
 // This class stores all information about a camera at loading time
 // To me this seems to be double work, since we already have a Camera class
 // I guess this can be removed later on
@@ -40,11 +41,155 @@ struct CameraInfo {
     CAMERA_MODEL _camera_model;
     int _width;
     int _height;
-    int _img_w;
-    int _img_h;
-    int _channels;
+
+    // These fields will be populated when the image is actually loaded in the dataloader
+    int _img_w = 0;                     // Actual loaded image width (after potential resizing)
+    int _img_h = 0;                     // Actual loaded image height (after potential resizing)
+    int _channels = 0;                  // Number of channels in loaded image
+    unsigned char* _img_data = nullptr; // Image data pointer (will be null until loaded)
+
     std::vector<double> _params;
-    unsigned char* _img_data; // shallow copy is fine here. No ownership
+
+    // Helper method to check if image data has been loaded
+    bool is_image_loaded() const {
+        return _img_data != nullptr;
+    }
+
+    // Helper method to load image data on demand
+    void load_image_data(int resolution = -1) {
+        if (is_image_loaded()) {
+            return; // Already loaded
+        }
+
+        auto [data, w, h, c] = read_image(_image_path, resolution);
+        _img_data = data;
+        _img_w = w;
+        _img_h = h;
+        _channels = c;
+    }
+
+    // Helper method to free image data when no longer needed
+    void free_image_data() {
+        if (_img_data != nullptr) {
+            free_image(_img_data);
+            _img_data = nullptr;
+            _img_w = 0;
+            _img_h = 0;
+            _channels = 0;
+        }
+    }
+
+    // Destructor to ensure memory is cleaned up
+    ~CameraInfo() {
+        free_image_data();
+    }
+
+    // Copy constructor - don't copy image data, just the path
+    CameraInfo(const CameraInfo& other)
+        : _camera_ID(other._camera_ID),
+          _R(other._R),
+          _T(other._T),
+          _fov_x(other._fov_x),
+          _fov_y(other._fov_y),
+          _image_name(other._image_name),
+          _image_path(other._image_path),
+          _camera_model(other._camera_model),
+          _width(other._width),
+          _height(other._height),
+          _img_w(0),
+          _img_h(0),
+          _channels(0),
+          _img_data(nullptr),
+          _params(other._params) {
+        // Don't copy image data - it will be loaded on demand
+    }
+
+    // Copy assignment operator
+    CameraInfo& operator=(const CameraInfo& other) {
+        if (this != &other) {
+            // Free existing image data
+            free_image_data();
+
+            // Copy basic properties
+            _camera_ID = other._camera_ID;
+            _R = other._R;
+            _T = other._T;
+            _fov_x = other._fov_x;
+            _fov_y = other._fov_y;
+            _image_name = other._image_name;
+            _image_path = other._image_path;
+            _camera_model = other._camera_model;
+            _width = other._width;
+            _height = other._height;
+            _params = other._params;
+
+            // Don't copy image data - reset to unloaded state
+            _img_w = 0;
+            _img_h = 0;
+            _channels = 0;
+            _img_data = nullptr;
+        }
+        return *this;
+    }
+
+    // Move constructor
+    CameraInfo(CameraInfo&& other) noexcept
+        : _camera_ID(other._camera_ID),
+          _R(std::move(other._R)),
+          _T(std::move(other._T)),
+          _fov_x(other._fov_x),
+          _fov_y(other._fov_y),
+          _image_name(std::move(other._image_name)),
+          _image_path(std::move(other._image_path)),
+          _camera_model(other._camera_model),
+          _width(other._width),
+          _height(other._height),
+          _img_w(other._img_w),
+          _img_h(other._img_h),
+          _channels(other._channels),
+          _img_data(other._img_data),
+          _params(std::move(other._params)) {
+        // Reset the source object
+        other._img_data = nullptr;
+        other._img_w = 0;
+        other._img_h = 0;
+        other._channels = 0;
+    }
+
+    // Move assignment operator
+    CameraInfo& operator=(CameraInfo&& other) noexcept {
+        if (this != &other) {
+            // Free existing image data
+            free_image_data();
+
+            // Move data from other
+            _camera_ID = other._camera_ID;
+            _R = std::move(other._R);
+            _T = std::move(other._T);
+            _fov_x = other._fov_x;
+            _fov_y = other._fov_y;
+            _image_name = std::move(other._image_name);
+            _image_path = std::move(other._image_path);
+            _camera_model = other._camera_model;
+            _width = other._width;
+            _height = other._height;
+            _img_w = other._img_w;
+            _img_h = other._img_h;
+            _channels = other._channels;
+            _img_data = other._img_data;
+            _params = std::move(other._params);
+
+            // Reset the source object
+            other._img_data = nullptr;
+            other._img_w = 0;
+            other._img_h = 0;
+            other._channels = 0;
+        }
+        return *this;
+    }
+
+    // Default constructor
+    CameraInfo() = default;
 };
 
 inline void dump_JSON(const std::filesystem::path& file_path, std::vector<nlohmann::json>& json_data) {

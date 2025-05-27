@@ -239,15 +239,13 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
 // -----------------------------------------------------------------------------
 //  High‑level helpers
 // -----------------------------------------------------------------------------
+
 std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_path,
                                             const std::unordered_map<uint32_t, CameraInfo>& cameras,
-                                            const std::vector<Image>& images,
-                                            int resolution) {
+                                            const std::vector<Image>& images) {
     std::vector<CameraInfo> cam_infos(images.size());
 
-    std::vector<std::future<void>> futures;
-    futures.reserve(images.size());
-
+    // No longer use async futures since we're not loading images here
     for (size_t idx = 0; idx < images.size(); ++idx) {
         const Image* img = &images[idx];
         auto it = cameras.find(img->_camera_id);
@@ -256,43 +254,41 @@ std::vector<CameraInfo> read_colmap_cameras(const std::filesystem::path file_pat
 
         cam_infos[idx] = it->second; // copy base parameters
 
-        futures.emplace_back(std::async(
-            std::launch::async,
-            [=](const std::filesystem::path& images_root, const Image* image, CameraInfo* cam) {
-                auto [data, w, h, c] = read_image(images_root / image->_name, resolution);
-                cam->_img_w = w;
-                cam->_img_h = h;
-                cam->_channels = c;
-                cam->_img_data = data;
+        // Set image path but don't load the image data yet
+        cam_infos[idx]._image_path = file_path / img->_name;
+        cam_infos[idx]._image_name = img->_name;
 
-                cam->_R = qvec2rotmat(image->_qvec);
-                cam->_T = image->_tvec;
-                cam->_image_name = image->_name;
-                cam->_image_path = images_root / image->_name;
+        // Set transformation matrices
+        cam_infos[idx]._R = qvec2rotmat(img->_qvec);
+        cam_infos[idx]._T = img->_tvec;
 
-                switch (cam->_camera_model) {
-                case CAMERA_MODEL::SIMPLE_PINHOLE: {
-                    const float fx = cam->_params[0];
-                    cam->_fov_x = focal2fov(fx, cam->_width);
-                    cam->_fov_y = focal2fov(fx, cam->_height);
-                    break;
-                }
-                case CAMERA_MODEL::PINHOLE: {
-                    const float fx = cam->_params[0];
-                    const float fy = cam->_params[1];
-                    cam->_fov_x = focal2fov(fx, cam->_width);
-                    cam->_fov_y = focal2fov(fy, cam->_height);
-                    break;
-                }
-                default:
-                    throw std::runtime_error("Camera model not supported in read_colmap_cameras");
-                }
-            },
-            file_path, img, &cam_infos[idx]));
+        // Calculate FOV based on camera model
+        switch (cam_infos[idx]._camera_model) {
+        case CAMERA_MODEL::SIMPLE_PINHOLE: {
+            const float fx = cam_infos[idx]._params[0];
+            cam_infos[idx]._fov_x = focal2fov(fx, cam_infos[idx]._width);
+            cam_infos[idx]._fov_y = focal2fov(fx, cam_infos[idx]._height);
+            break;
+        }
+        case CAMERA_MODEL::PINHOLE: {
+            const float fx = cam_infos[idx]._params[0];
+            const float fy = cam_infos[idx]._params[1];
+            cam_infos[idx]._fov_x = focal2fov(fx, cam_infos[idx]._width);
+            cam_infos[idx]._fov_y = focal2fov(fy, cam_infos[idx]._height);
+            break;
+        }
+        default:
+            throw std::runtime_error("Camera model not supported in read_colmap_cameras");
+        }
+
+        // Initialize image dimensions and data pointer to null
+        // These will be set when the image is actually loaded in the dataloader
+        cam_infos[idx]._img_w = 0;
+        cam_infos[idx]._img_h = 0;
+        cam_infos[idx]._channels = 0;
+        cam_infos[idx]._img_data = nullptr;
     }
 
-    for (auto& f : futures)
-        f.get();
     return cam_infos;
 }
 
@@ -326,7 +322,7 @@ std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path file_pat
 
     auto scene = std::make_unique<SceneInfo>();
     scene->_point_cloud = read_point3D_binary(file_path / "sparse/0/points3D.bin");
-    scene->_cameras = read_colmap_cameras(file_path / "images", cameras, images, resolution);
+    scene->_cameras = read_colmap_cameras(file_path / "images", cameras, images);
 
     const auto& cam0 = scene->_cameras.front();
     const size_t n = scene->_cameras.size();
