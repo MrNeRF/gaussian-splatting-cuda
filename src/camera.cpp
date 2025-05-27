@@ -19,7 +19,8 @@ Camera::Camera(int imported_colmap_id,
                               _FoVy(FoVy),
                               _image_name(std::move(std::move(image_name))),
                               _uid(uid),
-                              _scale(scale) {
+                              _scale(scale),
+                              _cuda_initialized(false) {
 
     this->_original_image = torch::clamp(image, 0.f, 1.f);
     this->_image_width = this->_original_image.size(2);
@@ -27,11 +28,20 @@ Camera::Camera(int imported_colmap_id,
 
     this->_zfar = 100.f;
     this->_znear = 0.01f;
+}
 
-    this->_world_view_transform = getWorld2View2(R, T, Eigen::Vector3f::Zero(), _scale).to(torch::kCUDA, true);
+void Camera::initialize_cuda_tensors() {
+    if (_cuda_initialized) {
+        return; // Already initialized
+    }
+
+    // Now create the CUDA tensors
+    this->_world_view_transform = getWorld2View2(_R, _T, Eigen::Vector3f::Zero(), _scale).to(torch::kCUDA, true);
     this->_projection_matrix = getProjectionMatrix(this->_znear, this->_zfar, this->_FoVx, this->_FoVy).to(torch::kCUDA, true);
     this->_full_proj_transform = this->_world_view_transform.unsqueeze(0).bmm(this->_projection_matrix.unsqueeze(0)).squeeze(0);
     this->_camera_center = this->_world_view_transform.inverse()[3].slice(0, 0, 3);
+
+    _cuda_initialized = true;
 }
 
 // TODO: I have skipped the resolution for now.
