@@ -5,18 +5,15 @@
 #include "core/point_cloud.hpp"
 
 #include <Eigen/Core>
-#include <torch/torch.h>
 
 #include <algorithm>
 #include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <future>
 #include <iomanip>
 #include <iostream>
 #include <memory>
-#include <tinyply.h>
 #include <unordered_map>
 #include <vector>
 
@@ -85,43 +82,8 @@ std::unique_ptr<std::vector<char>> read_binary(const std::filesystem::path& file
 }
 
 // -----------------------------------------------------------------------------
-//  PLY writer for debugging / export
-// -----------------------------------------------------------------------------
-void Write_output_ply(const std::filesystem::path& file_path,
-                      const std::vector<torch::Tensor>& tensors,
-                      const std::vector<std::string>& attribute_names) {
-    tinyply::PlyFile ply_file;
-
-    size_t attr_offset = 0;
-    for (size_t i = 0; i < tensors.size(); ++i) {
-        const size_t cols = tensors[i].size(1);
-        std::vector<std::string> attrs;
-        attrs.reserve(cols);
-        for (size_t j = 0; j < cols; ++j)
-            attrs.push_back(attribute_names[attr_offset + j]);
-
-        ply_file.add_properties_to_element(
-            "vertex", attrs, tinyply::Type::FLOAT32, tensors[i].size(0),
-            reinterpret_cast<uint8_t*>(tensors[i].data_ptr<float>()),
-            tinyply::Type::INVALID, 0);
-
-        attr_offset += cols;
-    }
-
-    std::filebuf fb;
-    fb.open(file_path, std::ios::out | std::ios::binary);
-    std::ostream out_stream(&fb);
-    ply_file.write(out_stream, true); // binary format
-}
-
-// -----------------------------------------------------------------------------
 //  COLMAP binary parsers
 // -----------------------------------------------------------------------------
-struct ImagePoint {
-    double x, y;
-    uint64_t point_id;
-}; // skipped, definition for sizeof
-
 std::vector<Image> read_images_binary(const std::filesystem::path& file_path) {
     auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();

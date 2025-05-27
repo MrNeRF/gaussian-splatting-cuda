@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "core/exporter.hpp"
 #include "core/gaussian_init.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
@@ -34,16 +35,15 @@ public:
     torch::Tensor Get_features() const;
     int Get_active_sh_degree() const { return _active_sh_degree; }
     torch::Tensor Get_scaling() { return torch::exp(_scaling); }
+    GaussianPointCloud to_point_cloud() const;
 
     // Methods
     void One_up_sh_degree();
-    void Create_from_pcd(PointCloud& pcd, float spatial_lr_scale);
     void Training_setup(const gs::param::OptimizationParameters& params);
     void Update_learning_rate(float iteration);
     void Reset_opacity();
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
     void Densify_and_prune(float max_grad, float min_opacity, float extent);
-    void Save_ply(const std::filesystem::path& file_path, int iteration, bool isLastIteration);
 
 public:
     // should not be public or it should maybe be pulled out here. Not sure yet

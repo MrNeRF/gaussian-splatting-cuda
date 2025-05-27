@@ -8,4 +8,3 @@
 #include <vector>
 
 std::unique_ptr<SceneInfo> read_colmap_scene_info(std::filesystem::path filepath, int resolution);
-void Write_output_ply(const std::filesystem::path& file_path, const std::vector<torch::Tensor>& tensors, const std::vector<std::string>& attributes_names);
