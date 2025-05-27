@@ -132,7 +132,6 @@ int main(int argc, char* argv[]) {
                 gaussians._optimizer->zero_grad(true);
                 gaussians.Update_learning_rate(iter);
             }
-
         }
     }
 
