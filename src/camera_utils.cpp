@@ -12,62 +12,68 @@
 #include <torch/torch.h>
 
 // -----------------------------------------------------------------------------
-//  World → view (NeRF++ translate/scale variant)
+//  World → view (NeRF++ translate / scale variant)
 // -----------------------------------------------------------------------------
 torch::Tensor getWorld2View2(const torch::Tensor& R,
                              const torch::Tensor& t,
                              const torch::Tensor& translate,
-                             float scale) {
-    assert_mat(R, 3, 3, "R");
-    assert_vec(t, 3, "t");
-    assert_vec(translate, 3, "translate");
+                             float scale)
+{
+    assert_mat(R,3,3,"R");
+    assert_vec(t,3,"t");
+    assert_vec(translate,3,"translate");
 
-    auto dev = R.device();
-
-    // 4×4 homogeneous matrix (row-major in torch)
+    const auto dev = R.device();
     torch::Tensor Rt = torch::eye(4,
                                   torch::TensorOptions().dtype(torch::kFloat32).device(dev));
 
-    // ---------------------------  THE ONLY CHANGE  --------------------------
-    Rt.index_put_({torch::indexing::Slice(0, 3),
-                   torch::indexing::Slice(0, 3)},
-                  R.t()); // <── transpose!
-    // -----------------------------------------------------------------------
+    /* 1. copy **transposed** => Eigen(col-major) → Torch(row-major) */
+    Rt.index_put_({torch::indexing::Slice(0,3),
+                   torch::indexing::Slice(0,3)}, R.t());
 
-    Rt.index_put_({torch::indexing::Slice(0, 3), 3}, t);
+    /* 2. copy translation exactly like the Eigen path did                *
+     *    (it will be handled when we go W2C → C2W → W2C again).          */
+    Rt.index_put_({torch::indexing::Slice(0,3), 3}, t);
 
-    torch::Tensor C2W = torch::linalg_inv(Rt); // camera → world
-    C2W.index_put_({torch::indexing::Slice(0, 3), 3},
-                   (C2W.index({torch::indexing::Slice(0, 3), 3}) + translate) * scale);
+    /* 3. identical two-step trick: W2C ➜ C2W ➜ adjust centre ➜ W2C      */
+    torch::Tensor C2W = torch::linalg_inv(Rt);
 
-    return torch::linalg_inv(C2W).clone(); // world → camera
+    auto centre = C2W.index({torch::indexing::Slice(0,3), 3});
+    centre = (centre + translate) * scale;
+    C2W.index_put_({torch::indexing::Slice(0,3), 3}, centre);
+
+    return torch::linalg_inv(C2W).clone();   // final World→View
 }
+
 
 // -----------------------------------------------------------------------------
 //  Projection matrix (OpenGL style, z-forward)
 // -----------------------------------------------------------------------------
-torch::Tensor getProjectionMatrix(float znear, float zfar,
-                                  float fovX, float fovY) {
-    float tanX = std::tan(fovX * 0.5f);
-    float tanY = std::tan(fovY * 0.5f);
+torch::Tensor getProjectionMatrix(float znear, float zfar, float fovX, float fovY) {
+    float tanHalfFovY = std::tan((fovY / 2.f));
+    float tanHalfFovX = std::tan((fovX / 2.f));
 
-    float right = tanX * znear;
-    float left = -right;
-    float top = tanY * znear;
+    float top = tanHalfFovY * znear;
     float bottom = -top;
+    float right = tanHalfFovX * znear;
+    float left = -right;
 
-    float z_sign = 1.0f; // OpenGL right-handed
+    torch::Tensor P = torch::zeros({4,4}, torch::kFloat32);
 
-    torch::Tensor P = torch::zeros({4, 4}, torch::kFloat32);
-    P[0][0] = 2 * znear / (right - left);
-    P[1][1] = 2 * znear / (top - bottom);
-    P[0][2] = (right + left) / (right - left);
-    P[1][2] = (top + bottom) / (top - bottom);
-    P[3][2] = z_sign;
-    P[2][2] = z_sign * zfar / (zfar - znear);
-    P[2][3] = -(zfar * znear) / (zfar - znear);
-    return P.clone();
+    float z_sign = 1.f;
+
+    P[0, 0] = 2.f * znear / (right - left);
+    P[1, 1] = 2.f * znear / (top - bottom);
+    P[0, 2] = (right + left) / (right - left);
+    P[1, 2] = (top + bottom) / (top - bottom);
+    P[3, 2] = z_sign;
+    P[2, 2] = z_sign * zfar / (zfar - znear);
+    P[2, 3] = -(zfar * znear) / (zfar - znear);
+
+    // clone the tensor to allocate new memory
+    return P.t().clone();
 }
+
 
 // -----------------------------------------------------------------------------
 //  Image I/O helpers

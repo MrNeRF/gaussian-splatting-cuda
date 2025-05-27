@@ -19,8 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace F = torch::nn::functional; // <-- correct namespace alias
-
+namespace F = torch::nn::functional;
 // -----------------------------------------------------------------------------
 //  Quaternion → rotation matrix
 // -----------------------------------------------------------------------------
@@ -45,7 +44,7 @@ inline torch::Tensor qvec2rotmat(const torch::Tensor& qraw) {
     R[2][0] = 2 * (x * z - y * w);
     R[2][1] = 2 * (y * z + x * w);
     R[2][2] = 1 - 2 * (x * x + y * y);
-    return R; // ←  **do NOT transpose here**
+    return R;
 }
 
 // -----------------------------------------------------------------------------
@@ -149,7 +148,7 @@ std::vector<Image> read_images_binary(const std::filesystem::path& file_path) {
         for (int k = 0; k < 4; ++k)
             q[k] = static_cast<float>(read_f64(cur));
 
-        img._qvec = F::normalize(q, F::NormalizeFuncOptions().dim(0));
+        img._qvec = q;
 
         torch::Tensor t = torch::empty({3}, torch::kFloat32);
         for (int k = 0; k < 3; ++k)
@@ -328,16 +327,7 @@ read_colmap_scene_info(const std::filesystem::path& base, int resolution) {
     scene->_point_cloud = read_point3D_binary(base / "sparse/0/points3D.bin");
     scene->_cameras = read_colmap_cameras(base / "images", cams, images);
 
-    const auto& first = scene->_cameras.front();
-    float mpix = first._img_w * first._img_h / 1'000'000.f;
-    bool resized = (resolution == 2 || resolution == 4 || resolution == 8);
-
-    std::cout << "Training with " << scene->_cameras.size() << " images of "
-              << first._img_w << " × " << first._img_h
-              << (resized ? " (resized) " : " ")
-              << "pixels (" << std::fixed << std::setprecision(3) << mpix
-              << " MP per image, "
-              << mpix * scene->_cameras.size() << " MP total)\n";
+    std::cout << "Training with " << scene->_cameras.size() << " images \n";
 
     scene->_nerf_norm_radius = getNerfppNorm(scene->_cameras);
     return scene;

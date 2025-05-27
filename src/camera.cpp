@@ -39,22 +39,18 @@ void Camera::initialize_cuda_tensors() {
     auto R_cuda = _R.to(torch::kCUDA, /*non_blocking=*/true);
     auto T_cuda = _T.to(torch::kCUDA, /*non_blocking=*/true);
 
-    _world_view_transform =
-        getWorld2View2(R_cuda,
-                       T_cuda,
-                       torch::zeros({3}, torch::TensorOptions()
-                                             .dtype(torch::kFloat32)
-                                             .device(torch::kCUDA)), // <-- same device
-                       _scale);
+    _world_view_transform = getWorld2View2(R_cuda, T_cuda,
+                                           torch::zeros({3}, torch::kFloat32)
+                                               .to(torch::kCUDA),
+                                           _scale);
 
-    _projection_matrix =
-        getProjectionMatrix(_znear, _zfar, _FoVx, _FoVy)
-            .to(torch::kCUDA, /*non_blocking=*/true);
+    _projection_matrix = getProjectionMatrix(_znear, _zfar,
+                                             _FoVx,  _FoVy)
+                             .to(torch::kCUDA);
 
-    _full_proj_transform = _projection_matrix.matmul(_world_view_transform);
+    this->_full_proj_transform = this->_world_view_transform.unsqueeze(0).bmm(this->_projection_matrix.unsqueeze(0)).squeeze(0);
+    this->_camera_center = this->_world_view_transform.inverse()[3].slice(0, 0, 3);
 
-    auto WV_inv = torch::linalg_inv(_world_view_transform);
-    _camera_center = WV_inv.index({torch::indexing::Slice(0, 3), 3});
 
     _cuda_initialized = true;
 }
