@@ -1,6 +1,7 @@
 #include "core/argument_parser.hpp"
 #include "core/dataset.hpp"
 #include "core/debug_utils.hpp"
+#include "core/exporter.hpp"
 #include "core/gaussian.hpp"
 #include "core/gaussian_init.hpp"
 #include "core/parameters.hpp"
@@ -128,11 +129,14 @@ int main(int argc, char* argv[]) {
                                 /*psnr=*/0.0f, is_densifying);
 
                 if (iter == optimParams.iterations) {
-                    gaussians.Save_ply(modelParams.output_path, iter, /*final=*/true);
+                    auto pc = gaussians.to_point_cloud();
+                    write_ply(pc, modelParams.output_path, iter, /*join=*/true);
                     break;
                 }
-                if (iter % 7000 == 0)
-                    gaussians.Save_ply(modelParams.output_path, iter, /*final=*/false);
+                if (iter % 7000 == 0) {
+                    auto pc = gaussians.to_point_cloud();
+                    write_ply(pc, modelParams.output_path, iter, /*join=*/false);
+                }
 
                 // Densification & pruning
                 if (iter < optimParams.densify_until_iter) {

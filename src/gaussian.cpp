@@ -244,54 +244,19 @@ void GaussianModel::Add_densification_stats(torch::Tensor& viewspace_point_tenso
     _denom.index_put_({update_filter}, _denom.index_select(0, update_filter.nonzero().squeeze()) + 1);
 }
 
-std::vector<std::string> GaussianModel::construct_list_of_attributes() {
-    std::vector<std::string> attributes = {"x", "y", "z", "nx", "ny", "nz"};
+GaussianPointCloud GaussianModel::to_point_cloud() const {
+    GaussianPointCloud pc;
 
-    for (int i = 0; i < _features_dc.size(1) * _features_dc.size(2); ++i)
-        attributes.push_back("f_dc_" + std::to_string(i));
+    pc.xyz = _xyz.cpu().contiguous();
+    pc.normals = torch::zeros_like(pc.xyz); // update if you have real normals
+    pc.features_dc = _features_dc.transpose(1, 2).flatten(1).cpu();
+    pc.features_rest = _features_rest.transpose(1, 2).flatten(1).cpu();
+    pc.opacity = _opacity.cpu();
+    pc.scaling = _scaling.cpu();
+    pc.rotation = _rotation.cpu();
 
-    for (int i = 0; i < _features_rest.size(1) * _features_rest.size(2); ++i)
-        attributes.push_back("f_rest_" + std::to_string(i));
+    pc.attribute_names =
+        make_attribute_names(_features_dc, _features_rest, _scaling, _rotation);
 
-    attributes.emplace_back("opacity");
-
-    for (int i = 0; i < _scaling.size(1); ++i)
-        attributes.push_back("scale_" + std::to_string(i));
-
-    for (int i = 0; i < _rotation.size(1); ++i)
-        attributes.push_back("rot_" + std::to_string(i));
-
-    return attributes;
-}
-
-void GaussianModel::Save_ply(const std::filesystem::path& file_path, int iteration, bool isLastIteration) {
-    std::cout << "Saving at " << std::to_string(iteration) << " iterations\n";
-    auto folder = file_path / ("point_cloud/iteration_" + std::to_string(iteration));
-    std::filesystem::create_directories(folder);
-
-    auto xyz = _xyz.cpu().contiguous();
-    auto normals = torch::zeros_like(xyz);
-    auto f_dc = _features_dc.transpose(1, 2).flatten(1).cpu().contiguous();
-    auto f_rest = _features_rest.transpose(1, 2).flatten(1).cpu().contiguous();
-    auto opacities = _opacity.cpu();
-    auto scale = _scaling.cpu();
-    auto rotation = _rotation.cpu();
-
-    std::vector<torch::Tensor> tensor_attributes = {xyz.clone(),
-                                                    normals.clone(),
-                                                    f_dc.clone(),
-                                                    f_rest.clone(),
-                                                    opacities.clone(),
-                                                    scale.clone(),
-                                                    rotation.clone()};
-    auto attributes = construct_list_of_attributes();
-    std::thread t = std::thread([folder, tensor_attributes, attributes]() {
-        Write_output_ply(folder / "point_cloud.ply", tensor_attributes, attributes);
-    });
-
-    if (isLastIteration) {
-        t.join();
-    } else {
-        t.detach();
-    }
+    return pc; // NRVO keeps it cheap
 }
