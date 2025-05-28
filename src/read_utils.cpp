@@ -1,6 +1,6 @@
 #include "core/read_utils.hpp"
-#include "core/scene_info.hpp"
 #include "core/camera_info.hpp"
+#include "core/scene_info.hpp"
 
 #include "core/torch_shapes.hpp"
 #include <torch/torch.h>
@@ -47,7 +47,6 @@ inline torch::Tensor qvec2rotmat(const torch::Tensor& qraw) {
 inline float focal2fov(float focal, int pixels) {
     return 2.0f * std::atan(pixels / (2.0f * focal));
 }
-
 
 class Image {
 public:
