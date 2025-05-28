@@ -1,6 +1,6 @@
 #include "core/gaussian_init.hpp"
 #include "core/debug_utils.hpp"
-#include "core/gaussian.hpp"
+#include "core/inria_adc.hpp"
 #include "core/mean_neighbor_dist.hpp"
 #include "core/read_utils.hpp"
 #include "core/scene_info.hpp"

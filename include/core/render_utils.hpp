@@ -3,8 +3,7 @@
 #pragma once
 
 #include "core/camera.hpp"
-#include "core/gaussian.hpp"
-#include "core/istrategy.hpp"
+#include "core/gaussian_model.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
 #include <cmath>
@@ -18,7 +17,7 @@ struct RenderOutput {
 };
 
 inline RenderOutput render(Camera& viewpoint_camera,
-                           IStrategy& densification_strat,
+                           const GaussianModel& gaussian_model,
                            torch::Tensor& bg_color,
                            float scaling_modifier = 1.0) {
     // Ensure background tensor (bg_color) is on GPU!
@@ -34,27 +33,27 @@ inline RenderOutput render(Camera& viewpoint_camera,
         .scale_modifier = scaling_modifier,
         .viewmatrix = viewpoint_camera.Get_world_view_transform(),
         .projmatrix = viewpoint_camera.Get_full_proj_transform(),
-        .sh_degree = densification_strat.Get_active_sh_degree(),
+        .sh_degree = gaussian_model.get_active_sh_degree(),
         .camera_center = viewpoint_camera.Get_camera_center(),
         .prefiltered = false};
 
     GaussianRasterizer rasterizer = GaussianRasterizer(raster_settings);
 
-    auto means3D = densification_strat.Get_xyz();
-    auto means2D = torch::zeros_like(densification_strat.Get_xyz()).requires_grad_(true);
+    auto means3D = gaussian_model.get_xyz();
+    auto means2D = torch::zeros_like(gaussian_model.get_xyz()).requires_grad_(true);
     means2D.retain_grad();
-    auto opacity = densification_strat.Get_opacity();
+    auto opacity = gaussian_model.get_opacity();
 
     auto scales = torch::Tensor();
     auto rotations = torch::Tensor();
     auto cov3D_precomp = torch::Tensor();
 
-    scales = densification_strat.Get_scaling();
-    rotations = densification_strat.Get_rotation();
+    scales = gaussian_model.get_scaling();
+    rotations = gaussian_model.get_rotation();
 
     auto shs = torch::Tensor();
     torch::Tensor colors_precomp = torch::Tensor();
-    shs = densification_strat.Get_features();
+    shs = gaussian_model.get_features();
 
     torch::cuda::synchronize();
 
