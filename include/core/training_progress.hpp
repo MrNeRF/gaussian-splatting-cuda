@@ -45,8 +45,7 @@ public:
         start_time_ = std::chrono::steady_clock::now();
     }
 
-    void update(int current_iteration, float loss, int splat_count,
-                float convergence_rate = 0.0f, bool is_densifying = false) {
+    void update(int current_iteration, float loss, int splat_count, bool is_densifying = false) {
         if (current_iteration % update_frequency_ != 0)
             return;
 
@@ -60,10 +59,6 @@ public:
 
         if (is_densifying) {
             postfix << " (+)";
-        }
-
-        if (convergence_rate > 0.0f) {
-            postfix << " | CR: " << std::fixed << std::setprecision(5) << convergence_rate;
         }
 
         progress_bar_->set_option(indicators::option::PostfixText(postfix.str()));

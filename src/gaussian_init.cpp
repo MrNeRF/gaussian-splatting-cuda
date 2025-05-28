@@ -25,14 +25,12 @@ namespace gauss::init {
     // ────────────────────────────────────────────────────────────────────────────
     InitTensors build_from_point_cloud(PointCloud& pcd, // ❶ non-const
                                        int max_sh_degree,
-                                       float /*spatial_lr_scale*/) {
+                                       float scene_scale) {
         InitTensors out;
+        out.scene_scale = scene_scale;
 
         const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
         const auto f32_cuda = f32.device(torch::kCUDA);
-        const auto u8_cuda = torch::TensorOptions()
-                                 .dtype(torch::kUInt8)
-                                 .device(torch::kCUDA);
 
         // 1 ─ xyz ────────────────────────────────────────────────────────────────
         out.xyz = torch::from_blob(pcd._points.data(),

@@ -13,12 +13,13 @@ namespace gauss::init {
         torch::Tensor opacity;
         torch::Tensor features_dc;
         torch::Tensor features_rest;
+        float scene_scale = -1.0;
     };
 
     /// Heavy-weight routine that used to live inside
     /// GaussianModel::Create_from_pcd.
     InitTensors build_from_point_cloud(PointCloud& pcd,
                                        int max_sh_degree,
-                                       float spatial_lr_scale);
+                                       float scene_scale);
 
 } // namespace gauss::init
