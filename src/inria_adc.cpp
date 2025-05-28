@@ -34,7 +34,7 @@ static inline torch::Tensor inverse_sigmoid(torch::Tensor x) {
 }
 
 InriaADC::InriaADC(int sh_degree, gauss::init::InitTensors&& init)
-    : _model(sh_degree, std::move(init)) {
+    : _splat_data(sh_degree, std::move(init)) {
 }
 
 void InriaADC::Update_learning_rate(float iteration) {
@@ -46,7 +46,7 @@ void InriaADC::Update_learning_rate(float iteration) {
 
 void InriaADC::Reset_opacity() {
     // opacity activation
-    auto new_opacity = inverse_sigmoid(torch::ones_like(_model.opacity_raw(), torch::TensorOptions().dtype(torch::kFloat32)) * 0.01f);
+    auto new_opacity = inverse_sigmoid(torch::ones_like(_splat_data.opacity_raw(), torch::TensorOptions().dtype(torch::kFloat32)) * 0.01f);
 
     void* param_key = _optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl();
 
@@ -59,7 +59,7 @@ void InriaADC::Reset_opacity() {
     adamParamStates->exp_avg_sq(torch::zeros_like(new_opacity));
     // replace tensor
     _optimizer->param_groups()[5].params()[0] = new_opacity.set_requires_grad(true);
-    _model.opacity_raw() = _optimizer->param_groups()[5].params()[0];
+    _splat_data.opacity_raw() = _optimizer->param_groups()[5].params()[0];
 
     void* new_param_key = _optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl();
     _optimizer->state()[new_param_key] = std::move(adamParamStates);
@@ -87,16 +87,16 @@ void InriaADC::prune_points(torch::Tensor mask) {
     auto valid_point_mask = ~mask;
     int true_count = valid_point_mask.sum().item<int>();
     auto indices = torch::nonzero(valid_point_mask == true).squeeze(-1);
-    prune_optimizer(_optimizer.get(), indices, _model.xyz(), 0);
-    prune_optimizer(_optimizer.get(), indices, _model.features_dc(), 1);
-    prune_optimizer(_optimizer.get(), indices, _model.features_rest(), 2);
-    prune_optimizer(_optimizer.get(), indices, _model.scaling_raw(), 3);
-    prune_optimizer(_optimizer.get(), indices, _model.rotation_raw(), 4);
-    prune_optimizer(_optimizer.get(), indices, _model.opacity_raw(), 5);
+    prune_optimizer(_optimizer.get(), indices, _splat_data.xyz(), 0);
+    prune_optimizer(_optimizer.get(), indices, _splat_data.features_dc(), 1);
+    prune_optimizer(_optimizer.get(), indices, _splat_data.features_rest(), 2);
+    prune_optimizer(_optimizer.get(), indices, _splat_data.scaling_raw(), 3);
+    prune_optimizer(_optimizer.get(), indices, _splat_data.rotation_raw(), 4);
+    prune_optimizer(_optimizer.get(), indices, _splat_data.opacity_raw(), 5);
 
     _xyz_gradient_accum = _xyz_gradient_accum.index_select(0, indices);
     _denom = _denom.index_select(0, indices);
-    _model.max_radii2D() = _model.max_radii2D().index_select(0, indices);
+    _splat_data.max_radii2D() = _splat_data.max_radii2D().index_select(0, indices);
 }
 
 void cat_tensors_to_optimizer(torch::optim::Adam* optimizer,
@@ -129,44 +129,44 @@ void InriaADC::densification_postfix(torch::Tensor& new_xyz,
                                      torch::Tensor& new_scaling,
                                      torch::Tensor& new_rotation,
                                      torch::Tensor& new_opacity) {
-    cat_tensors_to_optimizer(_optimizer.get(), new_xyz, _model.xyz(), 0);
-    cat_tensors_to_optimizer(_optimizer.get(), new_features_dc, _model.features_dc(), 1);
-    cat_tensors_to_optimizer(_optimizer.get(), new_features_rest, _model.features_rest(), 2);
-    cat_tensors_to_optimizer(_optimizer.get(), new_scaling, _model.scaling_raw(), 3);
-    cat_tensors_to_optimizer(_optimizer.get(), new_rotation, _model.rotation_raw(), 4);
-    cat_tensors_to_optimizer(_optimizer.get(), new_opacity, _model.opacity_raw(), 5);
+    cat_tensors_to_optimizer(_optimizer.get(), new_xyz, _splat_data.xyz(), 0);
+    cat_tensors_to_optimizer(_optimizer.get(), new_features_dc, _splat_data.features_dc(), 1);
+    cat_tensors_to_optimizer(_optimizer.get(), new_features_rest, _splat_data.features_rest(), 2);
+    cat_tensors_to_optimizer(_optimizer.get(), new_scaling, _splat_data.scaling_raw(), 3);
+    cat_tensors_to_optimizer(_optimizer.get(), new_rotation, _splat_data.rotation_raw(), 4);
+    cat_tensors_to_optimizer(_optimizer.get(), new_opacity, _splat_data.opacity_raw(), 5);
 
-    _xyz_gradient_accum = torch::zeros({_model.size(), 1}).to(torch::kCUDA);
-    _denom = torch::zeros({_model.size(), 1}).to(torch::kCUDA);
-    _model.max_radii2D() = torch::zeros({_model.size()}).to(torch::kCUDA);
+    _xyz_gradient_accum = torch::zeros({_splat_data.size(), 1}).to(torch::kCUDA);
+    _denom = torch::zeros({_splat_data.size(), 1}).to(torch::kCUDA);
+    _splat_data.max_radii2D() = torch::zeros({_splat_data.size()}).to(torch::kCUDA);
 }
 
 void InriaADC::densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity) {
     static const int N = 2;
-    const int n_init_points = _model.size();
+    const int n_init_points = _splat_data.size();
     // Extract points that satisfy the gradient condition
     torch::Tensor padded_grad = torch::zeros({n_init_points}).to(torch::kCUDA);
     padded_grad.slice(0, 0, grads.size(0)) = grads.squeeze();
     torch::Tensor selected_pts_mask = torch::where(padded_grad >= grad_threshold, torch::ones_like(padded_grad).to(torch::kBool), torch::zeros_like(padded_grad).to(torch::kBool));
-    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(_model.get_scaling().max(1)) > _percent_dense * _model.get_scene_scale());
+    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(_splat_data.get_scaling().max(1)) > _percent_dense * _splat_data.get_scene_scale());
     auto indices = torch::nonzero(selected_pts_mask == true).squeeze(-1);
 
-    torch::Tensor stds = _model.get_scaling().index_select(0, indices).repeat({N, 1});
+    torch::Tensor stds = _splat_data.get_scaling().index_select(0, indices).repeat({N, 1});
     torch::Tensor means = torch::zeros({stds.size(0), 3}).to(torch::kCUDA);
     torch::Tensor samples = torch::randn({stds.size(0), stds.size(1)}).to(torch::kCUDA) * stds + means;
-    torch::Tensor rots = build_rotation(_model.rotation_raw().index_select(0, indices)).repeat({N, 1, 1});
+    torch::Tensor rots = build_rotation(_splat_data.rotation_raw().index_select(0, indices)).repeat({N, 1, 1});
 
-    torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _model.xyz().index_select(0, indices).repeat({N, 1});
-    torch::Tensor new_scaling = torch::log(_model.get_scaling().index_select(0, indices).repeat({N, 1}) / (0.8 * N));
-    torch::Tensor new_rotation = _model.rotation_raw().index_select(0, indices).repeat({N, 1});
-    torch::Tensor new_features_dc = _model.features_dc().index_select(0, indices).repeat({N, 1, 1});
-    torch::Tensor new_features_rest = _model.features_rest().index_select(0, indices).repeat({N, 1, 1});
-    torch::Tensor new_opacity = _model.opacity_raw().index_select(0, indices).repeat({N, 1});
+    torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _splat_data.xyz().index_select(0, indices).repeat({N, 1});
+    torch::Tensor new_scaling = torch::log(_splat_data.get_scaling().index_select(0, indices).repeat({N, 1}) / (0.8 * N));
+    torch::Tensor new_rotation = _splat_data.rotation_raw().index_select(0, indices).repeat({N, 1});
+    torch::Tensor new_features_dc = _splat_data.features_dc().index_select(0, indices).repeat({N, 1, 1});
+    torch::Tensor new_features_rest = _splat_data.features_rest().index_select(0, indices).repeat({N, 1, 1});
+    torch::Tensor new_opacity = _splat_data.opacity_raw().index_select(0, indices).repeat({N, 1});
 
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 
     torch::Tensor prune_filter = torch::cat({selected_pts_mask, torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kBool).to(torch::kCUDA)});
-    prune_filter = torch::logical_or(prune_filter, (_model.get_opacity() < min_opacity).squeeze(-1));
+    prune_filter = torch::logical_or(prune_filter, (_splat_data.get_opacity() < min_opacity).squeeze(-1));
     prune_points(prune_filter);
 }
 
@@ -176,15 +176,15 @@ void InriaADC::densify_and_clone(torch::Tensor& grads, float grad_threshold) {
                                                    torch::ones_like(grads).to(torch::kBool),
                                                    torch::zeros_like(grads).to(torch::kBool));
 
-    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(_model.get_scaling().max(1)).unsqueeze(-1) <= _percent_dense * _model.get_scene_scale());
+    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(_splat_data.get_scaling().max(1)).unsqueeze(-1) <= _percent_dense * _splat_data.get_scene_scale());
 
     auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).squeeze(-1);
-    torch::Tensor new_xyz = _model.xyz().index_select(0, indices);
-    torch::Tensor new_features_dc = _model.features_dc().index_select(0, indices);
-    torch::Tensor new_features_rest = _model.features_rest().index_select(0, indices);
-    torch::Tensor new_opacity = _model.opacity_raw().index_select(0, indices);
-    torch::Tensor new_scaling = _model.scaling_raw().index_select(0, indices);
-    torch::Tensor new_rotation = _model.rotation_raw().index_select(0, indices);
+    torch::Tensor new_xyz = _splat_data.xyz().index_select(0, indices);
+    torch::Tensor new_features_dc = _splat_data.features_dc().index_select(0, indices);
+    torch::Tensor new_features_rest = _splat_data.features_rest().index_select(0, indices);
+    torch::Tensor new_opacity = _splat_data.opacity_raw().index_select(0, indices);
+    torch::Tensor new_scaling = _splat_data.scaling_raw().index_select(0, indices);
+    torch::Tensor new_rotation = _splat_data.rotation_raw().index_select(0, indices);
 
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 }
@@ -205,11 +205,11 @@ void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, to
 void InriaADC::post_backward(int iter, RenderOutput& render_output) {
 
     if (iter % 1000 == 0)
-        _model.increment_sh_degree();
+        _splat_data.increment_sh_degree();
 
-    const auto visible_max_radii = _model.max_radii2D().masked_select(render_output.visibility);
+    const auto visible_max_radii = _splat_data.max_radii2D().masked_select(render_output.visibility);
     const auto visible_radii = render_output.radii.masked_select(render_output.visibility);
-    _model.max_radii2D().masked_scatter_(render_output.visibility, torch::max(visible_max_radii, visible_radii));
+    _splat_data.max_radii2D().masked_scatter_(render_output.visibility, torch::max(visible_max_radii, visible_radii));
 
     // Densification & pruning
     if (iter < _params->densify_until_iter) {
@@ -239,22 +239,22 @@ void InriaADC::initialize(const gs::param::OptimizationParameters& p) {
     _params = std::make_unique<gs::param::OptimizationParameters>(p);
     const auto dev = torch::kCUDA;
 
-    _model.xyz() = _model.xyz().to(dev).set_requires_grad(true);
-    _model.scaling_raw() = _model.scaling_raw().to(dev).set_requires_grad(true);
-    _model.rotation_raw() = _model.rotation_raw().to(dev).set_requires_grad(true);
-    _model.opacity_raw() = _model.opacity_raw().to(dev).set_requires_grad(true);
-    _model.features_dc() = _model.features_dc().to(dev).set_requires_grad(true);
-    _model.features_rest() = _model.features_rest().to(dev).set_requires_grad(true);
+    _splat_data.xyz() = _splat_data.xyz().to(dev).set_requires_grad(true);
+    _splat_data.scaling_raw() = _splat_data.scaling_raw().to(dev).set_requires_grad(true);
+    _splat_data.rotation_raw() = _splat_data.rotation_raw().to(dev).set_requires_grad(true);
+    _splat_data.opacity_raw() = _splat_data.opacity_raw().to(dev).set_requires_grad(true);
+    _splat_data.features_dc() = _splat_data.features_dc().to(dev).set_requires_grad(true);
+    _splat_data.features_rest() = _splat_data.features_rest().to(dev).set_requires_grad(true);
 
     // aux buffers (no grad)
     _percent_dense = _params->percent_dense;
-    _xyz_gradient_accum = torch::zeros({_model.size(), 1}, torch::kFloat32).to(dev);
-    _denom = torch::zeros({_model.size(), 1}, torch::kFloat32).to(dev);
-    _model.max_radii2D() = torch::zeros({_model.size()}, torch::kFloat32).to(dev);
+    _xyz_gradient_accum = torch::zeros({_splat_data.size(), 1}, torch::kFloat32).to(dev);
+    _denom = torch::zeros({_splat_data.size(), 1}, torch::kFloat32).to(dev);
+    _splat_data.max_radii2D() = torch::zeros({_splat_data.size()}, torch::kFloat32).to(dev);
 
     _xyz_scheduler_args = Expon_lr_func(
-        _params->position_lr_init * _model.get_scene_scale(),
-        _params->position_lr_final * _model.get_scene_scale(),
+        _params->position_lr_init * _splat_data.get_scene_scale(),
+        _params->position_lr_final * _splat_data.get_scene_scale(),
         _params->position_lr_delay_mult,
         _params->position_lr_max_steps);
 
@@ -264,17 +264,17 @@ void InriaADC::initialize(const gs::param::OptimizationParameters& p) {
     using torch::optim::AdamOptions;
     std::vector<torch::optim::OptimizerParamGroup> groups;
 
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_model.xyz()},
-                                                          std::make_unique<AdamOptions>(_params->position_lr_init * _model.get_scene_scale())));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_model.features_dc()},
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.xyz()},
+                                                          std::make_unique<AdamOptions>(_params->position_lr_init * _splat_data.get_scene_scale())));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.features_dc()},
                                                           std::make_unique<AdamOptions>(_params->feature_lr)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_model.features_rest()},
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.features_rest()},
                                                           std::make_unique<AdamOptions>(_params->feature_lr / 20.f)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_model.scaling_raw()},
-                                                          std::make_unique<AdamOptions>(_params->scaling_lr * _model.get_scene_scale())));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_model.rotation_raw()},
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.scaling_raw()},
+                                                          std::make_unique<AdamOptions>(_params->scaling_lr * _splat_data.get_scene_scale())));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.rotation_raw()},
                                                           std::make_unique<AdamOptions>(_params->rotation_lr)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_model.opacity_raw()},
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.opacity_raw()},
                                                           std::make_unique<AdamOptions>(_params->opacity_lr)));
 
     for (auto& g : groups)
