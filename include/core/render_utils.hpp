@@ -3,9 +3,9 @@
 #pragma once
 
 #include "core/camera.hpp"
-#include "core/gaussian_model.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/splat_data.hpp"
 #include <cmath>
 #include <torch/torch.h>
 
@@ -17,7 +17,7 @@ struct RenderOutput {
 };
 
 inline RenderOutput render(Camera& viewpoint_camera,
-                           const GaussianModel& gaussian_model,
+                           const SplatData& gaussian_model,
                            torch::Tensor& bg_color,
                            float scaling_modifier = 1.0) {
     // Ensure background tensor (bg_color) is on GPU!

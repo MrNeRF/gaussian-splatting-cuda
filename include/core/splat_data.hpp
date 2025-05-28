@@ -4,11 +4,11 @@
 #include "core/gaussian_init.hpp"
 #include <torch/torch.h>
 
-class GaussianModel {
+class SplatData {
 public:
-    GaussianModel() = default;
+    SplatData() = default;
 
-    GaussianModel(int sh_degree, gauss::init::InitTensors&& init)
+    SplatData(int sh_degree, gauss::init::InitTensors&& init)
         : _max_sh_degree{sh_degree},
           _active_sh_degree{0},
           _scene_scale{std::move(init.scene_scale)},
@@ -29,7 +29,6 @@ public:
         return torch::cat({_features_dc, _features_rest}, 1);
     }
     int get_active_sh_degree() const { return _active_sh_degree; }
-    int get_max_sh_degree() const { return _max_sh_degree; }
     float get_scene_scale() const { return _scene_scale; }
 
     // Raw tensor access for optimization
@@ -46,10 +45,6 @@ public:
         if (_active_sh_degree < _max_sh_degree) {
             _active_sh_degree++;
         }
-    }
-
-    void set_active_sh_degree(int degree) {
-        _active_sh_degree = std::min(degree, _max_sh_degree);
     }
 
     // Convert to point cloud for export

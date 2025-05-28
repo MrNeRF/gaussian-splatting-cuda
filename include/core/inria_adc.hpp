@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "core/gaussian_model.hpp"
 #include "core/istrategy.hpp"
 #include "core/scene_info.hpp"
+#include "core/splat_data.hpp"
 #include <memory>
 #include <string>
 #include <torch/torch.h>
@@ -57,8 +57,8 @@ public:
     void initialize(const gs::param::OptimizationParameters& params) override;
     void post_backward(int iter, RenderOutput& render_output) override;
     void step(int iter) override;
-    GaussianModel& get_model() override { return _model; }
-    const GaussianModel& get_model() const override { return _model; }
+    SplatData& get_model() override { return _splat_data; }
+    [[nodiscard]] const SplatData& get_model() const override { return _splat_data; }
 
     // Additional public methods specific to InriaADC
     void Update_learning_rate(float iteration);
@@ -66,10 +66,6 @@ public:
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
     void Densify_and_prune(float max_grad, float min_opacity);
 
-public:
-    // should not be public or it should maybe be pulled out here. Not sure yet
-    // This is all public mostly for debugging purposes
-    std::unique_ptr<torch::optim::Adam> _optimizer;
 
 private:
     void prune_points(torch::Tensor mask);
@@ -84,7 +80,8 @@ private:
     void densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity);
 
 private:
-    GaussianModel _model;
+    std::unique_ptr<torch::optim::Adam> _optimizer;
+    SplatData _splat_data;
     float _percent_dense = 0.f;
 
     std::unique_ptr<gs::param::OptimizationParameters> _params;
