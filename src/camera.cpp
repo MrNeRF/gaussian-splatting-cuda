@@ -1,45 +1,63 @@
 #include "core/camera.hpp"
-#include "core/camera_info.hpp"
 #include "core/camera_utils.hpp"
-#include "core/parameters.hpp"
-#include <string>
-#include <torch/torch.h>
+
 #include <utility>
 
 Camera::Camera(int imported_colmap_id,
-               Eigen::Matrix3f R, Eigen::Vector3f T,
+               const torch::Tensor& R,
+               const torch::Tensor& T,
                float FoVx, float FoVy,
-               torch::Tensor image,
+               const torch::Tensor& image,
                std::string image_name,
                int uid,
-               float scale) : _colmap_id(imported_colmap_id),
-                              _R(R),
-                              _T(T),
-                              _FoVx(FoVx),
-                              _FoVy(FoVy),
-                              _image_name(std::move(std::move(image_name))),
-                              _uid(uid),
-                              _scale(scale),
-                              _cuda_initialized(false) {
+               float scale)
+    : _uid(uid),
+      _colmap_id(imported_colmap_id),
+      _FoVx(FoVx),
+      _FoVy(FoVy),
+      _image_name(std::move(image_name)),
+      _scale(scale) {
+    assert_mat(R, 3, 3, "R");
+    assert_vec(T, 3, "T");
 
-    this->_original_image = torch::clamp(image, 0.f, 1.f);
-    this->_image_width = this->_original_image.size(2);
-    this->_image_height = this->_original_image.size(1);
+    _R = R.to(torch::kFloat32).clone();
+    _T = T.to(torch::kFloat32).clone();
 
-    this->_zfar = 100.f;
-    this->_znear = 0.01f;
+    _original_image = torch::clamp(image.to(torch::kFloat32), 0.f, 1.f).contiguous();
+    _image_height = static_cast<int>(_original_image.size(1));
+    _image_width = static_cast<int>(_original_image.size(2));
 }
 
+// -----------------------------------------------------------------------------
+//  GPU initialisation
+// -----------------------------------------------------------------------------
 void Camera::initialize_cuda_tensors() {
-    if (_cuda_initialized) {
-        return; // Already initialized
-    }
+    if (_cuda_initialized)
+        return;
 
-    // Now create the CUDA tensors
-    this->_world_view_transform = getWorld2View2(_R, _T, Eigen::Vector3f::Zero(), _scale).to(torch::kCUDA, true);
-    this->_projection_matrix = getProjectionMatrix(this->_znear, this->_zfar, this->_FoVx, this->_FoVy).to(torch::kCUDA, true);
+    // move R,T once; everything below stays on cuda:0
+    auto R_cuda = _R.to(torch::kCUDA, /*non_blocking=*/true);
+    auto T_cuda = _T.to(torch::kCUDA, /*non_blocking=*/true);
+
+    _world_view_transform = getWorld2View2(R_cuda, T_cuda);
+
+    _projection_matrix = getProjectionMatrix(_znear, _zfar,
+                                             _FoVx, _FoVy)
+                             .to(torch::kCUDA);
+
     this->_full_proj_transform = this->_world_view_transform.unsqueeze(0).bmm(this->_projection_matrix.unsqueeze(0)).squeeze(0);
     this->_camera_center = this->_world_view_transform.inverse()[3].slice(0, 0, 3);
 
     _cuda_initialized = true;
 }
+
+// -----------------------------------------------------------------------------
+//  Accessors that guard CUDA init
+// -----------------------------------------------------------------------------
+torch::Tensor& Camera::world_view_transform() {
+    TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
+    return _world_view_transform;
+}
+torch::Tensor& Camera::projection_matrix() { return world_view_transform(), _projection_matrix; }
+torch::Tensor& Camera::full_proj_transform() { return world_view_transform(), _full_proj_transform; }
+torch::Tensor& Camera::camera_center() { return world_view_transform(), _camera_center; }
