@@ -51,10 +51,8 @@ int main(int argc, char* argv[]) {
                                                     modelParams.sh_degree,
                                                     scene._nerf_norm_radius);
 
-    GaussianModel gaussians(modelParams.sh_degree,
-                            scene._nerf_norm_radius,
-                            std::move(init));
-    gaussians.Training_setup(optimParams);
+    auto strategy = InriaADC(modelParams.sh_degree, std::move(init));
+    strategy.initialize(optimParams);
 
     auto background = modelParams.white_background
                           ? torch::tensor({1.f, 1.f, 1.f})
@@ -81,19 +79,15 @@ int main(int argc, char* argv[]) {
 
             auto gt_image = cam.Get_original_image().to(torch::kCUDA, /*non_blocking=*/true);
 
-            if (iter % 1000 == 0)
-                gaussians.One_up_sh_degree();
+            auto r_output = render(cam, gaussians, background);
 
-            auto [image, viewspace_point_tensor, visibility_filter, radii] =
-                render(cam, gaussians, background);
-
-            if (image.dim() == 3)
-                image = image.unsqueeze(0); // NCHW for SSIM
+            if (r_output.image.dim() == 3)
+                r_output.image = r_output.image.unsqueeze(0); // NCHW for SSIM
             if (gt_image.dim() == 3)
                 gt_image = gt_image.unsqueeze(0);
 
-            if (image.sizes() != gt_image.sizes()) {
-                std::cerr << "ERROR: size mismatch – rendered " << image.sizes()
+            if (r_output.image.sizes() != gt_image.sizes()) {
+                std::cerr << "ERROR: size mismatch – rendered " << r_output.image.sizes()
                           << " vs. ground truth " << gt_image.sizes() << '\n';
                 return -1;
             }
@@ -101,64 +95,32 @@ int main(int argc, char* argv[]) {
             //------------------------------------------------------------------
             // Loss = (1-λ)·L1 + λ·DSSIM
             //------------------------------------------------------------------
-            auto l1l = torch::l1_loss(image.squeeze(0), gt_image.squeeze(0));
-            auto ssim_loss = fused_ssim(image, gt_image, "same", /*train=*/true);
+            auto l1l = torch::l1_loss(r_output.image.squeeze(0), gt_image.squeeze(0));
+            auto ssim_loss = fused_ssim(r_output.image, gt_image, "same", /*train=*/true);
             auto loss = (1.f - optimParams.lambda_dssim) * l1l +
                         optimParams.lambda_dssim * (1.f - ssim_loss);
             loss.backward();
+            const float loss_value = loss.item<float>();
 
+            const bool is_densifying = (iter < optimParams.densify_until_iter &&
+                                        iter > optimParams.densify_from_iter &&
+                                        iter % optimParams.densification_interval == 0);
             //------------------------------------------------------------------
             // No-grad section – update radii, densify, optimise
             //------------------------------------------------------------------
             {
                 torch::NoGradGuard no_grad;
 
-                auto visible_max_radii = gaussians._max_radii2D.masked_select(visibility_filter);
-                auto visible_radii = radii.masked_select(visibility_filter);
-                gaussians._max_radii2D.masked_scatter_(
-                    visibility_filter, torch::max(visible_max_radii, visible_radii));
-
-                bool is_densifying = (iter < optimParams.densify_until_iter &&
-                                      iter > optimParams.densify_from_iter &&
-                                      iter % optimParams.densification_interval == 0);
-
-                float loss_value = loss.item<float>();
-                progress.update(iter, loss_value,
-                                static_cast<int>(gaussians.Get_xyz().size(0)),
-                                /*psnr=*/0.0f, is_densifying);
-
-                if (iter == optimParams.iterations) {
-                    auto pc = gaussians.to_point_cloud();
-                    write_ply(pc, modelParams.output_path, iter, /*join=*/true);
-                    break;
-                }
                 if (iter % 7000 == 0) {
                     auto pc = gaussians.to_point_cloud();
                     write_ply(pc, modelParams.output_path, iter, /*join=*/false);
                 }
 
-                // Densification & pruning
-                if (iter < optimParams.densify_until_iter) {
-                    gaussians.Add_densification_stats(viewspace_point_tensor, visibility_filter);
-                    if (is_densifying) {
-                        gaussians.Densify_and_prune(optimParams.densify_grad_threshold,
-                                                    optimParams.min_opacity,
-                                                    cameras_extent);
-                    }
-                    if (iter % optimParams.opacity_reset_interval == 0 ||
-                        (modelParams.white_background && iter == optimParams.densify_from_iter)) {
-                        gaussians.Reset_opacity();
-                    }
-                }
-
-                // Optimiser step
-                if (iter < optimParams.iterations) {
-                    gaussians._optimizer->step();
-                    gaussians._optimizer->zero_grad(true);
-                    gaussians.Update_learning_rate(iter);
-                }
+                strategy.post_backward(r_output);
+                strategy.step();
             }
 
+            progress.update(iter, loss_value, static_cast<int>(gaussians.Get_xyz().size(0)), is_densifying);
             ++iter;
         }
 
@@ -166,6 +128,8 @@ int main(int argc, char* argv[]) {
         train_dataloader = make_dataloader();
     }
 
+    auto pc = gaussians.to_point_cloud();
+    write_ply(pc, modelParams.output_path, iter, /*join=*/true);
     progress.print_final_summary(static_cast<int>(gaussians.Get_xyz().size(0)));
     return 0;
 }

@@ -1,7 +1,8 @@
 #include "core/gaussian.hpp"
 #include "core/debug_utils.hpp"
 #include "core/mean_neighbor_dist.hpp"
-#include "core/read_utils.hpp"
+#include "core/parameters.hpp"
+#include "core/render_utils.hpp"
 #include <exception>
 #include <thread>
 
@@ -32,11 +33,10 @@ static inline torch::Tensor inverse_sigmoid(torch::Tensor x) {
     return torch::log(x / (1 - x));
 }
 
-GaussianModel::GaussianModel(int sh_degree,
-                             float spatial_lr_scale,
-                             gauss::init::InitTensors&& init)
-    : _max_sh_degree{sh_degree},
-      _spatial_lr_scale{spatial_lr_scale} {
+InriaADC::InriaADC(int sh_degree,
+                   gauss::init::InitTensors&& init)
+    : _max_sh_degree{sh_degree} {
+    _scene_scale = std::move(init.scene_scale);
     _xyz = std::move(init.xyz);
     _scaling = std::move(init.scaling);
     _rotation = std::move(init.rotation);
@@ -53,7 +53,7 @@ GaussianModel::GaussianModel(int sh_degree,
  *
  * @return Tensor of the concatenated features
  */
-torch::Tensor GaussianModel::Get_features() const {
+torch::Tensor InriaADC::Get_features() const {
     auto features_dc = _features_dc;
     auto features_rest = _features_rest;
     return torch::cat({features_dc, features_rest}, 1);
@@ -64,7 +64,7 @@ torch::Tensor GaussianModel::Get_features() const {
  *
  * This function increments the active_sh_degree by 1, up to a maximum of max_sh_degree.
  */
-void GaussianModel::One_up_sh_degree() {
+void InriaADC::One_up_sh_degree() {
     if (_active_sh_degree < _max_sh_degree) {
         _active_sh_degree++;
     }
@@ -79,65 +79,20 @@ void GaussianModel::One_up_sh_degree() {
  * @param params The OptimizationParameters object providing the settings for training
  */
 // ─── GaussianModel::Training_setup ──────────────────────────────────────────
-void GaussianModel::Training_setup(const gs::param::OptimizationParameters& params) {
+void InriaADC::Training_setup(const gs::param::OptimizationParameters& params) {
     // ------------------------------------------------------------------
     // 0. Move all tensors to CUDA *first* and mark them trainable
     // ------------------------------------------------------------------
-    const auto dev = torch::kCUDA;
-
-    _xyz = _xyz.to(dev).set_requires_grad(true);
-    _scaling = _scaling.to(dev).set_requires_grad(true);
-    _rotation = _rotation.to(dev).set_requires_grad(true);
-    _opacity = _opacity.to(dev).set_requires_grad(true);
-    _features_dc = _features_dc.to(dev).set_requires_grad(true);
-    _features_rest = _features_rest.to(dev).set_requires_grad(true);
-
-    // aux buffers (no grad)
-    _percent_dense = params.percent_dense;
-    _xyz_gradient_accum = torch::zeros({_xyz.size(0), 1}, torch::kFloat32).to(dev);
-    _denom = torch::zeros({_xyz.size(0), 1}, torch::kFloat32).to(dev);
-    _max_radii2D = torch::zeros({_xyz.size(0)}, torch::kFloat32).to(dev);
-
-    _xyz_scheduler_args = Expon_lr_func(
-        params.position_lr_init * _spatial_lr_scale,
-        params.position_lr_final * _spatial_lr_scale,
-        params.position_lr_delay_mult,
-        params.position_lr_max_steps);
-
-    // ------------------------------------------------------------------
-    // 1. Build Adam param-groups with the CUDA tensors
-    // ------------------------------------------------------------------
-    using torch::optim::AdamOptions;
-    std::vector<torch::optim::OptimizerParamGroup> groups;
-
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_xyz},
-                                                          std::make_unique<AdamOptions>(params.position_lr_init * _spatial_lr_scale)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_features_dc},
-                                                          std::make_unique<AdamOptions>(params.feature_lr)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_features_rest},
-                                                          std::make_unique<AdamOptions>(params.feature_lr / 20.f)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_scaling},
-                                                          std::make_unique<AdamOptions>(params.scaling_lr * _spatial_lr_scale)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_rotation},
-                                                          std::make_unique<AdamOptions>(params.rotation_lr)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_opacity},
-                                                          std::make_unique<AdamOptions>(params.opacity_lr)));
-
-    for (auto& g : groups)
-        static_cast<AdamOptions&>(g.options()).eps(1e-15);
-
-    _optimizer = std::make_unique<torch::optim::Adam>(
-        groups, AdamOptions(0.f).eps(1e-15));
 }
 
-void GaussianModel::Update_learning_rate(float iteration) {
+void InriaADC::Update_learning_rate(float iteration) {
     // This is hacky because you cant change in libtorch individual parameter learning rate
     // xyz is added first, since _optimizer->param_groups() return a vector, we assume that xyz stays first
     auto lr = _xyz_scheduler_args(iteration);
     static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(lr);
 }
 
-void GaussianModel::Reset_opacity() {
+void InriaADC::Reset_opacity() {
     // opacity activation
     auto new_opacity = inverse_sigmoid(torch::ones_like(_opacity, torch::TensorOptions().dtype(torch::kFloat32)) * 0.01f);
 
@@ -175,7 +130,7 @@ void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, t
     optimizer->state()[new_param_key] = std::move(adamParamStates);
 }
 
-void GaussianModel::prune_points(torch::Tensor mask) {
+void InriaADC::prune_points(torch::Tensor mask) {
     // reverse to keep points
     auto valid_point_mask = ~mask;
     int true_count = valid_point_mask.sum().item<int>();
@@ -216,12 +171,12 @@ void cat_tensors_to_optimizer(torch::optim::Adam* optimizer,
     optimizer->state()[new_param_key] = std::move(adamParamStates);
 }
 
-void GaussianModel::densification_postfix(torch::Tensor& new_xyz,
-                                          torch::Tensor& new_features_dc,
-                                          torch::Tensor& new_features_rest,
-                                          torch::Tensor& new_scaling,
-                                          torch::Tensor& new_rotation,
-                                          torch::Tensor& new_opacity) {
+void InriaADC::densification_postfix(torch::Tensor& new_xyz,
+                                     torch::Tensor& new_features_dc,
+                                     torch::Tensor& new_features_rest,
+                                     torch::Tensor& new_scaling,
+                                     torch::Tensor& new_rotation,
+                                     torch::Tensor& new_opacity) {
     cat_tensors_to_optimizer(_optimizer.get(), new_xyz, _xyz, 0);
     cat_tensors_to_optimizer(_optimizer.get(), new_features_dc, _features_dc, 1);
     cat_tensors_to_optimizer(_optimizer.get(), new_features_rest, _features_rest, 2);
@@ -234,14 +189,14 @@ void GaussianModel::densification_postfix(torch::Tensor& new_xyz,
     _max_radii2D = torch::zeros({_xyz.size(0)}).to(torch::kCUDA);
 }
 
-void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, float min_opacity) {
+void InriaADC::densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity) {
     static const int N = 2;
     const int n_init_points = _xyz.size(0);
     // Extract points that satisfy the gradient condition
     torch::Tensor padded_grad = torch::zeros({n_init_points}).to(torch::kCUDA);
     padded_grad.slice(0, 0, grads.size(0)) = grads.squeeze();
     torch::Tensor selected_pts_mask = torch::where(padded_grad >= grad_threshold, torch::ones_like(padded_grad).to(torch::kBool), torch::zeros_like(padded_grad).to(torch::kBool));
-    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)) > _percent_dense * scene_extent);
+    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)) > _percent_dense * _scene_scale);
     auto indices = torch::nonzero(selected_pts_mask == true).squeeze(-1);
 
     torch::Tensor stds = Get_scaling().index_select(0, indices).repeat({N, 1});
@@ -263,13 +218,13 @@ void GaussianModel::densify_and_split(torch::Tensor& grads, float grad_threshold
     prune_points(prune_filter);
 }
 
-void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent) {
+void InriaADC::densify_and_clone(torch::Tensor& grads, float grad_threshold) {
     // Extract points that satisfy the gradient condition
     torch::Tensor selected_pts_mask = torch::where(grads >= grad_threshold,
                                                    torch::ones_like(grads).to(torch::kBool),
                                                    torch::zeros_like(grads).to(torch::kBool));
 
-    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)).unsqueeze(-1) <= _percent_dense * scene_extent);
+    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(Get_scaling().max(1)).unsqueeze(-1) <= _percent_dense * _scene_scale);
 
     auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).squeeze(-1);
     torch::Tensor new_xyz = _xyz.index_select(0, indices);
@@ -282,20 +237,20 @@ void GaussianModel::densify_and_clone(torch::Tensor& grads, float grad_threshold
     densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
 }
 
-void GaussianModel::Densify_and_prune(float max_grad, float min_opacity, float extent) {
+void InriaADC::Densify_and_prune(float max_grad, float min_opacity) {
     torch::Tensor grads = _xyz_gradient_accum / _denom;
     grads.index_put_({grads.isnan()}, 0.0);
 
-    densify_and_clone(grads, max_grad, extent);
-    densify_and_split(grads, max_grad, extent, min_opacity);
+    densify_and_clone(grads, max_grad);
+    densify_and_split(grads, max_grad, min_opacity);
 }
 
-void GaussianModel::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {
+void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {
     _xyz_gradient_accum.index_put_({update_filter}, _xyz_gradient_accum.index_select(0, update_filter.nonzero().squeeze()) + viewspace_point_tensor.grad().index_select(0, update_filter.nonzero().squeeze()).slice(1, 0, 2).norm(2, -1, true));
     _denom.index_put_({update_filter}, _denom.index_select(0, update_filter.nonzero().squeeze()) + 1);
 }
 
-GaussianPointCloud GaussianModel::to_point_cloud() const {
+GaussianPointCloud InriaADC::to_point_cloud() const {
     GaussianPointCloud pc;
 
     pc.xyz = _xyz.cpu().contiguous();
@@ -310,4 +265,84 @@ GaussianPointCloud GaussianModel::to_point_cloud() const {
         make_attribute_names(_features_dc, _features_rest, _scaling, _rotation);
 
     return pc; // NRVO keeps it cheap
+}
+void InriaADC::post_backward(int iter, RenderOutput& render_output) {
+
+    if (iter % 1000 == 0)
+        One_up_sh_degree();
+
+    const auto visible_max_radii = _max_radii2D.masked_select(render_output.visibility);
+    const auto visible_radii = render_output.radii.masked_select(render_output.visibility);
+    _max_radii2D.masked_scatter_(render_output.visibility, torch::max(visible_max_radii, visible_radii));
+
+    // Densification & pruning
+    if (iter < _params->densify_until_iter) {
+        Add_densification_stats(render_output.viewspace_pts, render_output.visibility);
+        const bool is_densifying = (iter < _params->densify_until_iter &&
+                                    iter > _params->densify_from_iter &&
+                                    iter % _params->densification_interval == 0);
+        if (is_densifying) {
+            Densify_and_prune(_params->densify_grad_threshold, _params->min_opacity);
+        }
+        if (iter % _params->opacity_reset_interval == 0) {
+            Reset_opacity();
+        }
+    }
+}
+void InriaADC::step(int iter) {
+
+    if (iter < _params->iterations) {
+        _optimizer->step();
+        _optimizer->zero_grad(true);
+        Update_learning_rate(iter);
+    }
+}
+
+void InriaADC::initialize(const gs::param::OptimizationParameters& p) {
+    _params = std::make_unique<gs::param::OptimizationParameters>(p);
+    const auto dev = torch::kCUDA;
+
+    _xyz = _xyz.to(dev).set_requires_grad(true);
+    _scaling = _scaling.to(dev).set_requires_grad(true);
+    _rotation = _rotation.to(dev).set_requires_grad(true);
+    _opacity = _opacity.to(dev).set_requires_grad(true);
+    _features_dc = _features_dc.to(dev).set_requires_grad(true);
+    _features_rest = _features_rest.to(dev).set_requires_grad(true);
+
+    // aux buffers (no grad)
+    _percent_dense = _params->percent_dense;
+    _xyz_gradient_accum = torch::zeros({_xyz.size(0), 1}, torch::kFloat32).to(dev);
+    _denom = torch::zeros({_xyz.size(0), 1}, torch::kFloat32).to(dev);
+    _max_radii2D = torch::zeros({_xyz.size(0)}, torch::kFloat32).to(dev);
+
+    _xyz_scheduler_args = Expon_lr_func(
+        _params->position_lr_init * _scene_scale,
+        _params->position_lr_final * _scene_scale,
+        _params->position_lr_delay_mult,
+        _params->position_lr_max_steps);
+
+    // ------------------------------------------------------------------
+    // 1. Build Adam param-groups with the CUDA tensors
+    // ------------------------------------------------------------------
+    using torch::optim::AdamOptions;
+    std::vector<torch::optim::OptimizerParamGroup> groups;
+
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_xyz},
+                                                          std::make_unique<AdamOptions>(_params->position_lr_init * _scene_scale)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_features_dc},
+                                                          std::make_unique<AdamOptions>(_params->feature_lr)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_features_rest},
+                                                          std::make_unique<AdamOptions>(_params->feature_lr / 20.f)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_scaling},
+                                                          std::make_unique<AdamOptions>(_params->scaling_lr * _scene_scale)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_rotation},
+                                                          std::make_unique<AdamOptions>(_params->rotation_lr)));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_opacity},
+                                                          std::make_unique<AdamOptions>(_params->opacity_lr)));
+
+    for (auto& g : groups)
+        static_cast<AdamOptions&>(g.options()).eps(1e-15);
+
+    _optimizer = std::make_unique<torch::optim::Adam>(
+        groups, AdamOptions(0.f).eps(1e-15));
 }

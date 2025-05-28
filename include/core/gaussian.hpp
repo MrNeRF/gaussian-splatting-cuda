@@ -5,13 +5,13 @@
 
 #include "core/exporter.hpp"
 #include "core/gaussian_init.hpp"
-#include "core/parameters.hpp"
+#include "core/istrategy.hpp"
 #include "core/scene_info.hpp"
 #include <memory>
 #include <string>
 #include <torch/torch.h>
 
-class GaussianModel {
+class InriaADC : public IStrategy {
 
     struct Expon_lr_func {
         float lr_init;
@@ -43,18 +43,21 @@ class GaussianModel {
     };
 
 public:
-    GaussianModel() = delete;
-    GaussianModel(int sh_degree,
-                  float spatial_lr_scale,
-                  gauss::init::InitTensors&& init);
+    InriaADC() = delete;
+    InriaADC(int sh_degree,
+             gauss::init::InitTensors&& init);
     // Copy constructor
-    GaussianModel(const GaussianModel& other) = delete;
+    InriaADC(const InriaADC& other) = delete;
     // Copy assignment operator
-    GaussianModel& operator=(const GaussianModel& other) = delete;
+    InriaADC& operator=(const InriaADC& other) = delete;
     // Move constructor
-    GaussianModel(GaussianModel&& other) = default;
+    InriaADC(InriaADC&& other) = default;
     // Move assignment operator
-    GaussianModel& operator=(GaussianModel&& other) = default;
+    InriaADC& operator=(InriaADC&& other) = default;
+
+    void initialize(const gs::param::OptimizationParameters& params) override;
+    void post_backward(int iter, RenderOutput& render_output) override;
+    void step(int iter) override;
 
 public:
     // Getters
@@ -72,7 +75,7 @@ public:
     void Update_learning_rate(float iteration);
     void Reset_opacity();
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
-    void Densify_and_prune(float max_grad, float min_opacity, float extent);
+    void Densify_and_prune(float max_grad, float min_opacity);
 
 public:
     // should not be public or it should maybe be pulled out here. Not sure yet
@@ -89,15 +92,16 @@ private:
                                torch::Tensor& new_rotation,
                                torch::Tensor& new_opacity);
 
-    void densify_and_clone(torch::Tensor& grads, float grad_threshold, float scene_extent);
-    void densify_and_split(torch::Tensor& grads, float grad_threshold, float scene_extent, float min_opacity);
+    void densify_and_clone(torch::Tensor& grads, float grad_threshold);
+    void densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity);
 
 private:
     int _active_sh_degree = 0;
     int _max_sh_degree = 0;
-    float _spatial_lr_scale = 0.f;
+    float _scene_scale = 0.f;
     float _percent_dense = 0.f;
 
+    std::unique_ptr<gs::param::OptimizationParameters> _params;
     Expon_lr_func _xyz_scheduler_args;
     torch::Tensor _denom;
     torch::Tensor _xyz;
