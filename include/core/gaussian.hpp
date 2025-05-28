@@ -41,6 +41,7 @@ class GaussianModel {
             return delay_rate * log_lerp;
         }
     };
+
 public:
     GaussianModel() = delete;
     GaussianModel(int sh_degree,
