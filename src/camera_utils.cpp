@@ -15,8 +15,7 @@
 //  World → view (NeRF++ translate / scale variant)
 // -----------------------------------------------------------------------------
 torch::Tensor getWorld2View2(const torch::Tensor& R,
-                             const torch::Tensor& t)
-{
+                             const torch::Tensor& t) {
     assert_mat(R, 3, 3, "R");
     assert_vec(t, 3, "t");
 
@@ -25,12 +24,12 @@ torch::Tensor getWorld2View2(const torch::Tensor& R,
                                   torch::TensorOptions().dtype(torch::kFloat32).device(dev));
 
     // 1. Put R^T in the top-left block
-    Rt.index_put_({torch::indexing::Slice(0,3),
-                   torch::indexing::Slice(0,3)},
+    Rt.index_put_({torch::indexing::Slice(0, 3),
+                   torch::indexing::Slice(0, 3)},
                   R.t());
 
     // 2. Copy translation exactly
-    Rt.index_put_({3, torch::indexing::Slice(0,3)}, t);
+    Rt.index_put_({3, torch::indexing::Slice(0, 3)}, t);
 
     // 3. No final transpose needed
     return Rt;
@@ -40,17 +39,16 @@ torch::Tensor getWorld2View2(const torch::Tensor& R,
 //  Projection matrix (OpenGL style, z-forward)
 // -----------------------------------------------------------------------------
 torch::Tensor getProjectionMatrix(float znear, float zfar,
-                                  float fovX, float fovY)
-{
+                                  float fovX, float fovY) {
     float tanHalfFovY = std::tan(fovY / 2.f);
     float tanHalfFovX = std::tan(fovX / 2.f);
 
-    float top    = tanHalfFovY * znear;
+    float top = tanHalfFovY * znear;
     float bottom = -top;
-    float right  = tanHalfFovX * znear;
-    float left   = -right;
+    float right = tanHalfFovX * znear;
+    float left = -right;
 
-    torch::Tensor P = torch::zeros({4,4}, torch::kFloat32);
+    torch::Tensor P = torch::zeros({4, 4}, torch::kFloat32);
 
     float z_sign = 1.f;
 
@@ -65,7 +63,6 @@ torch::Tensor getProjectionMatrix(float znear, float zfar,
     // Just clone, no transpose
     return P.clone();
 }
-
 
 // -----------------------------------------------------------------------------
 //  Image I/O helpers
