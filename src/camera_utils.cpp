@@ -39,29 +39,31 @@ torch::Tensor getWorld2View2(const torch::Tensor& R,
 // -----------------------------------------------------------------------------
 //  Projection matrix (OpenGL style, z-forward)
 // -----------------------------------------------------------------------------
-torch::Tensor getProjectionMatrix(float znear, float zfar, float fovX, float fovY) {
-    float tanHalfFovY = std::tan((fovY / 2.f));
-    float tanHalfFovX = std::tan((fovX / 2.f));
+torch::Tensor getProjectionMatrix(float znear, float zfar,
+                                  float fovX, float fovY)
+{
+    float tanHalfFovY = std::tan(fovY / 2.f);
+    float tanHalfFovX = std::tan(fovX / 2.f);
 
-    float top = tanHalfFovY * znear;
+    float top    = tanHalfFovY * znear;
     float bottom = -top;
-    float right = tanHalfFovX * znear;
-    float left = -right;
+    float right  = tanHalfFovX * znear;
+    float left   = -right;
 
     torch::Tensor P = torch::zeros({4,4}, torch::kFloat32);
 
     float z_sign = 1.f;
 
-    P[0, 0] = 2.f * znear / (right - left);
-    P[1, 1] = 2.f * znear / (top - bottom);
-    P[0, 2] = (right + left) / (right - left);
-    P[1, 2] = (top + bottom) / (top - bottom);
-    P[3, 2] = z_sign;
-    P[2, 2] = z_sign * zfar / (zfar - znear);
-    P[2, 3] = -(zfar * znear) / (zfar - znear);
+    P[0][0] = 2.f * znear / (right - left);
+    P[1][1] = 2.f * znear / (top - bottom);
+    P[0][2] = (right + left) / (right - left);
+    P[1][2] = (top + bottom) / (top - bottom);
+    P[2][2] = z_sign * zfar / (zfar - znear);
+    P[2][3] = z_sign;
+    P[3][2] = -(zfar * znear) / (zfar - znear);
 
-    // clone the tensor to allocate new memory
-    return P.t().clone();
+    // Just clone, no transpose
+    return P.clone();
 }
 
 
