@@ -1,5 +1,5 @@
-#include "core/debug_utils.hpp"
 #include "core/inria_adc.hpp"
+#include "core/debug_utils.hpp"
 #include "core/mean_neighbor_dist.hpp"
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
@@ -31,6 +31,21 @@ static inline torch::Tensor build_rotation(torch::Tensor r) {
 
 static inline torch::Tensor inverse_sigmoid(torch::Tensor x) {
     return torch::log(x / (1 - x));
+}
+
+float InriaADC::Expon_lr_func::operator()(int64_t step) const {
+    if (step < 0 || (lr_init == 0.0 && lr_final == 0.0)) {
+        return 0.0;
+    }
+    float delay_rate;
+    if (lr_delay_steps > 0. && step != 0) {
+        delay_rate = lr_delay_mult + (1 - lr_delay_mult) * std::sin(0.5 * M_PI * std::clamp((float)step / lr_delay_steps, 0.f, 1.f));
+    } else {
+        delay_rate = 1.0;
+    }
+    float t = std::clamp(static_cast<float>(step) / static_cast<float>(max_steps), 0.f, 1.f);
+    float log_lerp = std::exp(std::log(lr_init) * (1.f - t) + std::log(lr_final) * t);
+    return delay_rate * log_lerp;
 }
 
 InriaADC::InriaADC(int sh_degree, gauss::init::InitTensors&& init)
