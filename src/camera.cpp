@@ -42,12 +42,11 @@ void Camera::initialize_cuda_tensors() {
     _world_view_transform = getWorld2View2(R_cuda, T_cuda);
 
     _projection_matrix = getProjectionMatrix(_znear, _zfar,
-                                             _FoVx,  _FoVy)
+                                             _FoVx, _FoVy)
                              .to(torch::kCUDA);
 
     this->_full_proj_transform = this->_world_view_transform.unsqueeze(0).bmm(this->_projection_matrix.unsqueeze(0)).squeeze(0);
     this->_camera_center = this->_world_view_transform.inverse()[3].slice(0, 0, 3);
-
 
     _cuda_initialized = true;
 }
