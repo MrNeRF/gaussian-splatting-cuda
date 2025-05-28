@@ -1,8 +1,6 @@
 #include "core/read_utils.hpp"
+#include "core/scene_info.hpp"
 #include "core/camera_info.hpp"
-#include "core/camera_utils.hpp"
-#include "core/image.hpp"
-#include "core/point_cloud.hpp"
 
 #include "core/torch_shapes.hpp"
 #include <torch/torch.h>
@@ -12,7 +10,6 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <omp.h>
@@ -46,6 +43,27 @@ inline torch::Tensor qvec2rotmat(const torch::Tensor& qraw) {
     R[2][2] = 1 - 2 * (x * x + y * y);
     return R;
 }
+
+inline float focal2fov(float focal, int pixels) {
+    return 2.0f * std::atan(pixels / (2.0f * focal));
+}
+
+
+class Image {
+public:
+    Image() = default;
+    explicit Image(uint32_t id)
+        : _image_ID(id) {}
+
+    uint32_t _camera_id = 0;
+    std::string _name;
+
+    torch::Tensor _qvec = torch::tensor({1.f, 0.f, 0.f, 0.f}, torch::kFloat32);
+    torch::Tensor _tvec = torch::zeros({3}, torch::kFloat32);
+
+private:
+    uint32_t _image_ID = 0;
+};
 
 // -----------------------------------------------------------------------------
 //  Build 4 × 4 world-to-camera matrix
@@ -319,7 +337,7 @@ float getNerfppNorm(std::vector<CameraInfo>& cams) {
 //  Top-level helper
 // -----------------------------------------------------------------------------
 std::unique_ptr<SceneInfo>
-read_colmap_scene_info(const std::filesystem::path& base, int resolution) {
+read_colmap_scene_info(const std::filesystem::path& base) {
     auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");
     auto images = read_images_binary(base / "sparse/0/images.bin");
 

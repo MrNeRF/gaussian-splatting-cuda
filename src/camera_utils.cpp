@@ -2,67 +2,12 @@
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 
 #include "core/camera_utils.hpp"
-#include "core/torch_shapes.hpp"
 #include "external/stb_image.h"
 #include "external/stb_image_resize.h"
 
 #include <cmath>
 #include <filesystem>
 #include <iostream>
-#include <torch/torch.h>
-
-// -----------------------------------------------------------------------------
-//  World → view (NeRF++ translate / scale variant)
-// -----------------------------------------------------------------------------
-torch::Tensor getWorld2View2(const torch::Tensor& R,
-                             const torch::Tensor& t) {
-    assert_mat(R, 3, 3, "R");
-    assert_vec(t, 3, "t");
-
-    const auto dev = R.device();
-    torch::Tensor Rt = torch::eye(4,
-                                  torch::TensorOptions().dtype(torch::kFloat32).device(dev));
-
-    // 1. Put R^T in the top-left block
-    Rt.index_put_({torch::indexing::Slice(0, 3),
-                   torch::indexing::Slice(0, 3)},
-                  R.t());
-
-    // 2. Copy translation exactly
-    Rt.index_put_({3, torch::indexing::Slice(0, 3)}, t);
-
-    // 3. No final transpose needed
-    return Rt;
-}
-
-// -----------------------------------------------------------------------------
-//  Projection matrix (OpenGL style, z-forward)
-// -----------------------------------------------------------------------------
-torch::Tensor getProjectionMatrix(float znear, float zfar,
-                                  float fovX, float fovY) {
-    float tanHalfFovY = std::tan(fovY / 2.f);
-    float tanHalfFovX = std::tan(fovX / 2.f);
-
-    float top = tanHalfFovY * znear;
-    float bottom = -top;
-    float right = tanHalfFovX * znear;
-    float left = -right;
-
-    torch::Tensor P = torch::zeros({4, 4}, torch::kFloat32);
-
-    float z_sign = 1.f;
-
-    P[0][0] = 2.f * znear / (right - left);
-    P[1][1] = 2.f * znear / (top - bottom);
-    P[0][2] = (right + left) / (right - left);
-    P[1][2] = (top + bottom) / (top - bottom);
-    P[2][2] = z_sign * zfar / (zfar - znear);
-    P[2][3] = z_sign;
-    P[3][2] = -(zfar * znear) / (zfar - znear);
-
-    // Just clone, no transpose
-    return P.clone();
-}
 
 // -----------------------------------------------------------------------------
 //  Image I/O helpers

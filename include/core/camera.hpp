@@ -6,22 +6,17 @@
 
 class Camera : public torch::nn::Module {
 public:
-    Camera(int imported_colmap_id,
-           const torch::Tensor& R, // 3×3  (CPU, float32/64)
+    Camera(const torch::Tensor& R, // 3×3  (CPU, float32/64)
            const torch::Tensor& T, // 3    (CPU)
            float FoVx, float FoVy,
            const torch::Tensor& image, // H×W×C 0-1 float32 or uint8
            std::string image_name,
-           int image_id,
-           float scale = 1.0f);
+           int uid);
 
     // Allocate GPU copies & matrices
     void initialize_cuda_tensors();
-    [[nodiscard]] bool is_cuda_initialized() const noexcept { return _cuda_initialized; }
 
     // --- modern accessors --------------------------------------------------
-    int uid() const noexcept { return _uid; }
-    int colmap_id() const noexcept { return _colmap_id; }
     torch::Tensor& R() { return _R; }
     torch::Tensor& T() { return _T; }
     float FoVx() const noexcept { return _FoVx; }
@@ -30,18 +25,11 @@ public:
     const torch::Tensor& original_image() const { return _original_image; }
     int image_width() const noexcept { return _image_width; }
     int image_height() const noexcept { return _image_height; }
-    float zfar() const noexcept { return _zfar; }
-    float znear() const noexcept { return _znear; }
 
     torch::Tensor& world_view_transform();
-    torch::Tensor& projection_matrix();
     torch::Tensor& full_proj_transform();
     torch::Tensor& camera_center();
 
-    // -----------------------------------------------------------------------
-    //  *** compatibility wrappers ***
-    //  (keeps legacy code unchanged)
-    // -----------------------------------------------------------------------
     int Get_image_height() const noexcept { return image_height(); }
     int Get_image_width() const noexcept { return image_width(); }
     float Get_FoVx() const noexcept { return FoVx(); }
@@ -54,7 +42,6 @@ public:
 private:
     // ids
     int _uid = -1;
-    int _colmap_id = -1;
 
     // extrinsics / intrinsics
     torch::Tensor _R = torch::eye(3);
@@ -74,7 +61,6 @@ private:
 
     // NeRF++ translate/scale
     torch::Tensor _trans = torch::zeros({3});
-    float _scale = 1.f;
 
     // GPU copies (filled by initialize_cuda_tensors)
     torch::Tensor _world_view_transform;

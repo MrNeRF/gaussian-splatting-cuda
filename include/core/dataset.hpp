@@ -83,7 +83,6 @@ public:
 
         // Create Camera object
         Camera camera(
-            cam_info._camera_ID,
             cam_info._R,
             cam_info._T,
             cam_info._fov_x,
@@ -121,7 +120,7 @@ inline std::shared_ptr<CameraDataset> create_camera_dataset(
     }
 
     // Read scene info (now without loading image data)
-    auto scene_info = read_colmap_scene_info(params.source_path, params.resolution);
+    auto scene_info = read_colmap_scene_info(params.source_path);
 
     // Create and return dataset
     return std::make_shared<CameraDataset>(std::move(scene_info), params);
