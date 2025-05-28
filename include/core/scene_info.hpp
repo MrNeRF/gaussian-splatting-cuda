@@ -4,7 +4,7 @@
 #include "core/camera_info.hpp"
 #include "core/point_cloud.hpp"
 #pragma diag_suppress code_of_warning
-#include <Eigen/Dense>
+#include <torch/torch.h>
 #pragma diag_default code_of_warning
 #include <filesystem>
 

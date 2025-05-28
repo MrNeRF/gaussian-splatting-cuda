@@ -70,7 +70,6 @@ target_link_libraries(gaussian_host
         ${TORCH_LIBRARIES}
         nlohmann_json::nlohmann_json
         tinyply
-        eigen3
         glm
         Threads::Threads
         args
