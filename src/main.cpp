@@ -8,7 +8,6 @@
 #include "core/render_utils.hpp"
 #include "core/training_progress.hpp"
 #include "kernels/fused_ssim.cuh"
-#include "kernels/loss_utils.cuh"
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <iostream>
 #include <torch/torch.h>
@@ -102,7 +101,7 @@ int main(int argc, char* argv[]) {
             //------------------------------------------------------------------
             // Loss = (1-λ)·L1 + λ·DSSIM
             //------------------------------------------------------------------
-            auto l1l = gaussian_splatting::l1_loss(image.squeeze(0), gt_image.squeeze(0));
+            auto l1l = torch::l1_loss(image.squeeze(0), gt_image.squeeze(0));
             auto ssim_loss = fused_ssim(image, gt_image, "same", /*train=*/true);
             auto loss = (1.f - optimParams.lambda_dssim) * l1l +
                         optimParams.lambda_dssim * (1.f - ssim_loss);

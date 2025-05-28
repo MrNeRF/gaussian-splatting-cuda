@@ -1,11 +1,16 @@
 #include "core/gaussian_init.hpp"
 #include "core/debug_utils.hpp"
 #include "core/gaussian.hpp"
+#include "core/scene_info.hpp"
 #include "core/mean_neighbor_dist.hpp"
 #include "core/read_utils.hpp"
 #include <torch/torch.h>
 
 namespace gauss::init {
+
+    static inline torch::Tensor inverse_sigmoid(torch::Tensor x) {
+        return torch::log(x / (1 - x));
+    }
 
     // ────────────────────────────────────────────────────────────────────────────
     // Utility: map RGB in [0,1] to spherical-harmonics DC range

@@ -1,6 +1,7 @@
 #pragma once
-#include "core/point_cloud.hpp"
 #include <torch/torch.h>
+
+struct PointCloud;
 
 namespace gauss::init {
 

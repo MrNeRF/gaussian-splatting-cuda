@@ -5,6 +5,33 @@
 #include <exception>
 #include <thread>
 
+static inline torch::Tensor build_rotation(torch::Tensor r) {
+    torch::Tensor norm = torch::sqrt(torch::sum(r.pow(2), 1));
+    torch::Tensor q = r / norm.unsqueeze(-1);
+
+    using Slice = torch::indexing::Slice;
+    torch::Tensor R = torch::zeros({q.size(0), 3, 3}, torch::device(torch::kCUDA));
+    torch::Tensor r0 = q.index({Slice(), 0});
+    torch::Tensor x = q.index({Slice(), 1});
+    torch::Tensor y = q.index({Slice(), 2});
+    torch::Tensor z = q.index({Slice(), 3});
+
+    R.index_put_({Slice(), 0, 0}, 1 - 2 * (y * y + z * z));
+    R.index_put_({Slice(), 0, 1}, 2 * (x * y - r0 * z));
+    R.index_put_({Slice(), 0, 2}, 2 * (x * z + r0 * y));
+    R.index_put_({Slice(), 1, 0}, 2 * (x * y + r0 * z));
+    R.index_put_({Slice(), 1, 1}, 1 - 2 * (x * x + z * z));
+    R.index_put_({Slice(), 1, 2}, 2 * (y * z - r0 * x));
+    R.index_put_({Slice(), 2, 0}, 2 * (x * z - r0 * y));
+    R.index_put_({Slice(), 2, 1}, 2 * (y * z + r0 * x));
+    R.index_put_({Slice(), 2, 2}, 1 - 2 * (x * x + y * y));
+    return R;
+}
+
+static inline torch::Tensor inverse_sigmoid(torch::Tensor x) {
+    return torch::log(x / (1 - x));
+}
+
 GaussianModel::GaussianModel(int sh_degree,
                              float spatial_lr_scale,
                              gauss::init::InitTensors&& init)

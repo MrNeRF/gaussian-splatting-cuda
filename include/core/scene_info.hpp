@@ -2,14 +2,25 @@
 
 #include "core/camera.hpp"
 #include "core/camera_info.hpp"
-#include "core/point_cloud.hpp"
-#pragma diag_suppress code_of_warning
-#include <torch/torch.h>
-#pragma diag_default code_of_warning
 #include <filesystem>
 
-// Also here as in camera info. I guess this can be cleaned up and removed later on
-// TODO: Check and remove this class if possible
+struct Point {
+    float x;
+    float y;
+    float z;
+};
+
+struct Color {
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+};
+
+struct PointCloud {
+    std::vector<Point> _points;
+    std::vector<Color> _colors;
+};
+
 struct SceneInfo {
     std::vector<CameraInfo> _cameras;
     PointCloud _point_cloud;
