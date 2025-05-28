@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "core/exporter.hpp"
-#include "core/gaussian_init.hpp"
+#include "core/gaussian_model.hpp"
 #include "core/istrategy.hpp"
 #include "core/scene_info.hpp"
 #include <memory>
@@ -44,8 +43,7 @@ class InriaADC : public IStrategy {
 
 public:
     InriaADC() = delete;
-    InriaADC(int sh_degree,
-             gauss::init::InitTensors&& init);
+    InriaADC(int sh_degree, gauss::init::InitTensors&& init);
     // Copy constructor
     InriaADC(const InriaADC& other) = delete;
     // Copy assignment operator
@@ -55,23 +53,14 @@ public:
     // Move assignment operator
     InriaADC& operator=(InriaADC&& other) = default;
 
+    // IStrategy interface implementation
     void initialize(const gs::param::OptimizationParameters& params) override;
     void post_backward(int iter, RenderOutput& render_output) override;
     void step(int iter) override;
+    GaussianModel& get_model() override { return _model; }
+    const GaussianModel& get_model() const override { return _model; }
 
-public:
-    // Getters
-    inline torch::Tensor Get_xyz() const { return _xyz; }
-    inline torch::Tensor Get_opacity() const { return torch::sigmoid(_opacity); }
-    inline torch::Tensor Get_rotation() const { return torch::nn::functional::normalize(_rotation); }
-    torch::Tensor Get_features() const;
-    int Get_active_sh_degree() const { return _active_sh_degree; }
-    torch::Tensor Get_scaling() { return torch::exp(_scaling); }
-    GaussianPointCloud to_point_cloud() const;
-
-    // Methods
-    void One_up_sh_degree();
-    void Training_setup(const gs::param::OptimizationParameters& params);
+    // Additional public methods specific to InriaADC
     void Update_learning_rate(float iteration);
     void Reset_opacity();
     void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
@@ -81,7 +70,6 @@ public:
     // should not be public or it should maybe be pulled out here. Not sure yet
     // This is all public mostly for debugging purposes
     std::unique_ptr<torch::optim::Adam> _optimizer;
-    torch::Tensor _max_radii2D;
 
 private:
     void prune_points(torch::Tensor mask);
@@ -96,19 +84,11 @@ private:
     void densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity);
 
 private:
-    int _active_sh_degree = 0;
-    int _max_sh_degree = 0;
-    float _scene_scale = 0.f;
+    GaussianModel _model;
     float _percent_dense = 0.f;
 
     std::unique_ptr<gs::param::OptimizationParameters> _params;
     Expon_lr_func _xyz_scheduler_args;
     torch::Tensor _denom;
-    torch::Tensor _xyz;
-    torch::Tensor _features_dc;
-    torch::Tensor _features_rest;
-    torch::Tensor _scaling;
-    torch::Tensor _rotation;
     torch::Tensor _xyz_gradient_accum;
-    torch::Tensor _opacity;
 };

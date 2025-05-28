@@ -2,8 +2,8 @@
 #include "core/dataset.hpp"
 #include "core/debug_utils.hpp"
 #include "core/exporter.hpp"
-#include "core/gaussian.hpp"
 #include "core/gaussian_init.hpp"
+#include "core/inria_adc.hpp"
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
 #include "core/training_progress.hpp"
@@ -60,7 +60,6 @@ int main(int argc, char* argv[]) {
                                           torch::TensorOptions().dtype(torch::kFloat32))
                                 .to(torch::kCUDA);
 
-    const float cameras_extent = scene._nerf_norm_radius;
     TrainingProgress progress(optimParams.iterations, /*bar_width=*/100);
 
     int iter = 1;
@@ -79,7 +78,7 @@ int main(int argc, char* argv[]) {
 
             auto gt_image = cam.Get_original_image().to(torch::kCUDA, /*non_blocking=*/true);
 
-            auto r_output = render(cam, gaussians, background);
+            auto r_output = render(cam, strategy.get_model(), background);
 
             if (r_output.image.dim() == 3)
                 r_output.image = r_output.image.unsqueeze(0); // NCHW for SSIM
@@ -112,15 +111,15 @@ int main(int argc, char* argv[]) {
                 torch::NoGradGuard no_grad;
 
                 if (iter % 7000 == 0) {
-                    auto pc = gaussians.to_point_cloud();
+                    auto pc = strategy.get_model().to_point_cloud();
                     write_ply(pc, modelParams.output_path, iter, /*join=*/false);
                 }
 
-                strategy.post_backward(r_output);
-                strategy.step();
+                strategy.post_backward(iter, r_output);
+                strategy.step(iter);
             }
 
-            progress.update(iter, loss_value, static_cast<int>(gaussians.Get_xyz().size(0)), is_densifying);
+            progress.update(iter, loss_value, static_cast<int>(strategy.get_model().size()), is_densifying);
             ++iter;
         }
 
@@ -128,8 +127,8 @@ int main(int argc, char* argv[]) {
         train_dataloader = make_dataloader();
     }
 
-    auto pc = gaussians.to_point_cloud();
+    auto pc = strategy.get_model().to_point_cloud();
     write_ply(pc, modelParams.output_path, iter, /*join=*/true);
-    progress.print_final_summary(static_cast<int>(gaussians.Get_xyz().size(0)));
+    progress.print_final_summary(static_cast<int>(strategy.get_model().size()));
     return 0;
 }
