@@ -1,9 +1,9 @@
 #pragma once
+#include "external/tinyply.hpp"
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <thread>
-#include "external/tinyply.hpp"
 #include <torch/torch.h>
 #include <vector>
 

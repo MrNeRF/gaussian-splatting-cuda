@@ -3,17 +3,23 @@
 #pragma once
 
 #include "core/camera.hpp"
-#include "core/gaussian.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/splat_data.hpp"
 #include <cmath>
 #include <torch/torch.h>
 
-inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> render(Camera& viewpoint_camera,
-                                                                                     GaussianModel& gaussianModel,
-                                                                                     torch::Tensor& bg_color,
-                                                                                     float scaling_modifier = 1.0,
-                                                                                     torch::Tensor override_color = torch::empty({})) {
+struct RenderOutput {
+    torch::Tensor image;         // rendered_image
+    torch::Tensor viewspace_pts; // means2D
+    torch::Tensor visibility;    // radii > 0
+    torch::Tensor radii;         // per-Gaussian projected radius
+};
+
+inline RenderOutput render(Camera& viewpoint_camera,
+                           const SplatData& gaussian_model,
+                           torch::Tensor& bg_color,
+                           float scaling_modifier = 1.0) {
     // Ensure background tensor (bg_color) is on GPU!
     bg_color = bg_color.to(torch::kCUDA);
 
@@ -27,28 +33,27 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
         .scale_modifier = scaling_modifier,
         .viewmatrix = viewpoint_camera.Get_world_view_transform(),
         .projmatrix = viewpoint_camera.Get_full_proj_transform(),
-        .sh_degree = gaussianModel.Get_active_sh_degree(),
+        .sh_degree = gaussian_model.get_active_sh_degree(),
         .camera_center = viewpoint_camera.Get_camera_center(),
         .prefiltered = false};
 
     GaussianRasterizer rasterizer = GaussianRasterizer(raster_settings);
 
-    auto means3D = gaussianModel.Get_xyz();
-    auto means2D = torch::zeros_like(gaussianModel.Get_xyz()).requires_grad_(true);
+    auto means3D = gaussian_model.get_xyz();
+    auto means2D = torch::zeros_like(gaussian_model.get_xyz()).requires_grad_(true);
     means2D.retain_grad();
-    auto opacity = gaussianModel.Get_opacity();
+    auto opacity = gaussian_model.get_opacity();
 
     auto scales = torch::Tensor();
     auto rotations = torch::Tensor();
     auto cov3D_precomp = torch::Tensor();
 
-    scales = gaussianModel.Get_scaling();
-    rotations = gaussianModel.Get_rotation();
+    scales = gaussian_model.get_scaling();
+    rotations = gaussian_model.get_rotation();
 
     auto shs = torch::Tensor();
     torch::Tensor colors_precomp = torch::Tensor();
-    // This is nonsense. Background color not used? See orginal file colors_precomp=None line 70
-    shs = gaussianModel.Get_features();
+    shs = gaussian_model.get_features();
 
     torch::cuda::synchronize();
 
@@ -63,8 +68,6 @@ inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> re
         rotations,
         cov3D_precomp);
 
-    // Apply visibility filter to remove occluded Gaussians.
-    // TODO: I think there is no real use for means2D, isn't it?
     // render, viewspace_points, visibility_filter, radii
     return {rendererd_image, means2D, radii > 0, radii};
 }
