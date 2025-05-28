@@ -3,7 +3,7 @@
 #include <fstream>
 #include <string>
 #include <thread>
-#include <tinyply.h>
+#include "external/tinyply.hpp"
 #include <torch/torch.h>
 #include <vector>
 

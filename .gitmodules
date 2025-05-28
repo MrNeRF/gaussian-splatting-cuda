@@ -7,6 +7,3 @@
 [submodule "external/glm"]
 	path = external/glm
 	url = https://github.com/g-truc/glm
-[submodule "external/tinyply"]
-	path = external/tinyply
-	url = https://github.com/ddiakopoulos/tinyply.git

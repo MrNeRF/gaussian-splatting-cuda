@@ -51,6 +51,7 @@ set(HOST_SOURCES
         src/read_utils.cpp
         src/parameters.cpp
         src/argument_parser.cpp
+        src/external/tinyply.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
@@ -60,7 +61,6 @@ target_include_directories(gaussian_host
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include  # This allows #include "core/header.hpp"
         PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source  # For tinyply.h
         ${PYTHON_INCLUDE_DIRS}
         ${Python3_INCLUDE_DIRS}
 )
@@ -69,7 +69,6 @@ target_link_libraries(gaussian_host
         PUBLIC
         ${TORCH_LIBRARIES}
         nlohmann_json::nlohmann_json
-        tinyply
         glm
         Threads::Threads
         args
@@ -148,7 +147,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 target_include_directories(${PROJECT_NAME}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source  # For tinyply.h in main.cpp
         ${PYTHON_INCLUDE_DIRS}
         ${Python3_INCLUDE_DIRS}
 )
@@ -187,7 +185,6 @@ if(BUILD_TESTS)
         add_executable(test_host tests/test_host.cpp)
         target_include_directories(test_host PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/include
-                ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source
         )
         target_link_libraries(test_host PRIVATE gaussian_host)
         add_test(NAME HostTests COMMAND test_host)
@@ -198,7 +195,6 @@ if(BUILD_TESTS)
         set_target_properties(test_kernels PROPERTIES CUDA_ARCHITECTURES native)
         target_include_directories(test_kernels PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/include
-                ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source
         )
         target_link_libraries(test_kernels PRIVATE gaussian_kernels gaussian_host)
         add_test(NAME KernelTests COMMAND test_kernels)
@@ -216,7 +212,6 @@ message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Include paths:")
 message(STATUS "  - Main: ${CMAKE_CURRENT_SOURCE_DIR}/include")
 message(STATUS "  - Kernels: ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels")
-message(STATUS "  - TinyPLY: ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyply/source")
 message(STATUS "  - Python: ${PYTHON_INCLUDE_DIRS}")
 
 # Enable ccache if available
