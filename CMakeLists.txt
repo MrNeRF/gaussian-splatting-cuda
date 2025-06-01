@@ -37,6 +37,82 @@ endif()
 add_subdirectory(external)
 
 # =============================================================================
+# GSPLAT LIBRARY - New backend
+# =============================================================================
+
+set(GSPLAT_SOURCES
+        gsplat/Adam.cpp
+        gsplat/AdamCUDA.cu
+        gsplat/Intersect.cpp
+        gsplat/IntersectTile.cu
+        gsplat/Null.cpp
+        gsplat/NullCUDA.cu
+        gsplat/Projection.cpp
+        gsplat/ProjectionEWA3DGSFused.cu
+        gsplat/ProjectionEWA3DGSPacked.cu
+        gsplat/ProjectionEWASimple.cu
+        gsplat/ProjectionUT3DGSFused.cu
+        gsplat/QuatScaleToCovar.cpp
+        gsplat/QuatScaleToCovarCUDA.cu
+        gsplat/Rasterization.cpp
+        gsplat/RasterizeToIndices3DGS.cu
+        gsplat/RasterizeToPixels3DGSBwd.cu
+        gsplat/RasterizeToPixels3DGSFwd.cu
+        gsplat/RasterizeToPixelsFromWorld3DGSBwd.cu
+        gsplat/RasterizeToPixelsFromWorld3DGSFwd.cu
+        gsplat/Relocation.cpp
+        gsplat/RelocationCUDA.cu
+        gsplat/SphericalHarmonics.cpp
+        gsplat/SphericalHarmonicsCUDA.cu
+        # 2DGS files if needed
+        gsplat/Projection2DGSFused.cu
+        gsplat/Projection2DGSPacked.cu
+        gsplat/RasterizeToIndices2DGS.cu
+        gsplat/RasterizeToPixels2DGSBwd.cu
+        gsplat/RasterizeToPixels2DGSFwd.cu
+)
+
+add_library(gsplat_backend STATIC ${GSPLAT_SOURCES})
+
+set_target_properties(gsplat_backend PROPERTIES
+        CUDA_ARCHITECTURES native
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+        # Enable device linking for this library
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
+
+target_include_directories(gsplat_backend
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE
+        ${PYTHON_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
+)
+
+target_link_libraries(gsplat_backend
+        PUBLIC
+        CUDA::cudart
+        CUDA::curand
+        CUDA::cublas
+        ${TORCH_LIBRARIES}
+)
+
+# CUDA optimizations for gsplat - only apply to CUDA files
+target_compile_options(gsplat_backend PRIVATE
+        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
+        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0 -g -fno-omit-frame-pointer>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:-O3>
+)
+
+# Ensure debug symbols are kept
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(gsplat_backend PRIVATE _DEBUG)
+endif()
+
+# =============================================================================
 # HOST LIBRARY - Compiled with g++ (fast!)
 # =============================================================================
 
@@ -52,6 +128,7 @@ set(HOST_SOURCES
         src/splat_data.cpp
         src/trainer.cpp
         src/argument_parser.cpp
+        src/gsplat_rasterizer.cpp
         src/external/tinyply.cpp
 )
 
@@ -60,7 +137,8 @@ add_library(gaussian_host STATIC ${HOST_SOURCES})
 # Set up include directories for host library
 target_include_directories(gaussian_host
         PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include  # This allows #include "core/header.hpp"
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
         PRIVATE
         ${PYTHON_INCLUDE_DIRS}
         ${Python3_INCLUDE_DIRS}
@@ -75,6 +153,7 @@ target_link_libraries(gaussian_host
         args
         ${PYTHON_LIBRARIES}
         Python3::Python
+        gsplat_backend  # Link to gsplat
 )
 
 if(OpenMP_CXX_FOUND)
@@ -84,22 +163,28 @@ else()
     message(STATUS "OpenMP NOT found – falling back to single-thread loader")
 endif()
 
-# Fast C++ compilation
+# Fast C++ compilation with proper debug symbols
 target_compile_options(gaussian_host PRIVATE
-        $<$<CONFIG:Debug>:-O0 -g -Wall>
+        $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer -DDEBUG>
         $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
 )
 
+# Ensure debug symbols in debug builds
+set_target_properties(gaussian_host PROPERTIES
+        DEBUG_POSTFIX d
+)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+    set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G -O0")
+endif()
+
 # =============================================================================
-# KERNEL LIBRARY - Compiled with nvcc (only what needs it!)
+# KERNEL LIBRARY - Keep minimal for backwards compatibility
 # =============================================================================
 
 set(KERNEL_SOURCES
         kernels/ssim.cu
-        kernels/rasterize_points.cu
-        kernels/cuda_rasterizer/forward.cu
-        kernels/cuda_rasterizer/backward.cu
-        kernels/cuda_rasterizer/rasterizer_impl.cu
 )
 
 add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
@@ -108,13 +193,14 @@ set_target_properties(gaussian_kernels PROPERTIES
         CUDA_ARCHITECTURES native
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
+        # Enable device linking for this library
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
-# Set up include directories correctly for CUDA kernels
 target_include_directories(gaussian_kernels
         PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include          # For kernels/header.cuh and core/header.hpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels  # So kernels can find headers directly as "config.h"
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
         PRIVATE
         ${PYTHON_INCLUDE_DIRS}
         ${Python3_INCLUDE_DIRS}
@@ -129,34 +215,39 @@ target_link_libraries(gaussian_kernels
         glm
 )
 
-# CUDA optimizations
 target_compile_options(gaussian_kernels PRIVATE
-        $<$<CONFIG:Debug>:-O0 -g -G -lineinfo>
-        $<$<CONFIG:Release>:-O3 -use_fast_math --ptxas-options=-v>
+        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
 )
 
 # =============================================================================
-# MAIN EXECUTABLE
+# MAIN EXECUTABLE - WITH CUDA DEVICE LINKING
 # =============================================================================
 
+# Create the main executable with device linking enabled
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
         CUDA_ARCHITECTURES native
+        CUDA_SEPARABLE_COMPILATION ON
+        # This is the key property for device linking
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
 target_include_directories(${PROJECT_NAME}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
         ${PYTHON_INCLUDE_DIRS}
         ${Python3_INCLUDE_DIRS}
 )
 
+# Link directly to all libraries
 target_link_libraries(${PROJECT_NAME}
         PRIVATE
         gaussian_host
         gaussian_kernels
-        # Add Python libraries to main executable too
+        gsplat_backend
         ${PYTHON_LIBRARIES}
         Python3::Python
 )
@@ -172,6 +263,7 @@ endfunction()
 
 configure_build_type(gaussian_host)
 configure_build_type(gaussian_kernels)
+configure_build_type(gsplat_backend)
 configure_build_type(${PROJECT_NAME})
 
 # =============================================================================
@@ -193,7 +285,10 @@ if(BUILD_TESTS)
 
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kernels.cu")
         add_executable(test_kernels tests/test_kernels.cu)
-        set_target_properties(test_kernels PROPERTIES CUDA_ARCHITECTURES native)
+        set_target_properties(test_kernels PROPERTIES
+                CUDA_ARCHITECTURES native
+                CUDA_RESOLVE_DEVICE_SYMBOLS ON
+        )
         target_include_directories(test_kernels PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/include
         )

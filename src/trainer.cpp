@@ -57,8 +57,7 @@ namespace gs {
                 cam.initialize_cuda_tensors();
 
                 auto gt_image = cam.Get_original_image().to(torch::kCUDA, /*non_blocking=*/true);
-
-                auto r_output = render(cam, strategy_->get_model(), background_);
+                auto r_output = render_with_gsplat(cam, strategy_->get_model(), background_);
 
                 if (r_output.image.dim() == 3)
                     r_output.image = r_output.image.unsqueeze(0); // NCHW for SSIM
