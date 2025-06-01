@@ -6,6 +6,7 @@
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
 #include "core/splat_data.hpp"
+#include "core/gsplat_rasterizer.hpp"
 #include <cmath>
 #include <torch/torch.h>
 
@@ -70,4 +71,21 @@ inline RenderOutput render(Camera& viewpoint_camera,
 
     // render, viewspace_points, visibility_filter, radii
     return {rendererd_image, means2D, radii > 0, radii};
+}
+
+inline RenderOutput render_with_gsplat(Camera& viewpoint_camera,
+                                       const SplatData& gaussian_model,
+                                       torch::Tensor& bg_color,
+                                       float scaling_modifier = 1.0) {
+    // Use gsplat backend with proper namespace
+    auto gsplat_output = gs::render_gsplat(viewpoint_camera, gaussian_model, bg_color, scaling_modifier, false);
+
+    // Convert to RenderOutput format
+    RenderOutput output;
+    output.image = gsplat_output.image;
+    output.viewspace_pts = gsplat_output.means2d;
+    output.visibility = gsplat_output.radii > 0;
+    output.radii = gsplat_output.radii;
+
+    return output;
 }
