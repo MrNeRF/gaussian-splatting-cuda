@@ -1,7 +1,6 @@
 #include "core/argument_parser.hpp"
 #include "core/dataset.hpp"
 #include "core/debug_utils.hpp"
-#include "core/exporter.hpp"
 #include "core/inria_adc.hpp"
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
@@ -110,8 +109,7 @@ int main(int argc, char* argv[]) {
                 torch::NoGradGuard no_grad;
 
                 if (iter % 7000 == 0) {
-                    auto pc = strategy.get_model().to_point_cloud();
-                    write_ply(pc, modelParams.output_path, iter, /*join=*/false);
+                    strategy.get_model().save_ply(modelParams.output_path, iter, /*join=*/false);
                 }
 
                 strategy.post_backward(iter, r_output);
@@ -126,8 +124,7 @@ int main(int argc, char* argv[]) {
         train_dataloader = make_dataloader();
     }
 
-    auto pc = strategy.get_model().to_point_cloud();
-    write_ply(pc, modelParams.output_path, iter, /*join=*/true);
+    strategy.get_model().save_ply(modelParams.output_path, iter, /*join=*/true);
     progress.print_final_summary(static_cast<int>(strategy.get_model().size()));
     return 0;
 }
