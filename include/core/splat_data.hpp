@@ -1,6 +1,9 @@
 #pragma once
 
+#include <filesystem>
+#include <string>
 #include <torch/torch.h>
+#include <vector>
 
 // Forward declarations
 struct PointCloud;
@@ -47,8 +50,11 @@ public:
     // Utility methods
     void increment_sh_degree();
 
-    // Convert to point cloud for export
-    GaussianPointCloud to_point_cloud() const;
+    // Export methods - clean public interface
+    void save_ply(const std::filesystem::path& root, int iteration, bool join_thread = false) const;
+
+    // Get attribute names for the PLY format
+    std::vector<std::string> get_attribute_names() const;
 
 private:
     int _active_sh_degree = 0;
@@ -62,4 +68,7 @@ private:
     torch::Tensor _rotation;
     torch::Tensor _opacity;
     torch::Tensor _max_radii2D;
+
+    // Convert to point cloud for export (now private)
+    GaussianPointCloud to_point_cloud() const;
 };
