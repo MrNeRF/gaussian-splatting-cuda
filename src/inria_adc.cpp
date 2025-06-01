@@ -48,8 +48,8 @@ float InriaADC::Expon_lr_func::operator()(int64_t step) const {
     return delay_rate * log_lerp;
 }
 
-InriaADC::InriaADC(int sh_degree, gauss::init::InitTensors&& init)
-    : _splat_data(sh_degree, std::move(init)) {
+InriaADC::InriaADC(int sh_degree, SplatData&& splat_data)
+    : _splat_data(std::move(splat_data)) {
 }
 
 void InriaADC::Update_learning_rate(float iteration) {

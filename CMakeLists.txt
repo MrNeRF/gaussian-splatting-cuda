@@ -43,13 +43,13 @@ add_subdirectory(external)
 set(HOST_SOURCES
         src/main.cpp
         src/inria_adc.cpp
-        src/gaussian_init.cpp
         src/camera.cpp
         src/mean_neighbor_dist.cpp
         src/camera_utils.cpp
         src/rasterizer.cpp
         src/read_utils.cpp
         src/parameters.cpp
+        src/splat_data.cpp
         src/argument_parser.cpp
         src/external/tinyply.cpp
 )
