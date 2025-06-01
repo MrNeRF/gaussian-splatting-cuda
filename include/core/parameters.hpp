@@ -19,10 +19,10 @@ namespace gs {
             float rotation_lr = 0.001f;
             float lambda_dssim = 0.2f;
             float min_opacity = 0.005f;
-            uint64_t densification_interval = 100;
-            uint64_t opacity_reset_interval = 3'000;
-            uint64_t densify_from_iter = 500;
-            uint64_t densify_until_iter = 15'000;
+            size_t densification_interval = 100;
+            size_t opacity_reset_interval = 3'000;
+            size_t densify_from_iter = 500;
+            size_t densify_until_iter = 15'000;
             float densify_grad_threshold = 0.0002f;
         };
 
