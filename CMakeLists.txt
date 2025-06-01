@@ -50,6 +50,7 @@ set(HOST_SOURCES
         src/read_utils.cpp
         src/parameters.cpp
         src/splat_data.cpp
+        src/trainer.cpp
         src/argument_parser.cpp
         src/external/tinyply.cpp
 )
