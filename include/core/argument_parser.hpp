@@ -23,5 +23,8 @@ namespace gs {
          */
         int parse_arguments(const std::vector<std::string>& args,
                             gs::param::TrainingParameters& params);
+
+        // New combined function that handles both argument parsing and parameter loading
+        gs::param::TrainingParameters parse_args_and_params(int argc, char* argv[]);
     } // namespace args
 } // namespace gs

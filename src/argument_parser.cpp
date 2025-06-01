@@ -89,3 +89,12 @@ namespace gs {
         }
     } // namespace args
 } // namespace gs
+
+gs::param::TrainingParameters gs::args::parse_args_and_params(int argc, char* argv[]) {
+    gs::param::TrainingParameters params;
+    params.optimization = gs::param::read_optim_params_from_json();
+    if (parse_arguments(convert_args(argc, argv), params) < 0) {
+        throw std::runtime_error("Failed to parse arguments");
+    }
+    return params;
+}
