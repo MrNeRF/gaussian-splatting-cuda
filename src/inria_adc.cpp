@@ -48,7 +48,7 @@ float InriaADC::Expon_lr_func::operator()(int64_t step) const {
     return delay_rate * log_lerp;
 }
 
-InriaADC::InriaADC(int sh_degree, SplatData&& splat_data)
+InriaADC::InriaADC(SplatData&& splat_data)
     : _splat_data(std::move(splat_data)) {
 }
 
@@ -250,8 +250,8 @@ void InriaADC::step(int iter) {
     }
 }
 
-void InriaADC::initialize(const gs::param::OptimizationParameters& p) {
-    _params = std::make_unique<gs::param::OptimizationParameters>(p);
+void InriaADC::initialize(const gs::param::OptimizationParameters& optimParams) {
+    _params = std::make_unique<gs::param::OptimizationParameters>(optimParams);
     const auto dev = torch::kCUDA;
 
     _splat_data.xyz() = _splat_data.xyz().to(dev).set_requires_grad(true);

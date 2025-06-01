@@ -14,8 +14,7 @@ namespace gs {
         // Constructor that takes ownership of strategy and shares dataset
         Trainer(std::shared_ptr<CameraDataset> dataset,
                 std::unique_ptr<IStrategy> strategy,
-                const param::ModelParameters& model_params,
-                const param::OptimizationParameters& optim_params);
+                const param::TrainingParameters& params);
 
         // Delete copy operations
         Trainer(const Trainer&) = delete;
@@ -39,8 +38,7 @@ namespace gs {
         // Member variables
         std::shared_ptr<CameraDataset> dataset_;
         std::unique_ptr<IStrategy> strategy_;
-        param::ModelParameters model_params_;
-        param::OptimizationParameters optim_params_;
+        param::TrainingParameters params_;
 
         torch::Tensor background_;
         std::unique_ptr<TrainingProgress> progress_;

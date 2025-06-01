@@ -74,5 +74,5 @@ private:
 // Forward decls
 struct CameraInfo;
 namespace gs::param {
-    struct ModelParameters;
+    struct DatasetConfig;
 }

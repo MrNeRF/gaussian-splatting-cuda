@@ -21,9 +21,9 @@ public:
      * read from COLMAP and stores a const‑reference to the global parameters
      */
     CameraDataset(std::unique_ptr<SceneInfo> scene_info,
-                  const gs::param::ModelParameters& params)
+                  const gs::param::DatasetConfig& params)
         : _scene_info(std::move(scene_info)),
-          _params(params) {
+          _datasetConfig(params) {
 
         // Extract camera infos from scene
         _camera_infos = std::move(_scene_info->_cameras);
@@ -44,7 +44,7 @@ public:
     CameraDataset(const CameraDataset& other)
         : _scene_info(std::make_unique<SceneInfo>(*other._scene_info)),
           _camera_infos(other._camera_infos),
-          _params(other._params) {}
+          _datasetConfig(other._datasetConfig) {}
 
     // Move operations – default implementation is fine
     CameraDataset(CameraDataset&&) noexcept = default;
@@ -62,7 +62,7 @@ public:
         auto& cam_info = _camera_infos[index];
 
         // Load image on demand using the helper method
-        cam_info.load_image_data(_params.resolution);
+        cam_info.load_image_data(_datasetConfig.resolution);
 
         // Create tensor from the loaded image data
         torch::Tensor image_tensor = torch::from_blob(
@@ -108,22 +108,22 @@ public:
 private:
     std::unique_ptr<SceneInfo> _scene_info;
     std::vector<CameraInfo> _camera_infos;
-    const gs::param::ModelParameters& _params;
+    const gs::param::DatasetConfig& _datasetConfig;
 };
 
 inline std::shared_ptr<CameraDataset> create_camera_dataset(
-    const gs::param::ModelParameters& params) {
+    const gs::param::DatasetConfig& datasetConfig) {
 
-    if (!std::filesystem::exists(params.source_path)) {
+    if (!std::filesystem::exists(datasetConfig.data_path)) {
         throw std::runtime_error("Data path does not exist: " +
-                                 params.source_path.string());
+                                 datasetConfig.data_path.string());
     }
 
     // Read scene info (now without loading image data)
-    auto scene_info = read_colmap_scene_info(params.source_path);
+    auto scene_info = read_colmap_scene_info(datasetConfig.data_path);
 
     // Create and return dataset
-    return std::make_shared<CameraDataset>(std::move(scene_info), params);
+    return std::make_shared<CameraDataset>(std::move(scene_info), datasetConfig);
 }
 
 inline auto create_dataloader_from_dataset(

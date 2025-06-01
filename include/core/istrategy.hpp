@@ -1,12 +1,7 @@
 #pragma once
 
+#include "core/parameters.hpp"
 #include "core/splat_data.hpp"
-
-namespace gs {
-    namespace param {
-        struct OptimizationParameters;
-    }
-} // namespace gs
 
 struct RenderOutput;
 
@@ -14,7 +9,7 @@ class IStrategy {
 public:
     virtual ~IStrategy() = default;
 
-    virtual void initialize(const gs::param::OptimizationParameters& params) = 0;
+    virtual void initialize(const gs::param::OptimizationParameters& optimParams) = 0;
     virtual void post_backward(int iter, RenderOutput& render_output) = 0;
     virtual void step(int iter) = 0;
 
