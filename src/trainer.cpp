@@ -9,12 +9,10 @@ namespace gs {
 
     Trainer::Trainer(std::shared_ptr<CameraDataset> dataset,
                      std::unique_ptr<IStrategy> strategy,
-                     const param::ModelParameters& model_params,
-                     const param::OptimizationParameters& optim_params)
+                     const param::TrainingParameters& params)
         : dataset_(std::move(dataset)),
           strategy_(std::move(strategy)),
-          model_params_(model_params),
-          optim_params_(optim_params),
+          params_(params),
           dataset_size_(dataset_->size().value()) {
 
         // Check CUDA availability
@@ -23,18 +21,15 @@ namespace gs {
         }
 
         // Initialize strategy with optimization parameters
-        strategy_->initialize(optim_params_);
+        strategy_->initialize(params.optimization);
 
         // Set up background color
-        background_ = model_params_.white_background
-                          ? torch::tensor({1.f, 1.f, 1.f})
-                          : torch::tensor({0.f, 0.f, 0.f},
-                                          torch::TensorOptions().dtype(torch::kFloat32));
+        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
         background_ = background_.to(torch::kCUDA);
 
         // Initialize progress tracking
         progress_ = std::make_unique<TrainingProgress>(
-            optim_params_.iterations,
+            params.optimization.iterations,
             /*bar_width=*/100);
     }
 
@@ -44,14 +39,14 @@ namespace gs {
 
     void Trainer::train() {
         int iter = 1;
-        int epochs_needed = (optim_params_.iterations + dataset_size_ - 1) / dataset_size_;
+        int epochs_needed = (params_.optimization.iterations + dataset_size_ - 1) / dataset_size_;
 
         // Create initial dataloader
         auto train_dataloader = make_dataloader();
 
-        for (int epoch = 0; epoch < epochs_needed && iter <= optim_params_.iterations; ++epoch) {
+        for (int epoch = 0; epoch < epochs_needed && iter <= params_.optimization.iterations; ++epoch) {
             for (auto& batch : *train_dataloader) { // batch = std::vector<CameraExample>
-                if (iter > optim_params_.iterations) {
+                if (iter > params_.optimization.iterations) {
                     break;
                 }
 
@@ -81,14 +76,14 @@ namespace gs {
                 //------------------------------------------------------------------
                 auto l1l = torch::l1_loss(r_output.image.squeeze(0), gt_image.squeeze(0));
                 auto ssim_loss = fused_ssim(r_output.image, gt_image, "same", /*train=*/true);
-                auto loss = (1.f - optim_params_.lambda_dssim) * l1l +
-                            optim_params_.lambda_dssim * (1.f - ssim_loss);
+                auto loss = (1.f - params_.optimization.lambda_dssim) * l1l +
+                            params_.optimization.lambda_dssim * (1.f - ssim_loss);
                 loss.backward();
                 const float loss_value = loss.item<float>();
 
-                const bool is_densifying = (iter < optim_params_.densify_until_iter &&
-                                            iter > optim_params_.densify_from_iter &&
-                                            iter % optim_params_.densification_interval == 0);
+                const bool is_densifying = (iter < params_.optimization.densify_until_iter &&
+                                            iter > params_.optimization.densify_from_iter &&
+                                            iter % params_.optimization.densification_interval == 0);
 
                 //------------------------------------------------------------------
                 // No-grad section – update radii, densify, optimise
@@ -97,7 +92,7 @@ namespace gs {
                     torch::NoGradGuard no_grad;
 
                     if (iter % 7000 == 0) {
-                        strategy_->get_model().save_ply(model_params_.output_path, iter, /*join=*/false);
+                        strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/false);
                     }
 
                     strategy_->post_backward(iter, r_output);
@@ -113,7 +108,7 @@ namespace gs {
         }
 
         // Save final model
-        strategy_->get_model().save_ply(model_params_.output_path, iter, /*join=*/true);
+        strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
         progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
     }
 

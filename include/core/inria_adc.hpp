@@ -13,8 +13,7 @@ class InriaADC : public IStrategy {
 public:
     InriaADC() = delete;
 
-    // Updated constructor to take PointCloud directly
-    InriaADC(int sh_degree, SplatData&& splat_data);
+    InriaADC(SplatData&& splat_data);
 
     InriaADC(const InriaADC&) = delete;
     InriaADC& operator=(const InriaADC&) = delete;
@@ -22,7 +21,7 @@ public:
     InriaADC& operator=(InriaADC&&) = default;
 
     // IStrategy interface implementation
-    void initialize(const gs::param::OptimizationParameters& params) override;
+    void initialize(const gs::param::OptimizationParameters& optimParams) override;
     void post_backward(int iter, RenderOutput& render_output) override;
     void step(int iter) override;
     SplatData& get_model() override { return _splat_data; }
