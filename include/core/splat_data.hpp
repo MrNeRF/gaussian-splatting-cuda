@@ -1,68 +1,54 @@
 #pragma once
 
-#include "core/exporter.hpp"
-#include "core/gaussian_init.hpp"
 #include <torch/torch.h>
+
+// Forward declarations
+struct PointCloud;
+struct GaussianPointCloud;
 
 class SplatData {
 public:
     SplatData() = default;
 
-    SplatData(int sh_degree, gauss::init::InitTensors&& init)
-        : _max_sh_degree{sh_degree},
-          _active_sh_degree{0},
-          _scene_scale{std::move(init.scene_scale)},
-          _xyz{std::move(init.xyz)},
-          _scaling{std::move(init.scaling)},
-          _rotation{std::move(init.rotation)},
-          _opacity{std::move(init.opacity)},
-          _features_dc{std::move(init.features_dc)},
-          _features_rest{std::move(init.features_rest)},
-          _max_radii2D{torch::zeros({_xyz.size(0)}).to(torch::kCUDA, /*copy=*/true)} {}
+    // Constructor
+    SplatData(int sh_degree,
+              torch::Tensor xyz,
+              torch::Tensor features_dc,
+              torch::Tensor features_rest,
+              torch::Tensor scaling,
+              torch::Tensor rotation,
+              torch::Tensor opacity,
+              float scene_scale);
 
-    // Getters
-    torch::Tensor get_xyz() const { return _xyz; }
-    torch::Tensor get_opacity() const { return torch::sigmoid(_opacity); }
-    torch::Tensor get_rotation() const { return torch::nn::functional::normalize(_rotation); }
-    torch::Tensor get_scaling() const { return torch::exp(_scaling); }
-    torch::Tensor get_features() const {
-        return torch::cat({_features_dc, _features_rest}, 1);
-    }
-    int get_active_sh_degree() const { return _active_sh_degree; }
-    float get_scene_scale() const { return _scene_scale; }
+    // Static factory method to create from PointCloud
+    static SplatData create_from_point_cloud(PointCloud& pcd, int max_sh_degree, float scene_scale);
 
-    // Raw tensor access for optimization
-    torch::Tensor& xyz() { return _xyz; }
-    torch::Tensor& opacity_raw() { return _opacity; }
-    torch::Tensor& rotation_raw() { return _rotation; }
-    torch::Tensor& scaling_raw() { return _scaling; }
-    torch::Tensor& features_dc() { return _features_dc; }
-    torch::Tensor& features_rest() { return _features_rest; }
-    torch::Tensor& max_radii2D() { return _max_radii2D; }
+    // Computed getters (implemented in cpp)
+    torch::Tensor get_xyz() const;
+    torch::Tensor get_opacity() const;
+    torch::Tensor get_rotation() const;
+    torch::Tensor get_scaling() const;
+    torch::Tensor get_features() const;
+
+    // Simple inline getters
+    inline int get_active_sh_degree() const { return _active_sh_degree; }
+    inline float get_scene_scale() const { return _scene_scale; }
+    inline int64_t size() const { return _xyz.size(0); }
+
+    // Raw tensor access for optimization (inline for performance)
+    inline torch::Tensor& xyz() { return _xyz; }
+    inline torch::Tensor& opacity_raw() { return _opacity; }
+    inline torch::Tensor& rotation_raw() { return _rotation; }
+    inline torch::Tensor& scaling_raw() { return _scaling; }
+    inline torch::Tensor& features_dc() { return _features_dc; }
+    inline torch::Tensor& features_rest() { return _features_rest; }
+    inline torch::Tensor& max_radii2D() { return _max_radii2D; }
 
     // Utility methods
-    void increment_sh_degree() {
-        if (_active_sh_degree < _max_sh_degree) {
-            _active_sh_degree++;
-        }
-    }
+    void increment_sh_degree();
 
     // Convert to point cloud for export
-    GaussianPointCloud to_point_cloud() const {
-        GaussianPointCloud pc;
-        pc.xyz = _xyz.cpu().contiguous();
-        pc.normals = torch::zeros_like(pc.xyz);
-        pc.features_dc = _features_dc.transpose(1, 2).flatten(1).cpu();
-        pc.features_rest = _features_rest.transpose(1, 2).flatten(1).cpu();
-        pc.opacity = _opacity.cpu();
-        pc.scaling = _scaling.cpu();
-        pc.rotation = _rotation.cpu();
-        pc.attribute_names = make_attribute_names(_features_dc, _features_rest, _scaling, _rotation);
-        return pc;
-    }
-
-    // Get number of points
-    int64_t size() const { return _xyz.size(0); }
+    GaussianPointCloud to_point_cloud() const;
 
 private:
     int _active_sh_degree = 0;

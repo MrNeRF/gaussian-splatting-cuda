@@ -2,7 +2,6 @@
 #include "core/dataset.hpp"
 #include "core/debug_utils.hpp"
 #include "core/exporter.hpp"
-#include "core/gaussian_init.hpp"
 #include "core/inria_adc.hpp"
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
@@ -45,13 +44,13 @@ int main(int argc, char* argv[]) {
     auto train_dataloader = make_dataloader();
 
     //----------------------------------------------------------------------
-    // 4. Model initialisation
+    // 4. Model initialisation (UPDATED)
     //----------------------------------------------------------------------
-    auto init = gauss::init::build_from_point_cloud(scene._point_cloud,
-                                                    modelParams.sh_degree,
-                                                    scene._nerf_norm_radius);
+    auto splat_data = SplatData::create_from_point_cloud(scene._point_cloud,
+                                                         modelParams.sh_degree,
+                                                         scene._nerf_norm_radius);
 
-    auto strategy = InriaADC(modelParams.sh_degree, std::move(init));
+    auto strategy = InriaADC(modelParams.sh_degree, std::move(splat_data));
     strategy.initialize(optimParams);
 
     auto background = modelParams.white_background

@@ -12,7 +12,10 @@
 class InriaADC : public IStrategy {
 public:
     InriaADC() = delete;
-    InriaADC(int sh_degree, gauss::init::InitTensors&& init);
+
+    // Updated constructor to take PointCloud directly
+    InriaADC(int sh_degree, SplatData&& splat_data);
+
     InriaADC(const InriaADC&) = delete;
     InriaADC& operator=(const InriaADC&) = delete;
     InriaADC(InriaADC&&) = default;
