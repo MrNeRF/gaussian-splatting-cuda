@@ -141,23 +141,7 @@ Below are some guidelines to help ensure our project remains effective and consi
     - Ensure you've applied `clang-format` to maintain consistent coding style. There is in tools folder a git pre-commit hook. You can just copy it to .git/hooks/pre-commit. It will run clang-format before every commit.
     - We aim to minimize dependencies. If you're introducing a new one, it's essential to raise an issue for discussion first. There are ongoing efforts to reduce the number of dependencies, and your understanding in this area is appreciated.
 
-3. **Key Principles for Contributions**:
-    - **Speed**: We want to be the fastest 3D gaussian splatting implementation on this planet. Being lightning fast is key! I want instant training!
-    - **Quality**: Always prioritize high-quality rendering output. Never compromise quality for speed.
-    - **Usability**: We want to have a nice user experience. We're still perfecting this, and your contribution can make a difference!
 
-4. **Dataset Contributions**:
-    - If you have a unique dataset that you believe will be an excellent addition and that is eye popping, we'd love to see it! Remember, we're aiming to showcase exceptional datasets. We want to show off the best of the best. If you're unsure, feel free to raise an issue for discussion first.
-
-Together, with your contributions, we can make this project stand out. Thank you for being a part of this journey!
-
-## libtorch
-Initially, I utilized libtorch to simplify the development process. Once the implementation is stable with libtorch, I will begin replacing torch elements with my custom CUDA implementation.
-## MISC
-Here is random collection of things that have to be described in README later on
-- Needed for simple-knn: 
-```bash sudo apt-get install python3-dev ```
- 
 ## Citation and References
 If you utilize this software or present results obtained using it, please reference the original work:
 
