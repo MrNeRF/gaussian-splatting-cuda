@@ -10,19 +10,11 @@ namespace gs {
     namespace args {
 
         std::vector<std::string> convert_args(int argc, char* argv[]) {
-            std::vector<std::string> args;
-            args.reserve(argc);
-
-            for (int i = 0; i < argc; ++i) {
-                args.emplace_back(argv[i]);
-            }
-
-            return args;
+            return std::vector<std::string>(argv, argv + argc);
         }
 
         int parse_arguments(const std::vector<std::string>& args,
-                            gs::param::ModelParameters& modelParams,
-                            gs::param::OptimizationParameters& optimParams) {
+                            gs::param::TrainingParameters& params) {
 
             if (args.empty()) {
                 std::cerr << "No command line arguments provided!" << std::endl;
@@ -65,50 +57,44 @@ namespace gs {
             // Process parsed arguments and populate parameters
 
             // Data path is required
-            if (data_path) {
-                modelParams.source_path = ::args::get(data_path);
-            } else {
-                std::cerr << "No data path provided!" << std::endl;
+            if (::args::get(data_path).empty()) {
+                std::cerr << "ERROR: No data path specified. Use --data_path to specify the path to the dataset.\n";
                 return -1;
             }
+            params.dataset.data_path = ::args::get(data_path);
 
             // Handle output path
-            if (output_path) {
-                modelParams.output_path = ::args::get(output_path);
-            } else {
-                // Create default output path
-                std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
-                std::filesystem::path parentDir = executablePath.parent_path().parent_path();
-                std::filesystem::path outputDir = parentDir / "output";
-
-                try {
-                    bool isCreated = std::filesystem::create_directory(outputDir);
-                    if (!isCreated) {
-                        if (!force_overwrite_output_path) {
-                            std::cerr << "Directory already exists! Not overwriting it" << std::endl;
-                            return -1;
-                        } else {
-                            std::filesystem::create_directory(outputDir);
-                            std::filesystem::remove_all(outputDir);
-                        }
-                    }
-                } catch (...) {
-                    std::cerr << "Failed to create output directory!" << std::endl;
-                    return -1;
-                }
-                modelParams.output_path = outputDir;
+            if (::args::get(output_path).empty()) {
+                std::cerr << "ERROR: No output path specified. Use --output_path to specify the path for output files.\n";
+                return -1;
             }
+            params.dataset.output_path = ::args::get(output_path);
 
             // Process other arguments
             if (iterations) {
-                optimParams.iterations = ::args::get(iterations);
+                params.optimization.iterations = ::args::get(iterations);
             }
 
             if (resolution) {
-                modelParams.resolution = ::args::get(resolution);
+                params.dataset.resolution = ::args::get(resolution);
             }
+
+            std::filesystem::path outputDir = params.dataset.output_path;
+            if (!std::filesystem::exists(outputDir)) {
+                std::filesystem::create_directories(outputDir);
+            }
+            params.dataset.output_path = outputDir;
 
             return 0; // Success
         }
     } // namespace args
 } // namespace gs
+
+gs::param::TrainingParameters gs::args::parse_args_and_params(int argc, char* argv[]) {
+    gs::param::TrainingParameters params;
+    params.optimization = gs::param::read_optim_params_from_json();
+    if (parse_arguments(convert_args(argc, argv), params) < 0) {
+        throw std::runtime_error("Failed to parse arguments");
+    }
+    return params;
+}
