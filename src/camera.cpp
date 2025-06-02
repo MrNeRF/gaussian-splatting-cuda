@@ -1,5 +1,5 @@
 #include "core/camera.hpp"
-#include "core/camera_utils.hpp"
+#include "core/image_io.hpp"
 #include <cmath>
 
 static torch::Tensor create_projection(float znear, float zfar, float fovX, float fovY) {
@@ -82,8 +82,32 @@ void Camera::initialize_cuda_tensors() {
     _cuda_initialized = true;
 }
 
+void Camera::prefetch_image(int resolution) {
+    if (!_image_future.valid()) {
+        _image_future = load_image_async(_image_path, resolution);
+    }
+}
+
 torch::Tensor Camera::load_and_get_image(int resolution) {
-    auto [data, w, h, c] = load_image(_image_path, resolution);
+    unsigned char* data;
+    int w, h, c;
+
+    // If we have a prefetched future, use it
+    if (_image_future.valid()) {
+        auto result = _image_future.get();
+        data = std::get<0>(result);
+        w = std::get<1>(result);
+        h = std::get<2>(result);
+        c = std::get<3>(result);
+    } else {
+        // Otherwise load synchronously
+        auto result = load_image(_image_path, resolution);
+        data = std::get<0>(result);
+        w = std::get<1>(result);
+        h = std::get<2>(result);
+        c = std::get<3>(result);
+    }
+
     _image_width = w;
     _image_height = h;
 
@@ -98,7 +122,6 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
                           255.0f;
 
     free_image(data);
-
     return image.to(torch::kCUDA, /*non_blocking=*/true);
 }
 
