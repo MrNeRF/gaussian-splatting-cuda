@@ -46,10 +46,15 @@ private:
 
     void Update_learning_rate(float iteration);
     void Reset_opacity();
-    void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
+    void Add_densification_stats(torch::Tensor& viewspace_point_tensor,
+                                 torch::Tensor& update_filter,
+                                 int width,
+                                 int height,
+                                 int n_cameras);
     void Densify_and_prune(float max_grad, float min_opacity);
     void densify_and_clone(torch::Tensor& grads, float grad_threshold);
-    void densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity);
+    void densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity,
+                           int current_model_size, int gaussians_added_by_clone);
     void prune_points(torch::Tensor mask);
     void densification_postfix(torch::Tensor& new_xyz,
                                torch::Tensor& new_sh0,
@@ -57,6 +62,7 @@ private:
                                torch::Tensor& new_scaling,
                                torch::Tensor& new_rotation,
                                torch::Tensor& new_opacity);
+    void validate_tensor_sizes();  // New validation function
 
     std::unique_ptr<torch::optim::Adam> _optimizer;
     SplatData _splat_data;
