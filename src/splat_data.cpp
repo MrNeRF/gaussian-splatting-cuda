@@ -95,14 +95,14 @@ namespace {
         fs::create_directories(folder);
 
         std::vector<torch::Tensor> tensors;
-        tensors.push_back(pc.positions);
+        tensors.push_back(pc.means);
 
         if (pc.normals.defined())
             tensors.push_back(pc.normals);
-        if (pc.features_dc.defined())
-            tensors.push_back(pc.features_dc);
-        if (pc.features_rest.defined())
-            tensors.push_back(pc.features_rest);
+        if (pc.sh0.defined())
+            tensors.push_back(pc.sh0);
+        if (pc.shN.defined())
+            tensors.push_back(pc.shN);
         if (pc.opacity.defined())
             tensors.push_back(pc.opacity);
         if (pc.scaling.defined())
@@ -152,8 +152,8 @@ namespace {
 // Constructor from tensors
 SplatData::SplatData(int sh_degree,
                      torch::Tensor xyz,
-                     torch::Tensor features_dc,
-                     torch::Tensor features_rest,
+                     torch::Tensor sh0,
+                     torch::Tensor shN,
                      torch::Tensor scaling,
                      torch::Tensor rotation,
                      torch::Tensor opacity,
@@ -162,8 +162,8 @@ SplatData::SplatData(int sh_degree,
       _active_sh_degree{0},
       _scene_scale{scene_scale},
       _xyz{std::move(xyz)},
-      _features_dc{std::move(features_dc)},
-      _features_rest{std::move(features_rest)},
+      _sh0{std::move(sh0)},
+      _shN{std::move(shN)},
       _scaling{std::move(scaling)},
       _rotation{std::move(rotation)},
       _opacity{std::move(opacity)},
@@ -188,7 +188,7 @@ torch::Tensor SplatData::get_scaling() const {
 }
 
 torch::Tensor SplatData::get_features() const {
-    return torch::cat({_features_dc, _features_rest}, 1);
+    return torch::cat({_sh0, _shN}, 1);
 }
 
 // Utility method
@@ -205,9 +205,9 @@ void SplatData::increment_sh_degree() {
 std::vector<std::string> SplatData::get_attribute_names() const {
     std::vector<std::string> a{"x", "y", "z", "nx", "ny", "nz"};
 
-    for (int i = 0; i < _features_dc.size(1) * _features_dc.size(2); ++i)
+    for (int i = 0; i < _sh0.size(1) * _sh0.size(2); ++i)
         a.emplace_back("f_dc_" + std::to_string(i));
-    for (int i = 0; i < _features_rest.size(1) * _features_rest.size(2); ++i)
+    for (int i = 0; i < _shN.size(1) * _shN.size(2); ++i)
         a.emplace_back("f_rest_" + std::to_string(i));
 
     a.emplace_back("opacity");
@@ -230,12 +230,12 @@ PointCloud SplatData::to_point_cloud() const {
     PointCloud pc;
 
     // Basic attributes
-    pc.positions = _xyz.cpu().contiguous();
-    pc.normals = torch::zeros_like(pc.positions);
+    pc.means = _xyz.cpu().contiguous();
+    pc.normals = torch::zeros_like(pc.means);
 
     // Gaussian attributes
-    pc.features_dc = _features_dc.transpose(1, 2).flatten(1).cpu();
-    pc.features_rest = _features_rest.transpose(1, 2).flatten(1).cpu();
+    pc.sh0 = _sh0.transpose(1, 2).flatten(1).cpu();
+    pc.shN = _shN.transpose(1, 2).flatten(1).cpu();
     pc.opacity = _opacity.cpu();
     pc.scaling = _scaling.cpu();
     pc.rotation = _rotation.cpu();
@@ -266,7 +266,7 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
     pcd.normalize_colors();
 
     // 1. xyz - already a tensor, just move to CUDA and set requires_grad
-    auto xyz = pcd.positions.to(torch::kCUDA).set_requires_grad(true);
+    auto xyz = pcd.means.to(torch::kCUDA).set_requires_grad(true);
 
     // 2. scaling (log(σ)) - compute nearest neighbor distances
     auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(xyz), 1e-7);
@@ -299,26 +299,26 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
                          0},
                         fused_color);
 
-    auto features_dc = features.index({torch::indexing::Slice(),
-                                       torch::indexing::Slice(),
-                                       torch::indexing::Slice(0, 1)})
-                           .transpose(1, 2)
-                           .contiguous()
-                           .set_requires_grad(true);
+    auto sh0 = features.index({torch::indexing::Slice(),
+                               torch::indexing::Slice(),
+                               torch::indexing::Slice(0, 1)})
+                   .transpose(1, 2)
+                   .contiguous()
+                   .set_requires_grad(true);
 
-    auto features_rest = features.index({torch::indexing::Slice(),
-                                         torch::indexing::Slice(),
-                                         torch::indexing::Slice(1, torch::indexing::None)})
-                             .transpose(1, 2)
-                             .contiguous()
-                             .set_requires_grad(true);
+    auto shN = features.index({torch::indexing::Slice(),
+                               torch::indexing::Slice(),
+                               torch::indexing::Slice(1, torch::indexing::None)})
+                   .transpose(1, 2)
+                   .contiguous()
+                   .set_requires_grad(true);
 
     std::cout << "Initialized SplatData with:" << std::endl;
     std::cout << "  - " << xyz.size(0) << " points" << std::endl;
     std::cout << "  - Max SH degree: " << params.optimization.sh_degree << std::endl;
     std::cout << "  - Total SH coefficients: " << feature_shape << std::endl;
-    std::cout << "  - features_dc shape: " << features_dc.sizes() << std::endl;
-    std::cout << "  - features_rest shape: " << features_rest.sizes() << std::endl;
+    std::cout << "  - sh0 shape: " << sh0.sizes() << std::endl;
+    std::cout << "  - shN shape: " << shN.sizes() << std::endl;
 
-    return SplatData(params.optimization.sh_degree, xyz, features_dc, features_rest, scaling, rotation, opacity, scene_scale);
+    return SplatData(params.optimization.sh_degree, xyz, sh0, shN, scaling, rotation, opacity, scene_scale);
 }
