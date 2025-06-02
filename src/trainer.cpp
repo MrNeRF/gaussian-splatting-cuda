@@ -54,7 +54,7 @@ namespace gs {
                 if (iter % 100 == 0) { // Save every 100 iterations
                     auto save_path = params_.dataset.output_path /
                                      ("render_iter_" + std::to_string(iter) + ".png");
-                    save_image(save_path, r_output.image);
+                    save_image(save_path, {gt_image, r_output.image}, true, 2);
                 }
 
                 if (r_output.image.dim() == 3)
