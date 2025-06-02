@@ -13,6 +13,9 @@ struct RenderOutput {
     torch::Tensor viewspace_pts; // means2D
     torch::Tensor visibility;    // radii > 0
     torch::Tensor radii;         // per-Gaussian projected radius
+    int width;
+    int height;
+    int n_cameras = 1;
 };
 
 inline RenderOutput render(Camera& viewpoint_camera,
@@ -84,6 +87,11 @@ inline RenderOutput render_with_gsplat(Camera& viewpoint_camera,
     // GSplat radii is [N, 2], need to check both dimensions
     output.visibility = (gsplat_output.radii > 0).any(-1); // any(-1) reduces [N, 2] to [N]
     output.radii = std::get<0>(gsplat_output.radii.max(-1));
+
+    // Set dimensions
+    output.width = viewpoint_camera.image_width();
+    output.height = viewpoint_camera.image_height();
+    output.n_cameras = 1;
 
     return output;
 }
