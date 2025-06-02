@@ -78,8 +78,10 @@ inline RenderOutput render_with_gsplat(Camera& viewpoint_camera,
     RenderOutput output;
     output.image = gsplat_output.image;
     output.viewspace_pts = gsplat_output.means2d;
-    output.visibility = gsplat_output.radii > 0;
-    output.radii = gsplat_output.radii;
+
+    // GSplat radii is [N, 2], need to check both dimensions
+    output.visibility = (gsplat_output.radii > 0).any(-1); // any(-1) reduces [N, 2] to [N]
+    output.radii = std::get<0>(gsplat_output.radii.max(-1));
 
     return output;
 }
