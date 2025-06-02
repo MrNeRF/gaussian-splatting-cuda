@@ -58,32 +58,7 @@ void InriaADC::Update_learning_rate(float iteration) {
     static_cast<torch::optim::AdamOptions&>(_optimizer->param_groups()[0].options()).set_lr(lr);
 }
 
-void InriaADC::validate_tensor_sizes() {
-    const int gs_count = _splat_data.size();
-
-    TORCH_CHECK(_splat_data.xyz().size(0) == gs_count,
-                "xyz size mismatch: ", _splat_data.xyz().size(0), " vs ", gs_count);
-    TORCH_CHECK(_splat_data.sh0().size(0) == gs_count,
-                "sh0 size mismatch: ", _splat_data.sh0().size(0), " vs ", gs_count);
-    TORCH_CHECK(_splat_data.shN().size(0) == gs_count,
-                "shN size mismatch: ", _splat_data.shN().size(0), " vs ", gs_count);
-    TORCH_CHECK(_splat_data.scaling_raw().size(0) == gs_count,
-                "scaling size mismatch: ", _splat_data.scaling_raw().size(0), " vs ", gs_count);
-    TORCH_CHECK(_splat_data.rotation_raw().size(0) == gs_count,
-                "rotation size mismatch: ", _splat_data.rotation_raw().size(0), " vs ", gs_count);
-    TORCH_CHECK(_splat_data.opacity_raw().size(0) == gs_count,
-                "opacity size mismatch: ", _splat_data.opacity_raw().size(0), " vs ", gs_count);
-    TORCH_CHECK(_xyz_gradient_accum.size(0) == gs_count,
-                "gradient accumulator size mismatch: ", _xyz_gradient_accum.size(0), " vs ", gs_count);
-    TORCH_CHECK(_denom.size(0) == gs_count,
-                "denom size mismatch: ", _denom.size(0), " vs ", gs_count);
-    TORCH_CHECK(_splat_data.max_radii2D().size(0) == gs_count,
-                "max_radii2D size mismatch: ", _splat_data.max_radii2D().size(0), " vs ", gs_count);
-}
-
 void InriaADC::Reset_opacity() {
-    torch::cuda::synchronize();
-
     // opacity activation
     auto new_opacity = inverse_sigmoid(torch::ones_like(_splat_data.opacity_raw(), torch::TensorOptions().dtype(torch::kFloat32)) * 0.01f);
 
@@ -102,8 +77,6 @@ void InriaADC::Reset_opacity() {
 
     void* new_param_key = _optimizer->param_groups()[5].params()[0].unsafeGetTensorImpl();
     _optimizer->state()[new_param_key] = std::move(adamParamStates);
-
-    torch::cuda::synchronize();
 }
 
 void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, torch::Tensor& old_tensor, int param_position) {
@@ -124,27 +97,10 @@ void prune_optimizer(torch::optim::Adam* optimizer, const torch::Tensor& mask, t
 }
 
 void InriaADC::prune_points(torch::Tensor mask) {
-    torch::cuda::synchronize();
-
-    // Ensure mask has correct size
-    TORCH_CHECK(mask.size(0) == _splat_data.size(),
-                "Prune mask size (", mask.size(0), ") doesn't match gaussian count (",
-                _splat_data.size(), ")");
-
     // reverse to keep points
     auto valid_point_mask = ~mask;
-    auto indices = valid_point_mask.nonzero().squeeze(-1);
-
-    if (indices.numel() == 0) {
-        std::cerr << ts::color::YELLOW << "WARNING: Pruning would remove all gaussians!"
-                  << ts::color::RESET << std::endl;
-        return;
-    }
-
-    // Store original sizes for validation
-    const int original_size = _splat_data.size();
-    const int expected_new_size = indices.size(0);
-
+    int true_count = valid_point_mask.sum().item<int>();
+    auto indices = torch::nonzero(valid_point_mask == true).squeeze(-1);
     prune_optimizer(_optimizer.get(), indices, _splat_data.xyz(), 0);
     prune_optimizer(_optimizer.get(), indices, _splat_data.sh0(), 1);
     prune_optimizer(_optimizer.get(), indices, _splat_data.shN(), 2);
@@ -152,27 +108,15 @@ void InriaADC::prune_points(torch::Tensor mask) {
     prune_optimizer(_optimizer.get(), indices, _splat_data.rotation_raw(), 4);
     prune_optimizer(_optimizer.get(), indices, _splat_data.opacity_raw(), 5);
 
-    // Index select on 1D tensors
     _xyz_gradient_accum = _xyz_gradient_accum.index_select(0, indices);
     _denom = _denom.index_select(0, indices);
     _splat_data.max_radii2D() = _splat_data.max_radii2D().index_select(0, indices);
-
-    torch::cuda::synchronize();
-
-    // Validate new size
-    TORCH_CHECK(_splat_data.size() == expected_new_size,
-                "After pruning, size mismatch: expected ", expected_new_size,
-                " but got ", _splat_data.size());
-
-    validate_tensor_sizes();
 }
 
 void cat_tensors_to_optimizer(torch::optim::Adam* optimizer,
                               torch::Tensor& extension_tensor,
                               torch::Tensor& old_tensor,
                               int param_position) {
-    torch::cuda::synchronize();
-
     void* param_key = optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl();
 
     auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(static_cast<torch::optim::AdamParamState&>(
@@ -191,8 +135,6 @@ void cat_tensors_to_optimizer(torch::optim::Adam* optimizer,
 
     void* new_param_key = optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl();
     optimizer->state()[new_param_key] = std::move(adamParamStates);
-
-    torch::cuda::synchronize();
 }
 
 void InriaADC::densification_postfix(torch::Tensor& new_xyz,
@@ -201,16 +143,6 @@ void InriaADC::densification_postfix(torch::Tensor& new_xyz,
                                      torch::Tensor& new_scaling,
                                      torch::Tensor& new_rotation,
                                      torch::Tensor& new_opacity) {
-    // Ensure all new tensors have the same size
-    const int n_new = new_xyz.size(0);
-    TORCH_CHECK(new_sh0.size(0) == n_new, "new_sh0 size mismatch");
-    TORCH_CHECK(new_shN.size(0) == n_new, "new_shN size mismatch");
-    TORCH_CHECK(new_scaling.size(0) == n_new, "new_scaling size mismatch");
-    TORCH_CHECK(new_rotation.size(0) == n_new, "new_rotation size mismatch");
-    TORCH_CHECK(new_opacity.size(0) == n_new, "new_opacity size mismatch");
-
-    const int old_size = _splat_data.size();
-
     cat_tensors_to_optimizer(_optimizer.get(), new_xyz, _splat_data.xyz(), 0);
     cat_tensors_to_optimizer(_optimizer.get(), new_sh0, _splat_data.sh0(), 1);
     cat_tensors_to_optimizer(_optimizer.get(), new_shN, _splat_data.shN(), 2);
@@ -218,54 +150,21 @@ void InriaADC::densification_postfix(torch::Tensor& new_xyz,
     cat_tensors_to_optimizer(_optimizer.get(), new_rotation, _splat_data.rotation_raw(), 4);
     cat_tensors_to_optimizer(_optimizer.get(), new_opacity, _splat_data.opacity_raw(), 5);
 
-    // CRITICAL: Synchronize CUDA before resetting accumulators
-    torch::cuda::synchronize();
-
-    const int new_size = _splat_data.size();
-    TORCH_CHECK(new_size == old_size + n_new,
-                "Size after concatenation incorrect: expected ", old_size + n_new,
-                " but got ", new_size);
-
-    // Reset accumulators with correct 1D shape
-    _xyz_gradient_accum = torch::zeros({new_size}, torch::kFloat32).to(torch::kCUDA);
-    _denom = torch::zeros({new_size}, torch::kFloat32).to(torch::kCUDA);
-    _splat_data.max_radii2D() = torch::zeros({new_size}, torch::kFloat32).to(torch::kCUDA);
-
-    validate_tensor_sizes();
+    _xyz_gradient_accum = torch::zeros({_splat_data.size(), 1}).to(torch::kCUDA);
+    _denom = torch::zeros({_splat_data.size(), 1}).to(torch::kCUDA);
+    _splat_data.max_radii2D() = torch::zeros({_splat_data.size()}).to(torch::kCUDA);
 }
 
-void InriaADC::densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity,
-                                 int current_model_size, int gaussians_added_by_clone) {
+void InriaADC::densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity) {
     static const int N = 2;
+    const int n_init_points = _splat_data.size();
+    // Extract points that satisfy the gradient condition
+    torch::Tensor padded_grad = torch::zeros({n_init_points}).to(torch::kCUDA);
+    padded_grad.slice(0, 0, grads.size(0)) = grads.squeeze();
+    torch::Tensor selected_pts_mask = torch::where(padded_grad >= grad_threshold, torch::ones_like(padded_grad).to(torch::kBool), torch::zeros_like(padded_grad).to(torch::kBool));
+    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(_splat_data.get_scaling().max(1)) > _percent_dense * _splat_data.get_scene_scale());
+    auto indices = torch::nonzero(selected_pts_mask == true).squeeze(-1);
 
-    // FIXED: Use gradient size which represents the original model size
-    const int n_init_points = grads.size(0);
-
-    // grads is [N], not [N, 1]
-    torch::Tensor selected_pts_mask = grads >= grad_threshold;
-    TORCH_CHECK(selected_pts_mask.size(0) == n_init_points,
-                "selected_pts_mask size mismatch: ", selected_pts_mask.size(0), " vs ", n_init_points);
-
-    // Check scale condition for splitting (large gaussians)
-    // FIXED: Only check the first n_init_points gaussians
-    auto scaling = _splat_data.get_scaling().index({torch::indexing::Slice(0, n_init_points)});
-    TORCH_CHECK(scaling.size(0) == n_init_points,
-                "scaling size mismatch: ", scaling.size(0), " vs ", n_init_points);
-
-    auto scale_mask = std::get<0>(scaling.max(1)) > _percent_dense * _splat_data.get_scene_scale();
-    TORCH_CHECK(scale_mask.size(0) == n_init_points,
-                "scale_mask size mismatch: ", scale_mask.size(0), " vs ", n_init_points);
-
-    // Combine conditions
-    selected_pts_mask = selected_pts_mask & scale_mask;
-
-    auto indices = selected_pts_mask.nonzero().squeeze(-1);
-
-    if (indices.numel() == 0) {
-        return;  // No points to split
-    }
-
-    // Prepare new gaussians
     torch::Tensor stds = _splat_data.get_scaling().index_select(0, indices).repeat({N, 1});
     torch::Tensor means = torch::zeros({stds.size(0), 3}).to(torch::kCUDA);
     torch::Tensor samples = torch::randn({stds.size(0), stds.size(1)}).to(torch::kCUDA) * stds + means;
@@ -278,73 +177,22 @@ void InriaADC::densify_and_split(torch::Tensor& grads, float grad_threshold, flo
     torch::Tensor new_shN = _splat_data.shN().index_select(0, indices).repeat({N, 1, 1});
     torch::Tensor new_opacity = _splat_data.opacity_raw().index_select(0, indices).repeat({N, 1});
 
-    // Add new gaussians
     densification_postfix(new_xyz, new_sh0, new_shN, new_scaling, new_rotation, new_opacity);
 
-    torch::cuda::synchronize();
-
-    // FIXED: Calculate sizes correctly accounting for clone operations
-    const int size_after_split = _splat_data.size();
-    const int n_new_gaussians_from_split = indices.numel() * N;
-    const int total_new_gaussians = size_after_split - n_init_points;
-
-    // Verify the math
-    TORCH_CHECK(total_new_gaussians == gaussians_added_by_clone + n_new_gaussians_from_split,
-                "Unexpected number of new gaussians: expected ",
-                gaussians_added_by_clone + n_new_gaussians_from_split,
-                " but got ", total_new_gaussians);
-
-    // Create prune filter for original gaussians (before adding new ones)
-    torch::Tensor prune_filter = torch::zeros({n_init_points}, torch::kBool).to(torch::kCUDA);
-    prune_filter.masked_scatter_(selected_pts_mask, torch::ones_like(selected_pts_mask, torch::kBool));
-
-    // Extend prune filter to include all newly added gaussians (from both clone and split)
-    torch::Tensor extended_prune_filter = torch::cat({
-        prune_filter,
-        torch::zeros({total_new_gaussians}, torch::kBool).to(torch::kCUDA)
-    });
-
-    TORCH_CHECK(extended_prune_filter.size(0) == size_after_split,
-                "Extended prune filter size mismatch: ", extended_prune_filter.size(0),
-                " vs ", size_after_split);
-
-    // Also prune low opacity gaussians
-    auto opacity_check = _splat_data.get_opacity();
-    if (opacity_check.dim() == 2 && opacity_check.size(1) == 1) {
-        opacity_check = opacity_check.squeeze(-1);
-    }
-    TORCH_CHECK(opacity_check.size(0) == size_after_split,
-                "Opacity size mismatch: ", opacity_check.size(0), " vs ", size_after_split);
-
-    extended_prune_filter = extended_prune_filter | (opacity_check < min_opacity);
-
-    prune_points(extended_prune_filter);
+    torch::Tensor prune_filter = torch::cat({selected_pts_mask, torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kBool).to(torch::kCUDA)});
+    prune_filter = torch::logical_or(prune_filter, (_splat_data.get_opacity() < min_opacity).squeeze(-1));
+    prune_points(prune_filter);
 }
 
 void InriaADC::densify_and_clone(torch::Tensor& grads, float grad_threshold) {
-    // FIXED: Use gradient size, not current model size
-    const int n_init_points = grads.size(0);
+    // Extract points that satisfy the gradient condition
+    torch::Tensor selected_pts_mask = torch::where(grads >= grad_threshold,
+                                                   torch::ones_like(grads).to(torch::kBool),
+                                                   torch::zeros_like(grads).to(torch::kBool));
 
-    // grads is [N]
-    torch::Tensor selected_pts_mask = grads >= grad_threshold;
+    selected_pts_mask = torch::logical_and(selected_pts_mask, std::get<0>(_splat_data.get_scaling().max(1)).unsqueeze(-1) <= _percent_dense * _splat_data.get_scene_scale());
 
-    // Check scale condition for cloning (small gaussians)
-    // FIXED: Only check the first n_init_points gaussians
-    auto scaling = _splat_data.get_scaling().index({torch::indexing::Slice(0, n_init_points)});
-    TORCH_CHECK(scaling.size(0) == n_init_points,
-                "scaling size mismatch: ", scaling.size(0), " vs ", n_init_points);
-
-    auto scale_mask = std::get<0>(scaling.max(1)) <= _percent_dense * _splat_data.get_scene_scale();
-
-    // Combine conditions
-    selected_pts_mask = selected_pts_mask & scale_mask;
-
-    auto indices = selected_pts_mask.nonzero().squeeze(-1);
-
-    if (indices.numel() == 0) {
-        return;  // No points to clone
-    }
-
+    auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).squeeze(-1);
     torch::Tensor new_xyz = _splat_data.xyz().index_select(0, indices);
     torch::Tensor new_sh0 = _splat_data.sh0().index_select(0, indices);
     torch::Tensor new_shN = _splat_data.shN().index_select(0, indices);
@@ -356,192 +204,78 @@ void InriaADC::densify_and_clone(torch::Tensor& grads, float grad_threshold) {
 }
 
 void InriaADC::Densify_and_prune(float max_grad, float min_opacity) {
-    torch::cuda::synchronize();
-    validate_tensor_sizes();
+    torch::Tensor grads = _xyz_gradient_accum / _denom;
+    grads.index_put_({grads.isnan()}, 0.0);
 
-    // ADDED: Extra validation to ensure accumulator matches model size
-    const int model_size = _splat_data.size();
-    if (_xyz_gradient_accum.size(0) != model_size || _denom.size(0) != model_size) {
-        std::cerr << ts::color::YELLOW << "WARNING: Gradient accumulator size mismatch. "
-                  << "Resetting accumulators." << ts::color::RESET << std::endl;
-        _xyz_gradient_accum = torch::zeros({model_size}, torch::kFloat32).to(torch::kCUDA);
-        _denom = torch::zeros({model_size}, torch::kFloat32).to(torch::kCUDA);
-        return; // Skip densification this iteration
-    }
-
-    // Average gradients by count
-    torch::Tensor grads = _xyz_gradient_accum / _denom.clamp_min(1.0);
-    grads.masked_fill_(grads.isnan(), 0.0);
-
-    TORCH_CHECK(grads.size(0) == _splat_data.size(),
-                "Gradient size mismatch: ", grads.size(0), " vs ", _splat_data.size());
-
-    // FIXED: Track model size between operations
-    const int size_before_clone = _splat_data.size();
     densify_and_clone(grads, max_grad);
-
-    const int size_after_clone = _splat_data.size();
-    const int gaussians_added_by_clone = size_after_clone - size_before_clone;
-
-    // Now call split with awareness of the clone additions
-    densify_and_split(grads, max_grad, min_opacity, size_after_clone, gaussians_added_by_clone);
-
-    // CRITICAL: Reset gradient statistics after densification
-    // This matches the Python implementation
-    torch::cuda::synchronize();
-    const int current_size = _splat_data.size();
-    _xyz_gradient_accum = torch::zeros({current_size}, torch::kFloat32).to(torch::kCUDA);
-    _denom = torch::zeros({current_size}, torch::kFloat32).to(torch::kCUDA);
-
-    validate_tensor_sizes();
+    densify_and_split(grads, max_grad, min_opacity);
 }
 
-void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor,
-                                       torch::Tensor& update_filter,
-                                       int width,
-                                       int height,
-                                       int n_cameras) {
+void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter, int width, int height) {
     // Check if gradient exists
     if (!viewspace_point_tensor.grad().defined()) {
         std::cerr << ts::color::RED << "ERROR: viewspace_point_tensor has no gradient! "
-                  << "Make sure to call retain_grad() on intermediate tensors."
-                  << ts::color::RESET << std::endl;
+                  << "Make sure to call retain_grad() on intermediate tensors." << ts::color::RESET << std::endl;
         return;
     }
 
-    // FIXED: Use actual model size instead of viewspace tensor size
-    const int current_model_size = _splat_data.size();
-    const int viewspace_size = viewspace_point_tensor.size(0);
-    const int accumulator_size = _xyz_gradient_accum.size(0);
-
-    // Check if there's a size mismatch
-    if (viewspace_size != current_model_size) {
-        std::cerr << ts::color::YELLOW << "WARNING: Viewspace tensor size (" << viewspace_size
-                  << ") doesn't match model size (" << current_model_size << ")"
-                  << ts::color::RESET << std::endl;
-        // Skip this gradient accumulation to avoid errors
-        return;
-    }
-
-    if (current_model_size != accumulator_size) {
-        std::cerr << ts::color::YELLOW << "WARNING: Resizing gradient accumulators from "
-                  << accumulator_size << " to " << current_model_size << ts::color::RESET << std::endl;
-        _xyz_gradient_accum = torch::zeros({current_model_size}, torch::kFloat32).to(torch::kCUDA);
-        _denom = torch::zeros({current_model_size}, torch::kFloat32).to(torch::kCUDA);
-    }
-
-    // Clone the gradient to avoid modifying the original
-    auto grad = viewspace_point_tensor.grad().clone();
+    auto grad = viewspace_point_tensor.grad();
 
     // CRITICAL: Normalize gradients to [-1, 1] screen space
-    // This matches the Python implementation in default.py
-    grad.index({torch::indexing::Slice(), 0}) *= (width / 2.0f) * n_cameras;
-    grad.index({torch::indexing::Slice(), 1}) *= (height / 2.0f) * n_cameras;
+    // This is essential for the densification threshold to work correctly
+    grad = grad.clone(); // Clone to avoid modifying the original gradient
+    grad.index({torch::indexing::Slice(), 0}) *= width * 0.5f;
+    grad.index({torch::indexing::Slice(), 1}) *= height * 0.5f;
 
     // Get indices where update_filter is true
-    auto indices = update_filter.nonzero().squeeze(-1);
-    if (indices.numel() == 0) {
-        return; // No points to update
+    auto indices = update_filter.nonzero().squeeze();
+    if (indices.dim() == 0) {
+        indices = indices.unsqueeze(0); // Handle single element case
     }
 
-    // Validate indices are within bounds
-    auto max_idx = indices.max().item<int64_t>();
-    if (max_idx >= _xyz_gradient_accum.size(0)) {
-        std::cerr << ts::color::RED << "ERROR: Index " << max_idx
-                  << " out of bounds for accumulator size " << _xyz_gradient_accum.size(0)
-                  << ts::color::RESET << std::endl;
+    if (indices.numel() == 0) {
+        std::cout << ts::color::YELLOW << "No points to update" << ts::color::RESET << std::endl;
         return;
     }
 
-    // Compute L2 norm of gradients for visible points
-    auto selected_grad = grad.index_select(0, indices);
-    auto grad_norm = selected_grad.norm(2, -1);  // L2 norm, result is 1D
+    // Update gradient accumulator - only use first 2 dimensions (x, y)
+    auto selected_grad = grad.index_select(0, indices).slice(1, 0, 2).norm(2, -1, true);
+    auto selected_accum = _xyz_gradient_accum.index_select(0, indices);
+    _xyz_gradient_accum.index_put_({update_filter}, selected_accum + selected_grad);
 
-    // Accumulate gradient norms using index_add_ for efficiency
-    _xyz_gradient_accum.index_add_(0, indices, grad_norm);
-
-    // Accumulate count
-    _denom.index_add_(0, indices, torch::ones_like(indices, torch::kFloat32));
+    // Update denominator
+    auto selected_denom = _denom.index_select(0, indices);
+    _denom.index_put_({update_filter}, selected_denom + 1);
 }
 
 void InriaADC::post_backward(int iter, RenderOutput& render_output) {
-    // CRITICAL: Move SH degree increment to BEFORE any densification logic
-    // to avoid race conditions during densification
-    bool sh_degree_changed = false;
-    if (iter % 1000 == 0 && iter > 0) {
-        torch::cuda::synchronize();
+
+    if (iter % 1000 == 0)
         _splat_data.increment_sh_degree();
-        sh_degree_changed = true;
-        torch::cuda::synchronize();
-    }
 
-    // Skip the rest if we just changed SH degree to avoid any size mismatches
-    if (sh_degree_changed) {
-        return;
-    }
+    const auto visible_max_radii = _splat_data.max_radii2D().masked_select(render_output.visibility);
+    const auto visible_radii = render_output.radii.masked_select(render_output.visibility);
+    _splat_data.max_radii2D().masked_scatter_(render_output.visibility, torch::max(visible_max_radii, visible_radii));
 
-    // Update max radii for visible Gaussians
-    auto visibility = render_output.visibility;
-    if (visibility.any().item<bool>()) {
-        // Ensure max_radii2D has correct size
-        if (_splat_data.max_radii2D().size(0) != visibility.size(0)) {
-            std::cerr << ts::color::YELLOW << "WARNING: Resizing max_radii2D from "
-                      << _splat_data.max_radii2D().size(0) << " to " << visibility.size(0)
-                      << ts::color::RESET << std::endl;
-            _splat_data.max_radii2D() = torch::zeros({visibility.size(0)}, torch::kFloat32).to(torch::kCUDA);
-        }
-
-        // Get current max radii for visible points
-        auto visible_max_radii = _splat_data.max_radii2D().masked_select(visibility);
-
-        // Get rendered radii for visible points
-        auto visible_radii = render_output.radii.masked_select(visibility);
-
-        // Update max radii with the maximum of current and rendered
-        auto new_max_radii = torch::max(visible_max_radii, visible_radii);
-        _splat_data.max_radii2D().masked_scatter_(visibility, new_max_radii);
-    }
-
-    // Densification & pruning logic
+    // Densification & pruning
     if (iter < _params->densify_until_iter) {
-        // Accumulate densification statistics
-        Add_densification_stats(render_output.viewspace_pts,
-                                visibility,
-                                render_output.width,
-                                render_output.height,
-                                render_output.n_cameras);
-
-        // Check if we should densify at this iteration
-        const bool should_densify = (iter >= _params->densify_from_iter &&
-                                     iter % _params->densification_interval == 0);
-
-        if (should_densify) {
-            // Get the current size before densification
-            int size_before = _splat_data.size();
-
-            // Perform densification and pruning
+        // Pass width and height for gradient normalization
+        Add_densification_stats(render_output.viewspace_pts, render_output.visibility,
+                                render_output.width, render_output.height);
+        const bool is_densifying = (iter < _params->densify_until_iter &&
+                                    iter > _params->densify_from_iter &&
+                                    iter % _params->densification_interval == 0);
+        if (is_densifying) {
             Densify_and_prune(_params->densify_grad_threshold, _params->min_opacity);
-
-            // Log densification results
-            int size_after = _splat_data.size();
-            if (size_after != size_before) {
-                std::cout << ts::color::GREEN << "[Iter " << iter << "] "
-                          << "Densified: " << size_before << " -> " << size_after
-                          << " gaussians" << ts::color::RESET << std::endl;
-            }
         }
-
-        // Reset opacity periodically
-        if (iter % _params->opacity_reset_interval == 0 &&
-            iter > _params->densify_from_iter) {
-            std::cout << ts::color::YELLOW << "[Iter " << iter << "] "
-                      << "Resetting opacity" << ts::color::RESET << std::endl;
+        if (iter % _params->opacity_reset_interval == 0) {
             Reset_opacity();
         }
     }
 }
 
 void InriaADC::step(int iter) {
+
     if (iter < _params->iterations) {
         _optimizer->step();
         _optimizer->zero_grad(true);
@@ -560,10 +294,10 @@ void InriaADC::initialize(const gs::param::OptimizationParameters& optimParams) 
     _splat_data.sh0() = _splat_data.sh0().to(dev).set_requires_grad(true);
     _splat_data.shN() = _splat_data.shN().to(dev).set_requires_grad(true);
 
-    // aux buffers (no grad) - Initialize as 1D tensors
+    // aux buffers (no grad)
     _percent_dense = _params->percent_dense;
-    _xyz_gradient_accum = torch::zeros({_splat_data.size()}, torch::kFloat32).to(dev);
-    _denom = torch::zeros({_splat_data.size()}, torch::kFloat32).to(dev);
+    _xyz_gradient_accum = torch::zeros({_splat_data.size(), 1}, torch::kFloat32).to(dev);
+    _denom = torch::zeros({_splat_data.size(), 1}, torch::kFloat32).to(dev);
     _splat_data.max_radii2D() = torch::zeros({_splat_data.size()}, torch::kFloat32).to(dev);
 
     _xyz_scheduler_args = Expon_lr_func(
@@ -596,7 +330,4 @@ void InriaADC::initialize(const gs::param::OptimizationParameters& optimParams) 
 
     _optimizer = std::make_unique<torch::optim::Adam>(
         groups, AdamOptions(0.f).eps(1e-15));
-
-    // Validate initial state
-    validate_tensor_sizes();
 }
