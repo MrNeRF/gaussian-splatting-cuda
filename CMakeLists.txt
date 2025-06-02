@@ -120,7 +120,6 @@ set(HOST_SOURCES
         src/inria_adc.cpp
         src/camera.cpp
         src/image_io.cpp
-        src/rasterizer.cpp
         src/colmap_reader.cpp
         src/parameters.cpp
         src/splat_data.cpp
