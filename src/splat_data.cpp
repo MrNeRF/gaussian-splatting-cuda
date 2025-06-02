@@ -1,9 +1,11 @@
 #include "core/splat_data.hpp"
 #include "core/colmap_reader.hpp"
-#include "core/mean_neighbor_dist.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
+#include "external/nanoflann.hpp"
 #include "external/tinyply.hpp"
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -11,73 +13,143 @@
 #include <torch/torch.h>
 #include <vector>
 
-static inline void write_ply(const PointCloud& pc,
-                             const std::filesystem::path& root,
-                             int iteration,
-                             bool join_thread = false) {
-    namespace fs = std::filesystem;
-    fs::path folder = root / ("point_cloud/iteration_" + std::to_string(iteration));
-    fs::create_directories(folder);
+namespace {
+    // Point cloud adaptor for nanoflann
+    struct PointCloudAdaptor {
+        const float* points;
+        size_t num_points;
 
-    /* ----- pack all per-vertex tensors in the order we want to write ----- */
-    std::vector<torch::Tensor> tensors;
+        PointCloudAdaptor(const float* pts, size_t n) : points(pts),
+                                                        num_points(n) {}
 
-    // Always include positions
-    tensors.push_back(pc.positions);
+        inline size_t kdtree_get_point_count() const { return num_points; }
 
-    // Only include other tensors if they're defined (for Gaussian point clouds)
-    if (pc.normals.defined())
-        tensors.push_back(pc.normals);
-    if (pc.features_dc.defined())
-        tensors.push_back(pc.features_dc);
-    if (pc.features_rest.defined())
-        tensors.push_back(pc.features_rest);
-    if (pc.opacity.defined())
-        tensors.push_back(pc.opacity);
-    if (pc.scaling.defined())
-        tensors.push_back(pc.scaling);
-    if (pc.rotation.defined())
-        tensors.push_back(pc.rotation);
+        inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
+            return points[idx * 3 + dim];
+        }
 
-    /* ----- background job ------------------------------------------------ */
-    std::thread t([folder,
-                   tensors = std::move(tensors),
-                   names = pc.attribute_names]() mutable {
-        /* ---- local lambda that owns the actual tinyply call ------------- */
-        auto write_output_ply =
-            [](const fs::path& file_path,
-               const std::vector<torch::Tensor>& data,
-               const std::vector<std::string>& attr_names) {
-                tinyply::PlyFile ply;
-                size_t attr_off = 0;
+        template <class BBOX>
+        bool kdtree_get_bbox(BBOX& /* bb */) const { return false; }
+    };
 
-                for (const auto& tensor : data) {
-                    const size_t cols = tensor.size(1);
-                    std::vector<std::string> attrs(attr_names.begin() + attr_off,
-                                                   attr_names.begin() + attr_off + cols);
+    using KDTree = nanoflann::KDTreeSingleIndexAdaptor<
+        nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>,
+        PointCloudAdaptor,
+        3>;
 
-                    ply.add_properties_to_element(
-                        "vertex",
-                        attrs,
-                        tinyply::Type::FLOAT32,
-                        tensor.size(0),
-                        reinterpret_cast<uint8_t*>(tensor.data_ptr<float>()),
-                        tinyply::Type::INVALID, 0);
+    // Compute mean distance to 3 nearest neighbors for each point
+    torch::Tensor compute_mean_neighbor_distances(const torch::Tensor& points) {
+        auto cpu_points = points.to(torch::kCPU).contiguous();
+        const int num_points = cpu_points.size(0);
 
-                    attr_off += cols;
+        TORCH_CHECK(cpu_points.dim() == 2 && cpu_points.size(1) == 3,
+                    "Input points must have shape [N, 3]");
+        TORCH_CHECK(cpu_points.dtype() == torch::kFloat32,
+                    "Input points must be float32");
+
+        if (num_points <= 1) {
+            return torch::full({num_points}, 0.01f, points.options());
+        }
+
+        const float* data = cpu_points.data_ptr<float>();
+
+        PointCloudAdaptor cloud(data, num_points);
+        KDTree index(3, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+        index.buildIndex();
+
+        auto result = torch::zeros({num_points}, torch::kFloat32);
+        float* result_data = result.data_ptr<float>();
+
+#pragma omp parallel for if (num_points > 1000)
+        for (int i = 0; i < num_points; i++) {
+            const float query_pt[3] = {data[i * 3 + 0], data[i * 3 + 1], data[i * 3 + 2]};
+
+            const size_t num_results = std::min(4, num_points);
+            std::vector<size_t> ret_indices(num_results);
+            std::vector<float> out_dists_sqr(num_results);
+
+            nanoflann::KNNResultSet<float> resultSet(num_results);
+            resultSet.init(&ret_indices[0], &out_dists_sqr[0]);
+            index.findNeighbors(resultSet, &query_pt[0], nanoflann::SearchParameters(10));
+
+            float sum_dist = 0.0f;
+            int valid_neighbors = 0;
+
+            for (size_t j = 0; j < num_results && valid_neighbors < 3; j++) {
+                if (out_dists_sqr[j] > 1e-8f) {
+                    sum_dist += std::sqrt(out_dists_sqr[j]);
+                    valid_neighbors++;
                 }
+            }
 
-                std::filebuf fb;
-                fb.open(file_path, std::ios::out | std::ios::binary);
-                std::ostream out_stream(&fb);
-                ply.write(out_stream, /*binary=*/true);
-            };
+            result_data[i] = (valid_neighbors > 0) ? (sum_dist / valid_neighbors) : 0.01f;
+        }
 
-        write_output_ply(folder / "point_cloud.ply", tensors, names);
-    });
+        return result.to(points.device());
+    }
 
-    join_thread ? t.join() : t.detach();
-}
+    void write_ply(const PointCloud& pc,
+                   const std::filesystem::path& root,
+                   int iteration,
+                   bool join_thread = false) {
+        namespace fs = std::filesystem;
+        fs::path folder = root / ("point_cloud/iteration_" + std::to_string(iteration));
+        fs::create_directories(folder);
+
+        std::vector<torch::Tensor> tensors;
+        tensors.push_back(pc.positions);
+
+        if (pc.normals.defined())
+            tensors.push_back(pc.normals);
+        if (pc.features_dc.defined())
+            tensors.push_back(pc.features_dc);
+        if (pc.features_rest.defined())
+            tensors.push_back(pc.features_rest);
+        if (pc.opacity.defined())
+            tensors.push_back(pc.opacity);
+        if (pc.scaling.defined())
+            tensors.push_back(pc.scaling);
+        if (pc.rotation.defined())
+            tensors.push_back(pc.rotation);
+
+        std::thread t([folder,
+                       tensors = std::move(tensors),
+                       names = pc.attribute_names]() mutable {
+            auto write_output_ply =
+                [](const fs::path& file_path,
+                   const std::vector<torch::Tensor>& data,
+                   const std::vector<std::string>& attr_names) {
+                    tinyply::PlyFile ply;
+                    size_t attr_off = 0;
+
+                    for (const auto& tensor : data) {
+                        const size_t cols = tensor.size(1);
+                        std::vector<std::string> attrs(attr_names.begin() + attr_off,
+                                                       attr_names.begin() + attr_off + cols);
+
+                        ply.add_properties_to_element(
+                            "vertex",
+                            attrs,
+                            tinyply::Type::FLOAT32,
+                            tensor.size(0),
+                            reinterpret_cast<uint8_t*>(tensor.data_ptr<float>()),
+                            tinyply::Type::INVALID, 0);
+
+                        attr_off += cols;
+                    }
+
+                    std::filebuf fb;
+                    fb.open(file_path, std::ios::out | std::ios::binary);
+                    std::ostream out_stream(&fb);
+                    ply.write(out_stream, /*binary=*/true);
+                };
+
+            write_output_ply(folder / "point_cloud.ply", tensors, names);
+        });
+
+        join_thread ? t.join() : t.detach();
+    }
+} // namespace
 
 // Constructor from tensors
 SplatData::SplatData(int sh_degree,
@@ -175,7 +247,6 @@ PointCloud SplatData::to_point_cloud() const {
 
 SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParameters& params, float scene_scale) {
     // Helper lambdas
-
     auto pcd = read_colmap_point_cloud(params.dataset.data_path);
 
     auto inverse_sigmoid = [](torch::Tensor x) {

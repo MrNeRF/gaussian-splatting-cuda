@@ -43,7 +43,6 @@ set(HOST_SOURCES
         src/main.cpp
         src/inria_adc.cpp
         src/camera.cpp
-        src/mean_neighbor_dist.cpp
         src/image_io.cpp
         src/rasterizer.cpp
         src/colmap_reader.cpp
