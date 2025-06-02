@@ -1,6 +1,8 @@
 #include "core/splat_data.hpp"
 #include "core/mean_neighbor_dist.hpp"
-#include "core/scene_info.hpp"
+#include "core/parameters.hpp"
+#include "core/point_cloud.hpp"
+#include "core/read_utils.hpp"
 #include "external/tinyply.hpp"
 #include <filesystem>
 #include <fstream>
@@ -9,14 +11,7 @@
 #include <torch/torch.h>
 #include <vector>
 
-struct GaussianPointCloud {
-    torch::Tensor xyz, normals,
-        features_dc, features_rest,
-        opacity, scaling, rotation;
-    std::vector<std::string> attribute_names;
-};
-
-static inline void write_ply(const GaussianPointCloud& pc,
+static inline void write_ply(const PointCloud& pc,
                              const std::filesystem::path& root,
                              int iteration,
                              bool join_thread = false) {
@@ -25,9 +20,24 @@ static inline void write_ply(const GaussianPointCloud& pc,
     fs::create_directories(folder);
 
     /* ----- pack all per-vertex tensors in the order we want to write ----- */
-    std::vector<torch::Tensor> tensors{
-        pc.xyz, pc.normals, pc.features_dc, pc.features_rest,
-        pc.opacity, pc.scaling, pc.rotation};
+    std::vector<torch::Tensor> tensors;
+
+    // Always include positions
+    tensors.push_back(pc.positions);
+
+    // Only include other tensors if they're defined (for Gaussian point clouds)
+    if (pc.normals.defined())
+        tensors.push_back(pc.normals);
+    if (pc.features_dc.defined())
+        tensors.push_back(pc.features_dc);
+    if (pc.features_rest.defined())
+        tensors.push_back(pc.features_rest);
+    if (pc.opacity.defined())
+        tensors.push_back(pc.opacity);
+    if (pc.scaling.defined())
+        tensors.push_back(pc.scaling);
+    if (pc.rotation.defined())
+        tensors.push_back(pc.rotation);
 
     /* ----- background job ------------------------------------------------ */
     std::thread t([folder,
@@ -66,8 +76,7 @@ static inline void write_ply(const GaussianPointCloud& pc,
         write_output_ply(folder / "point_cloud.ply", tensors, names);
     });
 
-    join_thread ? t.join()
-                : t.detach();
+    join_thread ? t.join() : t.detach();
 }
 
 // Constructor from tensors
@@ -144,23 +153,31 @@ void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool 
     write_ply(pc, root, iteration, join_thread);
 }
 
-// Convert to point cloud (now private)
-GaussianPointCloud SplatData::to_point_cloud() const {
-    GaussianPointCloud pc;
-    pc.xyz = _xyz.cpu().contiguous();
-    pc.normals = torch::zeros_like(pc.xyz);
+PointCloud SplatData::to_point_cloud() const {
+    PointCloud pc;
+
+    // Basic attributes
+    pc.positions = _xyz.cpu().contiguous();
+    pc.normals = torch::zeros_like(pc.positions);
+
+    // Gaussian attributes
     pc.features_dc = _features_dc.transpose(1, 2).flatten(1).cpu();
     pc.features_rest = _features_rest.transpose(1, 2).flatten(1).cpu();
     pc.opacity = _opacity.cpu();
     pc.scaling = _scaling.cpu();
     pc.rotation = _rotation.cpu();
+
+    // Set attribute names for PLY export
     pc.attribute_names = get_attribute_names();
+
     return pc;
 }
 
-// Static factory method (like original gaussian_init)
-SplatData SplatData::create_from_point_cloud(PointCloud& pcd, int max_sh_degree, float scene_scale) {
+SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParameters& params, float scene_scale) {
     // Helper lambdas
+
+    auto pcd = read_colmap_point_cloud(params.dataset.data_path);
+
     auto inverse_sigmoid = [](torch::Tensor x) {
         return torch::log(x / (1 - x));
     };
@@ -173,14 +190,13 @@ SplatData SplatData::create_from_point_cloud(PointCloud& pcd, int max_sh_degree,
     const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
     const auto f32_cuda = f32.device(torch::kCUDA);
 
-    // 1. xyz
-    auto xyz = torch::from_blob(pcd._points.data(),
-                                {static_cast<int64_t>(pcd._points.size()), 3},
-                                f32)
-                   .to(torch::kCUDA)
-                   .set_requires_grad(true);
+    // Ensure colors are normalized floats
+    pcd.normalize_colors();
 
-    // 2. scaling (log(σ))
+    // 1. xyz - already a tensor, just move to CUDA and set requires_grad
+    auto xyz = pcd.positions.to(torch::kCUDA).set_requires_grad(true);
+
+    // 2. scaling (log(σ)) - compute nearest neighbor distances
     auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(xyz), 1e-7);
     auto scaling = torch::log(torch::sqrt(nn_dist))
                        .unsqueeze(-1)
@@ -188,27 +204,24 @@ SplatData SplatData::create_from_point_cloud(PointCloud& pcd, int max_sh_degree,
                        .to(f32_cuda)
                        .set_requires_grad(true);
 
-    // 3. rotation & opacity
-    auto rotation = torch::zeros({xyz.size(0), 4}, f32_cuda)
-                        .index_put_({torch::indexing::Slice(), 0}, 1)
-                        .set_requires_grad(true);
+    // 3. rotation (quaternion, identity) - split into multiple lines to avoid compilation error
+    auto rotation = torch::zeros({xyz.size(0), 4}, f32_cuda);
+    rotation.index_put_({torch::indexing::Slice(), 0}, 1);
+    rotation = rotation.set_requires_grad(true);
 
+    // 4. opacity (inverse sigmoid of 0.5)
     auto opacity = inverse_sigmoid(0.5f * torch::ones({xyz.size(0), 1}, f32_cuda))
                        .set_requires_grad(true);
 
-    // 4. features (DC + rest)
-    auto rgb = torch::from_blob(pcd._colors.data(),
-                                {static_cast<int64_t>(pcd._colors.size()), 3},
-                                torch::TensorOptions().dtype(torch::kUInt8))
-                   .to(f32) /
-               255.f;
+    // 5. features (SH coefficients)
+    // Colors are already normalized to float by pcd.normalize_colors()
+    auto colors_float = pcd.colors.to(torch::kCUDA);
+    auto fused_color = rgb_to_sh(colors_float);
 
-    auto fused_color = rgb_to_sh(rgb).to(torch::kCUDA);
-
-    const int64_t feature_shape = static_cast<int64_t>(std::pow(max_sh_degree + 1, 2));
+    const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));
     auto features = torch::zeros({fused_color.size(0), 3, feature_shape}, f32_cuda);
 
-    // DC coefficients
+    // Set DC coefficients
     features.index_put_({torch::indexing::Slice(),
                          torch::indexing::Slice(),
                          0},
@@ -228,6 +241,5 @@ SplatData SplatData::create_from_point_cloud(PointCloud& pcd, int max_sh_degree,
                              .contiguous()
                              .set_requires_grad(true);
 
-    return SplatData(max_sh_degree, xyz, features_dc, features_rest,
-                     scaling, rotation, opacity, scene_scale);
+    return SplatData(params.optimization.sh_degree, xyz, features_dc, features_rest, scaling, rotation, opacity, scene_scale);
 }

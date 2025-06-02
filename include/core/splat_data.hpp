@@ -1,13 +1,15 @@
+// Updated splat_data.hpp
 #pragma once
 
+#include "core/point_cloud.hpp"
 #include <filesystem>
 #include <string>
 #include <torch/torch.h>
 #include <vector>
 
-// Forward declarations
-struct PointCloud;
-struct GaussianPointCloud;
+namespace gs::param {
+    struct TrainingParameters;
+}
 
 class SplatData {
 public:
@@ -24,7 +26,7 @@ public:
               float scene_scale);
 
     // Static factory method to create from PointCloud
-    static SplatData create_from_point_cloud(PointCloud& pcd, int max_sh_degree, float scene_scale);
+    static SplatData init_model_from_pointcloud(const gs::param::TrainingParameters& params, float scene_scale);
 
     // Computed getters (implemented in cpp)
     torch::Tensor get_xyz() const;
@@ -69,6 +71,6 @@ private:
     torch::Tensor _opacity;
     torch::Tensor _max_radii2D;
 
-    // Convert to point cloud for export (now private)
-    GaussianPointCloud to_point_cloud() const;
+    // Convert to point cloud for export
+    PointCloud to_point_cloud() const;
 };

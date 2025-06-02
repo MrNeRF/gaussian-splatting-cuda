@@ -7,31 +7,33 @@
 
 int main(int argc, char* argv[]) {
     try {
-        // Parse arguments and load parameters in one step
+        //----------------------------------------------------------------------
+        // 1. Parse arguments and load parameters in one step
+        //----------------------------------------------------------------------
         auto params = gs::args::parse_args_and_params(argc, argv);
-
         //----------------------------------------------------------------------
-        // 2. Create dataset
+        // 2. Create dataset from COLMAP
         //----------------------------------------------------------------------
-        auto dataset = create_camera_dataset(params.dataset);
-        auto scene = dataset->get_scene_info();
-
+        auto [dataset, scene_scale] = create_dataset_from_colmap(params.dataset);
         //----------------------------------------------------------------------
         // 3. Model initialisation
         //----------------------------------------------------------------------
-        auto splat_data = SplatData::create_from_point_cloud(scene._point_cloud,
-                                                             params.optimization.sh_degree,
-                                                             scene._nerf_norm_radius);
-
-        auto strategy = std::make_unique<InriaADC>(std::move(splat_data));
-
+        auto splat_data = SplatData::init_model_from_pointcloud(params, scene_scale);
         //----------------------------------------------------------------------
-        // 4. Create trainer and run training
+        // 4. Create strategy
+        //----------------------------------------------------------------------
+        auto strategy = std::make_unique<InriaADC>(std::move(splat_data));
+        //----------------------------------------------------------------------
+        // 5. Create trainer
         //----------------------------------------------------------------------
         gs::Trainer trainer(dataset, std::move(strategy), params);
+        //----------------------------------------------------------------------
+        // 6. Start training
+        //----------------------------------------------------------------------
         trainer.train();
 
         return 0;
+
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return -1;
