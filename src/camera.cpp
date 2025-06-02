@@ -59,14 +59,19 @@ Camera::Camera(const torch::Tensor& R,
     assert_mat(R, 3, 3, "R");
     assert_vec(T, 3, "T");
 
-    _R = R.to(torch::kFloat32).clone();
-    _T = T.to(torch::kFloat32).clone();
+    // Use pinned memory for CPU tensors to enable faster transfers
+    auto pinned_options = torch::TensorOptions().dtype(torch::kFloat32).pinned_memory(true);
+
+    _R = R.to(pinned_options).clone();
+    _T = T.to(pinned_options).clone();
 }
 
 void Camera::initialize_cuda_tensors() {
+    // Only initialize once
     if (_cuda_initialized)
         return;
 
+    // Use non-blocking transfers with pinned memory
     auto R = _R.to(torch::kCUDA, /*non_blocking=*/true);
     auto t = _T.to(torch::kCUDA, /*non_blocking=*/true);
 
@@ -111,11 +116,14 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
     _image_width = w;
     _image_height = h;
 
+    // Use pinned memory for faster GPU transfer
+    auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
+
     torch::Tensor image = torch::from_blob(
                               data,
                               {h, w, c},
                               {w * c, c, 1},
-                              torch::kUInt8)
+                              pinned_options)
                               .to(torch::kFloat32)
                               .permute({2, 0, 1})
                               .clone() /
@@ -123,17 +131,4 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
 
     free_image(data);
     return image.to(torch::kCUDA, /*non_blocking=*/true);
-}
-
-torch::Tensor& Camera::world_view_transform() {
-    TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
-    return _world_view_transform;
-}
-
-torch::Tensor& Camera::full_proj_transform() {
-    return world_view_transform(), _full_proj_transform;
-}
-
-torch::Tensor& Camera::camera_center() {
-    return world_view_transform(), _camera_center;
 }

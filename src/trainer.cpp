@@ -49,9 +49,6 @@ namespace gs {
                 Camera* cam = camera_with_image.camera;
                 torch::Tensor gt_image = std::move(camera_with_image.image);
 
-                // Initialize CUDA tensors in the camera
-                cam->initialize_cuda_tensors();
-
                 auto r_output = render(*cam, strategy_->get_model(), background_);
 
                 if (r_output.image.dim() == 3)

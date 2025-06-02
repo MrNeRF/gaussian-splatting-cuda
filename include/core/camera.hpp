@@ -33,10 +33,21 @@ public:
     // Prefetch image asynchronously
     void prefetch_image(int resolution = -1);
 
-    // Accessors
-    torch::Tensor& world_view_transform();
-    torch::Tensor& full_proj_transform();
-    torch::Tensor& camera_center();
+    // Accessors - now return const references to avoid copies
+    const torch::Tensor& world_view_transform() const {
+        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
+        return _world_view_transform;
+    }
+
+    const torch::Tensor& full_proj_transform() const {
+        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
+        return _full_proj_transform;
+    }
+
+    const torch::Tensor& camera_center() const {
+        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
+        return _camera_center;
+    }
 
     int image_height() const noexcept { return _image_height; }
     int image_width() const noexcept { return _image_width; }

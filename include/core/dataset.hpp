@@ -24,6 +24,16 @@ public:
 
         std::cout << "CameraDataset initialized with " << _cameras.size()
                   << " cameras" << std::endl;
+
+        // Pre-initialize all camera CUDA tensors for better performance
+        std::cout << "Pre-initializing camera CUDA tensors..." << std::endl;
+        for (auto& cam : _cameras) {
+            cam->initialize_cuda_tensors();
+        }
+
+        // Ensure all transfers complete
+        torch::cuda::synchronize();
+        std::cout << "Camera CUDA initialization complete" << std::endl;
     }
 
     // Default copy constructor works with shared_ptr
