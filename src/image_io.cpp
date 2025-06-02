@@ -1,15 +1,15 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include "core/image_io.hpp"
 #include "external/stb_image.h"
+#include "external/stb_image_write.h"
 #include "external/stb_image_resize.h"
 
 #include <atomic>
-#include <cmath>
 #include <condition_variable>
 #include <filesystem>
-#include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -109,6 +109,39 @@ load_image(std::filesystem::path p, int res_div) {
         h = nh;
     }
     return {img, w, h, c};
+}
+
+void save_image(const std::filesystem::path& path, torch::Tensor image) {
+    // Ensure CPU and contiguous
+    image = image.to(torch::kCPU).contiguous();
+
+    // Convert [C, H, W] to [H, W, C]
+    if (image.dim() == 3 && image.size(0) <= 4) {
+        image = image.permute({1, 2, 0});
+    }
+
+    int height = image.size(0);
+    int width = image.size(1);
+    int channels = image.size(2);
+
+    // Convert to uint8
+    auto img_uint8 = (image.clamp(0, 1) * 255).to(torch::kUInt8);
+
+    // Save based on extension
+    auto ext = path.extension().string();
+    bool success = false;
+
+    if (ext == ".png") {
+        success = stbi_write_png(path.c_str(), width, height, channels,
+                                 img_uint8.data_ptr<uint8_t>(), width * channels);
+    } else if (ext == ".jpg" || ext == ".jpeg") {
+        success = stbi_write_jpg(path.c_str(), width, height, channels,
+                                 img_uint8.data_ptr<uint8_t>(), 95);
+    }
+
+    if (!success) {
+        throw std::runtime_error("Failed to save image: " + path.string());
+    }
 }
 
 void free_image(unsigned char* img) {
