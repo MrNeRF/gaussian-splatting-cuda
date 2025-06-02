@@ -33,7 +33,6 @@ struct CameraData {
     int _height = 0;
     torch::Tensor _params;
 
-    // Image payload (not used in new system but kept for compatibility)
     int _img_w = 0;
     int _img_h = 0;
     int _channels = 0;
