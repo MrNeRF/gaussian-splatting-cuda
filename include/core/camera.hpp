@@ -30,9 +30,6 @@ public:
     // Load image from disk and return it
     torch::Tensor load_and_get_image(int resolution = -1);
 
-    // Prefetch image asynchronously
-    void prefetch_image(int resolution = -1);
-
     // Accessors - now return const references to avoid copies
     const torch::Tensor& world_view_transform() const {
         TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
