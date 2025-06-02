@@ -39,7 +39,7 @@ public:
 
         auto& cam = _cameras[index];
 
-        // Load image on demand
+        // Just load image - no prefetching since indices are random
         torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
 
         // Return camera pointer and image

@@ -2,6 +2,7 @@
 
 #include "core/torch_shapes.hpp"
 #include <filesystem>
+#include <future>
 #include <string>
 #include <torch/torch.h>
 
@@ -28,6 +29,9 @@ public:
 
     // Load image from disk and return it
     torch::Tensor load_and_get_image(int resolution = -1);
+
+    // Prefetch image asynchronously
+    void prefetch_image(int resolution = -1);
 
     // Accessors
     torch::Tensor& world_view_transform();
@@ -70,4 +74,7 @@ private:
     torch::Tensor _camera_center;
 
     bool _cuda_initialized = false;
+
+    // Async loading
+    std::future<std::tuple<unsigned char*, int, int, int>> _image_future;
 };
