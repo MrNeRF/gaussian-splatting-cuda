@@ -159,6 +159,71 @@ void save_image(const std::filesystem::path& path, torch::Tensor image) {
     }
 }
 
+void save_image(const std::filesystem::path& path,
+                const std::vector<torch::Tensor>& images,
+                bool horizontal,
+                int separator_width) {
+    if (images.empty()) {
+        throw std::runtime_error("No images provided");
+    }
+
+    if (images.size() == 1) {
+        save_image(path, images[0]);
+        return;
+    }
+
+    // Prepare all images to same format
+    std::vector<torch::Tensor> processed_images;
+    for (auto img : images) {
+        // Clone to avoid modifying original
+        img = img.clone().to(torch::kCPU).to(torch::kFloat32);
+
+        // Handle different input formats
+        if (img.dim() == 4) {
+            img = img.squeeze(0);
+        }
+
+        // Convert [C, H, W] to [H, W, C]
+        if (img.dim() == 3 && img.size(0) <= 4) {
+            img = img.permute({1, 2, 0});
+        }
+
+        processed_images.push_back(img.contiguous());
+    }
+
+    // Create separator (white by default)
+    torch::Tensor separator;
+    if (separator_width > 0) {
+        auto first_img = processed_images[0];
+        if (horizontal) {
+            separator = torch::ones({first_img.size(0), separator_width, first_img.size(2)},
+                                    first_img.options());
+        } else {
+            separator = torch::ones({separator_width, first_img.size(1), first_img.size(2)},
+                                    first_img.options());
+        }
+    }
+
+    // Concatenate images with separators
+    torch::Tensor combined;
+    for (size_t i = 0; i < processed_images.size(); ++i) {
+        if (i == 0) {
+            combined = processed_images[i];
+        } else {
+            if (separator_width > 0) {
+                combined = torch::cat({combined, separator, processed_images[i]},
+                                      horizontal ? 1 : 0);
+            } else {
+                combined = torch::cat({combined, processed_images[i]},
+                                      horizontal ? 1 : 0);
+            }
+        }
+    }
+
+    // Save the combined image
+    save_image(path, combined);
+}
+
 void free_image(unsigned char* img) {
     stbi_image_free(img);
 }
