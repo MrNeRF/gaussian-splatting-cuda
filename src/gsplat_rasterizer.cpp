@@ -1,8 +1,8 @@
 #include "core/gsplat_rasterizer.hpp"
 #include "Ops.h"
+#include "core/debug_utils.hpp"
 #include <cmath>
 #include <torch/torch.h>
-#include "core/debug_utils.hpp"
 
 namespace gs {
 
@@ -91,7 +91,7 @@ namespace gs {
             torch::Tensor colors;
             if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
                 // Compute camera positions
-                auto viewmats_inv = torch::inverse(viewmats); // [C, 4, 4]
+                auto viewmats_inv = torch::inverse(viewmats);                   // [C, 4, 4]
                 auto campos = viewmats_inv.index({Slice(), Slice(None, 3), 3}); // [C, 3]
 
                 // Compute view directions
@@ -103,15 +103,14 @@ namespace gs {
                 // Compute SH for each camera
                 std::vector<torch::Tensor> color_list;
                 for (int c = 0; c < C; ++c) {
-                    auto cam_dirs = dirs[c]; // [N, 3]
+                    auto cam_dirs = dirs[c];  // [N, 3]
                     auto cam_mask = masks[c]; // [N]
 
                     auto cam_colors = gsplat::spherical_harmonics_fwd(
                         sh_degree,
                         cam_dirs,
                         sh_coeffs,
-                        cam_mask
-                    ); // [N, 3]
+                        cam_mask); // [N, 3]
 
                     color_list.push_back(cam_colors);
                 }
@@ -263,10 +262,6 @@ namespace gs {
             auto v_colors = std::get<3>(raster_grads).contiguous();
             auto v_opacities = std::get<4>(raster_grads).contiguous();
 
-            //INSPECT_TENSOR_FULL(v_conics);
-            //INSPECT_TENSOR_FULL(v_colors);
-            //INSPECT_TENSOR_FULL(v_means2d);
-            //INSPECT_TENSOR_FULL(v_opacities);
             // Add direct gradient from means2d if provided
             if (grad_means2d_direct.defined()) {
                 v_means2d = v_means2d + grad_means2d_direct;
@@ -307,7 +302,7 @@ namespace gs {
                     );
 
                     v_sh_list.push_back(std::get<1>(sh_grads)); // v_coeffs
-                    v_dirs[c] = std::get<0>(sh_grads); // v_dirs
+                    v_dirs[c] = std::get<0>(sh_grads);          // v_dirs
                 }
 
                 // Sum gradients from all cameras
@@ -347,7 +342,7 @@ namespace gs {
             auto v_viewmats = std::get<4>(proj_grads);
 
             // Sum opacity gradients from all cameras
-            if (v_opacities.dim() == 2) { // [C, N]
+            if (v_opacities.dim() == 2) {         // [C, N]
                 v_opacities = v_opacities.sum(0); // [N]
             }
 
@@ -391,14 +386,15 @@ namespace gs {
         float tanfovy = std::tan(viewpoint_camera.FoVy() * 0.5f);
         // Extract K from FoV and image dimensions
         const float focal_length_x = viewpoint_camera.image_width() / (2 * tanfovx);
-        const float focal_length_y = viewpoint_camera.image_height()/ (2 * tanfovy);
+        const float focal_length_y = viewpoint_camera.image_height() / (2 * tanfovy);
 
         float cx = image_width / 2.0f;
         float cy = image_height / 2.0f;
 
         auto K = torch::zeros({1, 3, 3}, viewmat.options());
         K[0][0][0] = focal_length_x;
-        K[0][1][1] = focal_length_y;;
+        K[0][1][1] = focal_length_y;
+        ;
         K[0][0][2] = cx;
         K[0][1][2] = cy;
         K[0][2][2] = 1.0f;
@@ -437,8 +433,8 @@ namespace gs {
             100.0f, // far_plane
             0.0f,   // radius_clip
             sh_degree,
-            false,  // calc_compensations
-            0       // camera_model (0 = PINHOLE)
+            false, // calc_compensations
+            0      // camera_model (0 = PINHOLE)
         );
 
         GSplatRenderOutput result;

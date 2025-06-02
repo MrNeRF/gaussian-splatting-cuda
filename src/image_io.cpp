@@ -4,8 +4,8 @@
 
 #include "core/image_io.hpp"
 #include "external/stb_image.h"
-#include "external/stb_image_write.h"
 #include "external/stb_image_resize.h"
+#include "external/stb_image_write.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -119,7 +119,7 @@ void save_image(const std::filesystem::path& path, torch::Tensor image) {
     image = image.to(torch::kCPU).to(torch::kFloat32);
 
     // Handle different input formats
-    if (image.dim() == 4) {  // [B, C, H, W] or [B, H, W, C]
+    if (image.dim() == 4) { // [B, C, H, W] or [B, H, W, C]
         image = image.squeeze(0);
     }
 
