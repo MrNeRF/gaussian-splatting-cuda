@@ -5,7 +5,6 @@
 #include "core/camera_utils.hpp"
 #include "core/parameters.hpp"
 #include "core/read_utils.hpp"
-#include "core/scene_info.hpp"
 #include <memory>
 #include <torch/torch.h>
 #include <vector>
@@ -17,16 +16,12 @@ using CameraExample = torch::data::Example<Camera, torch::Tensor>;
 class CameraDataset : public torch::data::Dataset<CameraDataset, CameraExample> {
 public:
     /**
-     * Primary constructor – takes ownership of the SceneInfo that was just
-     * read from COLMAP and stores a const‑reference to the global parameters
+     * Primary constructor – stores camera infos directly
      */
-    CameraDataset(std::unique_ptr<SceneInfo> scene_info,
+    CameraDataset(std::vector<CameraInfo> camera_infos,
                   const gs::param::DatasetConfig& params)
-        : _scene_info(std::move(scene_info)),
+        : _camera_infos(std::move(camera_infos)),
           _datasetConfig(params) {
-
-        // Extract camera infos from scene
-        _camera_infos = std::move(_scene_info->_cameras);
 
         std::cout << "CameraDataset initialized with " << _camera_infos.size()
                   << " cameras" << std::endl;
@@ -36,14 +31,10 @@ public:
      * Deep‑copy constructor.
      *
      * LibTorch's stateless dataloader takes the dataset **by value**, so a
-     * copy is required.  The SceneInfo held through a unique_ptr is deep‑copied
-     * here to keep ownership semantics intact.  The parameters object is
-     * *not* copied (it is an immutable external object) – the reference is
-     * simply rebound.
+     * copy is required.
      */
     CameraDataset(const CameraDataset& other)
-        : _scene_info(std::make_unique<SceneInfo>(*other._scene_info)),
-          _camera_infos(other._camera_infos),
+        : _camera_infos(other._camera_infos),
           _datasetConfig(other._datasetConfig) {}
 
     // Move operations – default implementation is fine
@@ -100,18 +91,18 @@ public:
         return _camera_infos.size();
     }
 
-    // Get scene info
-    const SceneInfo& get_scene_info() const {
-        return *_scene_info;
+    // Get camera infos if needed
+    const std::vector<CameraInfo>& get_camera_infos() const {
+        return _camera_infos;
     }
 
 private:
-    std::unique_ptr<SceneInfo> _scene_info;
     std::vector<CameraInfo> _camera_infos;
     const gs::param::DatasetConfig& _datasetConfig;
 };
 
-inline std::shared_ptr<CameraDataset> create_camera_dataset(
+// Updated factory function to work without SceneInfo
+inline std::tuple<std::shared_ptr<CameraDataset>, float> create_dataset_from_colmap(
     const gs::param::DatasetConfig& datasetConfig) {
 
     if (!std::filesystem::exists(datasetConfig.data_path)) {
@@ -119,11 +110,13 @@ inline std::shared_ptr<CameraDataset> create_camera_dataset(
                                  datasetConfig.data_path.string());
     }
 
-    // Read scene info (now without loading image data)
-    auto scene_info = read_colmap_scene_info(datasetConfig.data_path);
+    // Read cameras and nerf norm
+    auto [camera_infos, nerf_norm] = read_colmap_cameras_and_images(datasetConfig.data_path);
 
-    // Create and return dataset
-    return std::make_shared<CameraDataset>(std::move(scene_info), datasetConfig);
+    // Create dataset
+    auto dataset = std::make_shared<CameraDataset>(std::move(camera_infos), datasetConfig);
+
+    return {dataset, nerf_norm};
 }
 
 inline auto create_dataloader_from_dataset(
