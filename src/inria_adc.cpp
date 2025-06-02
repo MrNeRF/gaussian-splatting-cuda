@@ -212,13 +212,6 @@ void InriaADC::Densify_and_prune(float max_grad, float min_opacity) {
 }
 
 void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {
-    std::cout << ts::color::CYAN << "\n=== Add Densification Stats ===" << ts::color::RESET << std::endl;
-
-    INSPECT_TENSOR(viewspace_point_tensor);
-    INSPECT_TENSOR(update_filter);
-    INSPECT_TENSOR(_xyz_gradient_accum);
-    INSPECT_TENSOR(_denom);
-
     // Check if gradient exists
     if (!viewspace_point_tensor.grad().defined()) {
         std::cerr << ts::color::RED << "ERROR: viewspace_point_tensor has no gradient! "
@@ -227,15 +220,12 @@ void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, to
     }
 
     auto grad = viewspace_point_tensor.grad();
-    INSPECT_TENSOR(grad);
 
     // Get indices where update_filter is true
     auto indices = update_filter.nonzero().squeeze();
     if (indices.dim() == 0) {
         indices = indices.unsqueeze(0);  // Handle single element case
     }
-
-    std::cout << "Update indices count: " << indices.numel() << std::endl;
 
     if (indices.numel() == 0) {
         std::cout << ts::color::YELLOW << "No points to update" << ts::color::RESET << std::endl;
@@ -251,7 +241,6 @@ void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, to
     auto selected_denom = _denom.index_select(0, indices);
     _denom.index_put_({update_filter}, selected_denom + 1);
 
-    std::cout << ts::color::GREEN << "Densification stats updated successfully" << ts::color::RESET << std::endl;
 }
 
 void InriaADC::post_backward(int iter, RenderOutput& render_output) {
