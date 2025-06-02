@@ -9,7 +9,6 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
-#include <omp.h>
 #include <torch/torch.h>
 #include <unordered_map>
 #include <vector>
