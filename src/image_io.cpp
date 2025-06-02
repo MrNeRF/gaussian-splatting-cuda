@@ -13,7 +13,7 @@
 //  Image I/O helpers
 // -----------------------------------------------------------------------------
 std::tuple<unsigned char*, int, int, int>
-read_image(std::filesystem::path p, int res_div) {
+load_image(std::filesystem::path p, int res_div) {
     int w, h, c;
     unsigned char* img = stbi_load(p.string().c_str(), &w, &h, &c, 0);
     if (!img)

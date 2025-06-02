@@ -1,107 +1,64 @@
 #pragma once
 
 #include "core/camera.hpp"
-#include "core/camera_info.hpp"
-#include "core/camera_utils.hpp"
+#include "core/colmap_reader.hpp"
 #include "core/parameters.hpp"
-#include "core/read_utils.hpp"
 #include <memory>
 #include <torch/torch.h>
 #include <vector>
 
-// Example type that wraps Camera
-using CameraExample = torch::data::Example<Camera, torch::Tensor>;
+// Camera with loaded image
+struct CameraWithImage {
+    Camera* camera;
+    torch::Tensor image;
+};
 
-// Custom Dataset class following LibTorch patterns
+using CameraExample = torch::data::Example<CameraWithImage, torch::Tensor>;
+
 class CameraDataset : public torch::data::Dataset<CameraDataset, CameraExample> {
 public:
-    /**
-     * Primary constructor – stores camera infos directly
-     */
-    CameraDataset(std::vector<CameraInfo> camera_infos,
+    CameraDataset(std::vector<std::shared_ptr<Camera>> cameras,
                   const gs::param::DatasetConfig& params)
-        : _camera_infos(std::move(camera_infos)),
+        : _cameras(std::move(cameras)),
           _datasetConfig(params) {
 
-        std::cout << "CameraDataset initialized with " << _camera_infos.size()
+        std::cout << "CameraDataset initialized with " << _cameras.size()
                   << " cameras" << std::endl;
     }
 
-    /**
-     * Deep‑copy constructor.
-     *
-     * LibTorch's stateless dataloader takes the dataset **by value**, so a
-     * copy is required.
-     */
-    CameraDataset(const CameraDataset& other)
-        : _camera_infos(other._camera_infos),
-          _datasetConfig(other._datasetConfig) {}
-
-    // Move operations – default implementation is fine
+    // Default copy constructor works with shared_ptr
+    CameraDataset(const CameraDataset&) = default;
     CameraDataset(CameraDataset&&) noexcept = default;
     CameraDataset& operator=(CameraDataset&&) noexcept = default;
+    CameraDataset& operator=(const CameraDataset&) = default;
 
-    // Copy assignment is unnecessary – disable it explicitly to avoid misuse
-    CameraDataset& operator=(const CameraDataset&) = delete;
-
-    // Required: Get a single example
     CameraExample get(size_t index) override {
-        if (index >= _camera_infos.size()) {
+        if (index >= _cameras.size()) {
             throw std::out_of_range("Camera index out of range");
         }
 
-        auto& cam_info = _camera_infos[index];
+        auto& cam = _cameras[index];
 
-        // Load image on demand using the helper method
-        cam_info.load_image_data(_datasetConfig.resolution);
+        // Load image on demand
+        torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
 
-        // Create tensor from the loaded image data
-        torch::Tensor image_tensor = torch::from_blob(
-            cam_info._img_data,
-            {cam_info._img_h, cam_info._img_w, cam_info._channels},
-            {cam_info._img_w * cam_info._channels, cam_info._channels, 1},
-            torch::kUInt8);
-
-        // Convert to float and normalize
-        image_tensor = image_tensor.to(torch::kFloat32)
-                           .permute({2, 0, 1})
-                           .clone() / // Clone to own the memory before freeing
-                       255.0f;
-
-        // Free the image data immediately after cloning to tensor
-        // This helps keep memory usage low
-        cam_info.free_image_data();
-
-        // Create Camera object
-        Camera camera(
-            cam_info._R,
-            cam_info._T,
-            cam_info._fov_x,
-            cam_info._fov_y,
-            std::move(image_tensor),
-            cam_info._image_name,
-            static_cast<int>(index));
-
-        // Return as Example with dummy target (we don't use targets in this case)
-        return {std::move(camera), torch::empty({})};
+        // Return camera pointer and image
+        return {{cam.get(), std::move(image)}, torch::empty({})};
     }
 
-    // Required: Return the size of the dataset
     torch::optional<size_t> size() const override {
-        return _camera_infos.size();
+        return _cameras.size();
     }
 
-    // Get camera infos if needed
-    const std::vector<CameraInfo>& get_camera_infos() const {
-        return _camera_infos;
+    const std::vector<std::shared_ptr<Camera>>& get_cameras() const {
+        return _cameras;
     }
 
 private:
-    std::vector<CameraInfo> _camera_infos;
+    std::vector<std::shared_ptr<Camera>> _cameras;
     const gs::param::DatasetConfig& _datasetConfig;
 };
 
-// Updated factory function to work without SceneInfo
 inline std::tuple<std::shared_ptr<CameraDataset>, float> create_dataset_from_colmap(
     const gs::param::DatasetConfig& datasetConfig) {
 
@@ -110,11 +67,29 @@ inline std::tuple<std::shared_ptr<CameraDataset>, float> create_dataset_from_col
                                  datasetConfig.data_path.string());
     }
 
-    // Read cameras and nerf norm
     auto [camera_infos, nerf_norm] = read_colmap_cameras_and_images(datasetConfig.data_path);
 
-    // Create dataset
-    auto dataset = std::make_shared<CameraDataset>(std::move(camera_infos), datasetConfig);
+    std::vector<std::shared_ptr<Camera>> cameras;
+    cameras.reserve(camera_infos.size());
+
+    for (size_t i = 0; i < camera_infos.size(); ++i) {
+        const auto& info = camera_infos[i];
+
+        auto cam = std::make_shared<Camera>(
+            info._R,
+            info._T,
+            info._fov_x,
+            info._fov_y,
+            info._image_name,
+            info._image_path,
+            info._width,
+            info._height,
+            static_cast<int>(i));
+
+        cameras.push_back(std::move(cam));
+    }
+
+    auto dataset = std::make_shared<CameraDataset>(std::move(cameras), datasetConfig);
 
     return {dataset, nerf_norm};
 }
