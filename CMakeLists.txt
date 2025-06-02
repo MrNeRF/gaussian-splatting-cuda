@@ -23,7 +23,6 @@ endif()
 find_package(Torch REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
-find_package(OpenMP)
 find_package(Threads REQUIRED)
 
 # Python packages - CRITICAL for linking
@@ -120,10 +119,9 @@ set(HOST_SOURCES
         src/main.cpp
         src/inria_adc.cpp
         src/camera.cpp
-        src/mean_neighbor_dist.cpp
-        src/camera_utils.cpp
+        src/image_io.cpp
         src/rasterizer.cpp
-        src/read_utils.cpp
+        src/colmap_reader.cpp
         src/parameters.cpp
         src/splat_data.cpp
         src/trainer.cpp
@@ -155,13 +153,6 @@ target_link_libraries(gaussian_host
         Python3::Python
         gsplat_backend  # Link to gsplat
 )
-
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(gaussian_host PUBLIC OpenMP::OpenMP_CXX)
-    message(STATUS "OpenMP found – compiling with parallel point-cloud loader")
-else()
-    message(STATUS "OpenMP NOT found – falling back to single-thread loader")
-endif()
 
 # Fast C++ compilation with proper debug symbols
 target_compile_options(gaussian_host PRIVATE

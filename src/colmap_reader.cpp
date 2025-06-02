@@ -1,10 +1,6 @@
-#include "core/read_utils.hpp"
-#include "core/camera_info.hpp"
-#include "core/scene_info.hpp"
-
+#include "core/colmap_reader.hpp"
+#include "core/point_cloud.hpp"
 #include "core/torch_shapes.hpp"
-#include <torch/torch.h>
-
 #include <algorithm>
 #include <cstring>
 #include <exception>
@@ -12,18 +8,18 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
-#include <omp.h>
+#include <torch/torch.h>
 #include <unordered_map>
 #include <vector>
 
 namespace F = torch::nn::functional;
+
 // -----------------------------------------------------------------------------
-//  Quaternion → rotation matrix
+//  Quaternion to rotation matrix
 // -----------------------------------------------------------------------------
 inline torch::Tensor qvec2rotmat(const torch::Tensor& qraw) {
     assert_vec(qraw, 4, "qvec");
 
-    namespace F = torch::nn::functional;
     auto q = F::normalize(qraw.to(torch::kFloat32),
                           F::NormalizeFuncOptions().dim(0));
 
@@ -65,7 +61,7 @@ private:
 };
 
 // -----------------------------------------------------------------------------
-//  Build 4 × 4 world-to-camera matrix
+//  Build 4x4 world-to-camera matrix
 // -----------------------------------------------------------------------------
 inline torch::Tensor getWorld2View(const torch::Tensor& R,
                                    const torch::Tensor& T) {
@@ -188,18 +184,18 @@ std::vector<Image> read_images_binary(const std::filesystem::path& file_path) {
 // -----------------------------------------------------------------------------
 //  cameras.bin
 // -----------------------------------------------------------------------------
-std::unordered_map<uint32_t, CameraInfo>
+std::unordered_map<uint32_t, CameraData>
 read_cameras_binary(const std::filesystem::path& file_path) {
     auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
 
     uint64_t n_cams = read_u64(cur);
-    std::unordered_map<uint32_t, CameraInfo> cams;
+    std::unordered_map<uint32_t, CameraData> cams;
     cams.reserve(n_cams);
 
     for (uint64_t i = 0; i < n_cams; ++i) {
-        CameraInfo cam;
+        CameraData cam;
         cam._camera_ID = read_u32(cur);
 
         int32_t model_id = read_i32(cur);
@@ -226,7 +222,7 @@ read_cameras_binary(const std::filesystem::path& file_path) {
 }
 
 // -----------------------------------------------------------------------------
-//  points3D.bin  – PointCloud stays POD
+//  points3D.bin
 // -----------------------------------------------------------------------------
 PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
     auto buf_owner = read_binary(file_path);
@@ -234,44 +230,46 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
     const char* end = cur + buf_owner->size();
 
     uint64_t N = read_u64(cur);
-    struct P {
-        float x, y, z;
-        uint8_t r, g, b;
-    };
-    std::vector<P> tmp;
-    tmp.reserve(N);
+
+    // Pre-allocate tensors directly
+    torch::Tensor positions = torch::empty({static_cast<int64_t>(N), 3}, torch::kFloat32);
+    torch::Tensor colors = torch::empty({static_cast<int64_t>(N), 3}, torch::kUInt8);
+
+    // Get raw pointers for efficient access
+    float* pos_data = positions.data_ptr<float>();
+    uint8_t* col_data = colors.data_ptr<uint8_t>();
 
     for (uint64_t i = 0; i < N; ++i) {
-        cur += 8; // point ID
-        double dx = read_f64(cur), dy = read_f64(cur), dz = read_f64(cur);
-        uint8_t r = *cur++, g = *cur++, b = *cur++;
-        cur += 8;                                    // reprojection error
-        cur += read_u64(cur) * sizeof(uint32_t) * 2; // track
-        tmp.push_back({float(dx), float(dy), float(dz), r, g, b});
+        cur += 8; // skip point ID
+
+        // Read position directly into tensor
+        pos_data[i * 3 + 0] = static_cast<float>(read_f64(cur));
+        pos_data[i * 3 + 1] = static_cast<float>(read_f64(cur));
+        pos_data[i * 3 + 2] = static_cast<float>(read_f64(cur));
+
+        // Read color directly into tensor
+        col_data[i * 3 + 0] = *cur++;
+        col_data[i * 3 + 1] = *cur++;
+        col_data[i * 3 + 2] = *cur++;
+
+        cur += 8;                                    // skip reprojection error
+        cur += read_u64(cur) * sizeof(uint32_t) * 2; // skip track
     }
+
     if (cur != end)
         throw std::runtime_error("points3D.bin: trailing bytes");
 
-    PointCloud pc;
-    pc._points.resize(N);
-    pc._colors.resize(N);
-
-#pragma omp parallel for schedule(static)
-    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(N); ++i) {
-        pc._points[i] = {tmp[i].x, tmp[i].y, tmp[i].z};
-        pc._colors[i] = {tmp[i].r, tmp[i].g, tmp[i].b};
-    }
-    return pc;
+    return PointCloud(positions, colors);
 }
 
 // -----------------------------------------------------------------------------
 //  Assemble per-image camera information
 // -----------------------------------------------------------------------------
-std::vector<CameraInfo>
+std::vector<CameraData>
 read_colmap_cameras(const std::filesystem::path file_path,
-                    const std::unordered_map<uint32_t, CameraInfo>& cams,
+                    const std::unordered_map<uint32_t, CameraData>& cams,
                     const std::vector<Image>& images) {
-    std::vector<CameraInfo> out(images.size());
+    std::vector<CameraData> out(images.size());
 
     for (size_t i = 0; i < images.size(); ++i) {
         const Image& img = images[i];
@@ -315,13 +313,13 @@ read_colmap_cameras(const std::filesystem::path file_path,
 // -----------------------------------------------------------------------------
 static std::pair<torch::Tensor, float>
 center_and_diag(const std::vector<torch::Tensor>& pts) {
-    auto stack = torch::stack(pts); // N×3
+    auto stack = torch::stack(pts); // Nx3
     torch::Tensor avg = stack.mean(0);
     float diag = torch::norm(stack - avg, 2, 1).max().item<float>();
     return {avg, diag};
 }
 
-float getNerfppNorm(std::vector<CameraInfo>& cams) {
+float getNerfppNorm(std::vector<CameraData>& cams) {
     std::vector<torch::Tensor> centers;
     centers.reserve(cams.size());
     for (auto& c : cams) {
@@ -333,19 +331,23 @@ float getNerfppNorm(std::vector<CameraInfo>& cams) {
 }
 
 // -----------------------------------------------------------------------------
-//  Top-level helper
+//  Public API functions
 // -----------------------------------------------------------------------------
-std::unique_ptr<SceneInfo>
-read_colmap_scene_info(const std::filesystem::path& base) {
+PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
+    return read_point3D_binary(filepath / "sparse/0/points3D.bin");
+}
+
+std::tuple<std::vector<CameraData>, float> read_colmap_cameras_and_images(
+    const std::filesystem::path& base) {
+
     auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");
     auto images = read_images_binary(base / "sparse/0/images.bin");
 
-    auto scene = std::make_unique<SceneInfo>();
-    scene->_point_cloud = read_point3D_binary(base / "sparse/0/points3D.bin");
-    scene->_cameras = read_colmap_cameras(base / "images", cams, images);
+    auto camera_infos = read_colmap_cameras(base / "images", cams, images);
 
-    std::cout << "Training with " << scene->_cameras.size() << " images \n";
+    std::cout << "Training with " << camera_infos.size() << " images \n";
 
-    scene->_nerf_norm_radius = getNerfppNorm(scene->_cameras);
-    return scene;
+    float nerf_norm_radius = getNerfppNorm(camera_infos);
+
+    return {std::move(camera_infos), nerf_norm_radius};
 }

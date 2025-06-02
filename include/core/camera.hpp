@@ -1,78 +1,91 @@
 #pragma once
 
 #include "core/torch_shapes.hpp"
+#include <filesystem>
+#include <future>
 #include <string>
 #include <torch/torch.h>
 
-class Camera : public torch::nn::Module {
+class Camera {
 public:
-    Camera(const torch::Tensor& R, // 3×3  (CPU, float32/64)
-           const torch::Tensor& T, // 3    (CPU)
+    Camera() = default;
+
+    Camera(const torch::Tensor& R,
+           const torch::Tensor& T,
            float FoVx, float FoVy,
-           const torch::Tensor& image, // H×W×C 0-1 float32 or uint8
-           std::string image_name,
+           const std::string& image_name,
+           const std::filesystem::path& image_path,
+           int width, int height,
            int uid);
 
-    // Allocate GPU copies & matrices
+    // Delete copy, allow move
+    Camera(const Camera&) = delete;
+    Camera& operator=(const Camera&) = delete;
+    Camera(Camera&&) = default;
+    Camera& operator=(Camera&&) = default;
+
+    // Initialize GPU tensors on demand
     void initialize_cuda_tensors();
 
-    // --- modern accessors --------------------------------------------------
-    torch::Tensor& R() { return _R; }
-    torch::Tensor& T() { return _T; }
+    // Load image from disk and return it
+    torch::Tensor load_and_get_image(int resolution = -1);
+
+    // Prefetch image asynchronously
+    void prefetch_image(int resolution = -1);
+
+    // Accessors - now return const references to avoid copies
+    const torch::Tensor& world_view_transform() const {
+        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
+        return _world_view_transform;
+    }
+
+    const torch::Tensor& full_proj_transform() const {
+        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
+        return _full_proj_transform;
+    }
+
+    const torch::Tensor& camera_center() const {
+        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
+        return _camera_center;
+    }
+
+    int image_height() const noexcept { return _image_height; }
+    int image_width() const noexcept { return _image_width; }
     float FoVx() const noexcept { return _FoVx; }
     float FoVy() const noexcept { return _FoVy; }
     const std::string& image_name() const noexcept { return _image_name; }
-    const torch::Tensor& original_image() const { return _original_image; }
-    int image_width() const noexcept { return _image_width; }
-    int image_height() const noexcept { return _image_height; }
-
-    torch::Tensor& world_view_transform();
-    torch::Tensor& full_proj_transform();
-    torch::Tensor& camera_center();
-
-    int Get_image_height() const noexcept { return image_height(); }
-    int Get_image_width() const noexcept { return image_width(); }
-    float Get_FoVx() const noexcept { return FoVx(); }
-    float Get_FoVy() const noexcept { return FoVy(); }
-    torch::Tensor& Get_world_view_transform() { return world_view_transform(); }
-    torch::Tensor& Get_full_proj_transform() { return full_proj_transform(); }
-    torch::Tensor& Get_camera_center() { return camera_center(); }
-    const torch::Tensor& Get_original_image() const { return original_image(); }
+    int uid() const noexcept { return _uid; }
 
 private:
-    // ids
+    // IDs
     int _uid = -1;
 
-    // extrinsics / intrinsics
+    // Extrinsics / intrinsics (CPU)
     torch::Tensor _R = torch::eye(3);
     torch::Tensor _T = torch::zeros({3});
     float _FoVx = 0.f;
     float _FoVy = 0.f;
 
-    // image
+    // Image info
     std::string _image_name;
-    torch::Tensor _original_image; // CPU tensor
+    std::filesystem::path _image_path;
     int _image_width = 0;
     int _image_height = 0;
+    int _width = 0;  // Camera resolution
+    int _height = 0; // Camera resolution
 
-    // clip planes
+    // Clip planes
     float _zfar = 100.f;
     float _znear = 0.01f;
 
-    // NeRF++ translate/scale
-    torch::Tensor _trans = torch::zeros({3});
-
-    // GPU copies (filled by initialize_cuda_tensors)
+    // GPU tensors (computed on demand)
     torch::Tensor _world_view_transform;
     torch::Tensor _projection_matrix;
     torch::Tensor _full_proj_transform;
     torch::Tensor _camera_center;
 
     bool _cuda_initialized = false;
-};
 
-// Forward decls
-struct CameraInfo;
-namespace gs::param {
-    struct DatasetConfig;
-}
+    // Async loading
+    std::future<std::tuple<unsigned char*, int, int, int>> _image_future;
+};

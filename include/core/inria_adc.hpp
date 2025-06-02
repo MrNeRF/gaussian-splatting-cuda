@@ -4,8 +4,6 @@
 #pragma once
 
 #include "core/istrategy.hpp"
-#include "core/scene_info.hpp"
-#include "core/splat_data.hpp"
 #include <memory>
 #include <torch/torch.h>
 
