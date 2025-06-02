@@ -44,9 +44,9 @@ set(HOST_SOURCES
         src/inria_adc.cpp
         src/camera.cpp
         src/mean_neighbor_dist.cpp
-        src/camera_utils.cpp
+        src/image_io.cpp
         src/rasterizer.cpp
-        src/read_utils.cpp
+        src/colmap_reader.cpp
         src/parameters.cpp
         src/splat_data.cpp
         src/trainer.cpp

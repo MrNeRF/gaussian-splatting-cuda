@@ -1,5 +1,4 @@
-#include "core/read_utils.hpp"
-#include "core/camera_info.hpp"
+#include "core/colmap_reader.hpp"
 #include "core/point_cloud.hpp"
 #include "core/torch_shapes.hpp"
 #include <algorithm>
@@ -185,18 +184,18 @@ std::vector<Image> read_images_binary(const std::filesystem::path& file_path) {
 // -----------------------------------------------------------------------------
 //  cameras.bin
 // -----------------------------------------------------------------------------
-std::unordered_map<uint32_t, CameraInfo>
+std::unordered_map<uint32_t, CameraData>
 read_cameras_binary(const std::filesystem::path& file_path) {
     auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
 
     uint64_t n_cams = read_u64(cur);
-    std::unordered_map<uint32_t, CameraInfo> cams;
+    std::unordered_map<uint32_t, CameraData> cams;
     cams.reserve(n_cams);
 
     for (uint64_t i = 0; i < n_cams; ++i) {
-        CameraInfo cam;
+        CameraData cam;
         cam._camera_ID = read_u32(cur);
 
         int32_t model_id = read_i32(cur);
@@ -266,11 +265,11 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
 // -----------------------------------------------------------------------------
 //  Assemble per-image camera information
 // -----------------------------------------------------------------------------
-std::vector<CameraInfo>
+std::vector<CameraData>
 read_colmap_cameras(const std::filesystem::path file_path,
-                    const std::unordered_map<uint32_t, CameraInfo>& cams,
+                    const std::unordered_map<uint32_t, CameraData>& cams,
                     const std::vector<Image>& images) {
-    std::vector<CameraInfo> out(images.size());
+    std::vector<CameraData> out(images.size());
 
     for (size_t i = 0; i < images.size(); ++i) {
         const Image& img = images[i];
@@ -320,7 +319,7 @@ center_and_diag(const std::vector<torch::Tensor>& pts) {
     return {avg, diag};
 }
 
-float getNerfppNorm(std::vector<CameraInfo>& cams) {
+float getNerfppNorm(std::vector<CameraData>& cams) {
     std::vector<torch::Tensor> centers;
     centers.reserve(cams.size());
     for (auto& c : cams) {
@@ -338,7 +337,7 @@ PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
     return read_point3D_binary(filepath / "sparse/0/points3D.bin");
 }
 
-std::tuple<std::vector<CameraInfo>, float> read_colmap_cameras_and_images(
+std::tuple<std::vector<CameraData>, float> read_colmap_cameras_and_images(
     const std::filesystem::path& base) {
 
     auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");

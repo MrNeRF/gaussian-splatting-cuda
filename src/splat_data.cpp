@@ -1,8 +1,8 @@
 #include "core/splat_data.hpp"
+#include "core/colmap_reader.hpp"
 #include "core/mean_neighbor_dist.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
-#include "core/read_utils.hpp"
 #include "external/tinyply.hpp"
 #include <filesystem>
 #include <fstream>
