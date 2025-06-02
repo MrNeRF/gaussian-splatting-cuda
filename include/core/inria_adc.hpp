@@ -52,8 +52,8 @@ private:
     void densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity);
     void prune_points(torch::Tensor mask);
     void densification_postfix(torch::Tensor& new_xyz,
-                               torch::Tensor& new_features_dc,
-                               torch::Tensor& new_features_rest,
+                               torch::Tensor& new_sh0,
+                               torch::Tensor& new_shN,
                                torch::Tensor& new_scaling,
                                torch::Tensor& new_rotation,
                                torch::Tensor& new_opacity);
