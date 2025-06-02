@@ -177,7 +177,7 @@ torch::Tensor SplatData::get_xyz() const {
 }
 
 torch::Tensor SplatData::get_opacity() const {
-    return torch::sigmoid(_opacity);
+    return torch::sigmoid(_opacity).squeeze(-1);
 }
 
 torch::Tensor SplatData::get_rotation() const {
