@@ -1,7 +1,6 @@
 #pragma once
 
 #include <filesystem>
-#include <future>
 #include <torch/torch.h>
 
 std::tuple<unsigned char*, int, int, int>
@@ -13,7 +12,3 @@ void save_image(const std::filesystem::path& path,
                 int separator_width = 2);
 
 void free_image(unsigned char* image);
-
-// Async image loading
-std::future<std::tuple<unsigned char*, int, int, int>>
-load_image_async(const std::filesystem::path& p, int res_div = -1);
