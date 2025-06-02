@@ -15,19 +15,19 @@ namespace gs {
         bg_color = bg_color.to(torch::kCUDA);
 
         // Get camera parameters
-        int width = viewpoint_camera.Get_image_width();
-        int height = viewpoint_camera.Get_image_height();
+        int width = viewpoint_camera.image_width();
+        int height = viewpoint_camera.image_height();
 
         // Prepare viewmat and K
-        torch::Tensor viewmat = viewpoint_camera.Get_world_view_transform().unsqueeze(0); // [1, 4, 4]
+        torch::Tensor viewmat = viewpoint_camera.world_view_transform().unsqueeze(0); // [1, 4, 4]
         torch::Tensor K = torch::zeros({1, 3, 3}, torch::kCUDA);
 
         // Debug: Check viewmat shape
         std::cout << "Viewmat shape: " << viewmat.sizes() << std::endl;
 
         // Build intrinsic matrix from camera parameters
-        float focal_x = width / (2.0f * std::tan(viewpoint_camera.Get_FoVx() * 0.5f));
-        float focal_y = height / (2.0f * std::tan(viewpoint_camera.Get_FoVy() * 0.5f));
+        float focal_x = width / (2.0f * std::tan(viewpoint_camera.FoVx() * 0.5f));
+        float focal_y = height / (2.0f * std::tan(viewpoint_camera.FoVy() * 0.5f));
 
         K[0][0][0] = focal_x;
         K[0][1][1] = focal_y;
@@ -94,8 +94,7 @@ namespace gs {
                 far_plane,
                 radius_clip,
                 calc_compensations,
-                gsplat::CameraModelType::PINHOLE
-            );
+                gsplat::CameraModelType::PINHOLE);
 
             // Unpack the 9 values returned (added batch_ids which was missing)
             std::tie(indptr, batch_ids, camera_ids, gaussian_ids, radii, means2d, depths, conics, compensations) = proj_results;
@@ -116,8 +115,7 @@ namespace gs {
                 far_plane,
                 radius_clip,
                 calc_compensations,
-                gsplat::CameraModelType::PINHOLE
-            );
+                gsplat::CameraModelType::PINHOLE);
 
             std::tie(radii, means2d, depths, conics, compensations) = proj_results;
         }
@@ -127,11 +125,11 @@ namespace gs {
         if (packed) {
             // For packed mode, we need to compute SH for visible Gaussians only
             // Extract camera position from the inverse of view matrix
-            torch::Tensor viewmat_inv = torch::inverse(viewmat.squeeze(0)); // [4, 4]
+            torch::Tensor viewmat_inv = torch::inverse(viewmat.squeeze(0));              // [4, 4]
             torch::Tensor campos = viewmat_inv.index({torch::indexing::Slice(0, 3), 3}); // [3] - last column, first 3 rows
 
             torch::Tensor dirs = means3D.index_select(0, gaussian_ids) - campos.unsqueeze(0); // [nnz, 3]
-            torch::Tensor shs_visible = shs.index_select(0, gaussian_ids); // [nnz, K, 3]
+            torch::Tensor shs_visible = shs.index_select(0, gaussian_ids);                    // [nnz, K, 3]
 
             colors = gsplat::spherical_harmonics_fwd(
                 gaussian_model.get_active_sh_degree(),
@@ -142,7 +140,7 @@ namespace gs {
         } else {
             // Regular SH computation
             // Extract camera position from the inverse of view matrix
-            torch::Tensor viewmat_inv = torch::inverse(viewmat.squeeze(0)); // [4, 4]
+            torch::Tensor viewmat_inv = torch::inverse(viewmat.squeeze(0));              // [4, 4]
             torch::Tensor campos = viewmat_inv.index({torch::indexing::Slice(0, 3), 3}); // [3] - last column, first 3 rows
 
             torch::Tensor dirs = means3D - campos.unsqueeze(0); // [N, 3]
@@ -185,8 +183,7 @@ namespace gs {
             isect_ids,
             1, // C = 1 camera
             tile_width,
-            tile_height
-        );
+            tile_height);
 
         // Prepare opacities for rasterization
         torch::Tensor opacities_raster;
@@ -204,13 +201,12 @@ namespace gs {
             colors,
             opacities_raster,
             bg_color.unsqueeze(0), // backgrounds [1, 3]
-            torch::nullopt, // masks
+            torch::nullopt,        // masks
             width,
             height,
             tile_size,
             isect_offsets,
-            flatten_ids
-        );
+            flatten_ids);
 
         // Extract the rendered image for single camera
         render_colors = render_colors[0]; // [H, W, 3]

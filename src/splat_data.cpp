@@ -1,7 +1,11 @@
 #include "core/splat_data.hpp"
-#include "core/mean_neighbor_dist.hpp"
-#include "core/scene_info.hpp"
+#include "core/colmap_reader.hpp"
+#include "core/parameters.hpp"
+#include "core/point_cloud.hpp"
+#include "external/nanoflann.hpp"
 #include "external/tinyply.hpp"
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -9,66 +13,143 @@
 #include <torch/torch.h>
 #include <vector>
 
-struct GaussianPointCloud {
-    torch::Tensor xyz, normals,
-        features_dc, features_rest,
-        opacity, scaling, rotation;
-    std::vector<std::string> attribute_names;
-};
+namespace {
+    // Point cloud adaptor for nanoflann
+    struct PointCloudAdaptor {
+        const float* points;
+        size_t num_points;
 
-static inline void write_ply(const GaussianPointCloud& pc,
-                             const std::filesystem::path& root,
-                             int iteration,
-                             bool join_thread = false) {
-    namespace fs = std::filesystem;
-    fs::path folder = root / ("point_cloud/iteration_" + std::to_string(iteration));
-    fs::create_directories(folder);
+        PointCloudAdaptor(const float* pts, size_t n) : points(pts),
+                                                        num_points(n) {}
 
-    /* ----- pack all per-vertex tensors in the order we want to write ----- */
-    std::vector<torch::Tensor> tensors{
-        pc.xyz, pc.normals, pc.features_dc, pc.features_rest,
-        pc.opacity, pc.scaling, pc.rotation};
+        inline size_t kdtree_get_point_count() const { return num_points; }
 
-    /* ----- background job ------------------------------------------------ */
-    std::thread t([folder,
-                   tensors = std::move(tensors),
-                   names = pc.attribute_names]() mutable {
-        /* ---- local lambda that owns the actual tinyply call ------------- */
-        auto write_output_ply =
-            [](const fs::path& file_path,
-               const std::vector<torch::Tensor>& data,
-               const std::vector<std::string>& attr_names) {
-                tinyply::PlyFile ply;
-                size_t attr_off = 0;
+        inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
+            return points[idx * 3 + dim];
+        }
 
-                for (const auto& tensor : data) {
-                    const size_t cols = tensor.size(1);
-                    std::vector<std::string> attrs(attr_names.begin() + attr_off,
-                                                   attr_names.begin() + attr_off + cols);
+        template <class BBOX>
+        bool kdtree_get_bbox(BBOX& /* bb */) const { return false; }
+    };
 
-                    ply.add_properties_to_element(
-                        "vertex",
-                        attrs,
-                        tinyply::Type::FLOAT32,
-                        tensor.size(0),
-                        reinterpret_cast<uint8_t*>(tensor.data_ptr<float>()),
-                        tinyply::Type::INVALID, 0);
+    using KDTree = nanoflann::KDTreeSingleIndexAdaptor<
+        nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>,
+        PointCloudAdaptor,
+        3>;
 
-                    attr_off += cols;
+    // Compute mean distance to 3 nearest neighbors for each point
+    torch::Tensor compute_mean_neighbor_distances(const torch::Tensor& points) {
+        auto cpu_points = points.to(torch::kCPU).contiguous();
+        const int num_points = cpu_points.size(0);
+
+        TORCH_CHECK(cpu_points.dim() == 2 && cpu_points.size(1) == 3,
+                    "Input points must have shape [N, 3]");
+        TORCH_CHECK(cpu_points.dtype() == torch::kFloat32,
+                    "Input points must be float32");
+
+        if (num_points <= 1) {
+            return torch::full({num_points}, 0.01f, points.options());
+        }
+
+        const float* data = cpu_points.data_ptr<float>();
+
+        PointCloudAdaptor cloud(data, num_points);
+        KDTree index(3, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+        index.buildIndex();
+
+        auto result = torch::zeros({num_points}, torch::kFloat32);
+        float* result_data = result.data_ptr<float>();
+
+#pragma omp parallel for if (num_points > 1000)
+        for (int i = 0; i < num_points; i++) {
+            const float query_pt[3] = {data[i * 3 + 0], data[i * 3 + 1], data[i * 3 + 2]};
+
+            const size_t num_results = std::min(4, num_points);
+            std::vector<size_t> ret_indices(num_results);
+            std::vector<float> out_dists_sqr(num_results);
+
+            nanoflann::KNNResultSet<float> resultSet(num_results);
+            resultSet.init(&ret_indices[0], &out_dists_sqr[0]);
+            index.findNeighbors(resultSet, &query_pt[0], nanoflann::SearchParameters(10));
+
+            float sum_dist = 0.0f;
+            int valid_neighbors = 0;
+
+            for (size_t j = 0; j < num_results && valid_neighbors < 3; j++) {
+                if (out_dists_sqr[j] > 1e-8f) {
+                    sum_dist += std::sqrt(out_dists_sqr[j]);
+                    valid_neighbors++;
                 }
+            }
 
-                std::filebuf fb;
-                fb.open(file_path, std::ios::out | std::ios::binary);
-                std::ostream out_stream(&fb);
-                ply.write(out_stream, /*binary=*/true);
-            };
+            result_data[i] = (valid_neighbors > 0) ? (sum_dist / valid_neighbors) : 0.01f;
+        }
 
-        write_output_ply(folder / "point_cloud.ply", tensors, names);
-    });
+        return result.to(points.device());
+    }
 
-    join_thread ? t.join()
-                : t.detach();
-}
+    void write_ply(const PointCloud& pc,
+                   const std::filesystem::path& root,
+                   int iteration,
+                   bool join_thread = false) {
+        namespace fs = std::filesystem;
+        fs::path folder = root / ("point_cloud/iteration_" + std::to_string(iteration));
+        fs::create_directories(folder);
+
+        std::vector<torch::Tensor> tensors;
+        tensors.push_back(pc.positions);
+
+        if (pc.normals.defined())
+            tensors.push_back(pc.normals);
+        if (pc.features_dc.defined())
+            tensors.push_back(pc.features_dc);
+        if (pc.features_rest.defined())
+            tensors.push_back(pc.features_rest);
+        if (pc.opacity.defined())
+            tensors.push_back(pc.opacity);
+        if (pc.scaling.defined())
+            tensors.push_back(pc.scaling);
+        if (pc.rotation.defined())
+            tensors.push_back(pc.rotation);
+
+        std::thread t([folder,
+                       tensors = std::move(tensors),
+                       names = pc.attribute_names]() mutable {
+            auto write_output_ply =
+                [](const fs::path& file_path,
+                   const std::vector<torch::Tensor>& data,
+                   const std::vector<std::string>& attr_names) {
+                    tinyply::PlyFile ply;
+                    size_t attr_off = 0;
+
+                    for (const auto& tensor : data) {
+                        const size_t cols = tensor.size(1);
+                        std::vector<std::string> attrs(attr_names.begin() + attr_off,
+                                                       attr_names.begin() + attr_off + cols);
+
+                        ply.add_properties_to_element(
+                            "vertex",
+                            attrs,
+                            tinyply::Type::FLOAT32,
+                            tensor.size(0),
+                            reinterpret_cast<uint8_t*>(tensor.data_ptr<float>()),
+                            tinyply::Type::INVALID, 0);
+
+                        attr_off += cols;
+                    }
+
+                    std::filebuf fb;
+                    fb.open(file_path, std::ios::out | std::ios::binary);
+                    std::ostream out_stream(&fb);
+                    ply.write(out_stream, /*binary=*/true);
+                };
+
+            write_output_ply(folder / "point_cloud.ply", tensors, names);
+        });
+
+        join_thread ? t.join() : t.detach();
+    }
+} // namespace
 
 // Constructor from tensors
 SplatData::SplatData(int sh_degree,
@@ -144,23 +225,30 @@ void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool 
     write_ply(pc, root, iteration, join_thread);
 }
 
-// Convert to point cloud (now private)
-GaussianPointCloud SplatData::to_point_cloud() const {
-    GaussianPointCloud pc;
-    pc.xyz = _xyz.cpu().contiguous();
-    pc.normals = torch::zeros_like(pc.xyz);
+PointCloud SplatData::to_point_cloud() const {
+    PointCloud pc;
+
+    // Basic attributes
+    pc.positions = _xyz.cpu().contiguous();
+    pc.normals = torch::zeros_like(pc.positions);
+
+    // Gaussian attributes
     pc.features_dc = _features_dc.transpose(1, 2).flatten(1).cpu();
     pc.features_rest = _features_rest.transpose(1, 2).flatten(1).cpu();
     pc.opacity = _opacity.cpu();
     pc.scaling = _scaling.cpu();
     pc.rotation = _rotation.cpu();
+
+    // Set attribute names for PLY export
     pc.attribute_names = get_attribute_names();
+
     return pc;
 }
 
-// Static factory method (like original gaussian_init)
-SplatData SplatData::create_from_point_cloud(PointCloud& pcd, int max_sh_degree, float scene_scale) {
+SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParameters& params, float scene_scale) {
     // Helper lambdas
+    auto pcd = read_colmap_point_cloud(params.dataset.data_path);
+
     auto inverse_sigmoid = [](torch::Tensor x) {
         return torch::log(x / (1 - x));
     };
@@ -173,14 +261,13 @@ SplatData SplatData::create_from_point_cloud(PointCloud& pcd, int max_sh_degree,
     const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
     const auto f32_cuda = f32.device(torch::kCUDA);
 
-    // 1. xyz
-    auto xyz = torch::from_blob(pcd._points.data(),
-                                {static_cast<int64_t>(pcd._points.size()), 3},
-                                f32)
-                   .to(torch::kCUDA)
-                   .set_requires_grad(true);
+    // Ensure colors are normalized floats
+    pcd.normalize_colors();
 
-    // 2. scaling (log(σ))
+    // 1. xyz - already a tensor, just move to CUDA and set requires_grad
+    auto xyz = pcd.positions.to(torch::kCUDA).set_requires_grad(true);
+
+    // 2. scaling (log(σ)) - compute nearest neighbor distances
     auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(xyz), 1e-7);
     auto scaling = torch::log(torch::sqrt(nn_dist))
                        .unsqueeze(-1)
@@ -188,27 +275,24 @@ SplatData SplatData::create_from_point_cloud(PointCloud& pcd, int max_sh_degree,
                        .to(f32_cuda)
                        .set_requires_grad(true);
 
-    // 3. rotation & opacity
-    auto rotation = torch::zeros({xyz.size(0), 4}, f32_cuda)
-                        .index_put_({torch::indexing::Slice(), 0}, 1)
-                        .set_requires_grad(true);
+    // 3. rotation (quaternion, identity) - split into multiple lines to avoid compilation error
+    auto rotation = torch::zeros({xyz.size(0), 4}, f32_cuda);
+    rotation.index_put_({torch::indexing::Slice(), 0}, 1);
+    rotation = rotation.set_requires_grad(true);
 
+    // 4. opacity (inverse sigmoid of 0.5)
     auto opacity = inverse_sigmoid(0.5f * torch::ones({xyz.size(0), 1}, f32_cuda))
                        .set_requires_grad(true);
 
-    // 4. features (DC + rest)
-    auto rgb = torch::from_blob(pcd._colors.data(),
-                                {static_cast<int64_t>(pcd._colors.size()), 3},
-                                torch::TensorOptions().dtype(torch::kUInt8))
-                   .to(f32) /
-               255.f;
+    // 5. features (SH coefficients)
+    // Colors are already normalized to float by pcd.normalize_colors()
+    auto colors_float = pcd.colors.to(torch::kCUDA);
+    auto fused_color = rgb_to_sh(colors_float);
 
-    auto fused_color = rgb_to_sh(rgb).to(torch::kCUDA);
-
-    const int64_t feature_shape = static_cast<int64_t>(std::pow(max_sh_degree + 1, 2));
+    const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));
     auto features = torch::zeros({fused_color.size(0), 3, feature_shape}, f32_cuda);
 
-    // DC coefficients
+    // Set DC coefficients
     features.index_put_({torch::indexing::Slice(),
                          torch::indexing::Slice(),
                          0},
@@ -228,6 +312,5 @@ SplatData SplatData::create_from_point_cloud(PointCloud& pcd, int max_sh_degree,
                              .contiguous()
                              .set_requires_grad(true);
 
-    return SplatData(max_sh_degree, xyz, features_dc, features_rest,
-                     scaling, rotation, opacity, scene_scale);
+    return SplatData(params.optimization.sh_degree, xyz, features_dc, features_rest, scaling, rotation, opacity, scene_scale);
 }
