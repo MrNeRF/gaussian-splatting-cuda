@@ -1,6 +1,5 @@
 #include "core/inria_adc.hpp"
 #include "core/debug_utils.hpp"
-#include "core/mean_neighbor_dist.hpp"
 #include "core/parameters.hpp"
 #include "core/render_utils.hpp"
 #include <exception>
