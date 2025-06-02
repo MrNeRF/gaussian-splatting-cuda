@@ -2,6 +2,7 @@
 #include "Ops.h"
 #include <cmath>
 #include <torch/torch.h>
+#include "core/debug_utils.hpp"
 
 namespace gs {
 
@@ -16,7 +17,7 @@ namespace gs {
             torch::Tensor quats,
             torch::Tensor scales,
             torch::Tensor opacities,
-            torch::Tensor colors_precomp,
+            torch::Tensor sh_coeffs,
             torch::Tensor viewmats,
             torch::Tensor Ks,
             torch::Tensor bg,
@@ -42,6 +43,7 @@ namespace gs {
             quats = quats.to(torch::kCUDA).contiguous();
             scales = scales.to(torch::kCUDA).contiguous();
             opacities = opacities.to(torch::kCUDA).contiguous();
+            sh_coeffs = sh_coeffs.to(torch::kCUDA).contiguous();
             viewmats = viewmats.to(torch::kCUDA).contiguous();
             Ks = Ks.to(torch::kCUDA).contiguous();
             if (bg.defined()) {
@@ -85,7 +87,46 @@ namespace gs {
                 final_opacities = final_opacities * compensations;
             }
 
-            // Step 2: Tile intersection
+            // Step 2: Compute colors from spherical harmonics
+            torch::Tensor colors;
+            if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
+                // Compute camera positions
+                auto viewmats_inv = torch::inverse(viewmats); // [C, 4, 4]
+                auto campos = viewmats_inv.index({Slice(), Slice(None, 3), 3}); // [C, 3]
+
+                // Compute view directions
+                auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1); // [C, N, 3]
+
+                // Create masks based on radii visibility
+                auto masks = (radii > 0).all(-1); // [C, N]
+
+                // Compute SH for each camera
+                std::vector<torch::Tensor> color_list;
+                for (int c = 0; c < C; ++c) {
+                    auto cam_dirs = dirs[c]; // [N, 3]
+                    auto cam_mask = masks[c]; // [N]
+
+                    auto cam_colors = gsplat::spherical_harmonics_fwd(
+                        sh_degree,
+                        cam_dirs,
+                        sh_coeffs,
+                        cam_mask
+                    ); // [N, 3]
+
+                    color_list.push_back(cam_colors);
+                }
+                colors = torch::stack(color_list, 0); // [C, N, 3]
+
+                // Apply clamping as in Python
+                colors = torch::clamp_min(colors + 0.5f, 0.0f);
+            } else {
+                // No SH, just use DC component
+                colors = sh_coeffs.index({Slice(), 0, Slice()}); // [N, 3]
+                colors = colors.unsqueeze(0).expand({C, -1, -1}).contiguous();
+                colors = torch::clamp_min(colors + 0.5f, 0.0f);
+            }
+
+            // Step 3: Tile intersection
             int tile_size = 16;
             int tile_width = (image_width + tile_size - 1) / tile_size;
             int tile_height = (image_height + tile_size - 1) / tile_size;
@@ -108,24 +149,18 @@ namespace gs {
             auto isect_ids = std::get<1>(isect_results);
             auto flatten_ids = std::get<2>(isect_results);
 
-            // Step 3: Encode offsets
+            // Step 4: Encode offsets
             auto isect_offsets = gsplat::intersect_offset(
                 isect_ids,
                 C,
                 tile_width,
                 tile_height);
 
-            // Prepare colors - expand to [C, N, channels] if needed
-            torch::Tensor render_colors = colors_precomp.to(torch::kCUDA).contiguous();
-            if (render_colors.dim() == 2) {
-                render_colors = render_colors.unsqueeze(0).expand({C, N, -1}).contiguous();
-            }
-
-            // Step 4: Rasterize to pixels
+            // Step 5: Rasterize to pixels
             auto raster_results = gsplat::rasterize_to_pixels_3dgs_fwd(
                 means2d,
                 conics,
-                render_colors,
+                colors,
                 final_opacities,
                 bg.defined() ? bg : torch::Tensor(),
                 {}, // masks (optional)
@@ -139,11 +174,15 @@ namespace gs {
             auto rendered_alpha = std::get<1>(raster_results).contiguous();
             auto last_ids = std::get<2>(raster_results).contiguous();
 
+            // Convert alpha from double to float
+            rendered_alpha = rendered_alpha.to(torch::kFloat32);
+
             // Save for backward
-            ctx->save_for_backward({means3D, quats, scales, colors_precomp, viewmats, Ks,
+            ctx->save_for_backward({means3D, quats, scales, sh_coeffs, viewmats, Ks,
                                     radii, means2d, depths, conics,
                                     compensations,
                                     final_opacities,
+                                    colors,
                                     isect_offsets, flatten_ids, rendered_alpha, last_ids});
 
             ctx->saved_data["image_width"] = image_width;
@@ -153,6 +192,7 @@ namespace gs {
             ctx->saved_data["camera_model"] = camera_model_int;
             ctx->saved_data["calc_compensations"] = calc_compensations;
             ctx->saved_data["bg"] = bg;
+            ctx->saved_data["sh_degree"] = sh_degree;
 
             return {rendered_image, rendered_alpha, radii, means2d, depths};
         }
@@ -172,7 +212,7 @@ namespace gs {
             auto means3D = saved[0];
             auto quats = saved[1];
             auto scales = saved[2];
-            auto colors_precomp = saved[3];
+            auto sh_coeffs = saved[3];
             auto viewmats = saved[4];
             auto Ks = saved[5];
             auto radii = saved[6];
@@ -181,10 +221,11 @@ namespace gs {
             auto conics = saved[9];
             auto compensations = saved[10];
             auto final_opacities = saved[11];
-            auto isect_offsets = saved[12];
-            auto flatten_ids = saved[13];
-            auto rendered_alpha = saved[14];
-            auto last_ids = saved[15];
+            auto colors = saved[12];
+            auto isect_offsets = saved[13];
+            auto flatten_ids = saved[14];
+            auto rendered_alpha = saved[15];
+            auto last_ids = saved[16];
 
             int image_width = ctx->saved_data["image_width"].to<int>();
             int image_height = ctx->saved_data["image_height"].to<int>();
@@ -194,17 +235,13 @@ namespace gs {
                 ctx->saved_data["camera_model"].to<int>());
             bool calc_compensations = ctx->saved_data["calc_compensations"].to<bool>();
             auto bg = ctx->saved_data["bg"].to<torch::Tensor>();
+            int sh_degree = ctx->saved_data["sh_degree"].to<int>();
 
-            // Prepare colors for backward - ensure correct dimensions
-            torch::Tensor colors_for_bwd = colors_precomp;
-            if (colors_precomp.dim() == 2) {
-                colors_for_bwd = colors_precomp.unsqueeze(0).expand({viewmats.size(0), -1, -1});
-            }
-
+            // Backward through rasterization
             auto raster_grads = gsplat::rasterize_to_pixels_3dgs_bwd(
                 means2d,
                 conics,
-                colors_for_bwd,
+                colors,
                 final_opacities,
                 bg.defined() ? bg : torch::Tensor(),
                 {}, // masks
@@ -226,6 +263,10 @@ namespace gs {
             auto v_colors = std::get<3>(raster_grads).contiguous();
             auto v_opacities = std::get<4>(raster_grads).contiguous();
 
+            INSPECT_TENSOR_FULL(v_conics);
+            INSPECT_TENSOR_FULL(v_colors);
+            INSPECT_TENSOR_FULL(v_means2d);
+            INSPECT_TENSOR_FULL(v_opacities);
             // Add direct gradient from means2d if provided
             if (grad_means2d_direct.defined()) {
                 v_means2d = v_means2d + grad_means2d_direct;
@@ -234,14 +275,52 @@ namespace gs {
             // Apply compensation gradients if needed
             torch::Tensor v_compensations = torch::zeros_like(compensations);
             if (calc_compensations) {
-                // v_opacities contains gradient w.r.t (opacity * compensation)
-                // We need to split this into v_opacity and v_compensation
                 auto base_opacities = final_opacities / compensations;
                 v_compensations = v_opacities * base_opacities;
                 v_opacities = v_opacities * compensations;
             }
 
-            // Step 2: Backward through projection
+            // Backward through spherical harmonics
+            torch::Tensor v_sh_coeffs = torch::zeros_like(sh_coeffs);
+            torch::Tensor v_dirs = torch::zeros({viewmats.size(0), means3D.size(0), 3}, means3D.options());
+
+            if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
+                auto viewmats_inv = torch::inverse(viewmats);
+                auto campos = viewmats_inv.index({Slice(), Slice(None, 3), 3});
+                auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);
+                auto masks = (radii > 0).all(-1);
+
+                std::vector<torch::Tensor> v_sh_list;
+                for (int c = 0; c < viewmats.size(0); ++c) {
+                    auto cam_dirs = dirs[c];
+                    auto cam_mask = masks[c];
+                    auto cam_v_colors = v_colors[c];
+
+                    auto sh_grads = gsplat::spherical_harmonics_bwd(
+                        sh_coeffs.size(1),
+                        sh_degree,
+                        cam_dirs,
+                        sh_coeffs,
+                        cam_mask,
+                        cam_v_colors,
+                        true // compute_v_dirs
+                    );
+
+                    v_sh_list.push_back(std::get<1>(sh_grads)); // v_coeffs
+                    v_dirs[c] = std::get<0>(sh_grads); // v_dirs
+                }
+
+                // Sum gradients from all cameras
+                v_sh_coeffs = torch::stack(v_sh_list, 0).sum(0);
+            } else {
+                // No SH, gradient goes directly to DC component
+                v_sh_coeffs.index_put_({Slice(), 0, Slice()}, v_colors.sum(0));
+            }
+
+            // v_dirs contributes to v_means3D
+            torch::Tensor v_means3D_from_dirs = v_dirs.sum(0);
+
+            // Backward through projection
             auto proj_grads = gsplat::projection_ewa_3dgs_fused_bwd(
                 means3D,
                 {}, // covars
@@ -262,7 +341,7 @@ namespace gs {
                 v_compensations,
                 viewmats.requires_grad());
 
-            auto v_means3D = std::get<0>(proj_grads);
+            auto v_means3D = std::get<0>(proj_grads) + v_means3D_from_dirs;
             auto v_quats = std::get<2>(proj_grads);
             auto v_scales = std::get<3>(proj_grads);
             auto v_viewmats = std::get<4>(proj_grads);
@@ -272,17 +351,12 @@ namespace gs {
                 v_opacities = v_opacities.sum(0); // [N]
             }
 
-            // Handle color gradients
-            if (colors_precomp.dim() == 2 && v_colors.dim() == 3) {
-                v_colors = v_colors.sum(0); // Sum over cameras
-            }
-
             torch::autograd::tensor_list grads;
             grads.push_back(v_means3D);
             grads.push_back(v_quats);
             grads.push_back(v_scales);
             grads.push_back(v_opacities);
-            grads.push_back(v_colors);
+            grads.push_back(v_sh_coeffs);
             grads.push_back(v_viewmats);
             grads.push_back(torch::Tensor()); // Ks gradient
             grads.push_back(torch::Tensor()); // bg gradient
@@ -312,6 +386,7 @@ namespace gs {
 
         // Prepare viewmat and K for single camera (add batch dimension)
         auto viewmat = viewpoint_camera.world_view_transform().unsqueeze(0);
+
         // Extract K from FoV and image dimensions
         float fx = image_width / (2.0f * std::tan(viewpoint_camera.FoVx() / 2.0f));
         float fy = image_height / (2.0f * std::tan(viewpoint_camera.FoVy() / 2.0f));
@@ -331,13 +406,9 @@ namespace gs {
         auto scales = gaussian_model.get_scaling() * scaling_modifier;
         auto rotations = gaussian_model.get_rotation();
 
-        // Get colors (assuming RGB for now, no SH)
-        auto colors = gaussian_model.get_features();
-
-        if (colors.size(-1) > 3) {
-            // If SH coefficients, just take DC component for now
-            colors = colors.index({Slice(), Slice(None, 3)});
-        }
+        // Get SH coefficients
+        auto sh_coeffs = gaussian_model.get_features(); // [N, K, 3]
+        int sh_degree = gaussian_model.get_active_sh_degree();
 
         // Ensure background color is properly shaped
         if (!bg_color.defined() || bg_color.numel() == 0) {
@@ -352,7 +423,7 @@ namespace gs {
             rotations,
             scales,
             opacities,
-            colors,
+            sh_coeffs,
             viewmat,
             K,
             bg_color,
@@ -362,7 +433,7 @@ namespace gs {
             0.01f,  // near_plane
             100.0f, // far_plane
             0.0f,   // radius_clip
-            0,      // sh_degree (0 for no SH)
+            sh_degree,
             false,  // calc_compensations
             0       // camera_model (0 = PINHOLE)
         );
@@ -375,7 +446,6 @@ namespace gs {
 
         // Ensure proper dimensions for visibility mask computation
         if (result.radii.dim() == 1) {
-            // If radii is 1D, we need to handle it differently
             result.radii = result.radii.unsqueeze(-1).expand({-1, 2});
         }
 

@@ -77,6 +77,7 @@ inline RenderOutput render_with_gsplat(Camera& viewpoint_camera,
     // Convert to RenderOutput format
     RenderOutput output;
     output.image = gsplat_output.image;
+
     output.viewspace_pts = gsplat_output.means2d;
 
     // GSplat radii is [N, 2], need to check both dimensions
