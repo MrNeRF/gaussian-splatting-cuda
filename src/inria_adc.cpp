@@ -212,8 +212,46 @@ void InriaADC::Densify_and_prune(float max_grad, float min_opacity) {
 }
 
 void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {
-    _xyz_gradient_accum.index_put_({update_filter}, _xyz_gradient_accum.index_select(0, update_filter.nonzero().squeeze()) + viewspace_point_tensor.grad().index_select(0, update_filter.nonzero().squeeze()).slice(1, 0, 2).norm(2, -1, true));
-    _denom.index_put_({update_filter}, _denom.index_select(0, update_filter.nonzero().squeeze()) + 1);
+    std::cout << ts::color::CYAN << "\n=== Add Densification Stats ===" << ts::color::RESET << std::endl;
+
+    INSPECT_TENSOR(viewspace_point_tensor);
+    INSPECT_TENSOR(update_filter);
+    INSPECT_TENSOR(_xyz_gradient_accum);
+    INSPECT_TENSOR(_denom);
+
+    // Check if gradient exists
+    if (!viewspace_point_tensor.grad().defined()) {
+        std::cerr << ts::color::RED << "ERROR: viewspace_point_tensor has no gradient! "
+                  << "Make sure to call retain_grad() on intermediate tensors." << ts::color::RESET << std::endl;
+        return;
+    }
+
+    auto grad = viewspace_point_tensor.grad();
+    INSPECT_TENSOR(grad);
+
+    // Get indices where update_filter is true
+    auto indices = update_filter.nonzero().squeeze();
+    if (indices.dim() == 0) {
+        indices = indices.unsqueeze(0);  // Handle single element case
+    }
+
+    std::cout << "Update indices count: " << indices.numel() << std::endl;
+
+    if (indices.numel() == 0) {
+        std::cout << ts::color::YELLOW << "No points to update" << ts::color::RESET << std::endl;
+        return;
+    }
+
+    // Update gradient accumulator
+    auto selected_grad = grad.index_select(0, indices).slice(1, 0, 2).norm(2, -1, true);
+    auto selected_accum = _xyz_gradient_accum.index_select(0, indices);
+    _xyz_gradient_accum.index_put_({update_filter}, selected_accum + selected_grad);
+
+    // Update denominator
+    auto selected_denom = _denom.index_select(0, indices);
+    _denom.index_put_({update_filter}, selected_denom + 1);
+
+    std::cout << ts::color::GREEN << "Densification stats updated successfully" << ts::color::RESET << std::endl;
 }
 
 void InriaADC::post_backward(int iter, RenderOutput& render_output) {
