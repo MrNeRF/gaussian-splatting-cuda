@@ -224,7 +224,7 @@ void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, to
     // Get indices where update_filter is true
     auto indices = update_filter.nonzero().squeeze();
     if (indices.dim() == 0) {
-        indices = indices.unsqueeze(0);  // Handle single element case
+        indices = indices.unsqueeze(0); // Handle single element case
     }
 
     if (indices.numel() == 0) {
@@ -240,7 +240,6 @@ void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, to
     // Update denominator
     auto selected_denom = _denom.index_select(0, indices);
     _denom.index_put_({update_filter}, selected_denom + 1);
-
 }
 
 void InriaADC::post_backward(int iter, RenderOutput& render_output) {
