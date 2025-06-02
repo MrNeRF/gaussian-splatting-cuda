@@ -78,6 +78,7 @@ inline RenderOutput render_with_gsplat(Camera& viewpoint_camera,
     RenderOutput output;
     output.image = gsplat_output.image;
 
+    // IMPORTANT: Copy the tensor and ensure gradient retention
     output.viewspace_pts = gsplat_output.means2d;
 
     // GSplat radii is [N, 2], need to check both dimensions

@@ -87,7 +87,7 @@ namespace gs {
                         strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/false);
                     }
 
-                    // strategy_->post_backward(iter, r_output);
+                    strategy_->post_backward(iter, r_output);
                     strategy_->step(iter);
                 }
 
