@@ -14,19 +14,19 @@ namespace gs {
         static torch::autograd::tensor_list forward(
             torch::autograd::AutogradContext* ctx,
             // Gaussian parameters
-            torch::Tensor means3D,      // [N, 3]
-            torch::Tensor quats,        // [N, 4]
-            torch::Tensor scales,       // [N, 3]
-            torch::Tensor opacities,    // [N]
-            torch::Tensor sh_coeffs,    // [N, K, 3]
+            torch::Tensor means3D,   // [N, 3]
+            torch::Tensor quats,     // [N, 4]
+            torch::Tensor scales,    // [N, 3]
+            torch::Tensor opacities, // [N]
+            torch::Tensor sh_coeffs, // [N, K, 3]
             // Camera parameters
-            torch::Tensor viewmat,      // [1, 4, 4]
-            torch::Tensor K,            // [1, 3, 3]
-            torch::Tensor bg_color,     // [1, 3]
+            torch::Tensor viewmat,  // [1, 4, 4]
+            torch::Tensor K,        // [1, 3, 3]
+            torch::Tensor bg_color, // [1, 3]
             // Render settings as tensors
-            torch::Tensor settings,     // [9] tensor containing: width, height, sh_degree, etc.
+            torch::Tensor settings, // [9] tensor containing: width, height, sh_degree, etc.
             // Pre-allocated means2d that requires grad
-            torch::Tensor means2d_input) {  // [N, 2] - passed in to maintain gradient flow
+            torch::Tensor means2d_input) { // [N, 2] - passed in to maintain gradient flow
 
             // Extract settings
             auto settings_cpu = settings.cpu();
@@ -50,7 +50,7 @@ namespace gs {
             K = K.to(torch::kCUDA).contiguous();
             bg_color = bg_color.to(torch::kCUDA).contiguous();
 
-            int C = 1;  // Single camera
+            int C = 1; // Single camera
             int N = means3D.size(0);
 
             // Apply scaling modifier
@@ -59,7 +59,7 @@ namespace gs {
             // Step 1: Projection
             auto proj_results = gsplat::projection_ewa_3dgs_fused_fwd(
                 means3D,
-                {},  // covars
+                {}, // covars
                 quats,
                 scaled_scales,
                 opacities,
@@ -71,7 +71,7 @@ namespace gs {
                 near_plane,
                 far_plane,
                 radius_clip,
-                false,  // calc_compensations
+                false, // calc_compensations
                 gsplat::CameraModelType::PINHOLE);
 
             auto radii = std::get<0>(proj_results).contiguous();        // [C, N, 2]
@@ -92,30 +92,30 @@ namespace gs {
             torch::Tensor colors;
             if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
                 auto viewmat_inv = torch::inverse(viewmat);
-                auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3});  // [C, 3]
-                auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);         // [C, N, 3]
-                auto masks = (radii > 0).all(-1);                               // [C, N]
+                auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3}); // [C, 3]
+                auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);        // [C, N, 3]
+                auto masks = (radii > 0).all(-1);                              // [C, N]
 
                 // Compute SH for single camera
                 colors = gsplat::spherical_harmonics_fwd(
                     sh_degree, dirs[0], sh_coeffs, masks[0]);
-                colors = colors.unsqueeze(0);  // [1, N, 3]
+                colors = colors.unsqueeze(0); // [1, N, 3]
                 colors = torch::clamp_min(colors + 0.5f, 0.0f);
             } else {
-                colors = sh_coeffs.index({Slice(), 0, Slice()});  // [N, 3]
-                colors = colors.unsqueeze(0);                      // [1, N, 3]
+                colors = sh_coeffs.index({Slice(), 0, Slice()}); // [N, 3]
+                colors = colors.unsqueeze(0);                    // [1, N, 3]
                 colors = torch::clamp_min(colors + 0.5f, 0.0f);
             }
 
             // Step 3: Apply opacity with compensations
-            auto final_opacities = opacities.unsqueeze(0) * compensations;  // [C, N]
+            auto final_opacities = opacities.unsqueeze(0) * compensations; // [C, N]
 
             // Step 4: Tile intersection
             int tile_width = (width + tile_size - 1) / tile_size;
             int tile_height = (height + tile_size - 1) / tile_size;
 
             // Use means2d_input for tile intersection to maintain gradient connection
-            auto means2d_for_isect = means2d_input.unsqueeze(0);  // [1, N, 2]
+            auto means2d_for_isect = means2d_input.unsqueeze(0); // [1, N, 2]
 
             auto isect_results = gsplat::intersect_tile(
                 means2d_for_isect, radii, depths, {}, {},
@@ -133,7 +133,7 @@ namespace gs {
             // Step 5: Rasterization - use means2d_input to maintain gradient flow
             auto raster_results = gsplat::rasterize_to_pixels_3dgs_fwd(
                 means2d_for_isect, conics, colors, final_opacities,
-                bg_color, {},  // masks
+                bg_color, {}, // masks
                 width, height, tile_size,
                 isect_offsets, flatten_ids);
 
@@ -149,8 +149,7 @@ namespace gs {
                                     // Rasterization
                                     isect_offsets, flatten_ids, rendered_alpha, last_ids,
                                     // Settings and background
-                                    settings, bg_color
-            });
+                                    settings, bg_color});
 
             // Return rendered image, alpha, and radii (means2d is already in means2d_input)
             return {rendered_image, rendered_alpha, depths, radii};
@@ -197,12 +196,12 @@ namespace gs {
             // Backward through rasterization
             auto raster_grads = gsplat::rasterize_to_pixels_3dgs_bwd(
                 means2d, conics, colors, opacities.unsqueeze(0),
-                bg_color, {},  // masks
+                bg_color, {}, // masks
                 width, height, tile_size,
                 isect_offsets, flatten_ids,
                 rendered_alpha, last_ids,
                 grad_image, grad_alpha,
-                false);  // absgrad
+                false); // absgrad
 
             auto v_means2d_abs = std::get<0>(raster_grads);
             auto v_means2d = std::get<1>(raster_grads).contiguous();
@@ -223,10 +222,10 @@ namespace gs {
                 auto sh_grads = gsplat::spherical_harmonics_bwd(
                     sh_coeffs.size(1), sh_degree,
                     dirs[0], sh_coeffs, masks[0],
-                    v_colors[0], true);  // compute_v_dirs
+                    v_colors[0], true); // compute_v_dirs
 
                 v_sh_coeffs = std::get<1>(sh_grads);
-                v_dirs = std::get<0>(sh_grads).unsqueeze(0);  // [1, N, 3]
+                v_dirs = std::get<0>(sh_grads).unsqueeze(0); // [1, N, 3]
             } else {
                 v_sh_coeffs.index_put_({Slice(), 0, Slice()}, v_colors[0]);
                 v_dirs = torch::zeros({1, means3D.size(0), 3}, means3D.options());
@@ -278,10 +277,10 @@ namespace gs {
                 v_opacities,
                 v_sh_coeffs,
                 v_viewmat,
-                torch::Tensor(),  // K gradient
+                torch::Tensor(), // K gradient
                 v_bg_color,
-                torch::Tensor(),  // settings gradient
-                v_means2d.squeeze(0)  // means2d_input gradient
+                torch::Tensor(),     // settings gradient
+                v_means2d.squeeze(0) // means2d_input gradient
             };
         }
     };
@@ -318,7 +317,7 @@ namespace gs {
 
         // Get Gaussian parameters
         auto means3D = gaussian_model.get_xyz();
-        auto opacities = gaussian_model.get_opacity().squeeze(-1);  // Remove last dim if present
+        auto opacities = gaussian_model.get_opacity().squeeze(-1); // Remove last dim if present
         auto scales = gaussian_model.get_scaling();
         auto rotations = gaussian_model.get_rotation();
         auto sh_coeffs = gaussian_model.get_features();
@@ -336,13 +335,14 @@ namespace gs {
                                           (float)image_width,
                                           (float)image_height,
                                           (float)sh_degree,
-                                          0.3f,      // eps2d
-                                          0.01f,     // near_plane
-                                          100.0f,    // far_plane
-                                          0.0f,      // radius_clip
+                                          0.3f,   // eps2d
+                                          0.01f,  // near_plane
+                                          100.0f, // far_plane
+                                          0.0f,   // radius_clip
                                           scaling_modifier,
-                                          16.0f      // tile_size
-                                      }, torch::TensorOptions().dtype(torch::kFloat32));
+                                          16.0f // tile_size
+                                      },
+                                      torch::TensorOptions().dtype(torch::kFloat32));
 
         // CRITICAL: Create means2d tensor that will track gradients
         int N = means3D.size(0);
@@ -364,10 +364,10 @@ namespace gs {
 
         // Prepare output
         GSplatRenderOutput result;
-        result.image = rendered_image.squeeze(0).permute({2, 0, 1});  // [C, H, W, 3] -> [3, H, W]
-        result.means2d = means2d_with_grad;  // Use the tensor with retained gradients
-        result.depths = depths.squeeze(0);   // [C, N] -> [N]
-        result.radii = radii.squeeze(0);     // [C, N, 2] -> [N, 2]
+        result.image = rendered_image.squeeze(0).permute({2, 0, 1}); // [C, H, W, 3] -> [3, H, W]
+        result.means2d = means2d_with_grad;                          // Use the tensor with retained gradients
+        result.depths = depths.squeeze(0);                           // [C, N] -> [N]
+        result.radii = radii.squeeze(0);                             // [C, N, 2] -> [N, 2]
 
         // Empty for single camera rendering
         result.camera_ids = torch::Tensor();
