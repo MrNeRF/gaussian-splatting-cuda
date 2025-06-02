@@ -385,17 +385,20 @@ namespace gs {
         int image_width = static_cast<int>(viewpoint_camera.image_width());
 
         // Prepare viewmat and K for single camera (add batch dimension)
-        auto viewmat = viewpoint_camera.world_view_transform().unsqueeze(0);
+        auto viewmat = viewpoint_camera.world_view_transform().t().unsqueeze(0);
 
+        float tanfovx = std::tan(viewpoint_camera.FoVx() * 0.5f);
+        float tanfovy = std::tan(viewpoint_camera.FoVy() * 0.5f);
         // Extract K from FoV and image dimensions
-        float fx = image_width / (2.0f * std::tan(viewpoint_camera.FoVx() / 2.0f));
-        float fy = image_height / (2.0f * std::tan(viewpoint_camera.FoVy() / 2.0f));
+        const float focal_length_x = viewpoint_camera.image_width() / (2 * tanfovx);
+        const float focal_length_y = viewpoint_camera.image_height()/ (2 * tanfovy);
+
         float cx = image_width / 2.0f;
         float cy = image_height / 2.0f;
 
         auto K = torch::zeros({1, 3, 3}, viewmat.options());
-        K[0][0][0] = fx;
-        K[0][1][1] = fy;
+        K[0][0][0] = focal_length_x;
+        K[0][1][1] = focal_length_y;;
         K[0][0][2] = cx;
         K[0][1][2] = cy;
         K[0][2][2] = 1.0f;

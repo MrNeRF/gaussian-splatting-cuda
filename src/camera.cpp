@@ -87,12 +87,6 @@ void Camera::initialize_cuda_tensors() {
     _cuda_initialized = true;
 }
 
-void Camera::prefetch_image(int resolution) {
-    if (!_image_future.valid()) {
-        _image_future = load_image_async(_image_path, resolution);
-    }
-}
-
 torch::Tensor Camera::load_and_get_image(int resolution) {
     unsigned char* data;
     int w, h, c;

@@ -51,7 +51,7 @@ namespace gs {
                 torch::Tensor gt_image = std::move(camera_with_image.image);
 
                 auto r_output = render_with_gsplat(*cam, strategy_->get_model(), background_);
-                if (iter % 10 == 0) { // Save every 100 iterations
+                if (iter % 100 == 0) { // Save every 100 iterations
                     auto save_path = params_.dataset.output_path /
                                      ("render_iter_" + std::to_string(iter) + ".png");
                     save_image(save_path, r_output.image);
@@ -87,7 +87,7 @@ namespace gs {
                         strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/false);
                     }
 
-                    strategy_->post_backward(iter, r_output);
+                    //strategy_->post_backward(iter, r_output);
                     strategy_->step(iter);
                 }
 
