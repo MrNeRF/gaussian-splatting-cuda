@@ -263,10 +263,10 @@ namespace gs {
             auto v_colors = std::get<3>(raster_grads).contiguous();
             auto v_opacities = std::get<4>(raster_grads).contiguous();
 
-            INSPECT_TENSOR_FULL(v_conics);
-            INSPECT_TENSOR_FULL(v_colors);
-            INSPECT_TENSOR_FULL(v_means2d);
-            INSPECT_TENSOR_FULL(v_opacities);
+            //INSPECT_TENSOR_FULL(v_conics);
+            //INSPECT_TENSOR_FULL(v_colors);
+            //INSPECT_TENSOR_FULL(v_means2d);
+            //INSPECT_TENSOR_FULL(v_opacities);
             // Add direct gradient from means2d if provided
             if (grad_means2d_direct.defined()) {
                 v_means2d = v_means2d + grad_means2d_direct;

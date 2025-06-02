@@ -112,22 +112,37 @@ load_image(std::filesystem::path p, int res_div) {
 }
 
 void save_image(const std::filesystem::path& path, torch::Tensor image) {
-    // Ensure CPU and contiguous
-    image = image.to(torch::kCPU).contiguous();
+    // Clone to avoid modifying original
+    image = image.clone();
+
+    // Ensure CPU and float
+    image = image.to(torch::kCPU).to(torch::kFloat32);
+
+    // Handle different input formats
+    if (image.dim() == 4) {  // [B, C, H, W] or [B, H, W, C]
+        image = image.squeeze(0);
+    }
 
     // Convert [C, H, W] to [H, W, C]
     if (image.dim() == 3 && image.size(0) <= 4) {
         image = image.permute({1, 2, 0});
     }
 
+    // Make contiguous after permute
+    image = image.contiguous();
+
     int height = image.size(0);
     int width = image.size(1);
     int channels = image.size(2);
 
-    // Convert to uint8
-    auto img_uint8 = (image.clamp(0, 1) * 255).to(torch::kUInt8);
+    // Debug print
+    std::cout << "Saving image: " << path << " shape: [" << height << ", " << width << ", " << channels << "]"
+              << " min: " << image.min().item<float>()
+              << " max: " << image.max().item<float>() << std::endl;
 
-    // Save based on extension
+    // Convert to uint8
+    auto img_uint8 = (image.clamp(0, 1) * 255).to(torch::kUInt8).contiguous();
+
     auto ext = path.extension().string();
     bool success = false;
 

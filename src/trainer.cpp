@@ -1,4 +1,5 @@
 #include "core/trainer.hpp"
+#include "core/image_io.hpp"
 #include "core/render_utils.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <c10/cuda/CUDACachingAllocator.h>
@@ -50,9 +51,15 @@ namespace gs {
                 torch::Tensor gt_image = std::move(camera_with_image.image);
 
                 auto r_output = render_with_gsplat(*cam, strategy_->get_model(), background_);
+                if (iter % 10 == 0) { // Save every 100 iterations
+                    auto save_path = params_.dataset.output_path /
+                                     ("render_iter_" + std::to_string(iter) + ".png");
+                    save_image(save_path, r_output.image);
+                }
 
                 if (r_output.image.dim() == 3)
                     r_output.image = r_output.image.unsqueeze(0);
+
                 if (gt_image.dim() == 3)
                     gt_image = gt_image.unsqueeze(0);
 
