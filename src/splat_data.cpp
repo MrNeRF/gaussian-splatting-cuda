@@ -32,10 +32,8 @@ namespace {
         bool kdtree_get_bbox(BBOX& /* bb */) const { return false; }
     };
 
-    using KDTree = nanoflann::KDTreeSingleIndexAdaptor<
-        nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>,
-        PointCloudAdaptor,
-        3>;
+    // Fixed: KDTree typedef on single line
+    using KDTree = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>, PointCloudAdaptor, 3>;
 
     // Compute mean distance to 3 nearest neighbors for each point
     torch::Tensor compute_mean_neighbor_distances(const torch::Tensor& points) {
@@ -197,6 +195,9 @@ torch::Tensor SplatData::get_features() const {
 void SplatData::increment_sh_degree() {
     if (_active_sh_degree < _max_sh_degree) {
         _active_sh_degree++;
+        std::cout << "SH degree incremented to: " << _active_sh_degree
+                  << " (using " << (_active_sh_degree + 1) * (_active_sh_degree + 1)
+                  << " coefficients)" << std::endl;
     }
 }
 
@@ -311,6 +312,13 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
                              .transpose(1, 2)
                              .contiguous()
                              .set_requires_grad(true);
+
+    std::cout << "Initialized SplatData with:" << std::endl;
+    std::cout << "  - " << xyz.size(0) << " points" << std::endl;
+    std::cout << "  - Max SH degree: " << params.optimization.sh_degree << std::endl;
+    std::cout << "  - Total SH coefficients: " << feature_shape << std::endl;
+    std::cout << "  - features_dc shape: " << features_dc.sizes() << std::endl;
+    std::cout << "  - features_rest shape: " << features_rest.sizes() << std::endl;
 
     return SplatData(params.optimization.sh_degree, xyz, features_dc, features_rest, scaling, rotation, opacity, scene_scale);
 }
