@@ -1,5 +1,5 @@
-#include "Ops.h"
 #include "core/rasterizer.hpp"
+#include "Ops.h"
 #include <torch/torch.h>
 
 namespace gs {

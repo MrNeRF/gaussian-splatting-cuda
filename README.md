@@ -11,6 +11,7 @@ The materials, code, and assets within this repository are intended solely for e
 
 
 ## News
+- **[2025-06-03]**: Switched to Gsplat backend.
 - **[2025-05-27]**: Updated to LibTorch 2.7.0 for better compatibility and performance. Breaking changes in optimizer state management have been addressed.
 - **[2025-05-26]**: The current goal of this repo is to move towards a permissive license. Some works has been done in this direction. However, as the major work package we must remove the rasterizer and replace it with the gsplat implementation.
 

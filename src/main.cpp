@@ -1,6 +1,6 @@
 #include "core/argument_parser.hpp"
 #include "core/dataset.hpp"
-#include "core/inria_adc.hpp"
+#include "core/mcmc.hpp"
 #include "core/parameters.hpp"
 #include "core/trainer.hpp"
 #include <iostream>
@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 4. Create strategy
         //----------------------------------------------------------------------
-        auto strategy = std::make_unique<InriaADC>(std::move(splat_data));
+        auto strategy = std::make_unique<MCMC>(std::move(splat_data));
         //----------------------------------------------------------------------
         // 5. Create trainer
         //----------------------------------------------------------------------

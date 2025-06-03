@@ -96,6 +96,8 @@ namespace gs {
                     {"densify_from_iter", defaults.densify_from_iter, "Starting iteration for densification"},
                     {"densify_until_iter", defaults.densify_until_iter, "Ending iteration for densification"},
                     {"densify_grad_threshold", defaults.densify_grad_threshold, "Gradient threshold for densification"},
+                    {"opacity_reg", defaults.opacity_reg, "Opacity L1 regularization weight"},
+                    {"scale_reg", defaults.scale_reg, "Scale L1 regularization weight"},
                     {"sh_degree", defaults.sh_degree, "Gradient threshold for densification"}};
 
                 // Check all expected parameters
@@ -216,7 +218,14 @@ namespace gs {
             params.densify_from_iter = json["densify_from_iter"];
             params.densify_until_iter = json["densify_until_iter"];
             params.densify_grad_threshold = json["densify_grad_threshold"];
+            params.densify_grad_threshold = json["densify_grad_threshold"];
 
+            if (json.contains("opacity_reg")) {
+                params.opacity_reg = json["opacity_reg"];
+            }
+            if (json.contains("scale_reg")) {
+                params.scale_reg = json["scale_reg"];
+            }
             return params;
         }
 

@@ -2,7 +2,6 @@
 #include "core/image_io.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
-#include <c10/cuda/CUDACachingAllocator.h>
 #include <iostream>
 #include <torch/torch.h>
 
@@ -34,6 +33,7 @@ namespace gs {
         return create_dataloader_from_dataset(dataset_, workers);
     }
 
+    // In trainer.cpp, update the train() method:
     void Trainer::train() {
         int iter = 1;
         int epochs_needed = (params_.optimization.iterations + dataset_size_ - 1) / dataset_size_;
@@ -70,10 +70,24 @@ namespace gs {
                     throw std::runtime_error("Image size mismatch");
                 }
 
+                // Base loss computation
                 auto l1l = torch::l1_loss(r_output.image.squeeze(0), gt_image.squeeze(0));
                 auto ssim_loss = fused_ssim(r_output.image, gt_image, "same", /*train=*/true);
                 auto loss = (1.f - params_.optimization.lambda_dssim) * l1l +
                             params_.optimization.lambda_dssim * (1.f - ssim_loss);
+
+                // Add opacity regularization
+                if (params_.optimization.opacity_reg > 0.0f) {
+                    auto opacity_l1 = torch::abs(strategy_->get_model().get_opacity()).mean();
+                    loss = loss + params_.optimization.opacity_reg * opacity_l1;
+                }
+
+                // Add scale regularization
+                if (params_.optimization.scale_reg > 0.0f) {
+                    auto scale_l1 = torch::abs(strategy_->get_model().get_scaling()).mean();
+                    loss = loss + params_.optimization.scale_reg * scale_l1;
+                }
+
                 loss.backward();
                 const float loss_value = loss.item<float>();
 
