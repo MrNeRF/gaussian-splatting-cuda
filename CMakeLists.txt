@@ -41,7 +41,7 @@ add_subdirectory(gsplat)
 
 set(HOST_SOURCES
         src/main.cpp
-        src/inria_adc.cpp
+        src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp
         src/colmap_reader.cpp
