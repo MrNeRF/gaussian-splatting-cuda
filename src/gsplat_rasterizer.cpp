@@ -1,7 +1,5 @@
 #include "core/gsplat_rasterizer.hpp"
 #include "Ops.h"
-#include "core/debug_utils.hpp"
-#include <cmath>
 #include <torch/torch.h>
 
 namespace gs {
@@ -24,12 +22,12 @@ namespace gs {
             torch::Tensor K,        // [1, 3, 3]
             torch::Tensor bg_color, // [1, 3]
             // Render settings as tensors
-            torch::Tensor settings, // [9] tensor containing: width, height, sh_degree, etc.
+            const torch::Tensor& settings, // [9] tensor containing: width, height, sh_degree, etc.
             // Pre-allocated means2d that requires grad
-            torch::Tensor means2d_input) { // [N, 2] - passed in to maintain gradient flow
+            const torch::Tensor& means2d_input) { // [N, 2] - passed in to maintain gradient flow
 
             // Input validation
-            int N = means3D.size(0);
+            const int N = static_cast<int>(means3D.size(0));
             TORCH_CHECK(means3D.dim() == 2 && means3D.size(1) == 3,
                         "means3D must be [N, 3], got ", means3D.sizes());
             TORCH_CHECK(quats.dim() == 2 && quats.size(0) == N && quats.size(1) == 4,
@@ -56,19 +54,19 @@ namespace gs {
             TORCH_CHECK(means2d_input.requires_grad(), "means2d_input must require gradients");
 
             // Extract settings
-            auto settings_cpu = settings.cpu();
-            int width = settings_cpu[0].item<int>();
-            int height = settings_cpu[1].item<int>();
-            int sh_degree = settings_cpu[2].item<int>();
-            float eps2d = settings_cpu[3].item<float>();
-            float near_plane = settings_cpu[4].item<float>();
-            float far_plane = settings_cpu[5].item<float>();
-            float radius_clip = settings_cpu[6].item<float>();
-            float scaling_modifier = settings_cpu[7].item<float>();
-            int tile_size = settings_cpu[8].item<int>();
+            const auto settings_cpu = settings.cpu();
+            const auto width = settings_cpu[0].item<int>();
+            const auto height = settings_cpu[1].item<int>();
+            const auto sh_degree = settings_cpu[2].item<int>();
+            const auto eps2d = settings_cpu[3].item<float>();
+            const auto near_plane = settings_cpu[4].item<float>();
+            const auto far_plane = settings_cpu[5].item<float>();
+            const auto radius_clip = settings_cpu[6].item<float>();
+            const auto scaling_modifier = settings_cpu[7].item<float>();
+            const auto tile_size = settings_cpu[8].item<int>();
 
             // Check SH degree validity
-            int expected_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
+            const int expected_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
             TORCH_CHECK(sh_coeffs.size(1) >= expected_sh_coeffs,
                         "sh_coeffs must have at least ", expected_sh_coeffs, " coefficients for sh_degree ",
                         sh_degree, ", got ", sh_coeffs.size(1));
@@ -83,7 +81,7 @@ namespace gs {
             K = K.to(torch::kCUDA).contiguous();
             bg_color = bg_color.to(torch::kCUDA).contiguous();
 
-            int C = 1; // Single camera
+            const int C = 1; // Single camera
 
             // Apply scaling modifier
             auto scaled_scales = scales * scaling_modifier;
@@ -195,8 +193,8 @@ namespace gs {
                         "final_opacities must be [C, N], got ", final_opacities.sizes());
 
             // Step 4: Tile intersection
-            int tile_width = (width + tile_size - 1) / tile_size;
-            int tile_height = (height + tile_size - 1) / tile_size;
+            const int tile_width = (width + tile_size - 1) / tile_size;
+            const int tile_height = (height + tile_size - 1) / tile_size;
 
             // Use means2d_input for tile intersection to maintain gradient connection
             auto means2d_for_isect = means2d_input.unsqueeze(0); // [1, N, 2]
@@ -204,14 +202,14 @@ namespace gs {
                             means2d_for_isect.size(1) == N && means2d_for_isect.size(2) == 2,
                         "means2d_for_isect must be [1, N, 2], got ", means2d_for_isect.sizes());
 
-            auto isect_results = gsplat::intersect_tile(
+            const auto isect_results = gsplat::intersect_tile(
                 means2d_for_isect, radii, depths, {}, {},
                 C, tile_size, tile_width, tile_height,
                 true, false);
 
-            auto tiles_per_gauss = std::get<0>(isect_results);
-            auto isect_ids = std::get<1>(isect_results);
-            auto flatten_ids = std::get<2>(isect_results);
+            const auto tiles_per_gauss = std::get<0>(isect_results);
+            const auto isect_ids = std::get<1>(isect_results);
+            const auto flatten_ids = std::get<2>(isect_results);
 
             // Validate intersection results
             TORCH_CHECK(tiles_per_gauss.dim() == 2 && tiles_per_gauss.size(0) == C && tiles_per_gauss.size(1) == N,
@@ -277,48 +275,47 @@ namespace gs {
 
             auto grad_image = grad_outputs[0].to(torch::kCUDA).contiguous();
             auto grad_alpha = grad_outputs[1].to(torch::kCUDA).contiguous();
-            auto grad_depths_extra = grad_outputs[2];
-            auto grad_radii_extra = grad_outputs[3];
+            const auto& grad_depths_extra = grad_outputs[2];
 
             // Validate gradient inputs
             TORCH_CHECK(grad_image.defined(), "grad_image must be defined");
             TORCH_CHECK(grad_alpha.defined(), "grad_alpha must be defined");
 
             auto saved = ctx->get_saved_variables();
-            auto means3D = saved[0];
+            const auto& means3D = saved[0];
             auto quats = saved[1];
             auto scales = saved[2];
-            auto sh_coeffs = saved[3];
-            auto viewmat = saved[4];
-            auto K = saved[5];
-            auto radii = saved[6];
-            auto means2d = saved[7];
-            auto depths = saved[8];
-            auto conics = saved[9];
+            const auto& sh_coeffs = saved[3];
+            const auto& viewmat = saved[4];
+            const auto& K = saved[5];
+            const auto& radii = saved[6];
+            const auto& means2d = saved[7];
+            const auto& depths = saved[8];
+            const auto& conics = saved[9];
             auto compensations = saved[10];
-            auto colors = saved[11];
-            auto opacities = saved[12];
-            auto isect_offsets = saved[13];
-            auto flatten_ids = saved[14];
-            auto rendered_alpha = saved[15];
-            auto last_ids = saved[16];
-            auto settings = saved[17];
+            const auto& colors = saved[11];
+            const auto& opacities = saved[12];
+            const auto& isect_offsets = saved[13];
+            const auto& flatten_ids = saved[14];
+            const auto& rendered_alpha = saved[15];
+            const auto& last_ids = saved[16];
+            const auto& settings = saved[17];
             auto bg_color = saved[18];
-            auto sh_coeffs_used = saved[19];
+            const auto& sh_coeffs_used = saved[19];
 
             // Get sh_degree and num_coeffs from context
-            int sh_degree = ctx->saved_data["sh_degree"].to<int>();
-            int num_sh_coeffs = ctx->saved_data["num_sh_coeffs"].to<int>();
+            const int sh_degree = ctx->saved_data["sh_degree"].to<int>();
+            const int num_sh_coeffs = ctx->saved_data["num_sh_coeffs"].to<int>();
 
             // Extract settings
             auto settings_cpu = settings.cpu();
-            int width = settings_cpu[0].item<int>();
-            int height = settings_cpu[1].item<int>();
-            float eps2d = settings_cpu[3].item<float>();
-            int tile_size = settings_cpu[8].item<int>();
+            const auto width = settings_cpu[0].item<int>();
+            const auto height = settings_cpu[1].item<int>();
+            const auto eps2d = settings_cpu[3].item<float>();
+            const auto tile_size = settings_cpu[8].item<int>();
 
-            int C = viewmat.size(0);
-            int N = means3D.size(0);
+            const int C = static_cast<int>(viewmat.size(0));
+            const int N = static_cast<int>(means3D.size(0));
 
             // Validate gradient shapes
             TORCH_CHECK(grad_image.dim() == 4 && grad_image.size(0) == C &&
@@ -486,7 +483,7 @@ namespace gs {
     };
 
     // Main render function
-    GSplatRenderOutput render_gsplat(
+    RenderOutput rasterize(
         Camera& viewpoint_camera,
         const SplatData& gaussian_model,
         torch::Tensor& bg_color,
@@ -497,28 +494,14 @@ namespace gs {
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
 
         // Get camera parameters
-        int image_height = static_cast<int>(viewpoint_camera.image_height());
-        int image_width = static_cast<int>(viewpoint_camera.image_width());
+        const int image_height = static_cast<int>(viewpoint_camera.image_height());
+        const int image_width = static_cast<int>(viewpoint_camera.image_width());
 
         // Prepare viewmat and K
-        auto viewmat = viewpoint_camera.world_view_transform().t().unsqueeze(0);
+        auto viewmat = viewpoint_camera.world_view_transform();
         TORCH_CHECK(viewmat.dim() == 3 && viewmat.size(0) == 1 && viewmat.size(1) == 4 && viewmat.size(2) == 4,
                     "viewmat must be [1, 4, 4] after transpose and unsqueeze, got ", viewmat.sizes());
-
-        float tanfovx = std::tan(viewpoint_camera.FoVx() * 0.5f);
-        float tanfovy = std::tan(viewpoint_camera.FoVy() * 0.5f);
-        const float focal_length_x = viewpoint_camera.image_width() / (2 * tanfovx);
-        const float focal_length_y = viewpoint_camera.image_height() / (2 * tanfovy);
-
-        float cx = image_width / 2.0f;
-        float cy = image_height / 2.0f;
-
-        auto K = torch::zeros({1, 3, 3}, viewmat.options());
-        K[0][0][0] = focal_length_x;
-        K[0][1][1] = focal_length_y;
-        K[0][0][2] = cx;
-        K[0][1][2] = cy;
-        K[0][2][2] = 1.0f;
+        const auto K = viewpoint_camera.K();
 
         // Get Gaussian parameters
         auto means3D = gaussian_model.get_xyz();
@@ -526,13 +509,13 @@ namespace gs {
         if (opacities.dim() == 2 && opacities.size(1) == 1) {
             opacities = opacities.squeeze(-1); // Remove last dim if present
         }
-        auto scales = gaussian_model.get_scaling();
-        auto rotations = gaussian_model.get_rotation();
-        auto sh_coeffs = gaussian_model.get_features();
-        int sh_degree = gaussian_model.get_active_sh_degree();
+        const auto scales = gaussian_model.get_scaling();
+        const auto rotations = gaussian_model.get_rotation();
+        const auto sh_coeffs = gaussian_model.get_features();
+        const int sh_degree = gaussian_model.get_active_sh_degree();
 
         // Validate Gaussian parameters
-        int N = means3D.size(0);
+        const int N = static_cast<int>(means3D.size(0));
         TORCH_CHECK(means3D.dim() == 2 && means3D.size(1) == 3,
                     "means3D must be [N, 3], got ", means3D.sizes());
         TORCH_CHECK(opacities.dim() == 1 && opacities.size(0) == N,
@@ -579,10 +562,10 @@ namespace gs {
             means3D, rotations, scales, opacities, sh_coeffs,
             viewmat, K, bg_color, settings, means2d_with_grad);
 
-        auto rendered_image = outputs[0];
-        auto rendered_alpha = outputs[1];
-        auto depths = outputs[2];
-        auto radii = outputs[3];
+        const auto& rendered_image = outputs[0];
+        const auto& rendered_alpha = outputs[1];
+        const auto& depths = outputs[2];
+        const auto& radii = outputs[3];
 
         // Validate outputs
         TORCH_CHECK(rendered_image.dim() == 4 && rendered_image.size(0) == 1 &&
@@ -599,20 +582,19 @@ namespace gs {
                     "radii must be [1, N, 2], got ", radii.sizes());
 
         // Prepare output
-        GSplatRenderOutput result;
+        RenderOutput result;
         result.image = rendered_image.squeeze(0).permute({2, 0, 1}); // [C, H, W, 3] -> [3, H, W]
         TORCH_CHECK(result.image.dim() == 3 && result.image.size(0) == 3 &&
                         result.image.size(1) == image_height && result.image.size(2) == image_width,
                     "result.image must be [3, H, W], got ", result.image.sizes());
 
-        result.means2d = means2d_with_grad; // Use the tensor with retained gradients
-        result.depths = depths.squeeze(0);  // [C, N] -> [N]
-        result.radii = radii.squeeze(0);    // [C, N, 2] -> [N, 2]
+        result.means2d = means2d_with_grad;                   // Use the tensor with retained gradients
+        result.depths = depths.squeeze(0);                    // [C, N] -> [N]
+        result.radii = std::get<0>(radii.squeeze(0).max(-1)); // [C, N, 2] -> [N]
+        result.visibility = (result.radii > 0);               // any(-1) reduces [N, 2] to [N]
 
-        // Empty for single camera rendering
-        result.camera_ids = torch::Tensor();
-        result.gaussian_ids = torch::Tensor();
-
+        result.width = image_width;
+        result.height = image_height;
         return result;
     }
 

@@ -7,17 +7,19 @@
 
 namespace gs {
 
-    struct GSplatRenderOutput {
-        torch::Tensor image;        // rendered_image
-        torch::Tensor means2d;      // 2D means
-        torch::Tensor depths;       // depths
-        torch::Tensor radii;        // per-Gaussian projected radius
-        torch::Tensor camera_ids;   // for packed mode
-        torch::Tensor gaussian_ids; // for packed mode
+    struct RenderOutput {
+        torch::Tensor image;   // rendered_image
+        torch::Tensor means2d; // 2D means
+        torch::Tensor depths;  // depths
+        torch::Tensor radii;   // per-Gaussian projected radius
+        torch::Tensor visibility;
+
+        int width;
+        int height;
     };
 
     // Wrapper function to use gsplat backend for rendering
-    GSplatRenderOutput render_gsplat(
+    RenderOutput rasterize(
         Camera& viewpoint_camera,
         const SplatData& gaussian_model,
         torch::Tensor& bg_color,
