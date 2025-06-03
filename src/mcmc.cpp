@@ -141,7 +141,7 @@ int MCMC::relocate_gs() {
     update_optimizer_for_relocate(_optimizer.get(), sampled_idxs, dead_indices, 5); // opacity
 
     // Copy from sampled to dead indices
-    _splat_data.xyz().index_put_({dead_indices}, _splat_data.xyz().index_select(0, sampled_idxs));
+    _splat_data.means().index_put_({dead_indices}, _splat_data.means().index_select(0, sampled_idxs));
     _splat_data.sh0().index_put_({dead_indices}, _splat_data.sh0().index_select(0, sampled_idxs));
     _splat_data.shN().index_put_({dead_indices}, _splat_data.shN().index_select(0, sampled_idxs));
     _splat_data.scaling_raw().index_put_({dead_indices}, _splat_data.scaling_raw().index_select(0, sampled_idxs));
@@ -207,7 +207,7 @@ int MCMC::add_new_gs() {
     _splat_data.scaling_raw().index_put_({sampled_idxs}, torch::log(new_scales));
 
     // Prepare new Gaussians to concatenate
-    auto new_xyz = _splat_data.xyz().index_select(0, sampled_idxs);
+    auto new_means = _splat_data.means().index_select(0, sampled_idxs);
     auto new_sh0 = _splat_data.sh0().index_select(0, sampled_idxs);
     auto new_shN = _splat_data.shN().index_select(0, sampled_idxs);
     auto new_scaling = _splat_data.scaling_raw().index_select(0, sampled_idxs);
@@ -236,7 +236,7 @@ int MCMC::add_new_gs() {
         // Prepare new concatenated parameter
         torch::Tensor new_param;
         if (i == 0) {
-            new_param = torch::cat({_splat_data.xyz(), new_xyz}, 0).set_requires_grad(true);
+            new_param = torch::cat({_splat_data.means(), new_means}, 0).set_requires_grad(true);
         } else if (i == 1) {
             new_param = torch::cat({_splat_data.sh0(), new_sh0}, 0).set_requires_grad(true);
         } else if (i == 2) {
@@ -274,7 +274,7 @@ int MCMC::add_new_gs() {
 
         // Update the actual model parameters
         if (i == 0) {
-            _splat_data.xyz() = new_param;
+            _splat_data.means() = new_param;
         } else if (i == 1) {
             _splat_data.sh0() = new_param;
         } else if (i == 2) {
@@ -322,13 +322,13 @@ void MCMC::inject_noise() {
                            .lr();
 
     // Generate noise
-    auto noise = torch::randn_like(_splat_data.xyz()) * op_sigmoid.unsqueeze(-1) * current_lr * _noise_lr;
+    auto noise = torch::randn_like(_splat_data.means()) * op_sigmoid.unsqueeze(-1) * current_lr * _noise_lr;
 
     // Transform noise by covariance
     noise = torch::bmm(covars, noise.unsqueeze(-1)).squeeze(-1);
 
     // Add noise to positions
-    _splat_data.xyz().add_(noise);
+    _splat_data.means().add_(noise);
 }
 
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
@@ -338,7 +338,7 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     }
 
     // Move binoms to device if needed
-    _binoms = _binoms.to(_splat_data.xyz().device());
+    _binoms = _binoms.to(_splat_data.means().device());
 
     // Refine Gaussians
     if (iter < _refine_stop_iter && iter > _refine_start_iter && iter % _refine_every == 0) {
@@ -375,7 +375,7 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     const auto dev = torch::kCUDA;
 
     // Initialize parameters on CUDA
-    _splat_data.xyz() = _splat_data.xyz().to(dev).set_requires_grad(true);
+    _splat_data.means() = _splat_data.means().to(dev).set_requires_grad(true);
     _splat_data.scaling_raw() = _splat_data.scaling_raw().to(dev).set_requires_grad(true);
     _splat_data.rotation_raw() = _splat_data.rotation_raw().to(dev).set_requires_grad(true);
     _splat_data.opacity_raw() = _splat_data.opacity_raw().to(dev).set_requires_grad(true);
@@ -402,14 +402,14 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     std::vector<torch::optim::OptimizerParamGroup> groups;
 
     // Calculate initial learning rate for position
-    float position_lr_init = _params->position_lr_init * _splat_data.get_scene_scale();
+    float means_lr = _params->means_lr * _splat_data.get_scene_scale();
 
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.xyz()},
-                                                          std::make_unique<AdamOptions>(position_lr_init * _splat_data.get_scene_scale())));
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.means()},
+                                                          std::make_unique<AdamOptions>(means_lr * _splat_data.get_scene_scale())));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.sh0()},
-                                                          std::make_unique<AdamOptions>(_params->feature_lr)));
+                                                          std::make_unique<AdamOptions>(_params->shs_lr)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.shN()},
-                                                          std::make_unique<AdamOptions>(_params->feature_lr / 20.f)));
+                                                          std::make_unique<AdamOptions>(_params->shs_lr / 20.f)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.scaling_raw()},
                                                           std::make_unique<AdamOptions>(_params->scaling_lr )));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.rotation_raw()},
