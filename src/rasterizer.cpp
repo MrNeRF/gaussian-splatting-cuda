@@ -552,7 +552,7 @@ namespace gs {
         const auto isect_results = gsplat::intersect_tile(
             means2d, radii, depths, {}, {},
             1, tile_size, tile_width, tile_height,
-            true, false);
+            true);
 
         const auto tiles_per_gauss = std::get<0>(isect_results);
         const auto isect_ids = std::get<1>(isect_results);

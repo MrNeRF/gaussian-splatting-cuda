@@ -113,6 +113,7 @@ torch::Tensor fused_ssim(torch::Tensor img1, torch::Tensor img2,
 inline torch::Tensor fused_ssim(torch::Tensor img1, torch::Tensor img2,
                                 const std::string& padding, bool train) {
     fs_internal::check_padding(padding);
+    img1 = img1.contiguous();
     return fs_internal::_FusedSSIM::apply(img1, img2, padding, train).mean();
 }
 #endif // !__CUDA_ARCH__
