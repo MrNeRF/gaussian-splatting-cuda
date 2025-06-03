@@ -405,13 +405,13 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     float position_lr_init = _params->position_lr_init * _splat_data.get_scene_scale();
 
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.xyz()},
-                                                          std::make_unique<AdamOptions>(position_lr_init)));
+                                                          std::make_unique<AdamOptions>(position_lr_init * _splat_data.get_scene_scale())));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.sh0()},
                                                           std::make_unique<AdamOptions>(_params->feature_lr)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.shN()},
                                                           std::make_unique<AdamOptions>(_params->feature_lr / 20.f)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.scaling_raw()},
-                                                          std::make_unique<AdamOptions>(_params->scaling_lr * _splat_data.get_scene_scale())));
+                                                          std::make_unique<AdamOptions>(_params->scaling_lr )));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.rotation_raw()},
                                                           std::make_unique<AdamOptions>(_params->rotation_lr)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.opacity_raw()},

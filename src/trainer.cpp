@@ -72,6 +72,7 @@ namespace gs {
 
                 // Base loss computation
                 auto l1l = torch::l1_loss(r_output.image.squeeze(0), gt_image.squeeze(0));
+
                 auto ssim_loss = fused_ssim(r_output.image, gt_image, "same", /*train=*/true);
                 auto loss = (1.f - params_.optimization.lambda_dssim) * l1l +
                             params_.optimization.lambda_dssim * (1.f - ssim_loss);

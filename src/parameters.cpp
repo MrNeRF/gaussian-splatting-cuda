@@ -81,11 +81,7 @@ namespace gs {
                 const std::vector<ParamInfo> expected_params = {
                     {"iterations", defaults.iterations, "Total number of training iterations"},
                     {"position_lr_init", defaults.position_lr_init, "Initial learning rate for position updates"},
-                    {"position_lr_final", defaults.position_lr_final, "Final learning rate for position updates"},
-                    {"position_lr_delay_mult", defaults.position_lr_delay_mult, "Learning rate delay multiplier"},
-                    {"position_lr_max_steps", defaults.position_lr_max_steps, "Maximum steps for position learning"},
                     {"feature_lr", defaults.feature_lr, "Learning rate for feature updates"},
-                    {"percent_dense", defaults.percent_dense, "Percentage of points to keep during densification"},
                     {"opacity_lr", defaults.opacity_lr, "Learning rate for opacity updates"},
                     {"scaling_lr", defaults.scaling_lr, "Learning rate for scaling updates"},
                     {"rotation_lr", defaults.rotation_lr, "Learning rate for rotation updates"},
@@ -203,11 +199,7 @@ namespace gs {
             OptimizationParameters params;
             params.iterations = json["iterations"];
             params.position_lr_init = json["position_lr_init"];
-            params.position_lr_final = json["position_lr_final"];
-            params.position_lr_delay_mult = json["position_lr_delay_mult"];
-            params.position_lr_max_steps = json["position_lr_max_steps"];
             params.feature_lr = json["feature_lr"];
-            params.percent_dense = json["percent_dense"];
             params.opacity_lr = json["opacity_lr"];
             params.scaling_lr = json["scaling_lr"];
             params.rotation_lr = json["rotation_lr"];
