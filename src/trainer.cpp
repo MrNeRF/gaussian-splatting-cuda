@@ -74,27 +74,21 @@ namespace gs {
                 auto l1l = torch::l1_loss(r_output.image.squeeze(0), gt_image.squeeze(0));
 
                 auto ssim_loss = fused_ssim(r_output.image, gt_image, "same", /*train=*/true);
-                auto loss = (1.f - params_.optimization.lambda_dssim) * l1l +
-                            params_.optimization.lambda_dssim * (1.f - ssim_loss);
+                auto loss = (1.f - params_.optimization.lambda_dssim) * l1l + params_.optimization.lambda_dssim * (1.f - ssim_loss);
 
                 // Add opacity regularization
                 if (params_.optimization.opacity_reg > 0.0f) {
                     auto opacity_l1 = torch::abs(strategy_->get_model().get_opacity()).mean();
-                    loss = loss + params_.optimization.opacity_reg * opacity_l1;
+                    loss += params_.optimization.opacity_reg * opacity_l1;
                 }
 
                 // Add scale regularization
                 if (params_.optimization.scale_reg > 0.0f) {
                     auto scale_l1 = torch::abs(strategy_->get_model().get_scaling()).mean();
-                    loss = loss + params_.optimization.scale_reg * scale_l1;
+                    loss += params_.optimization.scale_reg * scale_l1;
                 }
 
                 loss.backward();
-                const float loss_value = loss.item<float>();
-
-                const bool is_densifying = (iter < params_.optimization.stop_densify &&
-                                            iter > params_.optimization.start_densify &&
-                                            iter % params_.optimization.growth_interval == 0);
 
                 {
                     torch::NoGradGuard no_grad;
@@ -107,7 +101,11 @@ namespace gs {
                     strategy_->step(iter);
                 }
 
-                progress_->update(iter, loss_value, static_cast<int>(strategy_->get_model().size()), is_densifying);
+                const bool is_densifying = (iter < params_.optimization.stop_densify &&
+                                            iter > params_.optimization.start_densify &&
+                                            iter % params_.optimization.growth_interval == 0);
+
+                progress_->update(iter, loss.item<float>(), static_cast<int>(strategy_->get_model().size()), is_densifying);
                 ++iter;
             }
 

@@ -267,7 +267,7 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
 
     // 2. scaling (log(σ)) - compute nearest neighbor distances
     auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
-    auto scaling = torch::log(torch::sqrt(nn_dist))
+    auto scaling = torch::log(torch::sqrt(nn_dist) * 0.1)
                        .unsqueeze(-1)
                        .repeat({1, 3})
                        .to(f32_cuda)
@@ -279,7 +279,7 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
     rotation = rotation.set_requires_grad(true);
 
     // 4. opacity (inverse sigmoid of 0.5)
-    auto opacity = inverse_sigmoid(0.5f * torch::ones({means.size(0), 1}, f32_cuda))
+    auto opacity = torch::logit(0.5f * torch::ones({means.size(0), 1}, f32_cuda))
                        .set_requires_grad(true);
 
     // 5. shs (SH coefficients)
@@ -292,20 +292,20 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
 
     // Set DC coefficients
     shs.index_put_({torch::indexing::Slice(),
-                         torch::indexing::Slice(),
-                         0},
-                        fused_color);
+                    torch::indexing::Slice(),
+                    0},
+                   fused_color);
 
     auto sh0 = shs.index({torch::indexing::Slice(),
-                               torch::indexing::Slice(),
-                               torch::indexing::Slice(0, 1)})
+                          torch::indexing::Slice(),
+                          torch::indexing::Slice(0, 1)})
                    .transpose(1, 2)
                    .contiguous()
                    .set_requires_grad(true);
 
     auto shN = shs.index({torch::indexing::Slice(),
-                               torch::indexing::Slice(),
-                               torch::indexing::Slice(1, torch::indexing::None)})
+                          torch::indexing::Slice(),
+                          torch::indexing::Slice(1, torch::indexing::None)})
                    .transpose(1, 2)
                    .contiguous()
                    .set_requires_grad(true);
