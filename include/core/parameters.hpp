@@ -8,18 +8,18 @@ namespace gs {
     namespace param {
         struct OptimizationParameters {
             size_t iterations = 30'000;
-            float position_lr_init = 0.00016f;
-            float feature_lr = 0.0025f;
+            float means_lr = 0.00016f;
+            float shs_lr = 0.0025f;
             float opacity_lr = 0.05f;
             float scaling_lr = 0.001f;
             float rotation_lr = 0.001f;
             float lambda_dssim = 0.2f;
             float min_opacity = 0.005f;
-            size_t densification_interval = 100;
-            size_t opacity_reset_interval = 3'000;
-            size_t densify_from_iter = 500;
-            size_t densify_until_iter = 15'000;
-            float densify_grad_threshold = 0.0002f;
+            size_t growth_interval = 100;
+            size_t reset_opacity = 3'000;
+            size_t start_densify = 500;
+            size_t stop_densify = 15'000;
+            float grad_threshold = 0.0002f;
             int sh_degree = 3;
             float opacity_reg = 0.01f;
             float scale_reg = 0.01f;

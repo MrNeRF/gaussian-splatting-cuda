@@ -464,14 +464,14 @@ namespace gs {
         TORCH_CHECK(K.is_cuda(), "K must be on CUDA");
 
         // Get Gaussian parameters
-        auto means3D = gaussian_model.get_xyz();
+        auto means3D = gaussian_model.get_means();
         auto opacities = gaussian_model.get_opacity();
         if (opacities.dim() == 2 && opacities.size(1) == 1) {
             opacities = opacities.squeeze(-1);
         }
         const auto scales = gaussian_model.get_scaling();
         const auto rotations = gaussian_model.get_rotation();
-        const auto sh_coeffs = gaussian_model.get_features();
+        const auto sh_coeffs = gaussian_model.get_shs();
         const int sh_degree = gaussian_model.get_active_sh_degree();
 
         // Validate Gaussian parameters

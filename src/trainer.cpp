@@ -92,9 +92,9 @@ namespace gs {
                 loss.backward();
                 const float loss_value = loss.item<float>();
 
-                const bool is_densifying = (iter < params_.optimization.densify_until_iter &&
-                                            iter > params_.optimization.densify_from_iter &&
-                                            iter % params_.optimization.densification_interval == 0);
+                const bool is_densifying = (iter < params_.optimization.stop_densify &&
+                                            iter > params_.optimization.start_densify &&
+                                            iter % params_.optimization.growth_interval == 0);
 
                 {
                     torch::NoGradGuard no_grad;

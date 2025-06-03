@@ -80,18 +80,18 @@ namespace gs {
 
                 const std::vector<ParamInfo> expected_params = {
                     {"iterations", defaults.iterations, "Total number of training iterations"},
-                    {"position_lr_init", defaults.position_lr_init, "Initial learning rate for position updates"},
-                    {"feature_lr", defaults.feature_lr, "Learning rate for feature updates"},
+                    {"means_lr", defaults.means_lr, "Initial learning rate for position updates"},
+                    {"shs_lr", defaults.shs_lr, "Learning rate for spherical harmonics updates"},
                     {"opacity_lr", defaults.opacity_lr, "Learning rate for opacity updates"},
                     {"scaling_lr", defaults.scaling_lr, "Learning rate for scaling updates"},
                     {"rotation_lr", defaults.rotation_lr, "Learning rate for rotation updates"},
                     {"lambda_dssim", defaults.lambda_dssim, "DSSIM loss weight"},
                     {"min_opacity", defaults.min_opacity, "Minimum opacity threshold"},
-                    {"densification_interval", defaults.densification_interval, "Interval between densification steps"},
-                    {"opacity_reset_interval", defaults.opacity_reset_interval, "Interval for opacity resets"},
-                    {"densify_from_iter", defaults.densify_from_iter, "Starting iteration for densification"},
-                    {"densify_until_iter", defaults.densify_until_iter, "Ending iteration for densification"},
-                    {"densify_grad_threshold", defaults.densify_grad_threshold, "Gradient threshold for densification"},
+                    {"growth_interval", defaults.growth_interval, "Interval between densification steps"},
+                    {"reset_opacity", defaults.reset_opacity, "Interval for opacity resets"},
+                    {"start_densify", defaults.start_densify, "Starting iteration for densification"},
+                    {"stop_densify", defaults.stop_densify, "Ending iteration for densification"},
+                    {"grad_threshold", defaults.grad_threshold, "Gradient threshold for densification"},
                     {"opacity_reg", defaults.opacity_reg, "Opacity L1 regularization weight"},
                     {"scale_reg", defaults.scale_reg, "Scale L1 regularization weight"},
                     {"sh_degree", defaults.sh_degree, "Gradient threshold for densification"}};
@@ -198,19 +198,19 @@ namespace gs {
 
             OptimizationParameters params;
             params.iterations = json["iterations"];
-            params.position_lr_init = json["position_lr_init"];
-            params.feature_lr = json["feature_lr"];
+            params.means_lr = json["means_lr"];
+            params.shs_lr = json["shs_lr"];
             params.opacity_lr = json["opacity_lr"];
             params.scaling_lr = json["scaling_lr"];
             params.rotation_lr = json["rotation_lr"];
             params.lambda_dssim = json["lambda_dssim"];
             params.min_opacity = json["min_opacity"];
-            params.densification_interval = json["densification_interval"];
-            params.opacity_reset_interval = json["opacity_reset_interval"];
-            params.densify_from_iter = json["densify_from_iter"];
-            params.densify_until_iter = json["densify_until_iter"];
-            params.densify_grad_threshold = json["densify_grad_threshold"];
-            params.densify_grad_threshold = json["densify_grad_threshold"];
+            params.growth_interval = json["growth_interval"];
+            params.reset_opacity = json["reset_opacity"];
+            params.start_densify = json["start_densify"];
+            params.stop_densify = json["stop_densify"];
+            params.grad_threshold = json["grad_threshold"];
+            params.grad_threshold = json["grad_threshold"];
 
             if (json.contains("opacity_reg")) {
                 params.opacity_reg = json["opacity_reg"];
