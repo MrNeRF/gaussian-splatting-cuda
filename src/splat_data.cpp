@@ -91,8 +91,7 @@ namespace {
                    int iteration,
                    bool join_thread = false) {
         namespace fs = std::filesystem;
-        fs::path folder = root / ("point_cloud/iteration_" + std::to_string(iteration));
-        fs::create_directories(folder);
+        fs::create_directories(root);
 
         std::vector<torch::Tensor> tensors;
         tensors.push_back(pc.means);
@@ -110,9 +109,10 @@ namespace {
         if (pc.rotation.defined())
             tensors.push_back(pc.rotation);
 
-        std::thread t([folder,
+        std::thread t([root,
                        tensors = std::move(tensors),
-                       names = pc.attribute_names]() mutable {
+                       names = pc.attribute_names,
+                       iter = iteration]() mutable {
             auto write_output_ply =
                 [](const fs::path& file_path,
                    const std::vector<torch::Tensor>& data,
@@ -141,8 +141,7 @@ namespace {
                     std::ostream out_stream(&fb);
                     ply.write(out_stream, /*binary=*/true);
                 };
-
-            write_output_ply(folder / "point_cloud.ply", tensors, names);
+            write_output_ply(root / ("splat_" + std::to_string(iter) + ".ply"), tensors, names);
         });
 
         join_thread ? t.join() : t.detach();
