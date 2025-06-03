@@ -195,9 +195,6 @@ torch::Tensor SplatData::get_features() const {
 void SplatData::increment_sh_degree() {
     if (_active_sh_degree < _max_sh_degree) {
         _active_sh_degree++;
-        std::cout << "SH degree incremented to: " << _active_sh_degree
-                  << " (using " << (_active_sh_degree + 1) * (_active_sh_degree + 1)
-                  << " coefficients)" << std::endl;
     }
 }
 
