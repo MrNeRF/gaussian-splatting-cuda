@@ -109,7 +109,7 @@ int MCMC::relocate_gs() {
     ratios = ratios.index_select(0, sampled_idxs) + 1;
 
     // IMPORTANT: Clamp and convert to int as in Python implementation
-    int n_max = static_cast<int>(_binoms.size(0));
+    const int n_max = static_cast<int>(_binoms.size(0));
     ratios = torch::clamp(ratios, 1, n_max);
     ratios = ratios.to(torch::kInt32).contiguous(); // Convert to int!
 
@@ -178,7 +178,7 @@ int MCMC::add_new_gs() {
     ratios = ratios.index_select(0, sampled_idxs) + 1;
 
     // IMPORTANT: Clamp and convert to int as in Python implementation
-    int n_max = static_cast<int>(_binoms.size(0));
+    const int n_max = static_cast<int>(_binoms.size(0));
     ratios = torch::clamp(ratios, 1, n_max);
     ratios = ratios.to(torch::kInt32).contiguous(); // Convert to int!
 
@@ -337,9 +337,6 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
         _splat_data.increment_sh_degree();
     }
 
-    // Move binoms to device if needed
-    _binoms = _binoms.to(_splat_data.means().device());
-
     // Refine Gaussians
     if (iter < _refine_stop_iter && iter > _refine_start_iter && iter % _refine_every == 0) {
         // Relocate dead Gaussians
@@ -396,22 +393,21 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
             binoms_accessor[n][k] = binom;
         }
     }
+    _binoms = _binoms.to(dev);
 
     // Initialize optimizer
     using torch::optim::AdamOptions;
     std::vector<torch::optim::OptimizerParamGroup> groups;
 
     // Calculate initial learning rate for position
-    float means_lr = _params->means_lr * _splat_data.get_scene_scale();
-
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.means()},
-                                                          std::make_unique<AdamOptions>(means_lr * _splat_data.get_scene_scale())));
+                                                          std::make_unique<AdamOptions>(_params->means_lr * _splat_data.get_scene_scale())));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.sh0()},
                                                           std::make_unique<AdamOptions>(_params->shs_lr)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.shN()},
                                                           std::make_unique<AdamOptions>(_params->shs_lr / 20.f)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.scaling_raw()},
-                                                          std::make_unique<AdamOptions>(_params->scaling_lr )));
+                                                          std::make_unique<AdamOptions>(_params->scaling_lr)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.rotation_raw()},
                                                           std::make_unique<AdamOptions>(_params->rotation_lr)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.opacity_raw()},
@@ -425,6 +421,6 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     // Initialize exponential scheduler
     // Python: gamma = 0.01^(1/max_steps)
     // This means after max_steps, lr will be 0.01 * initial_lr
-    double gamma = std::pow(0.01, 1.0 / _params->iterations);
-    _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma);
+    const double gamma = std::pow(0.01, 1.0 / _params->iterations);
+    _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma, 0);
 }

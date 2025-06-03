@@ -25,22 +25,23 @@ private:
     // Simple ExponentialLR implementation since C++ API is different
     class ExponentialLR {
     public:
-        ExponentialLR(torch::optim::Optimizer& optimizer, double gamma)
+        ExponentialLR(torch::optim::Optimizer& optimizer, double gamma, int param_group_index = -1)
             : optimizer_(optimizer),
-              gamma_(gamma) {}
+              gamma_(gamma),
+              param_group_index_(param_group_index) {}
 
         void step() {
-            // Update all parameter groups
-            for (auto& group : optimizer_.param_groups()) {
+                // Only update specific parameter group
+                auto& group = optimizer_.param_groups()[param_group_index_];
                 auto& options = static_cast<torch::optim::AdamOptions&>(group.options());
                 double current_lr = options.lr();
                 options.lr(current_lr * gamma_);
-            }
         }
 
     private:
         torch::optim::Optimizer& optimizer_;
         double gamma_;
+        int param_group_index_;
     };
 
     // Helper functions
