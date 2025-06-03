@@ -3,7 +3,7 @@
   "means_lr": 0.00016,
   "shs_lr": 0.0025,
   "opacity_lr": 0.05,
-  "scaling_lr": 0.001,
+  "scaling_lr": 0.005,
   "rotation_lr": 0.001,
   "lambda_dssim": 0.2,
   "min_opacity": 0.005,

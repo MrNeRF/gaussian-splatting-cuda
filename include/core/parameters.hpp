@@ -11,7 +11,7 @@ namespace gs {
             float means_lr = 0.00016f;
             float shs_lr = 0.0025f;
             float opacity_lr = 0.05f;
-            float scaling_lr = 0.001f;
+            float scaling_lr = 0.005f;
             float rotation_lr = 0.001f;
             float lambda_dssim = 0.2f;
             float min_opacity = 0.005f;
