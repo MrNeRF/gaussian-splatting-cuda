@@ -22,6 +22,27 @@ public:
     const SplatData& get_model() const override { return _splat_data; }
 
 private:
+    // Simple ExponentialLR implementation since C++ API is different
+    class ExponentialLR {
+    public:
+        ExponentialLR(torch::optim::Optimizer& optimizer, double gamma)
+            : optimizer_(optimizer),
+              gamma_(gamma) {}
+
+        void step() {
+            // Update all parameter groups
+            for (auto& group : optimizer_.param_groups()) {
+                auto& options = static_cast<torch::optim::AdamOptions&>(group.options());
+                double current_lr = options.lr();
+                options.lr(current_lr * gamma_);
+            }
+        }
+
+    private:
+        torch::optim::Optimizer& optimizer_;
+        double gamma_;
+    };
+
     // Helper functions
     torch::Tensor multinomial_sample(const torch::Tensor& weights, int n, bool replacement = true);
     int relocate_gs();
@@ -31,12 +52,10 @@ private:
                                        const torch::Tensor& sampled_indices,
                                        const torch::Tensor& dead_indices,
                                        int param_position);
-    void update_optimizer_for_add(torch::optim::Adam* optimizer,
-                                  const torch::Tensor& sampled_indices,
-                                  int param_position);
 
     // Member variables
     std::unique_ptr<torch::optim::Adam> _optimizer;
+    std::unique_ptr<ExponentialLR> _scheduler;
     SplatData _splat_data;
     std::unique_ptr<gs::param::OptimizationParameters> _params;
 
@@ -51,5 +70,4 @@ private:
 
     // State variables
     torch::Tensor _binoms;
-    float _current_lr = 0.0f;
 };

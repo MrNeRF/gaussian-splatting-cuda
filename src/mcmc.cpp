@@ -1,44 +1,12 @@
 #include "core/mcmc.hpp"
+#include "Ops.h"
 #include "core/debug_utils.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
-#include "Ops.h"
 #include <exception>
 #include <iostream>
 #include <random>
-
-// Helper function to build rotation matrix from quaternion
-static inline torch::Tensor build_rotation(torch::Tensor r) {
-    torch::Tensor norm = torch::sqrt(torch::sum(r.pow(2), 1));
-    torch::Tensor q = r / norm.unsqueeze(-1);
-
-    using Slice = torch::indexing::Slice;
-    torch::Tensor R = torch::zeros({q.size(0), 3, 3}, torch::device(torch::kCUDA));
-    torch::Tensor r0 = q.index({Slice(), 0});
-    torch::Tensor x = q.index({Slice(), 1});
-    torch::Tensor y = q.index({Slice(), 2});
-    torch::Tensor z = q.index({Slice(), 3});
-
-    R.index_put_({Slice(), 0, 0}, 1 - 2 * (y * y + z * z));
-    R.index_put_({Slice(), 0, 1}, 2 * (x * y - r0 * z));
-    R.index_put_({Slice(), 0, 2}, 2 * (x * z + r0 * y));
-    R.index_put_({Slice(), 1, 0}, 2 * (x * y + r0 * z));
-    R.index_put_({Slice(), 1, 1}, 1 - 2 * (x * x + z * z));
-    R.index_put_({Slice(), 1, 2}, 2 * (y * z - r0 * x));
-    R.index_put_({Slice(), 2, 0}, 2 * (x * z - r0 * y));
-    R.index_put_({Slice(), 2, 1}, 2 * (y * z + r0 * x));
-    R.index_put_({Slice(), 2, 2}, 1 - 2 * (x * x + y * y));
-    return R;
-}
-
-// Helper to compute covariance from quaternion and scale
-static inline torch::Tensor quat_scale_to_covar(const torch::Tensor& quats,
-                                                const torch::Tensor& scales) {
-    auto rots = build_rotation(quats);
-    auto scale_diag = torch::diag_embed(scales);
-    return torch::bmm(torch::bmm(rots, scale_diag), rots.transpose(1, 2));
-}
 
 MCMC::MCMC(SplatData&& splat_data)
     : _splat_data(std::move(splat_data)) {
@@ -106,81 +74,34 @@ void MCMC::update_optimizer_for_relocate(torch::optim::Adam* optimizer,
     // No need to update optimizer state since we're modifying in-place
 }
 
-void MCMC::update_optimizer_for_add(torch::optim::Adam* optimizer,
-                                    const torch::Tensor& sampled_indices,
-                                    int param_position) {
-    void* param_key = optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl();
-
-    auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(
-        static_cast<torch::optim::AdamParamState&>(*optimizer->state()[param_key]));
-
-    optimizer->state().erase(param_key);
-
-    // Extend the optimizer states
-    int n_new = sampled_indices.size(0);
-    auto device = adamParamStates->exp_avg().device();
-
-    // Get the right shape for the new zeros based on the parameter dimension
-    auto param_shape = optimizer->param_groups()[param_position].params()[0].sizes();
-    std::vector<int64_t> new_shape;
-    new_shape.push_back(n_new);
-    for (int i = 1; i < param_shape.size(); ++i) {
-        new_shape.push_back(param_shape[i]);
-    }
-
-    std::vector<torch::Tensor> exp_avg_tensors = {
-        adamParamStates->exp_avg(),
-        torch::zeros(new_shape, torch::TensorOptions().device(device))
-    };
-    std::vector<torch::Tensor> exp_avg_sq_tensors = {
-        adamParamStates->exp_avg_sq(),
-        torch::zeros(new_shape, torch::TensorOptions().device(device))
-    };
-
-    adamParamStates->exp_avg(torch::cat(exp_avg_tensors, 0));
-    adamParamStates->exp_avg_sq(torch::cat(exp_avg_sq_tensors, 0));
-
-    void* new_param_key = optimizer->param_groups()[param_position].params()[0].unsafeGetTensorImpl();
-    optimizer->state()[new_param_key] = std::move(adamParamStates);
-}
-
 int MCMC::relocate_gs() {
     // Get opacities and handle both [N] and [N, 1] shapes
     auto opacities = _splat_data.get_opacity();
     if (opacities.dim() == 2 && opacities.size(1) == 1) {
         opacities = opacities.squeeze(-1);
     }
-    TORCH_CHECK(opacities.dim() == 1, "Opacities must be 1D, got shape ", opacities.sizes());
 
     auto dead_mask = opacities <= _min_opacity;
     auto dead_indices = dead_mask.nonzero().squeeze(-1);
     int n_dead = dead_indices.numel();
 
-    if (n_dead == 0) return 0;
+    if (n_dead == 0)
+        return 0;
 
     auto alive_mask = ~dead_mask;
     auto alive_indices = alive_mask.nonzero().squeeze(-1);
 
-    if (alive_indices.numel() == 0) return 0;
-
-    TORCH_CHECK(dead_indices.dim() == 1, "Dead indices must be 1D, got shape ", dead_indices.sizes());
-    TORCH_CHECK(alive_indices.dim() == 1, "Alive indices must be 1D, got shape ", alive_indices.sizes());
+    if (alive_indices.numel() == 0)
+        return 0;
 
     // Sample from alive Gaussians based on opacity
     auto probs = opacities.index_select(0, alive_indices);
-    TORCH_CHECK(probs.dim() == 1, "Probs must be 1D, got shape ", probs.sizes());
-
     auto sampled_idxs_local = multinomial_sample(probs, n_dead, true);
     auto sampled_idxs = alive_indices.index_select(0, sampled_idxs_local);
-    TORCH_CHECK(sampled_idxs.dim() == 1, "Sampled indices must be 1D, got shape ", sampled_idxs.sizes());
 
     // Get parameters for sampled Gaussians
     auto sampled_opacities = opacities.index_select(0, sampled_idxs);
     auto sampled_scales = _splat_data.get_scaling().index_select(0, sampled_idxs);
-
-    TORCH_CHECK(sampled_opacities.dim() == 1, "Sampled opacities must be 1D, got shape ", sampled_opacities.sizes());
-    TORCH_CHECK(sampled_scales.dim() == 2 && sampled_scales.size(1) == 3,
-                "Sampled scales must be [N, 3], got shape ", sampled_scales.sizes());
 
     // Count occurrences of each sampled index
     auto ratios = torch::zeros({opacities.size(0)}, torch::kFloat32).to(torch::kCUDA);
@@ -190,9 +111,7 @@ int MCMC::relocate_gs() {
     // IMPORTANT: Clamp and convert to int as in Python implementation
     int n_max = static_cast<int>(_binoms.size(0));
     ratios = torch::clamp(ratios, 1, n_max);
-    ratios = ratios.to(torch::kInt32).contiguous();  // Convert to int!
-
-    TORCH_CHECK(ratios.dim() == 1, "Ratios must be 1D, got shape ", ratios.sizes());
+    ratios = ratios.to(torch::kInt32).contiguous(); // Convert to int!
 
     // Call the CUDA relocation function from gsplat
     auto relocation_result = gsplat::relocation(
@@ -200,15 +119,10 @@ int MCMC::relocate_gs() {
         sampled_scales,
         ratios,
         _binoms,
-        n_max
-    );
+        n_max);
 
     auto new_opacities = std::get<0>(relocation_result);
     auto new_scales = std::get<1>(relocation_result);
-
-    TORCH_CHECK(new_opacities.dim() == 1, "New opacities must be 1D, got shape ", new_opacities.sizes());
-    TORCH_CHECK(new_scales.dim() == 2 && new_scales.size(1) == 3,
-                "New scales must be [N, 3], got shape ", new_scales.sizes());
 
     // Clamp new opacities
     new_opacities = torch::clamp(new_opacities, _min_opacity, 1.0f - 1e-7f);
@@ -242,26 +156,21 @@ int MCMC::add_new_gs() {
     int n_target = std::min(_cap_max, static_cast<int>(1.05f * current_n));
     int n_new = std::max(0, n_target - current_n);
 
-    if (n_new == 0) return 0;
+    if (n_new == 0)
+        return 0;
 
     // Get opacities and handle both [N] and [N, 1] shapes
     auto opacities = _splat_data.get_opacity();
     if (opacities.dim() == 2 && opacities.size(1) == 1) {
         opacities = opacities.squeeze(-1);
     }
-    TORCH_CHECK(opacities.dim() == 1, "Opacities must be 1D, got shape ", opacities.sizes());
 
     auto probs = opacities.flatten();
     auto sampled_idxs = multinomial_sample(probs, n_new, true);
-    TORCH_CHECK(sampled_idxs.dim() == 1, "Sampled indices must be 1D, got shape ", sampled_idxs.sizes());
 
     // Get parameters for sampled Gaussians
     auto sampled_opacities = opacities.index_select(0, sampled_idxs);
     auto sampled_scales = _splat_data.get_scaling().index_select(0, sampled_idxs);
-
-    TORCH_CHECK(sampled_opacities.dim() == 1, "Sampled opacities must be 1D, got shape ", sampled_opacities.sizes());
-    TORCH_CHECK(sampled_scales.dim() == 2 && sampled_scales.size(1) == 3,
-                "Sampled scales must be [N, 3], got shape ", sampled_scales.sizes());
 
     // Count occurrences
     auto ratios = torch::zeros({opacities.size(0)}, torch::kFloat32).to(torch::kCUDA);
@@ -271,9 +180,7 @@ int MCMC::add_new_gs() {
     // IMPORTANT: Clamp and convert to int as in Python implementation
     int n_max = static_cast<int>(_binoms.size(0));
     ratios = torch::clamp(ratios, 1, n_max);
-    ratios = ratios.to(torch::kInt32).contiguous();  // Convert to int!
-
-    TORCH_CHECK(ratios.dim() == 1, "Ratios must be 1D, got shape ", ratios.sizes());
+    ratios = ratios.to(torch::kInt32).contiguous(); // Convert to int!
 
     // Call the CUDA relocation function from gsplat
     auto relocation_result = gsplat::relocation(
@@ -281,15 +188,10 @@ int MCMC::add_new_gs() {
         sampled_scales,
         ratios,
         _binoms,
-        n_max
-    );
+        n_max);
 
     auto new_opacities = std::get<0>(relocation_result);
     auto new_scales = std::get<1>(relocation_result);
-
-    TORCH_CHECK(new_opacities.dim() == 1, "New opacities must be 1D, got shape ", new_opacities.sizes());
-    TORCH_CHECK(new_scales.dim() == 2 && new_scales.size(1) == 3,
-                "New scales must be [N, 3], got shape ", new_scales.sizes());
 
     // Clamp new opacities
     new_opacities = torch::clamp(new_opacities, _min_opacity, 1.0f - 1e-7f);
@@ -349,17 +251,15 @@ int MCMC::add_new_gs() {
 
         // Create extended optimizer states
         auto new_shape = new_param.sizes().vec();
-        new_shape[0] = n_new;  // Shape for the new part
+        new_shape[0] = n_new; // Shape for the new part
 
         auto device = adamParamStates->exp_avg().device();
-        auto new_exp_avg = torch::cat({
-                                          adamParamStates->exp_avg(),
-                                          torch::zeros(new_shape, torch::TensorOptions().device(device))
-                                      }, 0);
-        auto new_exp_avg_sq = torch::cat({
-                                             adamParamStates->exp_avg_sq(),
-                                             torch::zeros(new_shape, torch::TensorOptions().device(device))
-                                         }, 0);
+        auto new_exp_avg = torch::cat({adamParamStates->exp_avg(),
+                                       torch::zeros(new_shape, torch::TensorOptions().device(device))},
+                                      0);
+        auto new_exp_avg_sq = torch::cat({adamParamStates->exp_avg_sq(),
+                                          torch::zeros(new_shape, torch::TensorOptions().device(device))},
+                                         0);
 
         // Update Adam state
         adamParamStates->exp_avg(new_exp_avg);
@@ -390,7 +290,8 @@ int MCMC::add_new_gs() {
 
     // Update max_radii2D
     _splat_data.max_radii2D() = torch::cat({_splat_data.max_radii2D(),
-                                            torch::zeros({n_new}, torch::kFloat32).to(torch::kCUDA)}, 0);
+                                            torch::zeros({n_new}, torch::kFloat32).to(torch::kCUDA)},
+                                           0);
 
     return n_new;
 }
@@ -401,53 +302,51 @@ void MCMC::inject_noise() {
     if (opacities.dim() == 2 && opacities.size(1) == 1) {
         opacities = opacities.squeeze(-1);
     }
-    TORCH_CHECK(opacities.dim() == 1, "Opacities must be 1D, got shape ", opacities.sizes());
 
     auto scales = _splat_data.get_scaling();
     auto quats = _splat_data.get_rotation();
-
-    TORCH_CHECK(scales.dim() == 2 && scales.size(1) == 3,
-                "Scales must be [N, 3], got shape ", scales.sizes());
-    TORCH_CHECK(quats.dim() == 2 && quats.size(1) == 4,
-                "Quaternions must be [N, 4], got shape ", quats.sizes());
 
     // Use gsplat's quat_scale_to_covar_preci function
     auto covar_result = gsplat::quat_scale_to_covar_preci_fwd(
         quats,
         scales,
-        true,   // compute_covar
-        false,  // compute_preci
-        false   // triu
+        true,  // compute_covar
+        false, // compute_preci
+        false  // triu
     );
-    auto covars = std::get<0>(covar_result);  // [N, 3, 3]
-
-    TORCH_CHECK(covars.dim() == 3 && covars.size(1) == 3 && covars.size(2) == 3,
-                "Covariances must be [N, 3, 3], got shape ", covars.sizes());
+    auto covars = std::get<0>(covar_result); // [N, 3, 3]
 
     // Opacity sigmoid function: 1 / (1 + exp(-k * (x - x0)))
     const float k = 100.0f;
     const float x0 = 0.995f;
     auto op_sigmoid = 1.0f / (1.0f + torch::exp(-k * ((1.0f - opacities) - x0)));
 
-    TORCH_CHECK(op_sigmoid.dim() == 1, "Opacity sigmoid must be 1D, got shape ", op_sigmoid.sizes());
+    // Get current learning rate from optimizer (after scheduler has updated it)
+    float current_lr = static_cast<torch::optim::AdamOptions&>(
+                           _optimizer->param_groups()[0].options())
+                           .lr();
 
     // Generate noise
-    auto noise = torch::randn_like(_splat_data.xyz()) * op_sigmoid.unsqueeze(-1) * _current_lr * _noise_lr;
-
-    TORCH_CHECK(noise.dim() == 2 && noise.size(1) == 3,
-                "Noise must be [N, 3], got shape ", noise.sizes());
+    auto noise = torch::randn_like(_splat_data.xyz()) * op_sigmoid.unsqueeze(-1) * current_lr * _noise_lr;
 
     // Transform noise by covariance
     noise = torch::bmm(covars, noise.unsqueeze(-1)).squeeze(-1);
-
-    TORCH_CHECK(noise.dim() == 2 && noise.size(1) == 3,
-                "Transformed noise must be [N, 3], got shape ", noise.sizes());
 
     // Add noise to positions
     _splat_data.xyz().add_(noise);
 }
 
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
+    // Increment SH degree every 1000 iterations
+    if (iter % 1000 == 0) {
+        _splat_data.increment_sh_degree();
+    }
+
+    // Update max radii (similar to InriaADC)
+    const auto visible_max_radii = _splat_data.max_radii2D().masked_select(render_output.visibility);
+    const auto visible_radii = render_output.radii.masked_select(render_output.visibility);
+    _splat_data.max_radii2D().masked_scatter_(render_output.visibility, torch::max(visible_max_radii, visible_radii));
+
     // Move binoms to device if needed
     _binoms = _binoms.to(_splat_data.xyz().device());
 
@@ -477,12 +376,7 @@ void MCMC::step(int iter) {
     if (iter < _params->iterations) {
         _optimizer->step();
         _optimizer->zero_grad(true);
-
-        // Update learning rate (for noise injection)
-        // Simple linear decay for now - can be replaced with more sophisticated scheduling
-        float progress = static_cast<float>(iter) / _params->iterations;
-        _current_lr = _params->position_lr_init * (1.0f - progress) +
-                      _params->position_lr_final * progress;
+        _scheduler->step();
     }
 }
 
@@ -497,11 +391,6 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _splat_data.opacity_raw() = _splat_data.opacity_raw().to(dev).set_requires_grad(true);
     _splat_data.sh0() = _splat_data.sh0().to(dev).set_requires_grad(true);
     _splat_data.shN() = _splat_data.shN().to(dev).set_requires_grad(true);
-
-    // Check initial shapes
-    TORCH_CHECK(_splat_data.opacity_raw().dim() == 1 ||
-                    (_splat_data.opacity_raw().dim() == 2 && _splat_data.opacity_raw().size(1) == 1),
-                "Opacity must be [N] or [N, 1], got shape ", _splat_data.opacity_raw().sizes());
 
     // Initialize binomial coefficients
     const int n_max = 51;
@@ -522,8 +411,11 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     using torch::optim::AdamOptions;
     std::vector<torch::optim::OptimizerParamGroup> groups;
 
+    // Calculate initial learning rate for position
+    float position_lr_init = _params->position_lr_init * _splat_data.get_scene_scale();
+
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.xyz()},
-                                                          std::make_unique<AdamOptions>(_params->position_lr_init * _splat_data.get_scene_scale())));
+                                                          std::make_unique<AdamOptions>(position_lr_init)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.sh0()},
                                                           std::make_unique<AdamOptions>(_params->feature_lr)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.shN()},
@@ -540,9 +432,12 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
 
     _optimizer = std::make_unique<torch::optim::Adam>(groups, AdamOptions(0.f).eps(1e-15));
 
+    // Initialize exponential scheduler
+    // Python: gamma = 0.01^(1/max_steps)
+    // This means after max_steps, lr will be 0.01 * initial_lr
+    double gamma = std::pow(0.01, 1.0 / _params->iterations);
+    _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma);
+
     // Initialize max_radii2D
     _splat_data.max_radii2D() = torch::zeros({_splat_data.size()}, torch::kFloat32).to(dev);
-
-    // Initialize current learning rate
-    _current_lr = _params->position_lr_init;
 }
