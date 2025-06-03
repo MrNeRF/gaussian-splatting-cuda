@@ -1,7 +1,7 @@
 #include "core/inria_adc.hpp"
 #include "core/debug_utils.hpp"
+#include "core/gsplat_rasterizer.hpp"
 #include "core/parameters.hpp"
-#include "core/render_utils.hpp"
 #include <exception>
 #include <thread>
 
@@ -248,7 +248,7 @@ void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, to
     _denom.index_put_({update_filter}, selected_denom + 1);
 }
 
-void InriaADC::post_backward(int iter, RenderOutput& render_output) {
+void InriaADC::post_backward(int iter, gs::RenderOutput& render_output) {
 
     if (iter % 1000 == 0)
         _splat_data.increment_sh_degree();
@@ -260,7 +260,7 @@ void InriaADC::post_backward(int iter, RenderOutput& render_output) {
     // Densification & pruning
     if (iter < _params->densify_until_iter) {
         // Pass width and height for gradient normalization
-        Add_densification_stats(render_output.viewspace_pts, render_output.visibility,
+        Add_densification_stats(render_output.means2d, render_output.visibility,
                                 render_output.width, render_output.height);
         const bool is_densifying = (iter < _params->densify_until_iter &&
                                     iter > _params->densify_from_iter &&

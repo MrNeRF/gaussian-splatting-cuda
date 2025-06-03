@@ -1,6 +1,6 @@
 #include "core/trainer.hpp"
+#include "core/gsplat_rasterizer.hpp"
 #include "core/image_io.hpp"
-#include "core/render_utils.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <iostream>
@@ -50,7 +50,8 @@ namespace gs {
                 Camera* cam = camera_with_image.camera;
                 torch::Tensor gt_image = std::move(camera_with_image.image);
 
-                auto r_output = render_with_gsplat(*cam, strategy_->get_model(), background_);
+                auto r_output = gs::rasterize(*cam, strategy_->get_model(), background_, 1, false);
+
                 if (iter % 100 == 0) { // Save every 100 iterations
                     auto save_path = params_.dataset.output_path /
                                      ("render_iter_" + std::to_string(iter) + ".png");
