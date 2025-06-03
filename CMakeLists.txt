@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.24)
+﻿cmake_minimum_required(VERSION 3.24...3.30)
 project(gaussian_splatting_cuda LANGUAGES CUDA CXX)
 
 # Setup
@@ -25,8 +25,7 @@ find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
 
-# Python packages - CRITICAL for linking
-find_package(PythonLibs REQUIRED)
+# Python packages - Use modern Python3 finding
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
 if(CUDAToolkit_VERSION VERSION_LESS "11.7")
@@ -34,11 +33,6 @@ if(CUDAToolkit_VERSION VERSION_LESS "11.7")
 endif()
 
 add_subdirectory(external)
-
-# =============================================================================
-# GSPLAT LIBRARY - New backend
-# =============================================================================
-
 add_subdirectory(gsplat)
 
 # =============================================================================
@@ -67,7 +61,6 @@ target_include_directories(gaussian_host
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
         PRIVATE
-        ${PYTHON_INCLUDE_DIRS}
         ${Python3_INCLUDE_DIRS}
 )
 
@@ -78,7 +71,6 @@ target_link_libraries(gaussian_host
         glm
         Threads::Threads
         args
-        ${PYTHON_LIBRARIES}
         Python3::Python
         gsplat_backend  # Link to gsplat
 )
@@ -113,7 +105,6 @@ set_target_properties(gaussian_kernels PROPERTIES
         CUDA_ARCHITECTURES native
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
-        # Enable device linking for this library
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
@@ -122,7 +113,6 @@ target_include_directories(gaussian_kernels
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
         PRIVATE
-        ${PYTHON_INCLUDE_DIRS}
         ${Python3_INCLUDE_DIRS}
 )
 
@@ -150,7 +140,6 @@ add_executable(${PROJECT_NAME} src/main.cpp)
 set_target_properties(${PROJECT_NAME} PROPERTIES
         CUDA_ARCHITECTURES native
         CUDA_SEPARABLE_COMPILATION ON
-        # This is the key property for device linking
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
@@ -158,7 +147,6 @@ target_include_directories(${PROJECT_NAME}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
-        ${PYTHON_INCLUDE_DIRS}
         ${Python3_INCLUDE_DIRS}
 )
 
@@ -168,16 +156,28 @@ target_link_libraries(${PROJECT_NAME}
         gaussian_host
         gaussian_kernels
         gsplat_backend
-        ${PYTHON_LIBRARIES}
         Python3::Python
 )
 
-# Build type configuration
+# Build type configuration - Updated to handle INTERFACE libraries
 function(configure_build_type target)
-    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        target_compile_definitions(${target} PRIVATE DEBUG_BUILD)
-    elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-        target_compile_definitions(${target} PRIVATE RELEASE_BUILD)
+    # Check if target is an INTERFACE library
+    get_target_property(target_type ${target} TYPE)
+
+    if(target_type STREQUAL "INTERFACE_LIBRARY")
+        # For INTERFACE libraries, use INTERFACE properties
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            target_compile_definitions(${target} INTERFACE DEBUG_BUILD)
+        elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+            target_compile_definitions(${target} INTERFACE RELEASE_BUILD)
+        endif()
+    else()
+        # For regular libraries, use PRIVATE properties
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            target_compile_definitions(${target} PRIVATE DEBUG_BUILD)
+        elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+            target_compile_definitions(${target} PRIVATE RELEASE_BUILD)
+        endif()
     endif()
 endfunction()
 
@@ -228,7 +228,7 @@ message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Include paths:")
 message(STATUS "  - Main: ${CMAKE_CURRENT_SOURCE_DIR}/include")
 message(STATUS "  - Kernels: ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels")
-message(STATUS "  - Python: ${PYTHON_INCLUDE_DIRS}")
+message(STATUS "  - Python: ${Python3_INCLUDE_DIRS}")
 
 # Enable ccache if available
 find_program(CCACHE_PROGRAM ccache)
