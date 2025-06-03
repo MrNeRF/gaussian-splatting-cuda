@@ -268,8 +268,7 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
 std::tuple<std::vector<CameraData>, float>
 read_colmap_cameras(const std::filesystem::path file_path,
                     const std::unordered_map<uint32_t, CameraData>& cams,
-                    const std::vector<Image>& images)
-{
+                    const std::vector<Image>& images) {
     std::vector<CameraData> out(images.size());
 
     // Prepare tensor to store all camera locations [N, 3]

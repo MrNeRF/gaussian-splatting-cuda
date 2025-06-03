@@ -31,11 +31,11 @@ private:
               param_group_index_(param_group_index) {}
 
         void step() {
-                // Only update specific parameter group
-                auto& group = optimizer_.param_groups()[param_group_index_];
-                auto& options = static_cast<torch::optim::AdamOptions&>(group.options());
-                double current_lr = options.lr();
-                options.lr(current_lr * gamma_);
+            // Only update specific parameter group
+            auto& group = optimizer_.param_groups()[param_group_index_];
+            auto& options = static_cast<torch::optim::AdamOptions&>(group.options());
+            double current_lr = options.lr();
+            options.lr(current_lr * gamma_);
         }
 
     private:
