@@ -17,7 +17,7 @@ public:
 
     // Constructor
     SplatData(int sh_degree,
-              torch::Tensor xyz,
+              torch::Tensor means,
               torch::Tensor sh0,
               torch::Tensor shN,
               torch::Tensor scaling,
@@ -29,19 +29,19 @@ public:
     static SplatData init_model_from_pointcloud(const gs::param::TrainingParameters& params, float scene_scale);
 
     // Computed getters (implemented in cpp)
-    torch::Tensor get_xyz() const;
+    torch::Tensor get_means() const;
     torch::Tensor get_opacity() const;
     torch::Tensor get_rotation() const;
     torch::Tensor get_scaling() const;
-    torch::Tensor get_features() const;
+    torch::Tensor get_shs() const;
 
     // Simple inline getters
     inline int get_active_sh_degree() const { return _active_sh_degree; }
     inline float get_scene_scale() const { return _scene_scale; }
-    inline int64_t size() const { return _xyz.size(0); }
+    inline int64_t size() const { return _means.size(0); }
 
     // Raw tensor access for optimization (inline for performance)
-    inline torch::Tensor& xyz() { return _xyz; }
+    inline torch::Tensor& means() { return _means; }
     inline torch::Tensor& opacity_raw() { return _opacity; }
     inline torch::Tensor& rotation_raw() { return _rotation; }
     inline torch::Tensor& scaling_raw() { return _scaling; }
@@ -63,7 +63,7 @@ private:
     int _max_sh_degree = 0;
     float _scene_scale = 0.f;
 
-    torch::Tensor _xyz;
+    torch::Tensor _means;
     torch::Tensor _sh0;
     torch::Tensor _shN;
     torch::Tensor _scaling;

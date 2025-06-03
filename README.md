@@ -1,29 +1,16 @@
 # "3D Gaussian Splatting for Real-Time Radiance Field Rendering" Reproduction in C++ and CUDA
-This repository contains a reproduction of the Gaussian-Splatting software, originally developed by Inria and the Max Planck Institut for Informatik (MPII). The reproduction is written in C++ and CUDA.
-I have used the source code from the original [repo](https://github.com/graphdeco-inria/gaussian-splatting) as blueprint for my first implementation.
-The original code is written in Python and PyTorch.
-
-I embarked on this project to deepen my understanding of the groundbreaking paper on 3D Gaussian splatting, by reimplementing everything from scratch.
-
-## 🚫 Commercial Use Disclaimer
-
-The materials, code, and assets within this repository are intended solely for educational, training, or research purposes. They may not be utilized for commercial activities without explicit authorization. Any unauthorized commercial usage, distribution, or licensing of this repository's content is strictly forbidden. I am not the license holder for the original implementation. This is derived work. For detailed terms, please refer to the license section.
-
 
 ## News
+- **[2025-06-03]**: Switched to Gsplat backend and updated license.
 - **[2025-05-27]**: Updated to LibTorch 2.7.0 for better compatibility and performance. Breaking changes in optimizer state management have been addressed.
 - **[2025-05-26]**: The current goal of this repo is to move towards a permissive license. Some works has been done in this direction. However, as the major work package we must remove the rasterizer and replace it with the gsplat implementation.
 
-## About this Project
-This project is a derivative of the original Gaussian-Splatting software and is governed by the Gaussian-Splatting License, which can be found in the LICENSE file in this repository. The original software was developed by Inria and MPII.
-
-Please be advised that the software in this repository cannot be used for commercial purposes without explicit consent from the original licensors, Inria and MPII.
 
 ## Build and Execution instructions
 ### Software Prerequisites
 1. Linux (tested with Ubuntu 22.04), windows probably won't work.
 2. CMake 3.24 or higher.
-3. CUDA 11.7 or higher (might work with a lower version, has to be manually set and tested).
+3. CUDA 11.8 or higher (might work with a lower version, has to be manually set and tested).
 4. Python with development headers.
 5. **LibTorch 2.7.0**: You can find the setup instructions in the libtorch section of this README.
 6. Other dependencies will be handled by the CMake script.
@@ -96,39 +83,6 @@ To run the `3D Gaussian Splatting CUDA Implementation` with specified data path,
 $ ./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 1000
 ```
 
-### View the results
-For now, you will need the SIBR view
-```bash
-git clone --recursive https://gitlab.inria.fr/sibr/sibr_core SIBR_viewers
-cd SIBR_viewers
-cmake -B build .
-cmake --build build --target install --config Release -- -j 
-cd ..
-```
-Then, you can view the results with:
-```bash
-./SIBR_viewers/install/bin/SIBR_gaussianViewer_app -m output
-```
-
-## Contributions
-Contributions are welcome! I want to make this a community project.
-
-Some ideas for relative straight forward contributions:
-- Revamp the README.
-- Add a proper config file or cmd line config.
-
-I want to get rid of some heavy dependencies:
-- Replace glm with custom matrix operations
-- Replace the few Eigen with some custom matrix operations
-
-Advanced contributions or long term goals:
-- Build a renderer to view training output in real time and to replace SIBR viewer.
-- Look into [gtsfm](https://github.com/borglab/gtsfm) to replace colmap dependency
-- CUDA optimization
-- Build a proper viewer for the training output (maybe with XR support?).
-
-Own ideas are welcome as well!
-
 ### Contribution Guidelines
 
 Below are some guidelines to help ensure our project remains effective and consistent.
@@ -150,7 +104,5 @@ Kerbl, Bernhard; Kopanas, Georgios; Leimkühler, Thomas; Drettakis, George (2023
 This will ensure the original authors receive the recognition they deserve.
 
 ## License
-
-This project is licensed under the Gaussian-Splatting License - see the [LICENSE](LICENSE) file for details.
 
 Follow me on Twitter if you want to know more about the latest development: https://twitter.com/janusch_patas
