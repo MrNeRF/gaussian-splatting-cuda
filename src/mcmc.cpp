@@ -288,11 +288,6 @@ int MCMC::add_new_gs() {
         }
     }
 
-    // Update max_radii2D
-    _splat_data.max_radii2D() = torch::cat({_splat_data.max_radii2D(),
-                                            torch::zeros({n_new}, torch::kFloat32).to(torch::kCUDA)},
-                                           0);
-
     return n_new;
 }
 
@@ -341,11 +336,6 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     if (iter % 1000 == 0) {
         _splat_data.increment_sh_degree();
     }
-
-    // Update max radii (similar to InriaADC)
-    const auto visible_max_radii = _splat_data.max_radii2D().masked_select(render_output.visibility);
-    const auto visible_radii = render_output.radii.masked_select(render_output.visibility);
-    _splat_data.max_radii2D().masked_scatter_(render_output.visibility, torch::max(visible_max_radii, visible_radii));
 
     // Move binoms to device if needed
     _binoms = _binoms.to(_splat_data.xyz().device());
@@ -437,7 +427,4 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     // This means after max_steps, lr will be 0.01 * initial_lr
     double gamma = std::pow(0.01, 1.0 / _params->iterations);
     _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma);
-
-    // Initialize max_radii2D
-    _splat_data.max_radii2D() = torch::zeros({_splat_data.size()}, torch::kFloat32).to(dev);
 }
