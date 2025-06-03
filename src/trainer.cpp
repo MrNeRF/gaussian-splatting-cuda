@@ -1,6 +1,6 @@
 #include "core/trainer.hpp"
-#include "core/gsplat_rasterizer.hpp"
 #include "core/image_io.hpp"
+#include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <iostream>
