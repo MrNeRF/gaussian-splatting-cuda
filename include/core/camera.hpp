@@ -30,24 +30,12 @@ public:
     // Load image from disk and return it
     torch::Tensor load_and_get_image(int resolution = -1);
 
-    // Prefetch image asynchronously
-    void prefetch_image(int resolution = -1);
-
     // Accessors - now return const references to avoid copies
     const torch::Tensor& world_view_transform() const {
-        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
         return _world_view_transform;
     }
 
-    const torch::Tensor& full_proj_transform() const {
-        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
-        return _full_proj_transform;
-    }
-
-    const torch::Tensor& camera_center() const {
-        TORCH_CHECK(_cuda_initialized, "initialize_cuda_tensors() not called");
-        return _camera_center;
-    }
+    torch::Tensor K() const;
 
     int image_height() const noexcept { return _image_height; }
     int image_width() const noexcept { return _image_width; }
@@ -59,10 +47,6 @@ public:
 private:
     // IDs
     int _uid = -1;
-
-    // Extrinsics / intrinsics (CPU)
-    torch::Tensor _R = torch::eye(3);
-    torch::Tensor _T = torch::zeros({3});
     float _FoVx = 0.f;
     float _FoVy = 0.f;
 
@@ -71,21 +55,7 @@ private:
     std::filesystem::path _image_path;
     int _image_width = 0;
     int _image_height = 0;
-    int _width = 0;  // Camera resolution
-    int _height = 0; // Camera resolution
-
-    // Clip planes
-    float _zfar = 100.f;
-    float _znear = 0.01f;
 
     // GPU tensors (computed on demand)
     torch::Tensor _world_view_transform;
-    torch::Tensor _projection_matrix;
-    torch::Tensor _full_proj_transform;
-    torch::Tensor _camera_center;
-
-    bool _cuda_initialized = false;
-
-    // Async loading
-    std::future<std::tuple<unsigned char*, int, int, int>> _image_future;
 };

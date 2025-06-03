@@ -20,7 +20,7 @@ public:
 
     // IStrategy interface implementation
     void initialize(const gs::param::OptimizationParameters& optimParams) override;
-    void post_backward(int iter, RenderOutput& render_output) override;
+    void post_backward(int iter, gs::RenderOutput& render_output) override;
     void step(int iter) override;
     SplatData& get_model() override { return _splat_data; }
     const SplatData& get_model() const override { return _splat_data; }
@@ -46,7 +46,9 @@ private:
 
     void Update_learning_rate(float iteration);
     void Reset_opacity();
-    void Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter);
+    void Add_densification_stats(torch::Tensor& viewspace_point_tensor,
+                                 torch::Tensor& update_filter,
+                                 int width, int height);
     void Densify_and_prune(float max_grad, float min_opacity);
     void densify_and_clone(torch::Tensor& grads, float grad_threshold);
     void densify_and_split(torch::Tensor& grads, float grad_threshold, float min_opacity);

@@ -18,8 +18,8 @@ public:
     // Constructor
     SplatData(int sh_degree,
               torch::Tensor xyz,
-              torch::Tensor features_dc,
-              torch::Tensor features_rest,
+              torch::Tensor sh0,
+              torch::Tensor shN,
               torch::Tensor scaling,
               torch::Tensor rotation,
               torch::Tensor opacity,
@@ -45,8 +45,8 @@ public:
     inline torch::Tensor& opacity_raw() { return _opacity; }
     inline torch::Tensor& rotation_raw() { return _rotation; }
     inline torch::Tensor& scaling_raw() { return _scaling; }
-    inline torch::Tensor& features_dc() { return _features_dc; }
-    inline torch::Tensor& features_rest() { return _features_rest; }
+    inline torch::Tensor& sh0() { return _sh0; }
+    inline torch::Tensor& shN() { return _shN; }
     inline torch::Tensor& max_radii2D() { return _max_radii2D; }
 
     // Utility methods
@@ -64,8 +64,8 @@ private:
     float _scene_scale = 0.f;
 
     torch::Tensor _xyz;
-    torch::Tensor _features_dc;
-    torch::Tensor _features_rest;
+    torch::Tensor _sh0;
+    torch::Tensor _shN;
     torch::Tensor _scaling;
     torch::Tensor _rotation;
     torch::Tensor _opacity;

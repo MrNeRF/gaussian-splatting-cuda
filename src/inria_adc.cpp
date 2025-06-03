@@ -1,7 +1,7 @@
 #include "core/inria_adc.hpp"
 #include "core/debug_utils.hpp"
 #include "core/parameters.hpp"
-#include "core/render_utils.hpp"
+#include "core/rasterizer.hpp"
 #include <exception>
 #include <thread>
 
@@ -102,8 +102,8 @@ void InriaADC::prune_points(torch::Tensor mask) {
     int true_count = valid_point_mask.sum().item<int>();
     auto indices = torch::nonzero(valid_point_mask == true).squeeze(-1);
     prune_optimizer(_optimizer.get(), indices, _splat_data.xyz(), 0);
-    prune_optimizer(_optimizer.get(), indices, _splat_data.features_dc(), 1);
-    prune_optimizer(_optimizer.get(), indices, _splat_data.features_rest(), 2);
+    prune_optimizer(_optimizer.get(), indices, _splat_data.sh0(), 1);
+    prune_optimizer(_optimizer.get(), indices, _splat_data.shN(), 2);
     prune_optimizer(_optimizer.get(), indices, _splat_data.scaling_raw(), 3);
     prune_optimizer(_optimizer.get(), indices, _splat_data.rotation_raw(), 4);
     prune_optimizer(_optimizer.get(), indices, _splat_data.opacity_raw(), 5);
@@ -138,14 +138,14 @@ void cat_tensors_to_optimizer(torch::optim::Adam* optimizer,
 }
 
 void InriaADC::densification_postfix(torch::Tensor& new_xyz,
-                                     torch::Tensor& new_features_dc,
-                                     torch::Tensor& new_features_rest,
+                                     torch::Tensor& new_sh0,
+                                     torch::Tensor& new_shN,
                                      torch::Tensor& new_scaling,
                                      torch::Tensor& new_rotation,
                                      torch::Tensor& new_opacity) {
     cat_tensors_to_optimizer(_optimizer.get(), new_xyz, _splat_data.xyz(), 0);
-    cat_tensors_to_optimizer(_optimizer.get(), new_features_dc, _splat_data.features_dc(), 1);
-    cat_tensors_to_optimizer(_optimizer.get(), new_features_rest, _splat_data.features_rest(), 2);
+    cat_tensors_to_optimizer(_optimizer.get(), new_sh0, _splat_data.sh0(), 1);
+    cat_tensors_to_optimizer(_optimizer.get(), new_shN, _splat_data.shN(), 2);
     cat_tensors_to_optimizer(_optimizer.get(), new_scaling, _splat_data.scaling_raw(), 3);
     cat_tensors_to_optimizer(_optimizer.get(), new_rotation, _splat_data.rotation_raw(), 4);
     cat_tensors_to_optimizer(_optimizer.get(), new_opacity, _splat_data.opacity_raw(), 5);
@@ -173,11 +173,11 @@ void InriaADC::densify_and_split(torch::Tensor& grads, float grad_threshold, flo
     torch::Tensor new_xyz = torch::bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + _splat_data.xyz().index_select(0, indices).repeat({N, 1});
     torch::Tensor new_scaling = torch::log(_splat_data.get_scaling().index_select(0, indices).repeat({N, 1}) / (0.8 * N));
     torch::Tensor new_rotation = _splat_data.rotation_raw().index_select(0, indices).repeat({N, 1});
-    torch::Tensor new_features_dc = _splat_data.features_dc().index_select(0, indices).repeat({N, 1, 1});
-    torch::Tensor new_features_rest = _splat_data.features_rest().index_select(0, indices).repeat({N, 1, 1});
+    torch::Tensor new_sh0 = _splat_data.sh0().index_select(0, indices).repeat({N, 1, 1});
+    torch::Tensor new_shN = _splat_data.shN().index_select(0, indices).repeat({N, 1, 1});
     torch::Tensor new_opacity = _splat_data.opacity_raw().index_select(0, indices).repeat({N, 1});
 
-    densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
+    densification_postfix(new_xyz, new_sh0, new_shN, new_scaling, new_rotation, new_opacity);
 
     torch::Tensor prune_filter = torch::cat({selected_pts_mask, torch::zeros({N * selected_pts_mask.sum().item<int>()}).to(torch::kBool).to(torch::kCUDA)});
     prune_filter = torch::logical_or(prune_filter, (_splat_data.get_opacity() < min_opacity).squeeze(-1));
@@ -194,13 +194,13 @@ void InriaADC::densify_and_clone(torch::Tensor& grads, float grad_threshold) {
 
     auto indices = torch::nonzero(selected_pts_mask.squeeze(-1) == true).squeeze(-1);
     torch::Tensor new_xyz = _splat_data.xyz().index_select(0, indices);
-    torch::Tensor new_features_dc = _splat_data.features_dc().index_select(0, indices);
-    torch::Tensor new_features_rest = _splat_data.features_rest().index_select(0, indices);
+    torch::Tensor new_sh0 = _splat_data.sh0().index_select(0, indices);
+    torch::Tensor new_shN = _splat_data.shN().index_select(0, indices);
     torch::Tensor new_opacity = _splat_data.opacity_raw().index_select(0, indices);
     torch::Tensor new_scaling = _splat_data.scaling_raw().index_select(0, indices);
     torch::Tensor new_rotation = _splat_data.rotation_raw().index_select(0, indices);
 
-    densification_postfix(new_xyz, new_features_dc, new_features_rest, new_scaling, new_rotation, new_opacity);
+    densification_postfix(new_xyz, new_sh0, new_shN, new_scaling, new_rotation, new_opacity);
 }
 
 void InriaADC::Densify_and_prune(float max_grad, float min_opacity) {
@@ -211,12 +211,44 @@ void InriaADC::Densify_and_prune(float max_grad, float min_opacity) {
     densify_and_split(grads, max_grad, min_opacity);
 }
 
-void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter) {
-    _xyz_gradient_accum.index_put_({update_filter}, _xyz_gradient_accum.index_select(0, update_filter.nonzero().squeeze()) + viewspace_point_tensor.grad().index_select(0, update_filter.nonzero().squeeze()).slice(1, 0, 2).norm(2, -1, true));
-    _denom.index_put_({update_filter}, _denom.index_select(0, update_filter.nonzero().squeeze()) + 1);
+void InriaADC::Add_densification_stats(torch::Tensor& viewspace_point_tensor, torch::Tensor& update_filter, int width, int height) {
+    // Check if gradient exists
+    if (!viewspace_point_tensor.grad().defined()) {
+        std::cerr << ts::color::RED << "ERROR: viewspace_point_tensor has no gradient! "
+                  << "Make sure to call retain_grad() on intermediate tensors." << ts::color::RESET << std::endl;
+        return;
+    }
+
+    auto grad = viewspace_point_tensor.grad();
+
+    // CRITICAL: Normalize gradients to [-1, 1] screen space
+    // This is essential for the densification threshold to work correctly
+    grad = grad.clone(); // Clone to avoid modifying the original gradient
+    grad.index({torch::indexing::Slice(), 0}) *= width * 0.5f;
+    grad.index({torch::indexing::Slice(), 1}) *= height * 0.5f;
+
+    // Get indices where update_filter is true
+    auto indices = update_filter.nonzero().squeeze();
+    if (indices.dim() == 0) {
+        indices = indices.unsqueeze(0); // Handle single element case
+    }
+
+    if (indices.numel() == 0) {
+        std::cout << ts::color::YELLOW << "No points to update" << ts::color::RESET << std::endl;
+        return;
+    }
+
+    // Update gradient accumulator - only use first 2 dimensions (x, y)
+    auto selected_grad = grad.index_select(0, indices).slice(1, 0, 2).norm(2, -1, true);
+    auto selected_accum = _xyz_gradient_accum.index_select(0, indices);
+    _xyz_gradient_accum.index_put_({update_filter}, selected_accum + selected_grad);
+
+    // Update denominator
+    auto selected_denom = _denom.index_select(0, indices);
+    _denom.index_put_({update_filter}, selected_denom + 1);
 }
 
-void InriaADC::post_backward(int iter, RenderOutput& render_output) {
+void InriaADC::post_backward(int iter, gs::RenderOutput& render_output) {
 
     if (iter % 1000 == 0)
         _splat_data.increment_sh_degree();
@@ -227,7 +259,9 @@ void InriaADC::post_backward(int iter, RenderOutput& render_output) {
 
     // Densification & pruning
     if (iter < _params->densify_until_iter) {
-        Add_densification_stats(render_output.viewspace_pts, render_output.visibility);
+        // Pass width and height for gradient normalization
+        Add_densification_stats(render_output.means2d, render_output.visibility,
+                                render_output.width, render_output.height);
         const bool is_densifying = (iter < _params->densify_until_iter &&
                                     iter > _params->densify_from_iter &&
                                     iter % _params->densification_interval == 0);
@@ -257,8 +291,8 @@ void InriaADC::initialize(const gs::param::OptimizationParameters& optimParams) 
     _splat_data.scaling_raw() = _splat_data.scaling_raw().to(dev).set_requires_grad(true);
     _splat_data.rotation_raw() = _splat_data.rotation_raw().to(dev).set_requires_grad(true);
     _splat_data.opacity_raw() = _splat_data.opacity_raw().to(dev).set_requires_grad(true);
-    _splat_data.features_dc() = _splat_data.features_dc().to(dev).set_requires_grad(true);
-    _splat_data.features_rest() = _splat_data.features_rest().to(dev).set_requires_grad(true);
+    _splat_data.sh0() = _splat_data.sh0().to(dev).set_requires_grad(true);
+    _splat_data.shN() = _splat_data.shN().to(dev).set_requires_grad(true);
 
     // aux buffers (no grad)
     _percent_dense = _params->percent_dense;
@@ -280,9 +314,9 @@ void InriaADC::initialize(const gs::param::OptimizationParameters& optimParams) 
 
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.xyz()},
                                                           std::make_unique<AdamOptions>(_params->position_lr_init * _splat_data.get_scene_scale())));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.features_dc()},
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.sh0()},
                                                           std::make_unique<AdamOptions>(_params->feature_lr)));
-    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.features_rest()},
+    groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.shN()},
                                                           std::make_unique<AdamOptions>(_params->feature_lr / 20.f)));
     groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.scaling_raw()},
                                                           std::make_unique<AdamOptions>(_params->scaling_lr * _splat_data.get_scene_scale())));
