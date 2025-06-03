@@ -9,11 +9,7 @@ namespace gs {
         struct OptimizationParameters {
             size_t iterations = 30'000;
             float position_lr_init = 0.00016f;
-            float position_lr_final = 0.0000016f;
-            float position_lr_delay_mult = 0.01f;
-            int64_t position_lr_max_steps = 30'000;
             float feature_lr = 0.0025f;
-            float percent_dense = 0.01f;
             float opacity_lr = 0.05f;
             float scaling_lr = 0.001f;
             float rotation_lr = 0.001f;

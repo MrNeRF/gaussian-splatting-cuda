@@ -1,11 +1,7 @@
 {
   "iterations": 30000,
   "position_lr_init": 0.00016,
-  "position_lr_final": 0.0000016,
-  "position_lr_delay_mult": 0.01,
-  "position_lr_max_steps": 30000,
   "feature_lr": 0.0025,
-  "percent_dense": 0.01,
   "opacity_lr": 0.05,
   "scaling_lr": 0.001,
   "rotation_lr": 0.001,
