@@ -265,11 +265,15 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
 // -----------------------------------------------------------------------------
 //  Assemble per-image camera information
 // -----------------------------------------------------------------------------
-std::vector<CameraData>
+std::tuple<std::vector<CameraData>, float>
 read_colmap_cameras(const std::filesystem::path file_path,
                     const std::unordered_map<uint32_t, CameraData>& cams,
-                    const std::vector<Image>& images) {
+                    const std::vector<Image>& images)
+{
     std::vector<CameraData> out(images.size());
+
+    // Prepare tensor to store all camera locations [N, 3]
+    torch::Tensor camera_locations = torch::zeros({static_cast<int64_t>(images.size()), 3}, torch::kFloat32);
 
     for (size_t i = 0; i < images.size(); ++i) {
         const Image& img = images[i];
@@ -283,6 +287,10 @@ read_colmap_cameras(const std::filesystem::path file_path,
 
         out[i]._R = qvec2rotmat(img._qvec);
         out[i]._T = img._tvec.clone();
+
+        // Camera location in world space = -R^T * T
+        // This is equivalent to extracting camtoworlds[:, :3, 3] after inverting w2c
+        camera_locations[i] = -torch::matmul(out[i]._R.t(), out[i]._T);
 
         switch (out[i]._camera_model) {
         case CAMERA_MODEL::SIMPLE_PINHOLE: {
@@ -305,29 +313,16 @@ read_colmap_cameras(const std::filesystem::path file_path,
         out[i]._img_w = out[i]._img_h = out[i]._channels = 0;
         out[i]._img_data = nullptr;
     }
-    return out;
-}
-
-// -----------------------------------------------------------------------------
-//  Scene-scale helper
-// -----------------------------------------------------------------------------
-static std::pair<torch::Tensor, float>
-center_and_diag(const std::vector<torch::Tensor>& pts) {
-    auto stack = torch::stack(pts); // Nx3
-    torch::Tensor avg = stack.mean(0);
-    float diag = torch::norm(stack - avg, 2, 1).max().item<float>();
-    return {avg, diag};
-}
-
-float getNerfppNorm(std::vector<CameraData>& cams) {
-    std::vector<torch::Tensor> centers;
-    centers.reserve(cams.size());
-    for (auto& c : cams) {
-        torch::Tensor W2C = getWorld2View(c._R, c._T);
-        torch::Tensor C2W = torch::linalg_inv(W2C);
-        centers.emplace_back(C2W.index({torch::indexing::Slice(0, 3), 3}));
+    float scene_scale = 1.0f;
+    if (!images.empty()) {
+        torch::Tensor scene_center = camera_locations.mean(0);                    // [3]
+        torch::Tensor dists = torch::norm(camera_locations - scene_center, 2, 1); // [N]
+        scene_scale = dists.max().item<float>() * 1.1f;
     }
-    return center_and_diag(centers).second * 1.1f; // +10 %
+
+    std::cout << "Training with " << out.size() << " images \n";
+    std::cout << "Scene scale: " << scene_scale << "\n";
+    return {std::move(out), scene_scale}; // +10% for safety
 }
 
 // -----------------------------------------------------------------------------
@@ -343,11 +338,5 @@ std::tuple<std::vector<CameraData>, float> read_colmap_cameras_and_images(
     auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");
     auto images = read_images_binary(base / "sparse/0/images.bin");
 
-    auto camera_infos = read_colmap_cameras(base / "images", cams, images);
-
-    std::cout << "Training with " << camera_infos.size() << " images \n";
-
-    float nerf_norm_radius = getNerfppNorm(camera_infos);
-
-    return {std::move(camera_infos), nerf_norm_radius};
+    return read_colmap_cameras(base / "images", cams, images);
 }
