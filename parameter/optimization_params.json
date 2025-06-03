@@ -16,5 +16,7 @@
   "densify_from_iter": 500,
   "densify_until_iter": 15000,
   "densify_grad_threshold": 0.0002,
-  "sh_degree": 3
+  "sh_degree": 3,
+  "opacity_reg": 0.01,
+  "scale_reg": 0.01
 }

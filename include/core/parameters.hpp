@@ -25,6 +25,8 @@ namespace gs {
             size_t densify_until_iter = 15'000;
             float densify_grad_threshold = 0.0002f;
             int sh_degree = 3;
+            float opacity_reg = 0.01f;
+            float scale_reg = 0.01f;
         };
 
         struct DatasetConfig {
