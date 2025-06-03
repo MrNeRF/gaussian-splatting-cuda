@@ -543,7 +543,7 @@ namespace gs {
                                           (float)sh_degree,
                                           0.3f,   // eps2d
                                           0.01f,  // near_plane
-                                          100.0f, // far_plane
+                                          10000.0f, // far_plane
                                           0.0f,   // radius_clip
                                           scaling_modifier,
                                           16.0f // tile_size
