@@ -11,13 +11,13 @@ namespace gs {
     public:
         static torch::autograd::tensor_list forward(
             torch::autograd::AutogradContext* ctx,
-            torch::Tensor means3D,      // [N, 3]
-            torch::Tensor quats,        // [N, 4]
-            torch::Tensor scales,       // [N, 3]
-            torch::Tensor opacities,    // [N]
-            torch::Tensor viewmat,      // [C, 4, 4]
-            torch::Tensor K,            // [C, 3, 3]
-            torch::Tensor settings) {   // [7] tensor containing projection settings
+            torch::Tensor means3D,    // [N, 3]
+            torch::Tensor quats,      // [N, 4]
+            torch::Tensor scales,     // [N, 3]
+            torch::Tensor opacities,  // [N]
+            torch::Tensor viewmat,    // [C, 4, 4]
+            torch::Tensor K,          // [C, 3, 3]
+            torch::Tensor settings) { // [7] tensor containing projection settings
 
             // Input validation
             const int N = static_cast<int>(means3D.size(0));
@@ -70,7 +70,7 @@ namespace gs {
             // Call projection
             auto proj_results = gsplat::projection_ewa_3dgs_fused_fwd(
                 means3D,
-                {},  // covars
+                {}, // covars
                 quats,
                 scaled_scales,
                 opacities,
@@ -82,7 +82,7 @@ namespace gs {
                 near_plane,
                 far_plane,
                 radius_clip,
-                false,  // calc_compensations
+                false, // calc_compensations
                 gsplat::CameraModelType::PINHOLE);
 
             auto radii = std::get<0>(proj_results).contiguous();
@@ -179,10 +179,10 @@ namespace gs {
     public:
         static torch::autograd::tensor_list forward(
             torch::autograd::AutogradContext* ctx,
-            torch::Tensor sh_coeffs,    // [N, K, 3]
-            torch::Tensor means3D,      // [N, 3]
-            torch::Tensor viewmat,      // [C, 4, 4]
-            torch::Tensor radii,        // [C, N, 2]
+            torch::Tensor sh_coeffs,          // [N, K, 3]
+            torch::Tensor means3D,            // [N, 3]
+            torch::Tensor viewmat,            // [C, 4, 4]
+            torch::Tensor radii,              // [C, N, 2]
             torch::Tensor sh_degree_tensor) { // [1] containing sh_degree
 
             const int N = static_cast<int>(means3D.size(0));
@@ -308,14 +308,14 @@ namespace gs {
     public:
         static torch::autograd::tensor_list forward(
             torch::autograd::AutogradContext* ctx,
-            torch::Tensor means2d,      // [C, N, 2]
-            torch::Tensor conics,       // [C, N, 3]
-            torch::Tensor colors,       // [C, N, 3]
-            torch::Tensor opacities,    // [C, N]
-            torch::Tensor bg_color,     // [C, 3]
-            torch::Tensor isect_offsets,// [C, tile_height, tile_width]
-            torch::Tensor flatten_ids,  // [nnz]
-            torch::Tensor settings) {   // [3] containing width, height, tile_size
+            torch::Tensor means2d,       // [C, N, 2]
+            torch::Tensor conics,        // [C, N, 3]
+            torch::Tensor colors,        // [C, N, 3]
+            torch::Tensor opacities,     // [C, N]
+            torch::Tensor bg_color,      // [C, 3]
+            torch::Tensor isect_offsets, // [C, tile_height, tile_width]
+            torch::Tensor flatten_ids,   // [nnz]
+            torch::Tensor settings) {    // [3] containing width, height, tile_size
 
             // Extract settings
             const auto width = settings[0].item<int>();
@@ -359,7 +359,7 @@ namespace gs {
             // Call rasterization
             auto raster_results = gsplat::rasterize_to_pixels_3dgs_fwd(
                 means2d, conics, colors, opacities,
-                bg_color, {},  // masks
+                bg_color, {}, // masks
                 width, height, tile_size,
                 isect_offsets, flatten_ids);
 
@@ -414,12 +414,12 @@ namespace gs {
             // Call backward
             auto raster_grads = gsplat::rasterize_to_pixels_3dgs_bwd(
                 means2d, conics, colors, opacities,
-                bg_color, {},  // masks
+                bg_color, {}, // masks
                 width, height, tile_size,
                 isect_offsets, flatten_ids,
                 rendered_alpha, last_ids,
                 grad_image, grad_alpha,
-                false);  // absgrad
+                false); // absgrad
 
             auto v_means2d_abs = std::get<0>(raster_grads);
             auto v_means2d = std::get<1>(raster_grads).contiguous();
@@ -511,15 +511,14 @@ namespace gs {
         const int tile_size = 16;
 
         // Step 1: Projection
-        auto proj_settings = torch::tensor({
-                                               (float)image_width,
-                                               (float)image_height,
-                                               eps2d,
-                                               near_plane,
-                                               far_plane,
-                                               radius_clip,
-                                               scaling_modifier
-                                           }, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+        auto proj_settings = torch::tensor({(float)image_width,
+                                            (float)image_height,
+                                            eps2d,
+                                            near_plane,
+                                            far_plane,
+                                            radius_clip,
+                                            scaling_modifier},
+                                           torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
         auto proj_outputs = ProjectionFunction::apply(
             means3D, rotations, scales, opacities, viewmat, K, proj_settings);
@@ -568,11 +567,10 @@ namespace gs {
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
 
         // Step 5: Rasterization
-        auto raster_settings = torch::tensor({
-                                                 (float)image_width,
-                                                 (float)image_height,
-                                                 (float)tile_size
-                                             }, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+        auto raster_settings = torch::tensor({(float)image_width,
+                                              (float)image_height,
+                                              (float)tile_size},
+                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
         auto raster_outputs = RasterizationFunction::apply(
             means2d, conics, colors, final_opacities, bg_color,
