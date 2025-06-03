@@ -39,77 +39,7 @@ add_subdirectory(external)
 # GSPLAT LIBRARY - New backend
 # =============================================================================
 
-set(GSPLAT_SOURCES
-        gsplat/Adam.cpp
-        gsplat/AdamCUDA.cu
-        gsplat/Intersect.cpp
-        gsplat/IntersectTile.cu
-        gsplat/Null.cpp
-        gsplat/NullCUDA.cu
-        gsplat/Projection.cpp
-        gsplat/ProjectionEWA3DGSFused.cu
-        gsplat/ProjectionEWA3DGSPacked.cu
-        gsplat/ProjectionEWASimple.cu
-        gsplat/ProjectionUT3DGSFused.cu
-        gsplat/QuatScaleToCovar.cpp
-        gsplat/QuatScaleToCovarCUDA.cu
-        gsplat/Rasterization.cpp
-        gsplat/RasterizeToIndices3DGS.cu
-        gsplat/RasterizeToPixels3DGSBwd.cu
-        gsplat/RasterizeToPixels3DGSFwd.cu
-        gsplat/RasterizeToPixelsFromWorld3DGSBwd.cu
-        gsplat/RasterizeToPixelsFromWorld3DGSFwd.cu
-        gsplat/Relocation.cpp
-        gsplat/RelocationCUDA.cu
-        gsplat/SphericalHarmonics.cpp
-        gsplat/SphericalHarmonicsCUDA.cu
-        # 2DGS files if needed
-        gsplat/Projection2DGSFused.cu
-        gsplat/Projection2DGSPacked.cu
-        gsplat/RasterizeToIndices2DGS.cu
-        gsplat/RasterizeToPixels2DGSBwd.cu
-        gsplat/RasterizeToPixels2DGSFwd.cu
-)
-
-add_library(gsplat_backend STATIC ${GSPLAT_SOURCES})
-
-set_target_properties(gsplat_backend PROPERTIES
-        CUDA_ARCHITECTURES native
-        CUDA_SEPARABLE_COMPILATION ON
-        POSITION_INDEPENDENT_CODE ON
-        # Enable device linking for this library
-        CUDA_RESOLVE_DEVICE_SYMBOLS ON
-)
-
-target_include_directories(gsplat_backend
-        PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        PRIVATE
-        ${PYTHON_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
-)
-
-target_link_libraries(gsplat_backend
-        PUBLIC
-        CUDA::cudart
-        CUDA::curand
-        CUDA::cublas
-        ${TORCH_LIBRARIES}
-)
-
-# CUDA optimizations for gsplat - only apply to CUDA files
-target_compile_options(gsplat_backend PRIVATE
-        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
-        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0 -g -fno-omit-frame-pointer>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:-O3>
-)
-
-# Ensure debug symbols are kept
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(gsplat_backend PRIVATE _DEBUG)
-endif()
+add_subdirectory(gsplat)
 
 # =============================================================================
 # HOST LIBRARY - Compiled with g++ (fast!)
@@ -125,7 +55,7 @@ set(HOST_SOURCES
         src/splat_data.cpp
         src/trainer.cpp
         src/argument_parser.cpp
-        src/gsplat_rasterizer.cpp
+        src/rasterizer.cpp
         src/external/tinyply.cpp
 )
 

@@ -1,7 +1,7 @@
 #include "core/inria_adc.hpp"
 #include "core/debug_utils.hpp"
-#include "core/gsplat_rasterizer.hpp"
 #include "core/parameters.hpp"
+#include "core/rasterizer.hpp"
 #include <exception>
 #include <thread>
 
