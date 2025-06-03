@@ -67,10 +67,10 @@ void save_image(const std::filesystem::path& path, torch::Tensor image) {
     bool success = false;
 
     if (ext == ".png") {
-        success = stbi_write_png(path.c_str(), width, height, channels,
+        success = stbi_write_png(path.string().c_str(), width, height, channels,
                                  img_uint8.data_ptr<uint8_t>(), width * channels);
     } else if (ext == ".jpg" || ext == ".jpeg") {
-        success = stbi_write_jpg(path.c_str(), width, height, channels,
+        success = stbi_write_jpg(path.string().c_str(), width, height, channels,
                                  img_uint8.data_ptr<uint8_t>(), 95);
     }
 
