@@ -90,11 +90,6 @@ public:
                   << std::endl;
     }
 
-    void print_early_convergence(int converged_at) {
-        complete();
-        std::cout << "🎯 Converged after " << converged_at << " iterations!" << std::endl;
-    }
-
     // Destructor ensures completion
     ~TrainingProgress() {
         complete();
