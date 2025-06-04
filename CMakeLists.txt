@@ -159,6 +159,18 @@ target_link_libraries(${PROJECT_NAME}
         Python3::Python
 )
 
+if(WIN32)
+  file(GLOB TORCH_DLLS "${Torch_DIR}/../../../lib/*.dll")
+
+  foreach(TORCH_DLL ${TORCH_DLLS})
+    add_custom_command(
+      TARGET ${PROJECT_NAME}
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TORCH_DLL}"
+              "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+  endforeach()
+endif()
+
 # Build type configuration - Updated to handle INTERFACE libraries
 function(configure_build_type target)
     # Check if target is an INTERFACE library
