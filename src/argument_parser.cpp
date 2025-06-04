@@ -38,6 +38,9 @@ namespace gs {
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations to train the model", {'i', "iter"});
             ::args::CompletionFlag completion(parser, {"complete"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Maximum number of Gaussians for MCMC", {"max-cap"});
+            ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name (e.g., images, images_2, images_4, images_8)", {"images"});
+            ::args::ValueFlag<int> test_every(parser, "test_every", "Every N-th image is a test image", {"test-every"});
+            ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
 
             // Parse arguments
             try {
@@ -89,6 +92,18 @@ namespace gs {
                 std::filesystem::create_directories(outputDir);
             }
             params.dataset.output_path = outputDir;
+
+            if (images_folder) {
+                params.dataset.images = ::args::get(images_folder);
+            }
+
+            if (test_every) {
+                params.dataset.test_every = ::args::get(test_every);
+            }
+
+            if (enable_eval) {
+                params.optimization.enable_eval = true;
+            }
 
             return 0; // Success
         }

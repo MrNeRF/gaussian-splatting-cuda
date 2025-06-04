@@ -50,6 +50,7 @@ set(HOST_SOURCES
         src/trainer.cpp
         src/argument_parser.cpp
         src/rasterizer.cpp
+        src/metrics.cpp
         src/external/tinyply.cpp
 )
 
