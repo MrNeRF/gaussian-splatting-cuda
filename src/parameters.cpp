@@ -85,8 +85,8 @@ namespace gs {
                 // Define all expected parameters and their types
                 struct ParamInfo {
                     std::string name;
-                    std::variant<size_t, float, int64_t> value;
-                    std::string description; // Added for better documentation
+                    std::variant<size_t, float, int, bool> value; // Updated to include all types
+                    std::string description;
                 };
 
                 const std::vector<ParamInfo> expected_params = {
@@ -105,9 +105,14 @@ namespace gs {
                     {"grad_threshold", defaults.grad_threshold, "Gradient threshold for densification"},
                     {"opacity_reg", defaults.opacity_reg, "Opacity L1 regularization weight"},
                     {"scale_reg", defaults.scale_reg, "Scale L1 regularization weight"},
-                    {"sh_degree", defaults.sh_degree, "Gradient threshold for densification"},
-                    {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"}
-                };
+                    {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
+                    {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
+                    {"use_bilateral_grid", defaults.use_bilateral_grid, "Enable bilateral grid for appearance modeling"},
+                    {"bilateral_grid_X", defaults.bilateral_grid_X, "Bilateral grid X dimension"},
+                    {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
+                    {"bilateral_grid_W", defaults.bilateral_grid_W, "Bilateral grid W dimension"},
+                    {"bilateral_grid_lr", defaults.bilateral_grid_lr, "Learning rate for bilateral grid"},
+                    {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -233,6 +238,25 @@ namespace gs {
             }
             if (json.contains("max_cap")) {
                 params.max_cap = json["max_cap"];
+            }
+
+            if (json.contains("use_bilateral_grid")) {
+                params.use_bilateral_grid = json["use_bilateral_grid"];
+            }
+            if (json.contains("bilateral_grid_X")) {
+                params.bilateral_grid_X = json["bilateral_grid_X"];
+            }
+            if (json.contains("bilateral_grid_Y")) {
+                params.bilateral_grid_Y = json["bilateral_grid_Y"];
+            }
+            if (json.contains("bilateral_grid_W")) {
+                params.bilateral_grid_W = json["bilateral_grid_W"];
+            }
+            if (json.contains("bilateral_grid_lr")) {
+                params.bilateral_grid_lr = json["bilateral_grid_lr"];
+            }
+            if (json.contains("tv_loss_weight")) {
+                params.tv_loss_weight = json["tv_loss_weight"];
             }
             return params;
         }
