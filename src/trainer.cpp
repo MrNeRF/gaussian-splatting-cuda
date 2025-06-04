@@ -187,6 +187,12 @@ namespace gs {
         std::vector<float> psnr_values, ssim_values, lpips_values;
         auto start_time = std::chrono::steady_clock::now();
 
+        // Create directory for evaluation images
+        std::filesystem::path eval_dir = params_.dataset.output_path /
+                                         ("eval_step_" + std::to_string(iteration));
+        std::filesystem::create_directories(eval_dir);
+
+        int image_idx = 0;
         for (auto& batch : *val_dataloader) {
             auto camera_with_image = batch[0].data;
             Camera* cam = camera_with_image.camera;
@@ -211,6 +217,14 @@ namespace gs {
             psnr_values.push_back(psnr);
             ssim_values.push_back(ssim);
             lpips_values.push_back(lpips);
+
+            // Save side-by-side images using existing function
+            save_image(eval_dir / (std::to_string(image_idx) + ".png"),
+                       {gt_image.squeeze(0), r_output.image.squeeze(0)},
+                       true, // horizontal
+                       4);   // separator width
+
+            image_idx++;
         }
 
         auto end_time = std::chrono::steady_clock::now();
@@ -220,10 +234,12 @@ namespace gs {
         result.psnr = std::accumulate(psnr_values.begin(), psnr_values.end(), 0.0f) / psnr_values.size();
         result.ssim = std::accumulate(ssim_values.begin(), ssim_values.end(), 0.0f) / ssim_values.size();
         result.lpips = std::accumulate(lpips_values.begin(), lpips_values.end(), 0.0f) / lpips_values.size();
-        result.elapsed_time = elapsed / val_dataset_size_; // Time per image
+        result.elapsed_time = elapsed / val_dataset_size_;
 
         // Add metrics to reporter
         metrics_reporter_->add_metrics(result);
+
+        std::cout << "Saved " << image_idx << " evaluation images to: " << eval_dir << std::endl;
 
         return result;
     }
