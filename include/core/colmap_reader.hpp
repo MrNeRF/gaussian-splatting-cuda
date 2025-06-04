@@ -41,7 +41,8 @@ struct CameraData {
 
 // Read COLMAP cameras, images, and compute nerf norm
 std::tuple<std::vector<CameraData>, float> read_colmap_cameras_and_images(
-    const std::filesystem::path& filepath);
+    const std::filesystem::path& base,
+    const std::string& images_folder = "images");
 
 // Read COLMAP point cloud
 PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath);
