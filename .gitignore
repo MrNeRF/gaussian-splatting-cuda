@@ -5,6 +5,7 @@ cmake-build-release/
 external/libtorch/
 output*
 .idea
+data
 *.pt
 .venv/
 *.png
