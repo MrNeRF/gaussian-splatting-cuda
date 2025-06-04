@@ -266,13 +266,21 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
 //  Assemble per-image camera information
 // -----------------------------------------------------------------------------
 std::tuple<std::vector<CameraData>, float>
-read_colmap_cameras(const std::filesystem::path file_path,
+read_colmap_cameras(const std::filesystem::path base_path,
                     const std::unordered_map<uint32_t, CameraData>& cams,
-                    const std::vector<Image>& images) {
+                    const std::vector<Image>& images,
+                    const std::string& images_folder = "images") {
     std::vector<CameraData> out(images.size());
+
+    std::filesystem::path images_path = base_path / images_folder;
 
     // Prepare tensor to store all camera locations [N, 3]
     torch::Tensor camera_locations = torch::zeros({static_cast<int64_t>(images.size()), 3}, torch::kFloat32);
+
+    // Check if the specified images folder exists
+    if (!std::filesystem::exists(images_path)) {
+        throw std::runtime_error("Images folder does not exist: " + images_path.string());
+    }
 
     for (size_t i = 0; i < images.size(); ++i) {
         const Image& img = images[i];
@@ -281,7 +289,7 @@ read_colmap_cameras(const std::filesystem::path file_path,
             throw std::runtime_error("Camera ID " + std::to_string(img._camera_id) + " not found");
 
         out[i] = it->second;
-        out[i]._image_path = file_path / img._name;
+        out[i]._image_path = images_path / img._name;
         out[i]._image_name = img._name;
 
         out[i]._R = qvec2rotmat(img._qvec);
@@ -332,10 +340,11 @@ PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
 }
 
 std::tuple<std::vector<CameraData>, float> read_colmap_cameras_and_images(
-    const std::filesystem::path& base) {
+    const std::filesystem::path& base,
+    const std::string& images_folder) {
 
     auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");
     auto images = read_images_binary(base / "sparse/0/images.bin");
 
-    return read_colmap_cameras(base / "images", cams, images);
+    return read_colmap_cameras(base, cams, images, images_folder);
 }

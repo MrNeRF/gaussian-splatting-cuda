@@ -64,6 +64,20 @@ public:
         progress_bar_->set_option(indicators::option::PostfixText(postfix.str()));
     }
 
+    void pause() {
+        if (!progress_bar_->is_completed()) {
+            progress_bar_->mark_as_completed();
+            std::cout << std::endl;
+        }
+    }
+
+    void resume(int current_iteration, float loss, int splat_count) {
+        // Reset the progress bar
+        progress_bar_->set_progress(static_cast<size_t>(
+            static_cast<float>(current_iteration) / total_iterations_ * 100));
+        update(current_iteration, loss, splat_count, false);
+    }
+
     void complete() {
         if (!progress_bar_->is_completed()) {
             progress_bar_->set_progress(100);
