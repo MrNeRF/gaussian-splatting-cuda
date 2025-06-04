@@ -1,108 +1,167 @@
-# "3D Gaussian Splatting for Real-Time Radiance Field Rendering" Reproduction in C++ and CUDA
+# 3D Gaussian Splatting for Real-Time Radiance Field Rendering - C++ and CUDA Implementation
+
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?logo=discord&logoColor=white)](https://discord.gg/TbxJST2BbC)
+[![Website](https://img.shields.io/badge/Website-mrnerf.com-blue)](https://mrnerf.com)
+
+A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built upon the [gsplat](https://github.com/nerfstudio-project/gsplat) rasterization backend.
 
 ## News
+- **[2025-06-04]**: Added MCMC strategy with `--max-cap` command line option for controlling maximum Gaussian count.
 - **[2025-06-03]**: Switched to Gsplat backend and updated license.
-- **[2025-05-27]**: Updated to LibTorch 2.7.0 for better compatibility and performance. Breaking changes in optimizer state management have been addressed.
-- **[2025-05-26]**: The current goal of this repo is to move towards a permissive license. Some works has been done in this direction. However, as the major work package we must remove the rasterizer and replace it with the gsplat implementation.
+- **[2024-05-27]**: Updated to LibTorch 2.7.0 for better compatibility and performance. Breaking changes in optimizer state management have been addressed.
+- **[2024-05-26]**: The current goal of this repo is to move towards a permissive license. Major work has been done to replace the rasterizer with the gsplat implementation.
 
+## Community & Support
 
-## Build and Execution instructions
+Join our growing community for discussions, support, and updates:
+- 💬 **[Discord Community](https://discord.gg/TbxJST2BbC)** - Get help, share results, and discuss development
+- 🌐 **[mrnerf.com](https://mrnerf.com)** - Visit our website for more resources
+- 🐦 **[@janusch_patas](https://twitter.com/janusch_patas)** - Follow for the latest updates
+
+## Build and Execution Instructions
+
 ### Software Prerequisites
-1. Linux (tested with Ubuntu 22.04), windows probably won't work.
-2. CMake 3.24 or higher.
-3. CUDA 11.8 or higher (might work with a lower version, has to be manually set and tested).
-4. Python with development headers.
-5. **LibTorch 2.7.0**: You can find the setup instructions in the libtorch section of this README.
-6. Other dependencies will be handled by the CMake script.
+1. **Linux** (tested with Ubuntu 22.04) - Windows is currently not supported
+2. **CMake** 3.24 or higher
+3. **CUDA** 11.8 or higher (may work with lower versions with manual configuration)
+4. **Python** with development headers
+5. **LibTorch 2.7.0** - Setup instructions below
+6. Other dependencies are handled automatically by CMake
 
 ### Hardware Prerequisites
-1. NVIDIA GPU with CUDA support. Successfully tested so far are RTX 4090, RTX A5000, 3090Ti and A100. With 3080Ti there is an outstanding issue (#21) with larger datasets.
-2. So far, the lowest compute capability tested was 8.0.
+1. **NVIDIA GPU** with CUDA support
+    - Successfully tested: RTX 4090, RTX A5000, RTX 3090Ti, A100
+    - Known issue with RTX 3080Ti on larger datasets (see #21)
+2. Minimum compute capability: 8.0
 
-It might work with other NVIDIA GPUs as well, but these are mostly untested. If you do successfully run on such hardware please
-post a message in the Discussions section of the repo.
+> If you successfully run on other hardware, please share your experience in the Discussions section!
 
-### Build
+### Build Instructions
+
 ```bash
+# Clone the repository with submodules
 git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
 cd gaussian-splatting-cuda
+
+# Download and setup LibTorch
 wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu118.zip  
 unzip libtorch-cxx11-abi-shared-with-deps-2.7.0+cu118.zip -d external/
 rm libtorch-cxx11-abi-shared-with-deps-2.7.0+cu118.zip
+
+# Build the project
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -- -j
 ```
 
-## LibTorch Version Update
+## LibTorch 2.7.0
 
-**Important**: This project has been updated to **LibTorch 2.7.0** (previously used 2.0.1). Key improvements include:
+This project uses **LibTorch 2.7.0** for optimal performance and compatibility:
 
-- **Enhanced Performance**: Better optimization and memory management
-- **API Stability**: Updated to use the latest stable PyTorch C++ API
-- **CUDA Compatibility**: Better integration with CUDA 11.8
-- **Bug Fixes**: Resolved optimizer state management issues from earlier versions
+- **Enhanced Performance**: Improved optimization and memory management
+- **API Stability**: Latest stable PyTorch C++ API
+- **CUDA Compatibility**: Better integration with CUDA 11.8+
+- **Bug Fixes**: Resolved optimizer state management issues
 
-### Migration Notes
+### Upgrading from Previous Versions
+1. Download the new LibTorch version using the build instructions
+2. Clean your build directory: `rm -rf build/`
+3. Rebuild the project
 
-If you're upgrading from a previous version:
-1. **Download the new LibTorch version** using the updated build instructions above
-2. **Clean your build directory**: `rm -rf build/` before rebuilding
-3. **Compatibility**: The code has been updated to handle LibTorch 2.7.0 API changes automatically
+## Dataset
 
-### Dataset
-The dataset is not included in this repository. You can download it from the original repository under the following link:
-[tanks & trains](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip).
-Then unzip it in the data folder.
+Download the dataset from the original repository:
+[Tanks & Trains Dataset](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip)
 
-### Command-Line Options
+Extract it to the `data` folder in the project root.
 
-The `3D Gaussian Splatting CUDA Implementation` provides a suite of command-line options to facilitate easy and customizable execution. Below are the available options:
+## Command-Line Options
 
 ### Core Options
 
-- **-h, --help**  
-  Display this help menu.
+- **`-h, --help`**  
+  Display the help menu
 
-- **-d, --data_path [PATH]**  
-  Specify the path to the training data.
- 
-- **-f, --force**  
-    Force overwriting of output folder. If not set, the program will exit if the output folder already exists.
- 
-- **-o, --output_path [PATH]**  
-  Specify the path to save the trained model. If this option is not specified, the trained model will be saved to the "output" folder located in the root directory of the project.
+- **`-d, --data-path [PATH]`**  
+  Path to the training data (required)
 
-- **-i, --iter [NUM]**  
-  Specify the number of iterations to train the model. Although the paper sets the maximum number of iterations at 30k, you'll likely need far fewer. Starting with 6k or 7k iterations should yield preliminary results. Outputs are saved every 7k iterations and also at the end of the training. Therefore, even if you set it to 5k iterations, an output will be generated upon completion.
+- **`-o, --output-path [PATH]`**  
+  Path to save the trained model (default: `./output`)
 
-### Example
+- **`-i, --iter [NUM]`**  
+  Number of training iterations (default: 30000)
+    - Paper suggests 30k, but 6k-7k often yields good preliminary results
+    - Outputs are saved every 7k iterations and at completion
 
-To run the `3D Gaussian Splatting CUDA Implementation` with specified data path, output path, and iterations, use the following command:
+- **`-f, --force`**  
+  Force overwrite of existing output folder
 
+- **`-r, --resolution [NUM]`**  
+  Set the resolution for training images
+
+### MCMC-Specific Options
+
+- **`--max-cap [NUM]`**  
+  Maximum number of Gaussians for MCMC strategy (default: 1000000)
+    - Controls the upper limit of Gaussian splats during training
+    - Useful for memory-constrained environments
+
+### Example Usage
+
+Basic training:
 ```bash
-$ ./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 1000
+./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 10000
 ```
 
-### Contribution Guidelines
+MCMC training with limited Gaussians:
+```bash
+./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 10000 --max-cap 500000
+```
 
-Below are some guidelines to help ensure our project remains effective and consistent.
+## Contribution Guidelines
 
-1. **Getting Started with Contributions**:
-    - I've marked several beginner-friendly issues as **good first issues**. If you're new to the project, these are great places to start.
-    - For those looking to contribute something not currently listed as an issue or propose something in the discussion section. You can direct message me on Twitter for a quick chat. Since there are not many contributors at the moment, I'm happy to discuss your ideas and help you get started.
+We welcome contributions! Here's how to get started:
 
-2. **Before Submitting Your Pull Request**:
-    - Ensure you've applied `clang-format` to maintain consistent coding style. There is in tools folder a git pre-commit hook. You can just copy it to .git/hooks/pre-commit. It will run clang-format before every commit.
-    - We aim to minimize dependencies. If you're introducing a new one, it's essential to raise an issue for discussion first. There are ongoing efforts to reduce the number of dependencies, and your understanding in this area is appreciated.
+1. **Getting Started**:
+    - Check out issues labeled as **good first issues** for beginner-friendly tasks
+    - For new ideas, open a discussion or join our [Discord](https://discord.gg/TbxJST2BbC)
 
+2. **Before Submitting a PR**:
+    - Apply `clang-format` for consistent code style
+    - Use the pre-commit hook: `cp tools/pre-commit .git/hooks/`
+    - Discuss new dependencies in an issue first - we aim to minimize dependencies
 
-## Citation and References
-If you utilize this software or present results obtained using it, please reference the original work:
+## Acknowledgments
 
-Kerbl, Bernhard; Kopanas, Georgios; Leimkühler, Thomas; Drettakis, George (2023). [3D Gaussian Splatting for Real-Time Radiance Field Rendering](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/). ACM Transactions on Graphics, 42(4).
+This implementation builds upon several key projects:
 
-This will ensure the original authors receive the recognition they deserve.
+- **[gsplat](https://github.com/nerfstudio-project/gsplat)**: We use gsplat's highly optimized CUDA rasterization backend, which provides significant performance improvements and better memory efficiency.
+
+- **Original 3D Gaussian Splatting**: Based on the groundbreaking work by Kerbl et al.
+
+## Citation
+
+If you use this software in your research, please cite the original work:
+
+```bibtex
+@article{kerbl3Dgaussians,
+  author    = {Kerbl, Bernhard and Kopanas, Georgios and Leimkühler, Thomas and Drettakis, George},
+  title     = {3D Gaussian Splatting for Real-Time Radiance Field Rendering},
+  journal   = {ACM Transactions on Graphics},
+  number    = {4},
+  volume    = {42},
+  month     = {July},
+  year      = {2023},
+  url       = {https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/}
+}
+```
 
 ## License
 
-Follow me on Twitter if you want to know more about the latest development: https://twitter.com/janusch_patas
+See LICENSE file for details.
+
+---
+
+**Connect with us:**
+- 🌐 Website: [mrnerf.com](https://mrnerf.com)
+- 💬 Discord: [Join our community](https://discord.gg/TbxJST2BbC)
+- 🐦 Twitter: Follow [@janusch_patas](https://twitter.com/janusch_patas) for development updates
