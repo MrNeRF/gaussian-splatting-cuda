@@ -14,5 +14,6 @@
   "grad_threshold": 0.0002,
   "sh_degree": 3,
   "opacity_reg": 0.01,
-  "scale_reg": 0.01
+  "scale_reg": 0.01,
+  "max_cap": 1000000
 }

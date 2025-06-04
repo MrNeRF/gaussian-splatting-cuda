@@ -37,6 +37,7 @@ namespace gs {
             ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to the training output", {'o', "output-path"});
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations to train the model", {'i', "iter"});
             ::args::CompletionFlag completion(parser, {"complete"});
+            ::args::ValueFlag<int> max_cap(parser, "max_cap", "Maximum number of Gaussians for MCMC", {"max-cap"});
 
             // Parse arguments
             try {
@@ -77,6 +78,10 @@ namespace gs {
 
             if (resolution) {
                 params.dataset.resolution = ::args::get(resolution);
+            }
+
+            if (max_cap) {
+                params.optimization.max_cap = ::args::get(max_cap);
             }
 
             std::filesystem::path outputDir = params.dataset.output_path;
