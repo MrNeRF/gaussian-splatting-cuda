@@ -10,6 +10,10 @@
 #include <variant>
 #include <vector>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 namespace gs {
     namespace param {
         namespace {
@@ -19,8 +23,15 @@ namespace gs {
              * @return std::filesystem::path Full path to the configuration file
              */
             std::filesystem::path get_config_path(const std::string& filename) {
+#ifdef _WIN32
+                char executablePathWindows[MAX_PATH];
+                GetModuleFileNameA(nullptr, executablePathWindows, MAX_PATH);
+                std::filesystem::path executablePath = std::filesystem::path(executablePathWindows);
+                std::filesystem::path parentDir = executablePath.parent_path().parent_path().parent_path();
+#else
                 std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
                 std::filesystem::path parentDir = executablePath.parent_path().parent_path();
+#endif
                 return parentDir / "parameter" / filename;
             }
 
