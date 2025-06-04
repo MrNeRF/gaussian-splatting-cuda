@@ -23,6 +23,7 @@ namespace gs {
             int sh_degree = 3;
             float opacity_reg = 0.01f;
             float scale_reg = 0.01f;
+            int max_cap = 1000000;
         };
 
         struct DatasetConfig {

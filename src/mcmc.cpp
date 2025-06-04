@@ -369,6 +369,7 @@ void MCMC::step(int iter) {
 
 void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _params = std::make_unique<gs::param::OptimizationParameters>(optimParams);
+    _cap_max = _params->max_cap;
     const auto dev = torch::kCUDA;
 
     // Initialize parameters on CUDA
