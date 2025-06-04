@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/bilateral_grid.hpp"
 #include "core/dataset.hpp"
 #include "core/istrategy.hpp"
 #include "core/parameters.hpp"
@@ -27,13 +28,16 @@ namespace gs {
         // Main training method
         virtual void train();
 
-        // Get the strategy (for external access if needed)
-        IStrategy& get_strategy() { return *strategy_; }
-        const IStrategy& get_strategy() const { return *strategy_; }
-
     protected:
-        // Helper to create fresh dataloaders
+        // Helper methods
         auto make_dataloader(int workers = 4) const;
+        void initialize_bilateral_grid();
+        torch::Tensor ensure_4d(const torch::Tensor& image) const;
+        torch::Tensor compute_losses(const torch::Tensor& rendered,
+                                     const torch::Tensor& ground_truth);
+        torch::Tensor compute_regularization_losses();
+        void step_optimizers(int iter);
+        void save_checkpoint(int iter);
 
         // Member variables
         std::shared_ptr<CameraDataset> dataset_;
@@ -43,6 +47,10 @@ namespace gs {
         torch::Tensor background_;
         std::unique_ptr<TrainingProgress> progress_;
         size_t dataset_size_;
+
+        // Bilateral grid components
+        std::unique_ptr<gs::BilateralGrid> bilateral_grid_;
+        std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
     };
 
 } // namespace gs

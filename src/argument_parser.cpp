@@ -30,14 +30,13 @@ namespace gs {
             ::args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
             ::args::ValueFlag<float> convergence_rate(parser, "convergence_rate", "Set convergence rate", {'c', "convergence_rate"});
             ::args::ValueFlag<int> resolution(parser, "resolution", "Set resolution", {'r', "resolution"});
-            ::args::Flag enable_cr_monitoring(parser, "enable_cr_monitoring", "Enable convergence rate monitoring", {"enable-cr-monitoring"});
             ::args::Flag force_overwrite_output_path(parser, "force", "Forces to overwrite output folder", {'f', "force"});
-            ::args::Flag empty_gpu_memory(parser, "empty_gpu_cache", "Forces to reset GPU Cache. Should be lighter on VRAM", {"empty-gpu-cache"});
             ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to the training data", {'d', "data-path"});
             ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to the training output", {'o', "output-path"});
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations to train the model", {'i', "iter"});
             ::args::CompletionFlag completion(parser, {"complete"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Maximum number of Gaussians for MCMC", {"max-cap"});
+            ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid", {"bilateral-grid"});
 
             // Parse arguments
             try {
@@ -82,6 +81,10 @@ namespace gs {
 
             if (max_cap) {
                 params.optimization.max_cap = ::args::get(max_cap);
+            }
+
+            if (use_bilateral_grid) {
+                params.optimization.use_bilateral_grid = true;
             }
 
             std::filesystem::path outputDir = params.dataset.output_path;

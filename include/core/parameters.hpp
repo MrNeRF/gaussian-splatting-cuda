@@ -24,6 +24,14 @@ namespace gs {
             float opacity_reg = 0.01f;
             float scale_reg = 0.01f;
             int max_cap = 1000000;
+
+            // Bilateral grid parameters
+            bool use_bilateral_grid = true;
+            int bilateral_grid_X = 16;
+            int bilateral_grid_Y = 16;
+            int bilateral_grid_W = 8;
+            float bilateral_grid_lr = 2e-3;
+            float tv_loss_weight = 10.0f;
         };
 
         struct DatasetConfig {
