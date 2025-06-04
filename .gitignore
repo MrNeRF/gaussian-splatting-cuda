@@ -12,3 +12,6 @@ output*
 test.py
 *.nsys-rep
 testdata
+
+*.pt
+!weights/*.pt
