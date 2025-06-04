@@ -3,6 +3,7 @@
 #pragma once
 
 #include <filesystem>
+#include <vector>
 
 namespace gs {
     namespace param {
@@ -24,6 +25,9 @@ namespace gs {
             float opacity_reg = 0.01f;
             float scale_reg = 0.01f;
             int max_cap = 1000000;
+            std::vector<size_t> eval_steps = {7000, 30000}; // Steps to evaluate the model
+            std::vector<size_t> save_steps = {7000, 30000}; // Steps to save the model
+            bool enable_eval = false;                       // Only evaluate when explicitly enabled
         };
 
         struct DatasetConfig {
@@ -31,6 +35,7 @@ namespace gs {
             std::filesystem::path output_path = "output";
             std::string images = "images";
             int resolution = -1;
+            int test_every = 8;
         };
 
         struct TrainingParameters {
