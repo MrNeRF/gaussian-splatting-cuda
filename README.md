@@ -2,6 +2,7 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?logo=discord&logoColor=white)](https://discord.gg/TbxJST2BbC)
 [![Website](https://img.shields.io/badge/Website-mrnerf.com-blue)](https://mrnerf.com)
+[![Papers](https://img.shields.io/badge/Papers-Awesome%203DGS-orange)](https://mrnerf.github.io/awesome-3D-gaussian-splatting/)
 
 A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built upon the [gsplat](https://github.com/nerfstudio-project/gsplat) rasterization backend.
 
@@ -16,6 +17,7 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 Join our growing community for discussions, support, and updates:
 - 💬 **[Discord Community](https://discord.gg/TbxJST2BbC)** - Get help, share results, and discuss development
 - 🌐 **[mrnerf.com](https://mrnerf.com)** - Visit our website for more resources
+- 📚 **[Awesome 3D Gaussian Splatting](https://mrnerf.github.io/awesome-3D-gaussian-splatting/)** - Comprehensive paper list and resources
 - 🐦 **[@janusch_patas](https://twitter.com/janusch_patas)** - Follow for the latest updates
 
 ## Build and Execution Instructions
@@ -163,5 +165,6 @@ See LICENSE file for details.
 
 **Connect with us:**
 - 🌐 Website: [mrnerf.com](https://mrnerf.com)
+- 📚 Papers: [Awesome 3D Gaussian Splatting](https://mrnerf.github.io/awesome-3D-gaussian-splatting/)
 - 💬 Discord: [Join our community](https://discord.gg/TbxJST2BbC)
 - 🐦 Twitter: Follow [@janusch_patas](https://twitter.com/janusch_patas) for development updates
