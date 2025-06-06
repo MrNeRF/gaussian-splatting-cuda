@@ -13,7 +13,7 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 - **[2024-05-26]**: The current goal of this repo is to move towards a permissive license. Major work has been done to replace the rasterizer with the gsplat implementation.
 
 ## Metrics
-Currently the implementation does not achieve on par results with the original paper, but it is a work in progress.
+Currently the implementation does not achieve on par results with gsplat-mcmc, but it is a work in progress.
 It is just a matter of time to fix the bug. Help is welcome :) The metrics for the mcmc strategy are as follows:
 
 | Scene   | Iteration | PSNR      | SSIM     | LPIPS    | Time per Image | Num Gaussians |
