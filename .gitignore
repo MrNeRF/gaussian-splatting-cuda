@@ -4,6 +4,7 @@ cmake-build-debug/
 cmake-build-release/
 external/libtorch/
 output*
+results
 .idea
 data
 *.pt

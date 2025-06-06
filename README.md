@@ -12,6 +12,20 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 - **[2024-05-27]**: Updated to LibTorch 2.7.0 for better compatibility and performance. Breaking changes in optimizer state management have been addressed.
 - **[2024-05-26]**: The current goal of this repo is to move towards a permissive license. Major work has been done to replace the rasterizer with the gsplat implementation.
 
+## Metrics
+Currently the implementation does not achieve on par results with the original paper, but it is a work in progress.
+It is just a matter of time to fix the bug. Help is welcome :) The metrics for the mcmc strategy are as follows:
+
+| Scene   | Iteration | PSNR      | SSIM     | LPIPS    | Time per Image | Num Gaussians |
+|---------|-----------|-----------|----------|----------|----------------|----------------|
+| garden  | 30000     | 26.783308 | 0.844365 | 0.172228 | 0.292672       | 1000000        |
+| bicycle | 30000     | 24.980711 | 0.752129 | 0.275350 | 0.264686       | 1000000        |
+| stump   | 30000     | 26.013144 | 0.765344 | 0.284621 | 0.273014       | 1000000        |
+| bonsai  | 30000     | 32.446644 | 0.947480 | 0.250926 | 0.410129       | 1000000        |
+| counter | 30000     | 28.947033 | 0.913405 | 0.245062 | 0.426714       | 1000000        |
+| kitchen | 30000     | 31.423859 | 0.931581 | 0.158657 | 0.433940       | 1000000        |
+| room    | 30000     | 32.027206 | 0.929847 | 0.275652 | 0.405215       | 1000000        |
+
 ## Community & Support
 
 Join our growing community for discussions, support, and updates:
