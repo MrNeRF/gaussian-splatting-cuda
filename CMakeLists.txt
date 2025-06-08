@@ -50,6 +50,7 @@ set(HOST_SOURCES
         src/argument_parser.cpp
         src/rasterizer.cpp
         src/metrics.cpp
+        src/rasterizer_autograd.cpp
         src/external/tinyply.cpp
 )
 
@@ -226,6 +227,9 @@ if(BUILD_TESTS)
             tests/test_rasterization.cpp
             tests/test_gsplat_ops.cpp
             tests/test_intersect_debug.cpp
+            tests/test_autograd.cpp
+            tests/test_numerical_gradients.cpp
+            tests/torch_impl.cpp
     )
 
     # Create test executable
@@ -240,11 +244,11 @@ if(BUILD_TESTS)
     target_include_directories(gaussian_tests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
             ${Python3_INCLUDE_DIRS}
     )
 
-    target_link_libraries(gaussian_tests
-            PRIVATE
+    target_link_libraries(gaussian_tests PRIVATE
             gaussian_host
             gaussian_kernels
             gsplat_backend
@@ -253,7 +257,10 @@ if(BUILD_TESTS)
             Python3::Python
     )
 
-    # Copy test data if exists
+    target_compile_options(gaussian_tests PRIVATE
+            $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G -lineinfo -Xcudafe --device-debug>
+    )
+
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_data")
         add_custom_command(TARGET gaussian_tests POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_directory
