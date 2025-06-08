@@ -190,13 +190,13 @@ TEST_F(BasicOpsTest, SphericalHarmonicsTest) {
 TEST_F(BasicOpsTest, IntersectTilesTest) {
     torch::manual_seed(42);
 
-    int C = 1;  // Single camera for this test
-    int N = 100;  // Reduced from 1000 to avoid memory issues
-    int width = 640, height = 480;
+    int C = 3;  // Multiple cameras
+    int N = 100;  // Number of Gaussians
+    int width = 40, height = 60;
     int tile_size = 16;
 
-    auto means2d = torch::rand({C, N, 2}, device) * width;
-    auto radii = torch::randint(0, 50, {C, N, 2}, torch::TensorOptions().dtype(torch::kInt32).device(device));
+    auto means2d = torch::randn({C, N, 2}, device) * width;
+    auto radii = torch::randint(0, width, {C, N, 2}, torch::TensorOptions().dtype(torch::kInt32).device(device));
     auto depths = torch::rand({C, N}, device);
 
     int tile_width = (width + tile_size - 1) / tile_size;
@@ -219,20 +219,24 @@ TEST_F(BasicOpsTest, IntersectTilesTest) {
     auto isect_ids = std::get<1>(isect_results);
     auto flatten_ids = std::get<2>(isect_results);
 
-    // When C > 1 or batched input, tiles_per_gauss can be 2D
-    // Check dimensions based on whether output is batched
+    // The gsplat C++ implementation may return tiles_per_gauss as 2D [C, N]
+    // while the Python reference implementation returns 1D
+    // We should accept both as valid
+    bool tiles_per_gauss_valid = false;
     if (tiles_per_gauss.dim() == 2) {
-        EXPECT_EQ(tiles_per_gauss.size(0), C);
-        // For single camera case, we can squeeze
-        if (C == 1) {
-            tiles_per_gauss = tiles_per_gauss.squeeze(0);
-        }
+        // 2D case: should be [C, N]
+        tiles_per_gauss_valid = (tiles_per_gauss.size(0) == C && tiles_per_gauss.size(1) == N);
+    } else if (tiles_per_gauss.dim() == 1) {
+        // 1D case: should be flattened to C*N
+        tiles_per_gauss_valid = (tiles_per_gauss.size(0) == C * N);
     }
+    EXPECT_TRUE(tiles_per_gauss_valid) << "tiles_per_gauss has unexpected shape: " << tiles_per_gauss.sizes();
 
-    // After potential squeeze, these should be 1D for the single camera case
-    if (C == 1) {
-        EXPECT_EQ(tiles_per_gauss.dim(), 1);
-    }
+    // isect_ids and flatten_ids should be 1D
+    EXPECT_EQ(isect_ids.dim(), 1);
+    EXPECT_EQ(flatten_ids.dim(), 1);
+
+    // isect_ids and flatten_ids should be 1D
     EXPECT_EQ(isect_ids.dim(), 1);
     EXPECT_EQ(flatten_ids.dim(), 1);
 

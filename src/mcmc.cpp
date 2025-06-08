@@ -64,17 +64,31 @@ void MCMC::update_optimizer_for_relocate(torch::optim::Adam* optimizer,
     auto& param = optimizer->param_groups()[param_position].params()[0];
     void* param_key = param.unsafeGetTensorImpl();
 
+    // Check if optimizer state exists
+    auto state_it = optimizer->state().find(param_key);
+    if (state_it == optimizer->state().end()) {
+        // No state exists yet - this can happen if optimizer.step() hasn't been called
+        // In this case, there's nothing to reset, so we can safely return
+        return;
+    }
+
     // Get the optimizer state
-    auto& param_state = *optimizer->state()[param_key];
+    auto& param_state = *state_it->second;
     auto& adam_state = static_cast<torch::optim::AdamParamState&>(param_state);
 
     // Reset the states for sampled indices (set to zero)
     adam_state.exp_avg().index_put_({sampled_indices}, 0);
     adam_state.exp_avg_sq().index_put_({sampled_indices}, 0);
+
+    // Also reset max_exp_avg_sq if it exists (used in some Adam variants)
+    if (adam_state.max_exp_avg_sq().defined()) {
+        adam_state.max_exp_avg_sq().index_put_({sampled_indices}, 0);
+    }
 }
 
 int MCMC::relocate_gs() {
     // Get opacities and handle both [N] and [N, 1] shapes
+    torch::NoGradGuard no_grad;
     auto opacities = _splat_data.get_opacity();
     if (opacities.dim() == 2 && opacities.size(1) == 1) {
         opacities = opacities.squeeze(-1);
@@ -153,6 +167,13 @@ int MCMC::relocate_gs() {
 }
 
 int MCMC::add_new_gs() {
+    // Add this check at the beginning
+    torch::NoGradGuard no_grad;
+    if (!_optimizer) {
+        std::cerr << "Warning: add_new_gs called but optimizer not initialized" << std::endl;
+        return 0;
+    }
+
     int current_n = _splat_data.size();
     int n_target = std::min(_cap_max, static_cast<int>(1.05f * current_n));
     int n_new = std::max(0, n_target - current_n);
@@ -222,75 +243,70 @@ int MCMC::add_new_gs() {
     auto concat_rotation = torch::cat({_splat_data.rotation_raw(), new_rotation}, 0).set_requires_grad(true);
     auto concat_opacity = torch::cat({_splat_data.opacity_raw(), new_opacity}, 0).set_requires_grad(true);
 
-    // Step 2: Update optimizer states for each parameter group
-    // The key is to maintain the association between old parameter and its state
+    // Step 2: SAFER optimizer state update
+    // Store the new parameters in a temporary array first
+    std::array<torch::Tensor*, 6> new_params = {
+        &concat_means, &concat_sh0, &concat_shN,
+        &concat_scaling, &concat_rotation, &concat_opacity
+    };
+
+    // Collect old parameter keys and states
+    std::vector<void*> old_param_keys;
+    std::vector<std::unique_ptr<torch::optim::OptimizerParamState>> saved_states;
+
     for (int i = 0; i < 6; ++i) {
-        // Get the OLD parameter reference
         auto& old_param = _optimizer->param_groups()[i].params()[0];
         void* old_param_key = old_param.unsafeGetTensorImpl();
+        old_param_keys.push_back(old_param_key);
 
-        // Get the current optimizer state
-        auto& param_state = *_optimizer->state()[old_param_key];
-        auto& adam_state = static_cast<torch::optim::AdamParamState&>(param_state);
+        // Check if state exists
+        auto state_it = _optimizer->state().find(old_param_key);
+        if (state_it != _optimizer->state().end()) {
+            // Clone the state before modifying
+            auto& adam_state = static_cast<torch::optim::AdamParamState&>(*state_it->second);
 
-        // Create new extended states with zeros for new parameters
-        auto old_exp_avg = adam_state.exp_avg();
-        auto old_exp_avg_sq = adam_state.exp_avg_sq();
+            // Create extended states
+            torch::IntArrayRef new_shape;
+            if (i == 0) new_shape = new_means.sizes();
+            else if (i == 1) new_shape = new_sh0.sizes();
+            else if (i == 2) new_shape = new_shN.sizes();
+            else if (i == 3) new_shape = new_scaling.sizes();
+            else if (i == 4) new_shape = new_rotation.sizes();
+            else new_shape = new_opacity.sizes();
 
-        // Determine shape for new zeros based on parameter type
-        torch::IntArrayRef new_shape;
-        if (i == 0) { // means
-            new_shape = new_means.sizes();
-        } else if (i == 1) { // sh0
-            new_shape = new_sh0.sizes();
-        } else if (i == 2) { // shN
-            new_shape = new_shN.sizes();
-        } else if (i == 3) { // scaling
-            new_shape = new_scaling.sizes();
-        } else if (i == 4) { // rotation
-            new_shape = new_rotation.sizes();
-        } else { // opacity
-            new_shape = new_opacity.sizes();
-        }
+            auto zeros_to_add = torch::zeros(new_shape, adam_state.exp_avg().options());
+            auto new_exp_avg = torch::cat({adam_state.exp_avg(), zeros_to_add}, 0);
+            auto new_exp_avg_sq = torch::cat({adam_state.exp_avg_sq(), zeros_to_add}, 0);
 
-        // Extend optimizer states
-        auto zeros_to_add = torch::zeros(new_shape, old_exp_avg.options());
-        auto new_exp_avg = torch::cat({old_exp_avg, zeros_to_add}, 0);
-        auto new_exp_avg_sq = torch::cat({old_exp_avg_sq, zeros_to_add}, 0);
+            // Create new state
+            auto new_state = std::make_unique<torch::optim::AdamParamState>();
+            new_state->step(adam_state.step());
+            new_state->exp_avg(new_exp_avg);
+            new_state->exp_avg_sq(new_exp_avg_sq);
+            if (adam_state.max_exp_avg_sq().defined()) {
+                auto new_max_exp_avg_sq = torch::cat({adam_state.max_exp_avg_sq(), zeros_to_add}, 0);
+                new_state->max_exp_avg_sq(new_max_exp_avg_sq);
+            }
 
-        // Update the Adam state
-        adam_state.exp_avg(new_exp_avg);
-        adam_state.exp_avg_sq(new_exp_avg_sq);
-
-        // Now update the parameter reference in the optimizer
-        // First remove the old parameter from optimizer state
-        _optimizer->state().erase(old_param_key);
-
-        // Assign the new concatenated parameter
-        torch::Tensor* new_param_ptr = nullptr;
-        if (i == 0) {
-            _optimizer->param_groups()[i].params()[0] = concat_means;
-            new_param_ptr = &concat_means;
-        } else if (i == 1) {
-            _optimizer->param_groups()[i].params()[0] = concat_sh0;
-            new_param_ptr = &concat_sh0;
-        } else if (i == 2) {
-            _optimizer->param_groups()[i].params()[0] = concat_shN;
-            new_param_ptr = &concat_shN;
-        } else if (i == 3) {
-            _optimizer->param_groups()[i].params()[0] = concat_scaling;
-            new_param_ptr = &concat_scaling;
-        } else if (i == 4) {
-            _optimizer->param_groups()[i].params()[0] = concat_rotation;
-            new_param_ptr = &concat_rotation;
+            saved_states.push_back(std::move(new_state));
         } else {
-            _optimizer->param_groups()[i].params()[0] = concat_opacity;
-            new_param_ptr = &concat_opacity;
+            saved_states.push_back(nullptr);
         }
+    }
 
-        // Add the state back with the new parameter key
-        void* new_param_key = new_param_ptr->unsafeGetTensorImpl();
-        _optimizer->state()[new_param_key] = std::make_unique<torch::optim::AdamParamState>(std::move(adam_state));
+    // Now remove all old states
+    for (auto key : old_param_keys) {
+        _optimizer->state().erase(key);
+    }
+
+    // Update parameters and add new states
+    for (int i = 0; i < 6; ++i) {
+        _optimizer->param_groups()[i].params()[0] = *new_params[i];
+
+        if (saved_states[i]) {
+            void* new_param_key = new_params[i]->unsafeGetTensorImpl();
+            _optimizer->state()[new_param_key] = std::move(saved_states[i]);
+        }
     }
 
     // Step 3: Finally update the model's parameters
@@ -348,6 +364,7 @@ void MCMC::inject_noise() {
 
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     // Increment SH degree every 1000 iterations
+    torch::NoGradGuard no_grad;
     if (iter % 1000 == 0) {
         _splat_data.increment_sh_degree();
     }
@@ -385,6 +402,12 @@ void MCMC::step(int iter) {
 void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _params = std::make_unique<gs::param::OptimizationParameters>(optimParams);
     _cap_max = _params->max_cap;
+
+    _refine_start_iter = _params->start_densify;
+    _refine_stop_iter = _params->stop_densify;
+    _refine_every = _params->growth_interval;
+    _min_opacity = _params->min_opacity;
+
     const auto dev = torch::kCUDA;
 
     // Initialize parameters on CUDA

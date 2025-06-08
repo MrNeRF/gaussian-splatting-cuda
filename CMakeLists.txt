@@ -221,7 +221,7 @@ if(BUILD_TESTS)
 
     # Test sources
     set(TEST_SOURCES
-            #ests/test_mcmc.cpp
+            tests/test_mcmc.cpp
             tests/test_basic.cpp
             tests/test_rasterization.cpp
             tests/test_gsplat_ops.cpp
