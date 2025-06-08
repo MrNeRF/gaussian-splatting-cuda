@@ -64,14 +64,13 @@ void MCMC::update_optimizer_for_relocate(torch::optim::Adam* optimizer,
     auto& param = optimizer->param_groups()[param_position].params()[0];
     void* param_key = param.unsafeGetTensorImpl();
 
-    auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(
-        static_cast<torch::optim::AdamParamState&>(*optimizer->state()[param_key]));
+    // Get the optimizer state
+    auto& param_state = *optimizer->state()[param_key];
+    auto& adam_state = static_cast<torch::optim::AdamParamState&>(param_state);
 
-    // Reset the states for sampled indices
-    adamParamStates->exp_avg().index_put_({sampled_indices}, 0);
-    adamParamStates->exp_avg_sq().index_put_({sampled_indices}, 0);
-
-    // No need to update optimizer state since we're modifying in-place
+    // Reset the states for sampled indices (set to zero)
+    adam_state.exp_avg().index_put_({sampled_indices}, 0);
+    adam_state.exp_avg_sq().index_put_({sampled_indices}, 0);
 }
 
 int MCMC::relocate_gs() {
@@ -198,8 +197,7 @@ int MCMC::add_new_gs() {
     // Clamp new opacities
     new_opacities = torch::clamp(new_opacities, _min_opacity, 1.0f - 1e-7f);
 
-    // Update existing Gaussians
-    // Handle opacity shape properly
+    // Update existing Gaussians FIRST (before concatenation)
     if (_splat_data.opacity_raw().dim() == 2) {
         _splat_data.opacity_raw().index_put_({sampled_idxs, torch::indexing::Slice()},
                                              torch::logit(new_opacities).unsqueeze(-1));
@@ -216,79 +214,92 @@ int MCMC::add_new_gs() {
     auto new_rotation = _splat_data.rotation_raw().index_select(0, sampled_idxs);
     auto new_opacity = _splat_data.opacity_raw().index_select(0, sampled_idxs);
 
-    // CRITICAL: Update optimizer states BEFORE concatenating parameters
-    // This follows the Python pattern where optimizer states are extended first
+    // Step 1: Concatenate all parameters
+    auto concat_means = torch::cat({_splat_data.means(), new_means}, 0).set_requires_grad(true);
+    auto concat_sh0 = torch::cat({_splat_data.sh0(), new_sh0}, 0).set_requires_grad(true);
+    auto concat_shN = torch::cat({_splat_data.shN(), new_shN}, 0).set_requires_grad(true);
+    auto concat_scaling = torch::cat({_splat_data.scaling_raw(), new_scaling}, 0).set_requires_grad(true);
+    auto concat_rotation = torch::cat({_splat_data.rotation_raw(), new_rotation}, 0).set_requires_grad(true);
+    auto concat_opacity = torch::cat({_splat_data.opacity_raw(), new_opacity}, 0).set_requires_grad(true);
 
-    // For each parameter group, we need to:
-    // 1. Get current optimizer state
-    // 2. Extend it with zeros for new parameters
-    // 3. Update the parameter in the optimizer
-
+    // Step 2: Update optimizer states for each parameter group
+    // The key is to maintain the association between old parameter and its state
     for (int i = 0; i < 6; ++i) {
-        auto& param = _optimizer->param_groups()[i].params()[0];
-        void* param_key = param.unsafeGetTensorImpl();
+        // Get the OLD parameter reference
+        auto& old_param = _optimizer->param_groups()[i].params()[0];
+        void* old_param_key = old_param.unsafeGetTensorImpl();
 
-        // Get current state
-        auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(
-            static_cast<torch::optim::AdamParamState&>(*_optimizer->state()[param_key]));
+        // Get the current optimizer state
+        auto& param_state = *_optimizer->state()[old_param_key];
+        auto& adam_state = static_cast<torch::optim::AdamParamState&>(param_state);
 
-        // Remove old state
-        _optimizer->state().erase(param_key);
+        // Create new extended states with zeros for new parameters
+        auto old_exp_avg = adam_state.exp_avg();
+        auto old_exp_avg_sq = adam_state.exp_avg_sq();
 
-        // Prepare new concatenated parameter
-        torch::Tensor new_param;
-        if (i == 0) {
-            new_param = torch::cat({_splat_data.means(), new_means}, 0).set_requires_grad(true);
-        } else if (i == 1) {
-            new_param = torch::cat({_splat_data.sh0(), new_sh0}, 0).set_requires_grad(true);
-        } else if (i == 2) {
-            new_param = torch::cat({_splat_data.shN(), new_shN}, 0).set_requires_grad(true);
-        } else if (i == 3) {
-            new_param = torch::cat({_splat_data.scaling_raw(), new_scaling}, 0).set_requires_grad(true);
-        } else if (i == 4) {
-            new_param = torch::cat({_splat_data.rotation_raw(), new_rotation}, 0).set_requires_grad(true);
-        } else {
-            new_param = torch::cat({_splat_data.opacity_raw(), new_opacity}, 0).set_requires_grad(true);
+        // Determine shape for new zeros based on parameter type
+        torch::IntArrayRef new_shape;
+        if (i == 0) { // means
+            new_shape = new_means.sizes();
+        } else if (i == 1) { // sh0
+            new_shape = new_sh0.sizes();
+        } else if (i == 2) { // shN
+            new_shape = new_shN.sizes();
+        } else if (i == 3) { // scaling
+            new_shape = new_scaling.sizes();
+        } else if (i == 4) { // rotation
+            new_shape = new_rotation.sizes();
+        } else { // opacity
+            new_shape = new_opacity.sizes();
         }
 
-        // Create extended optimizer states
-        auto new_shape = new_param.sizes().vec();
-        new_shape[0] = n_new; // Shape for the new part
+        // Extend optimizer states
+        auto zeros_to_add = torch::zeros(new_shape, old_exp_avg.options());
+        auto new_exp_avg = torch::cat({old_exp_avg, zeros_to_add}, 0);
+        auto new_exp_avg_sq = torch::cat({old_exp_avg_sq, zeros_to_add}, 0);
 
-        auto device = adamParamStates->exp_avg().device();
-        auto new_exp_avg = torch::cat({adamParamStates->exp_avg(),
-                                       torch::zeros(new_shape, torch::TensorOptions().device(device))},
-                                      0);
-        auto new_exp_avg_sq = torch::cat({adamParamStates->exp_avg_sq(),
-                                          torch::zeros(new_shape, torch::TensorOptions().device(device))},
-                                         0);
+        // Update the Adam state
+        adam_state.exp_avg(new_exp_avg);
+        adam_state.exp_avg_sq(new_exp_avg_sq);
 
-        // Update Adam state
-        adamParamStates->exp_avg(new_exp_avg);
-        adamParamStates->exp_avg_sq(new_exp_avg_sq);
+        // Now update the parameter reference in the optimizer
+        // First remove the old parameter from optimizer state
+        _optimizer->state().erase(old_param_key);
 
-        // Update parameter in optimizer
-        _optimizer->param_groups()[i].params()[0] = new_param;
-
-        // Store new state
-        void* new_param_key = new_param.unsafeGetTensorImpl();
-        _optimizer->state()[new_param_key] = std::move(adamParamStates);
-
-        // Update the actual model parameters
+        // Assign the new concatenated parameter
+        torch::Tensor* new_param_ptr = nullptr;
         if (i == 0) {
-            _splat_data.means() = new_param;
+            _optimizer->param_groups()[i].params()[0] = concat_means;
+            new_param_ptr = &concat_means;
         } else if (i == 1) {
-            _splat_data.sh0() = new_param;
+            _optimizer->param_groups()[i].params()[0] = concat_sh0;
+            new_param_ptr = &concat_sh0;
         } else if (i == 2) {
-            _splat_data.shN() = new_param;
+            _optimizer->param_groups()[i].params()[0] = concat_shN;
+            new_param_ptr = &concat_shN;
         } else if (i == 3) {
-            _splat_data.scaling_raw() = new_param;
+            _optimizer->param_groups()[i].params()[0] = concat_scaling;
+            new_param_ptr = &concat_scaling;
         } else if (i == 4) {
-            _splat_data.rotation_raw() = new_param;
+            _optimizer->param_groups()[i].params()[0] = concat_rotation;
+            new_param_ptr = &concat_rotation;
         } else {
-            _splat_data.opacity_raw() = new_param;
+            _optimizer->param_groups()[i].params()[0] = concat_opacity;
+            new_param_ptr = &concat_opacity;
         }
+
+        // Add the state back with the new parameter key
+        void* new_param_key = new_param_ptr->unsafeGetTensorImpl();
+        _optimizer->state()[new_param_key] = std::make_unique<torch::optim::AdamParamState>(std::move(adam_state));
     }
+
+    // Step 3: Finally update the model's parameters
+    _splat_data.means() = concat_means;
+    _splat_data.sh0() = concat_sh0;
+    _splat_data.shN() = concat_shN;
+    _splat_data.scaling_raw() = concat_scaling;
+    _splat_data.rotation_raw() = concat_rotation;
+    _splat_data.opacity_raw() = concat_opacity;
 
     return n_new;
 }
