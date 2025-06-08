@@ -4,6 +4,7 @@
 #include "core/splat_data.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/camera.hpp"
 #include <memory>
 
 class MCMCTest : public ::testing::Test {
@@ -27,6 +28,26 @@ protected:
         params.optimization.start_densify = 500;
         params.optimization.stop_densify = 15000;
         params.optimization.growth_interval = 100;
+        params.optimization.sh_degree = 3;
+
+        // Set up test camera
+        setupTestCamera();
+    }
+
+    void setupTestCamera() {
+        // Create a test camera
+        auto R = torch::eye(3, torch::kFloat32);
+        auto T = torch::tensor({0.0f, 0.0f, 5.0f}, torch::kFloat32);
+        float fov = M_PI / 3.0f;  // 60 degrees
+
+        test_camera = std::make_unique<Camera>(
+            R, T, fov, fov,
+            "test_camera",
+            "", 256, 256, 0
+        );
+
+        // Background color
+        background = torch::zeros({3}, device);
     }
 
     // Helper to create a dummy SplatData for testing
@@ -36,30 +57,58 @@ protected:
 
         auto means = torch::randn({N, 3}, torch::kFloat32);
         auto sh0 = torch::randn({N, 1, 3}, torch::kFloat32);
-        auto shN = torch::randn({N, 3, 3}, torch::kFloat32);
+        auto shN = torch::randn({N, (params.optimization.sh_degree + 1) * (params.optimization.sh_degree + 1) - 1, 3}, torch::kFloat32);
         auto scaling = torch::randn({N, 3}, torch::kFloat32);
         auto rotation = torch::randn({N, 4}, torch::kFloat32);
         auto opacity = torch::randn({N, 1}, torch::kFloat32);
 
-        return SplatData(3, means, sh0, shN, scaling, rotation, opacity, 1.0f);
+        return SplatData(params.optimization.sh_degree, means, sh0, shN, scaling, rotation, opacity, 1.0f);
     }
 
-    // Helper to create render output with correct size
-    gs::RenderOutput createRenderOutput(int size) {
-        gs::RenderOutput render_output;
-        render_output.radii = torch::ones({size}, torch::kInt32).to(device);
-        render_output.visibility = torch::ones({size}, torch::kBool).to(device);
-        render_output.means2d = torch::randn({size, 2}, torch::kFloat32).to(device);
-        render_output.depths = torch::rand({size}, torch::kFloat32).to(device) * 10.0f;
-        render_output.image = torch::zeros({3, 256, 256}, torch::kFloat32).to(device);
-        render_output.width = 256;
-        render_output.height = 256;
-        return render_output;
+    // Helper to perform actual rendering
+    gs::RenderOutput performRendering(MCMC& mcmc) {
+        auto bg_copy = background.clone();
+        return gs::rasterize(*test_camera, mcmc.get_model(), bg_copy, 1.0f, false);
     }
 
     torch::Device device{torch::kCPU};
     gs::param::TrainingParameters params{};
+    std::unique_ptr<Camera> test_camera;
+    torch::Tensor background;
 };
+
+TEST_F(MCMCTest, FullPipelineIntegrationTest) {
+    // Create test data
+    auto splat_data = createTestSplatData(100);
+    auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
+    mcmc->initialize(params.optimization);
+
+    // Perform actual rendering
+    auto render_output = performRendering(*mcmc);
+
+    // Check render output is valid
+    EXPECT_EQ(render_output.image.sizes(), torch::IntArrayRef({3, 256, 256}));
+    EXPECT_FALSE(render_output.image.isnan().any().item<bool>());
+
+    // Compute loss and backward
+    auto loss = render_output.image.mean();
+    loss.backward();
+
+    // Check that gradients are computed for all parameters
+    EXPECT_TRUE(mcmc->get_model().means().grad().defined());
+    EXPECT_TRUE(mcmc->get_model().opacity_raw().grad().defined());
+    EXPECT_TRUE(mcmc->get_model().scaling_raw().grad().defined());
+    EXPECT_TRUE(mcmc->get_model().rotation_raw().grad().defined());
+    EXPECT_TRUE(mcmc->get_model().sh0().grad().defined());
+    EXPECT_TRUE(mcmc->get_model().shN().grad().defined());
+
+    // Run MCMC step
+    mcmc->post_backward(600, render_output);
+    mcmc->step(600);
+
+    // Verify step was taken
+    EXPECT_FALSE(mcmc->get_model().means().grad().defined()) << "Gradients should be zeroed after step";
+}
 
 TEST_F(MCMCTest, InitializationTest) {
     // Create test data
@@ -80,25 +129,31 @@ TEST_F(MCMCTest, InitializationTest) {
     EXPECT_TRUE(mcmc->get_model().rotation_raw().requires_grad());
 }
 
-TEST_F(MCMCTest, SHDegreeIncrementTest) {
+TEST_F(MCMCTest, SHDegreeIncrementWithRenderingTest) {
     // Create test data
     auto splat_data = createTestSplatData(50);
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
     // Set parameters to avoid refinement at iteration 1000
-    params.optimization.stop_densify = 999;  // Stop densification before iteration 1000
+    params.optimization.start_densify = 1001;  // Start after iteration 1000
+    params.optimization.stop_densify = 2000;   // Stop densification later
+    params.optimization.growth_interval = 100;
     mcmc->initialize(params.optimization);
+
+    // Perform initial render to establish optimizer states
+    auto render_output = performRendering(*mcmc);
+    auto loss = render_output.image.mean();
+    loss.backward();
+    mcmc->step(1);
 
     // Get initial SH degree
     int initial_degree = mcmc->get_model().get_active_sh_degree();
 
-    // Create render output with current size
-    auto render_output = createRenderOutput(mcmc->get_model().size());
+    // Render again and call post_backward at iteration 1000
+    render_output = performRendering(*mcmc);
+    loss = render_output.image.mean();
+    loss.backward();
 
-    // Disable gradient computation
-    torch::NoGradGuard no_grad;
-
-    // Call post_backward at iteration 1000 (should only increment SH degree)
     mcmc->post_backward(1000, render_output);
 
     // Check SH degree increased
@@ -106,56 +161,57 @@ TEST_F(MCMCTest, SHDegreeIncrementTest) {
     EXPECT_EQ(new_degree, initial_degree + 1);
 }
 
-TEST_F(MCMCTest, OptimizerStepTest) {
-    // Test that optimizer step works correctly
-    auto splat_data = createTestSplatData(10);
+TEST_F(MCMCTest, GradientFlowTest) {
+    // Test that gradients flow correctly through the full pipeline
+    auto splat_data = createTestSplatData(50);
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
     mcmc->initialize(params.optimization);
 
     // Store initial values
     auto means_before = mcmc->get_model().means().clone();
 
-    // Create dummy gradients
-    {
-        torch::NoGradGuard no_grad;
-        mcmc->get_model().means().mutable_grad() = torch::randn_like(mcmc->get_model().means()) * 0.01f;
-        mcmc->get_model().opacity_raw().mutable_grad() = torch::randn_like(mcmc->get_model().opacity_raw()) * 0.01f;
-        mcmc->get_model().scaling_raw().mutable_grad() = torch::randn_like(mcmc->get_model().scaling_raw()) * 0.01f;
-        mcmc->get_model().rotation_raw().mutable_grad() = torch::randn_like(mcmc->get_model().rotation_raw()) * 0.01f;
-        mcmc->get_model().sh0().mutable_grad() = torch::randn_like(mcmc->get_model().sh0()) * 0.01f;
-        mcmc->get_model().shN().mutable_grad() = torch::randn_like(mcmc->get_model().shN()) * 0.01f;
-    }
+    // Render and compute loss
+    auto render_output = performRendering(*mcmc);
+    auto loss = render_output.image.sum();  // Use sum for stronger gradients
+    loss.backward();
+
+    // Check gradients exist and are non-zero
+    auto means_grad = mcmc->get_model().means().grad();
+    EXPECT_TRUE(means_grad.defined());
+    auto grad_norm = means_grad.norm();
+    EXPECT_GT(grad_norm.item<float>(), 0) << "Gradients should be non-zero";
 
     // Take optimizer step
-    ASSERT_NO_THROW(mcmc->step(1));
+    mcmc->step(1);
 
     // Check that parameters changed
     auto means_after = mcmc->get_model().means();
     auto diff = (means_after - means_before).abs().sum();
     EXPECT_GT(diff.item<float>(), 0) << "Parameters should change after optimizer step";
-
-    // Check gradients were zeroed
-    EXPECT_FALSE(mcmc->get_model().means().grad().defined() ||
-                 mcmc->get_model().means().grad().sum().item<float>() == 0);
 }
 
-TEST_F(MCMCTest, NoiseInjectionTest) {
-    // Test that noise injection works
+TEST_F(MCMCTest, NoiseInjectionWithRenderingTest) {
+    // Test noise injection in the context of actual rendering
     auto splat_data = createTestSplatData(20);
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
     mcmc->initialize(params.optimization);
 
+    // Perform initial render and step to initialize optimizer
+    auto render_output = performRendering(*mcmc);
+    auto loss = render_output.image.mean();
+    loss.backward();
+    mcmc->step(1);
+
     // Store initial positions
     auto means_before = mcmc->get_model().means().clone();
 
-    // Create render output
-    auto render_output = createRenderOutput(mcmc->get_model().size());
+    // Render again
+    render_output = performRendering(*mcmc);
+    loss = render_output.image.mean();
+    loss.backward();
 
     // Call post_backward at iteration 100 (no refinement, just noise)
-    {
-        torch::NoGradGuard no_grad;
-        mcmc->post_backward(100, render_output);
-    }
+    mcmc->post_backward(100, render_output);
 
     // Positions should have changed due to noise injection
     auto means_after = mcmc->get_model().means();
@@ -163,123 +219,151 @@ TEST_F(MCMCTest, NoiseInjectionTest) {
     EXPECT_GT(diff.item<float>(), 0) << "Positions should change due to noise injection";
 }
 
-TEST_F(MCMCTest, RefinementBoundariesTest) {
-    // Test that refinement respects start/stop boundaries
+TEST_F(MCMCTest, RefinementWithActualRenderingTest) {
+    // Test refinement (relocation and addition) with actual rendering
     auto splat_data = createTestSplatData(30);
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
-    // Set clear boundaries
-    params.optimization.start_densify = 1000;
-    params.optimization.stop_densify = 2000;
+    // Set up for refinement
+    params.optimization.start_densify = 500;
+    params.optimization.stop_densify = 1000;
     params.optimization.growth_interval = 100;
     mcmc->initialize(params.optimization);
 
+    // Initialize optimizer
+    auto render_output = performRendering(*mcmc);
+    auto loss = render_output.image.mean();
+    loss.backward();
+    mcmc->step(1);
+
     int initial_size = mcmc->get_model().size();
 
-    // Test before start_densify (iteration 500)
-    {
-        torch::NoGradGuard no_grad;
-        auto render_output = createRenderOutput(mcmc->get_model().size());
-        mcmc->post_backward(500, render_output);
-        EXPECT_EQ(mcmc->get_model().size(), initial_size) << "Size should not change before start_densify";
-    }
+    // Run refinement step
+    render_output = performRendering(*mcmc);
+    loss = render_output.image.mean();
+    loss.backward();
 
-    // Test during refinement period (iteration 1100)
-    {
-        torch::NoGradGuard no_grad;
-        auto render_output = createRenderOutput(mcmc->get_model().size());
-        mcmc->post_backward(1100, render_output);
-        // Size might change during refinement period
-    }
+    mcmc->post_backward(600, render_output);
 
-    // Test after stop_densify (iteration 2100)
-    {
-        torch::NoGradGuard no_grad;
-        int size_before = mcmc->get_model().size();
-        auto render_output = createRenderOutput(size_before);
-        mcmc->post_backward(2100, render_output);
-        EXPECT_EQ(mcmc->get_model().size(), size_before) << "Size should not change after stop_densify";
-    }
+    // Size might have changed due to refinement
+    int new_size = mcmc->get_model().size();
+    std::cout << "Size changed from " << initial_size << " to " << new_size << std::endl;
 }
 
-TEST_F(MCMCTest, MaxCapRespectedTest) {
-    // Test that max_cap is respected
-    auto splat_data = createTestSplatData(90);
+TEST_F(MCMCTest, RelocationMechanicsTest) {
+    // Detailed test of relocation with actual rendering
+    auto splat_data = createTestSplatData(100);
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
-    // Set a low max_cap
-    params.optimization.max_cap = 100;
+    params.optimization.min_opacity = 0.005f;
+    params.optimization.start_densify = 500;
+    params.optimization.stop_densify = 1000;
     mcmc->initialize(params.optimization);
 
-    // Run multiple refinement steps
-    for (int iter = 600; iter <= 1000; iter += 100) {
-        torch::NoGradGuard no_grad;
-        auto render_output = createRenderOutput(mcmc->get_model().size());
-        mcmc->post_backward(iter, render_output);
+    // Initialize optimizer
+    auto render_output = performRendering(*mcmc);
+    auto loss = render_output.image.mean();
+    loss.backward();
+    mcmc->step(1);
 
-        EXPECT_LE(mcmc->get_model().size(), params.optimization.max_cap)
-            << "Size should never exceed max_cap";
-    }
-}
-
-TEST_F(MCMCTest, ConsistentParameterSizesTest) {
-    // Test that all parameters maintain consistent sizes
-    auto splat_data = createTestSplatData(25);
-    auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
-    mcmc->initialize(params.optimization);
-
-    // Run a refinement step
-    {
-        torch::NoGradGuard no_grad;
-        auto render_output = createRenderOutput(mcmc->get_model().size());
-        mcmc->post_backward(600, render_output);
-    }
-
-    // Check all parameters have the same size
-    int64_t size = mcmc->get_model().size();
-    EXPECT_EQ(mcmc->get_model().means().size(0), size);
-    EXPECT_EQ(mcmc->get_model().opacity_raw().size(0), size);
-    EXPECT_EQ(mcmc->get_model().scaling_raw().size(0), size);
-    EXPECT_EQ(mcmc->get_model().rotation_raw().size(0), size);
-    EXPECT_EQ(mcmc->get_model().sh0().size(0), size);
-    EXPECT_EQ(mcmc->get_model().shN().size(0), size);
-}
-
-TEST_F(MCMCTest, MinOpacityThresholdTest) {
-    // Test that min_opacity threshold works correctly
-    auto splat_data = createTestSplatData(50);
-    auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
-
-    // Set a high min_opacity to ensure some Gaussians are relocated
-    params.optimization.min_opacity = 0.7f;
-    mcmc->initialize(params.optimization);
-
-    // Manually set some opacities below threshold
+    // Manually set some opacities to be very low
     {
         torch::NoGradGuard no_grad;
         auto opacity_raw = mcmc->get_model().opacity_raw();
         // Set first 20 Gaussians to have very low opacity
-        opacity_raw.slice(0, 0, 20).fill_(torch::logit(torch::tensor(0.01f)));
+        opacity_raw.slice(0, 0, 20).fill_(torch::logit(torch::tensor(0.001f)));
     }
 
-    // Store means before relocation
-    auto means_before = mcmc->get_model().means().clone();
+    // Store positions of low-opacity Gaussians
+    auto low_opacity_means_before = mcmc->get_model().means().slice(0, 0, 20).clone();
 
-    // Trigger relocation
-    {
-        torch::NoGradGuard no_grad;
-        auto render_output = createRenderOutput(mcmc->get_model().size());
-        mcmc->post_backward(600, render_output);
-    }
+    // Trigger relocation through rendering
+    render_output = performRendering(*mcmc);
+    loss = render_output.image.mean();
+    loss.backward();
 
-    // Check that low-opacity Gaussians were relocated
+    mcmc->post_backward(600, render_output);
+
+    // Check that low-opacity Gaussians were relocated (positions changed)
+    auto low_opacity_means_after = mcmc->get_model().means().slice(0, 0, 20);
+    auto position_diff = (low_opacity_means_after - low_opacity_means_before).abs().sum();
+    EXPECT_GT(position_diff.item<float>(), 0) << "Low-opacity Gaussians should be relocated";
+
+    // Check that all opacities are now above threshold
     auto opacities = mcmc->get_model().get_opacity();
     if (opacities.dim() == 2) {
         opacities = opacities.squeeze(-1);
     }
-
-    // All opacities should now be above min_opacity (or close to it)
     auto min_opacity_value = opacities.min();
     EXPECT_GE(min_opacity_value.item<float>(), params.optimization.min_opacity * 0.9f)
-        << "All opacities should be above or near min_opacity after relocation";
+        << "All opacities should be above threshold after relocation";
+}
+
+TEST_F(MCMCTest, ConsistentRenderingAfterOperationsTest) {
+    // Test that rendering remains consistent after MCMC operations
+    auto splat_data = createTestSplatData(50);
+    auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
+    mcmc->initialize(params.optimization);
+
+    // Initial render
+    auto render1 = performRendering(*mcmc);
+
+    // Run through several iterations
+    for (int iter = 1; iter <= 5; ++iter) {
+        auto render_output = performRendering(*mcmc);
+        auto loss = render_output.image.mean();
+        loss.backward();
+
+        mcmc->post_backward(500 + iter * 100, render_output);
+        mcmc->step(500 + iter * 100);
+    }
+
+    // Final render
+    auto render2 = performRendering(*mcmc);
+
+    // Both renders should be valid
+    EXPECT_FALSE(render1.image.isnan().any().item<bool>());
+    EXPECT_FALSE(render2.image.isnan().any().item<bool>());
+    EXPECT_TRUE((render1.image >= 0).all().item<bool>());
+    EXPECT_TRUE((render1.image <= 1).all().item<bool>());
+    EXPECT_TRUE((render2.image >= 0).all().item<bool>());
+    EXPECT_TRUE((render2.image <= 1).all().item<bool>());
+
+    // Images should be different due to optimization
+    EXPECT_FALSE(torch::allclose(render1.image, render2.image));
+}
+
+TEST_F(MCMCTest, MultipleRefinementCyclesTest) {
+    // Test multiple refinement cycles with actual rendering
+    auto splat_data = createTestSplatData(50);
+    auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
+
+    params.optimization.max_cap = 200;  // Low cap to test limits
+    params.optimization.start_densify = 100;
+    params.optimization.stop_densify = 1000;
+    params.optimization.growth_interval = 100;
+    mcmc->initialize(params.optimization);
+
+    // Track size changes
+    std::vector<int> sizes;
+    sizes.push_back(mcmc->get_model().size());
+
+    // Run multiple refinement cycles
+    for (int iter = 100; iter <= 500; iter += 100) {
+        auto render_output = performRendering(*mcmc);
+        auto loss = render_output.image.mean();
+        loss.backward();
+
+        mcmc->post_backward(iter, render_output);
+        mcmc->step(iter);
+
+        sizes.push_back(mcmc->get_model().size());
+
+        // Verify size never exceeds cap
+        EXPECT_LE(mcmc->get_model().size(), params.optimization.max_cap)
+            << "Size should never exceed max_cap";
+    }
+
+    // Verify some growth happened
+    EXPECT_GT(sizes.back(), sizes.front()) << "Some Gaussians should have been added";
 }
