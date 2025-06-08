@@ -306,6 +306,8 @@ int MCMC::add_new_gs() {
 
 void MCMC::inject_noise() {
     // Get opacities and handle both [N] and [N, 1] shapes
+    torch::NoGradGuard no_grad;
+
     auto opacities = _splat_data.get_opacity();
     if (opacities.dim() == 2 && opacities.size(1) == 1) {
         opacities = opacities.squeeze(-1);
