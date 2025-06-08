@@ -338,52 +338,60 @@ TEST_F(AutogradTest, GradientAccumulationTest) {
     auto covars1 = outputs1[0];
     auto loss1 = covars1.sum();
 
-    // Compute gradients using autograd::grad but retain graph
-    torch::autograd::variable_list loss_list1 = {loss1};
-    torch::autograd::variable_list inputs = {quats, scales};
-    auto grads1 = torch::autograd::grad(
-        loss_list1,
-        inputs,
-        /*grad_outputs=*/{},
-        /*retain_graph=*/true,
-        /*create_graph=*/false
-    );
+    // Clone the inputs to create a separate graph for the second computation
+    auto quats_clone = quats.clone().detach().requires_grad_(true);
+    auto scales_clone = scales.clone().detach().requires_grad_(true);
 
-    auto grad_quats_1 = grads1[0].clone();
-    auto grad_scales_1 = grads1[1].clone();
-
-    // Second forward/backward (should accumulate)
-    auto outputs2 = QuatScaleToCovarPreciFunction::apply(quats, scales, settings);
+    // Second forward/backward with cloned inputs
+    auto outputs2 = QuatScaleToCovarPreciFunction::apply(quats_clone, scales_clone, settings);
     auto covars2 = outputs2[0];
     auto loss2 = covars2.sum();
 
-    // Compute gradients again
-    torch::autograd::variable_list loss_list2 = {loss2};
-    auto grads2 = torch::autograd::grad(
-        loss_list2,
-        inputs,
+    // Compute gradients using autograd::grad
+    torch::autograd::variable_list loss_list1 = {loss1};
+    torch::autograd::variable_list inputs1 = {quats, scales};
+    auto grads1 = torch::autograd::grad(
+        loss_list1,
+        inputs1,
         /*grad_outputs=*/{},
         /*retain_graph=*/false,
         /*create_graph=*/false
     );
 
-    // Since we're using autograd::grad, gradients don't accumulate automatically
-    // We need to check that each gradient computation gives the same result
-    assertTensorClose(grads2[0], grad_quats_1, 1e-5, 1e-5);
-    assertTensorClose(grads2[1], grad_scales_1, 1e-5, 1e-5);
+    torch::autograd::variable_list loss_list2 = {loss2};
+    torch::autograd::variable_list inputs2 = {quats_clone, scales_clone};
+    auto grads2 = torch::autograd::grad(
+        loss_list2,
+        inputs2,
+        /*grad_outputs=*/{},
+        /*retain_graph=*/false,
+        /*create_graph=*/false
+    );
+
+    // Since inputs are the same (just cloned), gradients should be the same
+    assertTensorClose(grads2[0], grads1[0], 1e-5, 1e-5);
+    assertTensorClose(grads2[1], grads1[1], 1e-5, 1e-5);
 
     // To test accumulation, we need to use .backward() instead
-    // Use mutable_grad() to set gradients
+    // Reset gradients
     quats.mutable_grad() = torch::zeros_like(quats);
     scales.mutable_grad() = torch::zeros_like(scales);
 
+    // Create two separate forward passes to avoid graph reuse
+    auto outputs3 = QuatScaleToCovarPreciFunction::apply(quats, scales, settings);
+    auto covars3 = outputs3[0];
+    auto loss3 = covars3.sum();
+
     // First backward
-    loss1.backward(/*gradient=*/{}, /*retain_graph=*/true);
+    loss3.backward();
     auto acc_grad_quats_1 = quats.grad().clone();
     auto acc_grad_scales_1 = scales.grad().clone();
 
-    // Second backward (accumulates)
-    loss2.backward();
+    // Second forward and backward
+    auto outputs4 = QuatScaleToCovarPreciFunction::apply(quats, scales, settings);
+    auto covars4 = outputs4[0];
+    auto loss4 = covars4.sum();
+    loss4.backward();
 
     // Check that gradients accumulated
     auto expected_quats_grad = acc_grad_quats_1 * 2;
