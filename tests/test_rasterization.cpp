@@ -1,11 +1,11 @@
-#include <gtest/gtest.h>
-#include <torch/torch.h>
-#include "core/rasterizer.hpp"
 #include "core/camera.hpp"
-#include "core/splat_data.hpp"
-#include "core/parameters.hpp"
 #include "core/debug_utils.hpp"
+#include "core/parameters.hpp"
+#include "core/rasterizer.hpp"
+#include "core/splat_data.hpp"
+#include <gtest/gtest.h>
 #include <memory>
+#include <torch/torch.h>
 
 class RasterizationTest : public ::testing::Test {
 protected:
@@ -25,7 +25,7 @@ protected:
     void setupTestScene() {
         // Create a simple test scene with known Gaussians
         N = 100;
-        C = 2;  // 2 cameras
+        C = 2; // 2 cameras
         width = 300;
         height = 200;
 
@@ -40,8 +40,7 @@ protected:
 
         splat_data = std::make_unique<SplatData>(
             params.optimization.sh_degree,
-            means, sh0, shN, scales, quats, opacity, 1.0f
-        );
+            means, sh0, shN, scales, quats, opacity, 1.0f);
 
         // Move to CUDA
         splat_data->means() = splat_data->means().to(device);
@@ -55,13 +54,12 @@ protected:
         for (int i = 0; i < C; ++i) {
             auto R = torch::eye(3, torch::kFloat32);
             auto T = torch::tensor({0.0f, 0.0f, 5.0f + i * 2.0f}, torch::kFloat32);
-            float fov = M_PI / 3.0f;  // 60 degrees
+            float fov = M_PI / 3.0f; // 60 degrees
 
             cameras.push_back(std::make_unique<Camera>(
                 R, T, fov, fov,
                 "test_cam_" + std::to_string(i),
-                "", width, height, i
-                ));
+                "", width, height, i));
         }
 
         // Background color
@@ -71,58 +69,56 @@ protected:
     // Helper methods
     SplatData createEmptySplatData() {
         return SplatData(
-            0,  // sh_degree
+            0,                                                   // sh_degree
             torch::zeros({0, 3}, torch::kFloat32).to(device),    // means
             torch::zeros({0, 1, 3}, torch::kFloat32).to(device), // sh0
             torch::zeros({0, 0, 3}, torch::kFloat32).to(device), // shN
             torch::zeros({0, 3}, torch::kFloat32).to(device),    // scaling
             torch::zeros({0, 4}, torch::kFloat32).to(device),    // rotation
             torch::zeros({0, 1}, torch::kFloat32).to(device),    // opacity
-            1.0f  // scene_scale
+            1.0f                                                 // scene_scale
         );
     }
 
     SplatData createSplatDataBehindCamera() {
         int n = 10;
         auto means = torch::zeros({n, 3}, torch::kFloat32);
-        means.select(1, 2) = -10.0f;  // All Z coordinates behind camera
+        means.select(1, 2) = -10.0f; // All Z coordinates behind camera
 
         return SplatData(
-            0,  // sh_degree
+            0, // sh_degree
             means.to(device),
             torch::rand({n, 1, 3}, torch::kFloat32).to(device),
             torch::zeros({n, 0, 3}, torch::kFloat32).to(device),
             torch::zeros({n, 3}, torch::kFloat32).to(device),
             torch::tensor({1.0f, 0.0f, 0.0f, 0.0f}, torch::kFloat32).repeat({n, 1}).to(device),
             torch::zeros({n, 1}, torch::kFloat32).to(device),
-            1.0f
-        );
+            1.0f);
     }
 
     SplatData createLargeSplatData() {
         int n = 5;
         auto means = torch::randn({n, 3}, torch::kFloat32) * 0.5f;
-        auto scales = torch::ones({n, 3}, torch::kFloat32) * 2.0f;  // Log of large scale
+        auto scales = torch::ones({n, 3}, torch::kFloat32) * 2.0f; // Log of large scale
 
         return SplatData(
-            0,  // sh_degree
+            0, // sh_degree
             means.to(device),
             torch::rand({n, 1, 3}, torch::kFloat32).to(device),
             torch::zeros({n, 0, 3}, torch::kFloat32).to(device),
             scales.to(device),
             torch::tensor({1.0f, 0.0f, 0.0f, 0.0f}, torch::kFloat32).repeat({n, 1}).to(device),
             torch::ones({n, 1}, torch::kFloat32).to(device),
-            1.0f
-        );
+            1.0f);
     }
 
-    torch::Device device{torch::kCPU};  // Initialize with default value
-    gs::param::TrainingParameters params{};  // Initialize with default value
+    torch::Device device{torch::kCPU};      // Initialize with default value
+    gs::param::TrainingParameters params{}; // Initialize with default value
     std::unique_ptr<SplatData> splat_data;
     std::vector<std::unique_ptr<Camera>> cameras;
     torch::Tensor background;
-    int N{0}, C{0}, width{0}, height{0};  // Initialize primitive types
-};  // Class ends here
+    int N{0}, C{0}, width{0}, height{0}; // Initialize primitive types
+};                                       // Class ends here
 
 // Test cases go outside the class
 TEST_F(RasterizationTest, BasicRasterizationTest) {
@@ -133,8 +129,7 @@ TEST_F(RasterizationTest, BasicRasterizationTest) {
         // Rasterize
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cam, *splat_data, bg_copy, 1.0f, false
-        );
+            *cam, *splat_data, bg_copy, 1.0f, false);
 
         // Check output dimensions
         EXPECT_EQ(render_output.image.sizes(), torch::IntArrayRef({3, height, width}));
@@ -167,9 +162,8 @@ TEST_F(RasterizationTest, RenderModesTest) {
     {
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cam, *splat_data, bg_copy, 1.0f, false
-        );
-        EXPECT_EQ(render_output.image.size(0), 3);  // RGB channels
+            *cam, *splat_data, bg_copy, 1.0f, false);
+        EXPECT_EQ(render_output.image.size(0), 3); // RGB channels
     }
 
     // Note: Our C++ implementation doesn't directly support D, ED, RGB+D modes
@@ -177,8 +171,7 @@ TEST_F(RasterizationTest, RenderModesTest) {
     {
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cam, *splat_data, bg_copy, 1.0f, false
-        );
+            *cam, *splat_data, bg_copy, 1.0f, false);
 
         // Check depths are positive for visible Gaussians
         auto visible_depths = render_output.depths.masked_select(render_output.visibility);
@@ -225,8 +218,7 @@ TEST_F(RasterizationTest, ScalingModifierTest) {
     for (float scale_mod : scale_modifiers) {
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cam, *splat_data, bg_copy, scale_mod, false
-        );
+            *cam, *splat_data, bg_copy, scale_mod, false);
         renders.push_back(render_output.image);
         visible_counts.push_back(render_output.visibility.sum().template item<int64_t>());
     }
@@ -248,16 +240,15 @@ TEST_F(RasterizationTest, BackgroundColorTest) {
     std::vector<torch::Tensor> backgrounds = {
         torch::zeros({3}, device),
         torch::ones({3}, device) * 0.5f,
-        torch::tensor({1.0f, 0.0f, 0.0f}, device)  // Red background
+        torch::tensor({1.0f, 0.0f, 0.0f}, device) // Red background
     };
 
     std::vector<torch::Tensor> renders;
 
     for (const auto& bg : backgrounds) {
-        auto bg_copy = bg.clone();  // rasterize might modify it
+        auto bg_copy = bg.clone(); // rasterize might modify it
         auto render_output = gs::rasterize(
-            *cam, *splat_data, bg_copy, 1.0f, false
-        );
+            *cam, *splat_data, bg_copy, 1.0f, false);
         renders.push_back(render_output.image);
     }
 
@@ -289,8 +280,7 @@ TEST_F(RasterizationTest, GradientFlowTest) {
     // Forward pass
     auto bg_copy = background.clone();
     auto render_output = gs::rasterize(
-        *cam, *splat_data, bg_copy, 1.0f, false
-    );
+        *cam, *splat_data, bg_copy, 1.0f, false);
 
     // Create a simple loss
     auto loss = render_output.image.mean();
@@ -323,8 +313,7 @@ TEST_F(RasterizationTest, MultiViewConsistencyTest) {
     for (int i = 0; i < C; ++i) {
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cameras[i], *splat_data, bg_copy, 1.0f, false
-        );
+            *cameras[i], *splat_data, bg_copy, 1.0f, false);
         renders.push_back(render_output.image);
         visible_counts.push_back(render_output.visibility.sum().template item<int>());
     }
@@ -356,8 +345,7 @@ TEST_F(RasterizationTest, PerformanceConsistencyTest) {
     for (int i = 0; i < num_renders; ++i) {
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cam, *splat_data, bg_copy, 1.0f, false
-        );
+            *cam, *splat_data, bg_copy, 1.0f, false);
         renders.push_back(render_output.image);
     }
 
@@ -376,8 +364,7 @@ TEST_F(RasterizationTest, EdgeCasesTest) {
         auto empty_splat = createEmptySplatData();
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cam, empty_splat, bg_copy, 1.0f, false
-        );
+            *cam, empty_splat, bg_copy, 1.0f, false);
 
         // Should produce background color
         auto expected = background.unsqueeze(1).unsqueeze(2).expand({3, height, width});
@@ -389,8 +376,7 @@ TEST_F(RasterizationTest, EdgeCasesTest) {
         auto behind_cam_splat = createSplatDataBehindCamera();
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cam, behind_cam_splat, bg_copy, 1.0f, false
-        );
+            *cam, behind_cam_splat, bg_copy, 1.0f, false);
 
         // Should produce background color (no visible Gaussians)
         EXPECT_EQ(render_output.visibility.sum().template item<int64_t>(), 0);
@@ -401,8 +387,7 @@ TEST_F(RasterizationTest, EdgeCasesTest) {
         auto large_splat = createLargeSplatData();
         auto bg_copy = background.clone();
         auto render_output = gs::rasterize(
-            *cam, large_splat, bg_copy, 1.0f, false
-        );
+            *cam, large_splat, bg_copy, 1.0f, false);
 
         // Should still produce valid output
         EXPECT_TRUE((render_output.image >= 0).all().template item<bool>());

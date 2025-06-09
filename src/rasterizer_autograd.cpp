@@ -207,42 +207,50 @@ namespace gs {
 
         torch::Tensor colors;
         torch::Tensor sh_coeffs_used;
+        torch::Tensor dirs;
+        torch::Tensor dirs_normalized;
         int num_sh_coeffs = 1;
 
         if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
             auto viewmat_inv = torch::inverse(viewmat);
             auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3});
-            auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);
+            dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);
+
+            // IMPORTANT: Normalize directions before computing SH
+            dirs_normalized = torch::nn::functional::normalize(dirs,
+                                                               torch::nn::functional::NormalizeFuncOptions().dim(-1).p(2));
+
             auto masks = (radii > 0).all(-1);
 
             // Device checks for intermediate tensors
             TORCH_CHECK(viewmat_inv.is_cuda(), "viewmat_inv must be on CUDA");
             TORCH_CHECK(campos.is_cuda(), "campos must be on CUDA");
             TORCH_CHECK(dirs.is_cuda(), "dirs must be on CUDA");
+            TORCH_CHECK(dirs_normalized.is_cuda(), "dirs_normalized must be on CUDA");
             TORCH_CHECK(masks.is_cuda(), "masks must be on CUDA");
 
             num_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
             sh_coeffs_used = sh_coeffs.index({Slice(), Slice(None, num_sh_coeffs), Slice()}).contiguous();
 
-            // Compute SH for single camera
+            // Compute SH for single camera with normalized directions
             colors = gsplat::spherical_harmonics_fwd(
-                sh_degree, dirs[0], sh_coeffs_used, masks[0]);
+                sh_degree, dirs_normalized[0], sh_coeffs_used, masks[0]);
             colors = colors.unsqueeze(0);
-            colors = torch::clamp_min(colors + 0.5f, 0.0f);
         } else {
             // Use only DC component
             sh_coeffs_used = sh_coeffs.index({Slice(), Slice(None, 1), Slice()}).contiguous();
             colors = sh_coeffs_used.index({Slice(), 0, Slice()});
             colors = colors.unsqueeze(0);
-            colors = torch::clamp_min(colors + 0.5f, 0.0f);
+            dirs = torch::Tensor();            // Empty tensor for DC-only case
+            dirs_normalized = torch::Tensor(); // Empty tensor for DC-only case
         }
 
         // Ensure colors is on CUDA and contiguous
         colors = colors.contiguous();
         TORCH_CHECK(colors.is_cuda(), "colors must be on CUDA after SH computation");
 
-        // Save for backward
-        ctx->save_for_backward({sh_coeffs, sh_coeffs_used, means3D, viewmat, radii});
+        // Save for backward - save both normalized and unnormalized directions
+        ctx->save_for_backward({sh_coeffs, sh_coeffs_used, means3D, viewmat, radii, dirs, dirs_normalized});
         ctx->saved_data["sh_degree"] = sh_degree;
         ctx->saved_data["num_sh_coeffs"] = num_sh_coeffs;
 
@@ -261,6 +269,8 @@ namespace gs {
         const auto& means3D = saved[2];
         const auto& viewmat = saved[3];
         const auto& radii = saved[4];
+        const auto& dirs = saved[5];
+        const auto& dirs_normalized = saved[6];
 
         const int sh_degree = ctx->saved_data["sh_degree"].to<int>();
         const int num_sh_coeffs = ctx->saved_data["num_sh_coeffs"].to<int>();
@@ -271,21 +281,32 @@ namespace gs {
         torch::Tensor v_means3D;
 
         if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
-            auto viewmat_inv = torch::inverse(viewmat);
-            auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3});
-            auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);
             auto masks = (radii > 0).all(-1);
 
+            // Use the normalized directions for backward
             auto sh_grads = gsplat::spherical_harmonics_bwd(
                 num_sh_coeffs, sh_degree,
-                dirs[0], sh_coeffs_used, masks[0],
+                dirs_normalized[0], sh_coeffs_used, masks[0],
                 v_colors[0], true);
 
             auto v_sh_coeffs_active = std::get<0>(sh_grads);
-            auto v_dirs = std::get<1>(sh_grads);
+            auto v_dirs_normalized = std::get<1>(sh_grads);
 
             v_sh_coeffs.index_put_({Slice(), Slice(None, num_sh_coeffs), Slice()}, v_sh_coeffs_active);
-            v_means3D = v_dirs;
+
+            // Backpropagate through normalization
+            // For normalized vector n = d / ||d||, the gradient is:
+            // v_d = (I - n * n^T) * v_n / ||d||
+            auto dirs_single = dirs[0];                       // Shape [N, 3]
+            auto dirs_norm = dirs_single.norm(2, -1, true);   // Shape [N, 1]
+            auto dirs_normalized_single = dirs_normalized[0]; // Shape [N, 3]
+
+            // Compute gradient w.r.t unnormalized directions
+            auto v_dirs_single = v_dirs_normalized / dirs_norm;
+            v_dirs_single = v_dirs_single - dirs_normalized_single * (dirs_normalized_single * v_dirs_normalized).sum(-1, true);
+
+            // This is gradient w.r.t. dirs[0], which came from means3D - campos
+            v_means3D = v_dirs_single;
         } else {
             // Only DC component
             v_sh_coeffs.index_put_({Slice(), 0, Slice()}, v_colors[0]);

@@ -17,16 +17,15 @@ namespace reference {
 
         // Build rotation matrix
         std::vector<torch::Tensor> R_components = {
-            1 - 2 * (y*y + z*z),
-            2 * (x*y - w*z),
-            2 * (x*z + w*y),
-            2 * (x*y + w*z),
-            1 - 2 * (x*x + z*z),
-            2 * (y*z - w*x),
-            2 * (x*z - w*y),
-            2 * (y*z + w*x),
-            1 - 2 * (x*x + y*y)
-        };
+            1 - 2 * (y * y + z * z),
+            2 * (x * y - w * z),
+            2 * (x * z + w * y),
+            2 * (x * y + w * z),
+            1 - 2 * (x * x + z * z),
+            2 * (y * z - w * x),
+            2 * (x * z - w * y),
+            2 * (y * z + w * x),
+            1 - 2 * (x * x + y * y)};
 
         auto R = torch::stack(R_components, -1);
         auto shape = quats.sizes().vec();
@@ -43,32 +42,34 @@ namespace reference {
         bool compute_preci,
         bool triu) {
 
-        auto R = quat_to_rotmat(quats);  // [N, 3, 3]
+        auto R = quat_to_rotmat(quats); // [N, 3, 3]
         torch::Tensor covars, precis;
 
         if (compute_covar) {
             // M = R * S (where S is diagonal matrix of scales)
-            auto M = R * scales.unsqueeze(-2);  // [N, 3, 3]
-            covars = torch::bmm(M, M.transpose(-1, -2));  // [N, 3, 3]
+            auto M = R * scales.unsqueeze(-2);           // [N, 3, 3]
+            covars = torch::bmm(M, M.transpose(-1, -2)); // [N, 3, 3]
 
             if (triu) {
                 // Convert to upper triangular format
                 covars = covars.reshape({covars.size(0), 9});
                 // Average symmetric elements
                 covars = (covars.index({"...", torch::tensor({0, 1, 2, 4, 5, 8})}) +
-                          covars.index({"...", torch::tensor({0, 3, 6, 4, 7, 8})})) / 2.0f;
+                          covars.index({"...", torch::tensor({0, 3, 6, 4, 7, 8})})) /
+                         2.0f;
             }
         }
 
         if (compute_preci) {
             // P = R * (1/S)
             auto P = R * (1.0f / scales).unsqueeze(-2);  // [N, 3, 3]
-            precis = torch::bmm(P, P.transpose(-1, -2));  // [N, 3, 3]
+            precis = torch::bmm(P, P.transpose(-1, -2)); // [N, 3, 3]
 
             if (triu) {
                 precis = precis.reshape({precis.size(0), 9});
                 precis = (precis.index({"...", torch::tensor({0, 1, 2, 4, 5, 8})}) +
-                          precis.index({"...", torch::tensor({0, 3, 6, 4, 7, 8})})) / 2.0f;
+                          precis.index({"...", torch::tensor({0, 3, 6, 4, 7, 8})})) /
+                         2.0f;
             }
         }
 
@@ -77,24 +78,24 @@ namespace reference {
 
     // Perspective projection
     std::tuple<torch::Tensor, torch::Tensor> persp_proj(
-        const torch::Tensor& means,   // [C, N, 3]
-        const torch::Tensor& covars,  // [C, N, 3, 3]
-        const torch::Tensor& Ks,      // [C, 3, 3]
+        const torch::Tensor& means,  // [C, N, 3]
+        const torch::Tensor& covars, // [C, N, 3, 3]
+        const torch::Tensor& Ks,     // [C, 3, 3]
         int width,
         int height) {
 
         const int C = means.size(0);
         const int N = means.size(1);
 
-        auto tx = means.select(-1, 0);  // [C, N]
-        auto ty = means.select(-1, 1);  // [C, N]
-        auto tz = means.select(-1, 2);  // [C, N]
+        auto tx = means.select(-1, 0); // [C, N]
+        auto ty = means.select(-1, 1); // [C, N]
+        auto tz = means.select(-1, 2); // [C, N]
         auto tz2 = tz * tz;
 
-        auto fx = Ks.select(-2, 0).select(-1, 0).unsqueeze(-1);  // [C, 1]
-        auto fy = Ks.select(-2, 1).select(-1, 1).unsqueeze(-1);  // [C, 1]
-        auto cx = Ks.select(-2, 0).select(-1, 2).unsqueeze(-1);  // [C, 1]
-        auto cy = Ks.select(-2, 1).select(-1, 2).unsqueeze(-1);  // [C, 1]
+        auto fx = Ks.select(-2, 0).select(-1, 0).unsqueeze(-1); // [C, 1]
+        auto fy = Ks.select(-2, 1).select(-1, 1).unsqueeze(-1); // [C, 1]
+        auto cx = Ks.select(-2, 0).select(-1, 2).unsqueeze(-1); // [C, 1]
+        auto cy = Ks.select(-2, 1).select(-1, 2).unsqueeze(-1); // [C, 1]
 
         auto tan_fovx = 0.5f * width / fx;
         auto tan_fovy = 0.5f * height / fy;
@@ -108,10 +109,10 @@ namespace reference {
         ty = tz * torch::clamp(ty / tz, -lim_y_neg, lim_y_pos);
 
         auto O = torch::zeros({C, N}, means.options());
-        auto J = torch::stack({
-                                  fx / tz, O, -fx * tx / tz2,
-                                  O, fy / tz, -fy * ty / tz2
-                              }, -1).reshape({C, N, 2, 3});
+        auto J = torch::stack({fx / tz, O, -fx * tx / tz2,
+                               O, fy / tz, -fy * ty / tz2},
+                              -1)
+                     .reshape({C, N, 2, 3});
 
         // Compute 2D covariance: J @ covars @ J^T
         auto cov2d = torch::einsum("...ij,...jk,...kl->...il", {J, covars, J.transpose(-1, -2)});
@@ -125,12 +126,12 @@ namespace reference {
 
     // World to camera transformation
     std::tuple<torch::Tensor, torch::Tensor> world_to_cam(
-        const torch::Tensor& means,   // [N, 3]
-        const torch::Tensor& covars,  // [N, 3, 3]
+        const torch::Tensor& means,      // [N, 3]
+        const torch::Tensor& covars,     // [N, 3, 3]
         const torch::Tensor& viewmats) { // [C, 4, 4]
 
-        auto R = viewmats.slice(-2, 0, 3).slice(-1, 0, 3);  // [C, 3, 3]
-        auto t = viewmats.slice(-2, 0, 3).select(-1, 3);    // [C, 3]
+        auto R = viewmats.slice(-2, 0, 3).slice(-1, 0, 3); // [C, 3, 3]
+        auto t = viewmats.slice(-2, 0, 3).select(-1, 3);   // [C, 3]
 
         // Transform means: R @ means^T + t
         auto means_c = torch::einsum("cij,nj->cni", {R, means}) + t.unsqueeze(1);
@@ -187,11 +188,10 @@ namespace reference {
         }
 
         // Compute conics (inverse of 2D covariance)
-        auto conics = torch::stack({
-                                       covars2d.select(-2, 1).select(-1, 1) / det,
-                                       -(covars2d.select(-2, 0).select(-1, 1) + covars2d.select(-2, 1).select(-1, 0)) / 2.0f / det,
-                                       covars2d.select(-2, 0).select(-1, 0) / det
-                                   }, -1);
+        auto conics = torch::stack({covars2d.select(-2, 1).select(-1, 1) / det,
+                                    -(covars2d.select(-2, 0).select(-1, 1) + covars2d.select(-2, 1).select(-1, 0)) / 2.0f / det,
+                                    covars2d.select(-2, 0).select(-1, 0) / det},
+                                   -1);
 
         // Depths
         auto depths = means_c.select(-1, 2);
@@ -223,7 +223,8 @@ namespace reference {
 
         result.select(-1, 0).fill_(0.2820947917738781f);
 
-        if (basis_dim <= 1) return result;
+        if (basis_dim <= 1)
+            return result;
 
         auto x = dirs.select(-1, 0);
         auto y = dirs.select(-1, 1);
@@ -234,10 +235,11 @@ namespace reference {
         result.select(-1, 3) = fTmpA * x;
         result.select(-1, 1) = fTmpA * y;
 
-        if (basis_dim <= 4) return result;
+        if (basis_dim <= 4)
+            return result;
 
         auto z2 = z * z;
-        auto fTmpB = -1.092548430592079f * z;  // auto instead of float
+        auto fTmpB = -1.092548430592079f * z; // auto instead of float
         fTmpA = 0.5462742152960395f;
         auto fC1 = x * x - y * y;
         auto fS1 = 2 * x * y;
@@ -247,10 +249,11 @@ namespace reference {
         result.select(-1, 8) = fTmpA * fC1;
         result.select(-1, 4) = fTmpA * fS1;
 
-        if (basis_dim <= 9) return result;
+        if (basis_dim <= 9)
+            return result;
 
         auto fTmpC = -2.285228997322329f * z2 + 0.4570457994644658f;
-        fTmpB = 1.445305721320277f * z;  // reuse as tensor
+        fTmpB = 1.445305721320277f * z; // reuse as tensor
         fTmpA = -0.5900435899266435f;
         auto fC2 = x * fC1 - y * fS1;
         auto fS2 = x * fS1 + y * fC1;
@@ -262,11 +265,12 @@ namespace reference {
         result.select(-1, 15) = fTmpA * fC2;
         result.select(-1, 9) = fTmpA * fS2;
 
-        if (basis_dim <= 16) return result;
+        if (basis_dim <= 16)
+            return result;
 
         auto fTmpD = z * (-4.683325804901025f * z2 + 2.007139630671868f);
         fTmpC = 3.31161143515146f * z2 - 0.47308734787878f;
-        fTmpB = -1.770130769779931f * z;  // reuse as tensor
+        fTmpB = -1.770130769779931f * z; // reuse as tensor
         fTmpA = 0.6258357354491763f;
         auto fC3 = x * fC2 - y * fS2;
         auto fS3 = x * fS2 + y * fC2;
@@ -286,7 +290,7 @@ namespace reference {
 
     torch::Tensor spherical_harmonics(
         int degree,
-        const torch::Tensor& dirs,   // [N, 3]
+        const torch::Tensor& dirs,     // [N, 3]
         const torch::Tensor& coeffs) { // [N, K, 3]
 
         auto dirs_norm = torch::nn::functional::normalize(
@@ -306,9 +310,9 @@ namespace reference {
 
     // Tile intersection test
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> isect_tiles(
-        const torch::Tensor& means2d,  // [C, N, 2]
-        const torch::Tensor& radii,    // [C, N, 2]
-        const torch::Tensor& depths,   // [C, N]
+        const torch::Tensor& means2d, // [C, N, 2]
+        const torch::Tensor& radii,   // [C, N, 2]
+        const torch::Tensor& depths,  // [C, N]
         int tile_size,
         int tile_width,
         int tile_height,
@@ -384,10 +388,14 @@ namespace reference {
         // Copy back to GPU
         isect_ids = torch::from_blob(isect_ids_vec.data(),
                                      {static_cast<int64_t>(isect_ids_vec.size())},
-                                     torch::kInt64).clone().to(device);
+                                     torch::kInt64)
+                        .clone()
+                        .to(device);
         flatten_ids = torch::from_blob(flatten_ids_vec.data(),
                                        {static_cast<int64_t>(flatten_ids_vec.size())},
-                                       torch::kInt32).clone().to(device);
+                                       torch::kInt32)
+                          .clone()
+                          .to(device);
 
         if (sort) {
             auto sorted_indices = torch::argsort(isect_ids);

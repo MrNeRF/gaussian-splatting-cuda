@@ -12,13 +12,13 @@ namespace gs {
     public:
         static torch::autograd::tensor_list forward(
             torch::autograd::AutogradContext* ctx,
-            torch::Tensor means3D,    // [N, 3]
-            torch::Tensor quats,      // [N, 4]
-            torch::Tensor scales,     // [N, 3]
-            torch::Tensor opacities,  // [N]
-            torch::Tensor viewmat,    // [C, 4, 4]
-            torch::Tensor K,          // [C, 3, 3]
-            torch::Tensor settings);  // [7] tensor containing projection settings
+            torch::Tensor means3D,   // [N, 3]
+            torch::Tensor quats,     // [N, 4]
+            torch::Tensor scales,    // [N, 3]
+            torch::Tensor opacities, // [N]
+            torch::Tensor viewmat,   // [C, 4, 4]
+            torch::Tensor K,         // [C, 3, 3]
+            torch::Tensor settings); // [7] tensor containing projection settings
 
         static torch::autograd::tensor_list backward(
             torch::autograd::AutogradContext* ctx,
@@ -30,11 +30,11 @@ namespace gs {
     public:
         static torch::autograd::tensor_list forward(
             torch::autograd::AutogradContext* ctx,
-            torch::Tensor sh_coeffs,          // [N, K, 3]
-            torch::Tensor means3D,            // [N, 3]
-            torch::Tensor viewmat,            // [C, 4, 4]
-            torch::Tensor radii,              // [C, N, 2]
-            torch::Tensor sh_degree_tensor);  // [1] containing sh_degree
+            torch::Tensor sh_coeffs,         // [N, K, 3]
+            torch::Tensor means3D,           // [N, 3]
+            torch::Tensor viewmat,           // [C, 4, 4]
+            torch::Tensor radii,             // [C, N, 2]
+            torch::Tensor sh_degree_tensor); // [1] containing sh_degree
 
         static torch::autograd::tensor_list backward(
             torch::autograd::AutogradContext* ctx,
