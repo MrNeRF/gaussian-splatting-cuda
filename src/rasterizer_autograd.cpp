@@ -250,7 +250,7 @@ namespace gs {
         TORCH_CHECK(colors.is_cuda(), "colors must be on CUDA after SH computation");
 
         // Save for backward - save both normalized and unnormalized directions
-        ctx->save_for_backward({sh_coeffs, sh_coeffs_used, means3D, viewmat, radii, dirs, dirs_normalized});
+        ctx->save_for_backward({sh_coeffs, sh_coeffs_used, means3D, viewmat, radii, dirs});
         ctx->saved_data["sh_degree"] = sh_degree;
         ctx->saved_data["num_sh_coeffs"] = num_sh_coeffs;
 
@@ -270,12 +270,10 @@ namespace gs {
         const auto& viewmat = saved[3];
         const auto& radii = saved[4];
         const auto& dirs = saved[5];
-        const auto& dirs_normalized = saved[6];
+        // dirs_normalized is no longer needed
 
         const int sh_degree = ctx->saved_data["sh_degree"].to<int>();
         const int num_sh_coeffs = ctx->saved_data["num_sh_coeffs"].to<int>();
-        const int C = static_cast<int>(viewmat.size(0));
-        const int N = static_cast<int>(means3D.size(0));
 
         torch::Tensor v_sh_coeffs = torch::zeros_like(sh_coeffs);
         torch::Tensor v_means3D;
@@ -283,30 +281,20 @@ namespace gs {
         if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
             auto masks = (radii > 0).all(-1);
 
-            // Use the normalized directions for backward
+            // Pass the UNNORMALIZED dirs to backward, since gsplat handles normalization internally
             auto sh_grads = gsplat::spherical_harmonics_bwd(
                 num_sh_coeffs, sh_degree,
-                dirs_normalized[0], sh_coeffs_used, masks[0],
+                dirs[0],  // Use unnormalized dirs, not dirs_normalized!
+                sh_coeffs_used, masks[0],
                 v_colors[0], true);
 
             auto v_sh_coeffs_active = std::get<0>(sh_grads);
-            auto v_dirs_normalized = std::get<1>(sh_grads);
+            auto v_dirs = std::get<1>(sh_grads);
 
             v_sh_coeffs.index_put_({Slice(), Slice(None, num_sh_coeffs), Slice()}, v_sh_coeffs_active);
 
-            // Backpropagate through normalization
-            // For normalized vector n = d / ||d||, the gradient is:
-            // v_d = (I - n * n^T) * v_n / ||d||
-            auto dirs_single = dirs[0];                       // Shape [N, 3]
-            auto dirs_norm = dirs_single.norm(2, -1, true);   // Shape [N, 1]
-            auto dirs_normalized_single = dirs_normalized[0]; // Shape [N, 3]
-
-            // Compute gradient w.r.t unnormalized directions
-            auto v_dirs_single = v_dirs_normalized / dirs_norm;
-            v_dirs_single = v_dirs_single - dirs_normalized_single * (dirs_normalized_single * v_dirs_normalized).sum(-1, true);
-
-            // This is gradient w.r.t. dirs[0], which came from means3D - campos
-            v_means3D = v_dirs_single;
+            // No normalization backprop needed - gsplat already handled it
+            v_means3D = v_dirs;
         } else {
             // Only DC component
             v_sh_coeffs.index_put_({Slice(), 0, Slice()}, v_colors[0]);
