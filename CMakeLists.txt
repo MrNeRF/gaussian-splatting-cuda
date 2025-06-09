@@ -229,6 +229,7 @@ if(BUILD_TESTS)
             tests/test_intersect_debug.cpp
             tests/test_autograd.cpp
             tests/test_numerical_gradients.cpp
+            tests/test_garden_data.cpp
             tests/torch_impl.cpp
     )
 
@@ -266,6 +267,16 @@ if(BUILD_TESTS)
                 COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${CMAKE_CURRENT_SOURCE_DIR}/test_data"
                 "$<TARGET_FILE_DIR:gaussian_tests>/test_data"
+        )
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt")
+        add_custom_command(TARGET gaussian_tests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:gaussian_tests>/tests/data"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt"
+                "$<TARGET_FILE_DIR:gaussian_tests>/tests/data/"
         )
     endif()
 

@@ -247,8 +247,7 @@ int MCMC::add_new_gs() {
     // Store the new parameters in a temporary array first
     std::array<torch::Tensor*, 6> new_params = {
         &concat_means, &concat_sh0, &concat_shN,
-        &concat_scaling, &concat_rotation, &concat_opacity
-    };
+        &concat_scaling, &concat_rotation, &concat_opacity};
 
     // Collect old parameter keys and states
     std::vector<void*> old_param_keys;
@@ -267,12 +266,18 @@ int MCMC::add_new_gs() {
 
             // Create extended states
             torch::IntArrayRef new_shape;
-            if (i == 0) new_shape = new_means.sizes();
-            else if (i == 1) new_shape = new_sh0.sizes();
-            else if (i == 2) new_shape = new_shN.sizes();
-            else if (i == 3) new_shape = new_scaling.sizes();
-            else if (i == 4) new_shape = new_rotation.sizes();
-            else new_shape = new_opacity.sizes();
+            if (i == 0)
+                new_shape = new_means.sizes();
+            else if (i == 1)
+                new_shape = new_sh0.sizes();
+            else if (i == 2)
+                new_shape = new_shN.sizes();
+            else if (i == 3)
+                new_shape = new_scaling.sizes();
+            else if (i == 4)
+                new_shape = new_rotation.sizes();
+            else
+                new_shape = new_opacity.sizes();
 
             auto zeros_to_add = torch::zeros(new_shape, adam_state.exp_avg().options());
             auto new_exp_avg = torch::cat({adam_state.exp_avg(), zeros_to_add}, 0);

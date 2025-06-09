@@ -1,15 +1,15 @@
-#include <gtest/gtest.h>
-#include <torch/torch.h>
 #include "Ops.h"
 #include "core/debug_utils.hpp"
 #include "core/rasterizer_autograd.hpp"
-#include <memory>
 #include <cuda_runtime.h>
+#include <gtest/gtest.h>
+#include <memory>
+#include <torch/torch.h>
 
 // Using the exposed autograd functions from gs namespace
+using gs::ProjectionFunction;
 using gs::QuatScaleToCovarPreciFunction;
 using gs::SphericalHarmonicsFunction;
-using gs::ProjectionFunction;
 
 class AutogradTest : public ::testing::Test {
 protected:
@@ -62,7 +62,7 @@ TEST_F(AutogradTest, QuatScaleToCovarPreciAutogradTest) {
         EXPECT_EQ(precis.sizes(), torch::IntArrayRef({N, 3, 3}));
 
         // Create a simple scalar loss
-        auto loss = covars.sum() * 0.001f + precis.sum() * 0.00001f;  // Scale down to avoid huge gradients
+        auto loss = covars.sum() * 0.001f + precis.sum() * 0.00001f; // Scale down to avoid huge gradients
         loss.backward();
 
         // Check gradients exist on the ORIGINAL input tensors
@@ -84,8 +84,10 @@ TEST_F(AutogradTest, QuatScaleToCovarPreciAutogradTest) {
     }
 
     // Clear gradients
-    if (quats.grad().defined()) quats.grad().zero_();
-    if (scales.grad().defined()) scales.grad().zero_();
+    if (quats.grad().defined())
+        quats.grad().zero_();
+    if (scales.grad().defined())
+        scales.grad().zero_();
 
     // Test with triu=true
     {
@@ -119,7 +121,7 @@ TEST_F(AutogradTest, SphericalHarmonicsAutogradTest) {
         auto sh_coeffs = torch::randn({N, K, 3}, device).set_requires_grad(true);
         auto means3D = torch::randn({N, 3}, device).set_requires_grad(true);
         auto viewmat = torch::eye(4, device).unsqueeze(0).set_requires_grad(true); // [1, 4, 4]
-        auto radii = torch::ones({C, N, 2}, device) * 10; // All visible
+        auto radii = torch::ones({C, N, 2}, device) * 10;                          // All visible
         auto sh_degree_tensor = torch::tensor({sh_degree}, torch::TensorOptions().dtype(torch::kInt32).device(device));
 
         // Forward through autograd function
@@ -146,9 +148,12 @@ TEST_F(AutogradTest, SphericalHarmonicsAutogradTest) {
         }
 
         // Clear gradients for next iteration
-        if (sh_coeffs.grad().defined()) sh_coeffs.grad().zero_();
-        if (means3D.grad().defined()) means3D.grad().zero_();
-        if (viewmat.grad().defined()) viewmat.grad().zero_();
+        if (sh_coeffs.grad().defined())
+            sh_coeffs.grad().zero_();
+        if (means3D.grad().defined())
+            means3D.grad().zero_();
+        if (viewmat.grad().defined())
+            viewmat.grad().zero_();
     }
 }
 
@@ -163,35 +168,39 @@ TEST_F(AutogradTest, ProjectionAutogradTest) {
     auto quats = torch::nn::functional::normalize(
                      torch::randn({N, 4}, device),
                      torch::nn::functional::NormalizeFuncOptions().dim(-1))
-                     .detach().requires_grad_(true);
+                     .detach()
+                     .requires_grad_(true);
     auto scales = (torch::rand({N, 3}, device) * 0.1f)
-                      .detach().requires_grad_(true);
+                      .detach()
+                      .requires_grad_(true);
     auto opacities = torch::rand({N}, device).detach().requires_grad_(true);
-    auto viewmats = torch::eye(4, device).unsqueeze(0).repeat({C, 1, 1})
-                        .detach().requires_grad_(true);
+    auto viewmats = torch::eye(4, device).unsqueeze(0).repeat({C, 1, 1}).detach().requires_grad_(true);
 
     auto Ks = torch::tensor({{300.0f, 0.0f, 320.0f},
                              {0.0f, 300.0f, 240.0f},
-                             {0.0f, 0.0f,   1.0f}}, device)
-                  .unsqueeze(0).repeat({C, 1, 1});
+                             {0.0f, 0.0f, 1.0f}},
+                            device)
+                  .unsqueeze(0)
+                  .repeat({C, 1, 1});
 
     // Test projection (note: compensations are always computed as false in the actual implementation)
     {
         auto settings = torch::tensor({(float)width, (float)height,
                                        0.3f, 0.01f, 10000.0f,
-                                       0.0f, 1.0f}, device);
+                                       0.0f, 1.0f},
+                                      device);
 
         auto outputs = ProjectionFunction::apply(
             means, quats, scales, opacities, viewmats, Ks, settings);
 
-        auto radii  = outputs[0];
+        auto radii = outputs[0];
         auto means2d = outputs[1];
-        auto depths  = outputs[2];
-        auto conics  = outputs[3];
+        auto depths = outputs[2];
+        auto conics = outputs[3];
         auto compensations = outputs[4];
 
-        EXPECT_EQ(radii.sizes(),  torch::IntArrayRef({C, N, 2}));
-        EXPECT_EQ(means2d.sizes(),torch::IntArrayRef({C, N, 2}));
+        EXPECT_EQ(radii.sizes(), torch::IntArrayRef({C, N, 2}));
+        EXPECT_EQ(means2d.sizes(), torch::IntArrayRef({C, N, 2}));
         EXPECT_EQ(depths.sizes(), torch::IntArrayRef({C, N}));
         EXPECT_EQ(conics.sizes(), torch::IntArrayRef({C, N, 3}));
         EXPECT_EQ(compensations.sizes(), torch::IntArrayRef({C, N}));
@@ -211,8 +220,7 @@ TEST_F(AutogradTest, ProjectionAutogradTest) {
             /*grad_outputs=*/{},
             /*retain_graph=*/false,
             /*create_graph=*/false,
-            /*allow_unused=*/true
-        );
+            /*allow_unused=*/true);
 
         // Check that gradients are defined for inputs that should have gradients
         EXPECT_TRUE(grads[0].defined()); // means grad
@@ -251,17 +259,17 @@ TEST_F(AutogradTest, FullRenderingPipelineAutogradTest) {
     auto opacities = torch::rand({N}, device);
     opacities.requires_grad_(true);
 
-    auto sh_coeffs = torch::randn({N, 1, 3}, device);  // Only DC component
+    auto sh_coeffs = torch::randn({N, 1, 3}, device); // Only DC component
     sh_coeffs.requires_grad_(true);
 
     // Camera
     auto viewmat = torch::eye(4, device).unsqueeze(0);
     viewmat.requires_grad_(true);
-    auto K = torch::tensor({
-                               {200.0f, 0.0f, 64.0f},
-                               {0.0f, 200.0f, 64.0f},
-                               {0.0f, 0.0f, 1.0f}
-                           }, device).unsqueeze(0);
+    auto K = torch::tensor({{200.0f, 0.0f, 64.0f},
+                            {0.0f, 200.0f, 64.0f},
+                            {0.0f, 0.0f, 1.0f}},
+                           device)
+                 .unsqueeze(0);
 
     // 1. Projection
     auto proj_settings = torch::tensor({(float)width, (float)height, 0.3f, 0.01f, 1000.0f, 0.0f, 1.0f}, device);
@@ -290,12 +298,12 @@ TEST_F(AutogradTest, FullRenderingPipelineAutogradTest) {
     loss.backward();
 
     // Check that all gradients are defined
-    EXPECT_TRUE(means.grad().defined()); // means grad
-    EXPECT_TRUE(quats.grad().defined()); // quats grad
-    EXPECT_TRUE(scales.grad().defined()); // scales grad
+    EXPECT_TRUE(means.grad().defined());     // means grad
+    EXPECT_TRUE(quats.grad().defined());     // quats grad
+    EXPECT_TRUE(scales.grad().defined());    // scales grad
     EXPECT_TRUE(opacities.grad().defined()); // opacities grad
     EXPECT_TRUE(sh_coeffs.grad().defined()); // sh_coeffs grad
-    EXPECT_TRUE(viewmat.grad().defined()); // viewmat grad
+    EXPECT_TRUE(viewmat.grad().defined());   // viewmat grad
 
     // Check gradients are non-zero (at least some should be)
     auto means_grad_sum = means.grad().abs().sum().item<float>();
@@ -355,8 +363,7 @@ TEST_F(AutogradTest, GradientAccumulationTest) {
         inputs1,
         /*grad_outputs=*/{},
         /*retain_graph=*/false,
-        /*create_graph=*/false
-    );
+        /*create_graph=*/false);
 
     torch::autograd::variable_list loss_list2 = {loss2};
     torch::autograd::variable_list inputs2 = {quats_clone, scales_clone};
@@ -365,8 +372,7 @@ TEST_F(AutogradTest, GradientAccumulationTest) {
         inputs2,
         /*grad_outputs=*/{},
         /*retain_graph=*/false,
-        /*create_graph=*/false
-    );
+        /*create_graph=*/false);
 
     // Since inputs are the same (just cloned), gradients should be the same
     assertTensorClose(grads2[0], grads1[0], 1e-5, 1e-5);

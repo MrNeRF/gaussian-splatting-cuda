@@ -1,6 +1,6 @@
 #include "core/rasterizer.hpp"
-#include "core/rasterizer_autograd.hpp"
 #include "Ops.h"
+#include "core/rasterizer_autograd.hpp"
 #include <torch/torch.h>
 
 namespace gs {
@@ -107,6 +107,9 @@ namespace gs {
         auto color_outputs = SphericalHarmonicsFunction::apply(
             sh_coeffs, means3D, viewmat, radii, sh_degree_tensor);
         auto colors = color_outputs[0];
+
+        // Apply the SH offset and clamping for rendering (shift from [-0.5, 0.5] to [0, 1])
+        colors = torch::clamp_min(colors + 0.5f, 0.0f);
 
         // Step 3: Apply opacity with compensations
         auto final_opacities = opacities.unsqueeze(0) * compensations;

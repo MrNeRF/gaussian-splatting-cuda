@@ -1,8 +1,8 @@
 #pragma once
 
+#include <string>
 #include <torch/torch.h>
 #include <tuple>
-#include <string>
 
 namespace reference {
 

@@ -1,11 +1,11 @@
-#include <gtest/gtest.h>
-#include <torch/torch.h>
+#include "core/camera.hpp"
 #include "core/mcmc.hpp"
-#include "core/splat_data.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
-#include "core/camera.hpp"
+#include "core/splat_data.hpp"
+#include <gtest/gtest.h>
 #include <memory>
+#include <torch/torch.h>
 
 class MCMCTest : public ::testing::Test {
 protected:
@@ -38,13 +38,12 @@ protected:
         // Create a test camera
         auto R = torch::eye(3, torch::kFloat32);
         auto T = torch::tensor({0.0f, 0.0f, 5.0f}, torch::kFloat32);
-        float fov = M_PI / 3.0f;  // 60 degrees
+        float fov = M_PI / 3.0f; // 60 degrees
 
         test_camera = std::make_unique<Camera>(
             R, T, fov, fov,
             "test_camera",
-            "", 256, 256, 0
-        );
+            "", 256, 256, 0);
 
         // Background color
         background = torch::zeros({3}, device);
@@ -135,8 +134,8 @@ TEST_F(MCMCTest, SHDegreeIncrementWithRenderingTest) {
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
     // Set parameters to avoid refinement at iteration 1000
-    params.optimization.start_densify = 1001;  // Start after iteration 1000
-    params.optimization.stop_densify = 2000;   // Stop densification later
+    params.optimization.start_densify = 1001; // Start after iteration 1000
+    params.optimization.stop_densify = 2000;  // Stop densification later
     params.optimization.growth_interval = 100;
     mcmc->initialize(params.optimization);
 
@@ -172,7 +171,7 @@ TEST_F(MCMCTest, GradientFlowTest) {
 
     // Render and compute loss
     auto render_output = performRendering(*mcmc);
-    auto loss = render_output.image.sum();  // Use sum for stronger gradients
+    auto loss = render_output.image.sum(); // Use sum for stronger gradients
     loss.backward();
 
     // Check gradients exist and are non-zero
@@ -338,7 +337,7 @@ TEST_F(MCMCTest, MultipleRefinementCyclesTest) {
     auto splat_data = createTestSplatData(50);
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
-    params.optimization.max_cap = 200;  // Low cap to test limits
+    params.optimization.max_cap = 200; // Low cap to test limits
     params.optimization.start_densify = 100;
     params.optimization.stop_densify = 1000;
     params.optimization.growth_interval = 100;
