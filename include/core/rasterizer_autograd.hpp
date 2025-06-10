@@ -30,11 +30,10 @@ namespace gs {
     public:
         static torch::autograd::tensor_list forward(
             torch::autograd::AutogradContext* ctx,
-            torch::Tensor sh_coeffs,         // [N, K, 3]
-            torch::Tensor means3D,           // [N, 3]
-            torch::Tensor viewmat,           // [C, 4, 4]
-            torch::Tensor radii,             // [C, N, 2]
-            torch::Tensor sh_degree_tensor); // [1] containing sh_degree
+            torch::Tensor sh_degree_tensor,  // [1] containing sh_degree
+            torch::Tensor dirs,              // [N, 3]
+            torch::Tensor coeffs,            // [N, K, 3]
+            torch::Tensor masks);            // [N] optional boolean masks
 
         static torch::autograd::tensor_list backward(
             torch::autograd::AutogradContext* ctx,
