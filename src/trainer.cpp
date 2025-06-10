@@ -81,10 +81,6 @@ namespace gs {
 
         for (int epoch = 0; epoch < epochs_needed && iter <= params_.optimization.iterations; ++epoch) {
             for (auto& batch : *train_dataloader) {
-                if (iter > params_.optimization.iterations) {
-                    break;
-                }
-
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera;
                 torch::Tensor gt_image = std::move(camera_with_image.image);
@@ -156,6 +152,11 @@ namespace gs {
                                             iter % params_.optimization.growth_interval == 0);
 
                 progress_->update(iter, loss.item<float>(), static_cast<int>(strategy_->get_model().size()), is_densifying);
+
+                if (iter == params_.optimization.iterations) {
+                    break;
+                }
+
                 ++iter;
             }
 
