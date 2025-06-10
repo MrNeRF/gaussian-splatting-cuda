@@ -172,79 +172,61 @@ namespace gs {
     // SphericalHarmonicsFunction implementation
     torch::autograd::tensor_list SphericalHarmonicsFunction::forward(
         torch::autograd::AutogradContext* ctx,
-        torch::Tensor sh_coeffs,          // [N, K, 3]
-        torch::Tensor means3D,            // [N, 3]
-        torch::Tensor viewmat,            // [C, 4, 4]
-        torch::Tensor radii,              // [C, N, 2]
-        torch::Tensor sh_degree_tensor) { // [1] containing sh_degree
+        torch::Tensor sh_degree_tensor,  // [1] containing sh_degree
+        torch::Tensor dirs,              // [N, 3]
+        torch::Tensor coeffs,            // [N, K, 3]
+        torch::Tensor masks) {           // [N] optional
 
-        const int N = static_cast<int>(means3D.size(0));
-        const int C = static_cast<int>(viewmat.size(0));
         const int sh_degree = sh_degree_tensor.item<int>();
+        const int N = static_cast<int>(dirs.size(0));
+        const int num_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
 
         // Input validation
-        TORCH_CHECK(sh_coeffs.dim() == 3 && sh_coeffs.size(0) == N && sh_coeffs.size(2) == 3,
-                    "sh_coeffs must be [N, K, 3], got ", sh_coeffs.sizes());
-        TORCH_CHECK(means3D.dim() == 2 && means3D.size(1) == 3,
-                    "means3D must be [N, 3], got ", means3D.sizes());
-        TORCH_CHECK(viewmat.dim() == 3 && viewmat.size(1) == 4 && viewmat.size(2) == 4,
-                    "viewmat must be [C, 4, 4], got ", viewmat.sizes());
-        TORCH_CHECK(radii.dim() == 3 && radii.size(0) == C && radii.size(1) == N && radii.size(2) == 2,
-                    "radii must be [C, N, 2], got ", radii.sizes());
+        TORCH_CHECK(dirs.dim() == 2 && dirs.size(1) == 3,
+                    "dirs must be [N, 3], got ", dirs.sizes());
+        TORCH_CHECK(coeffs.dim() == 3 && coeffs.size(0) == N && coeffs.size(2) == 3,
+                    "coeffs must be [N, K, 3], got ", coeffs.sizes());
+        TORCH_CHECK(coeffs.size(1) >= num_sh_coeffs,
+                    "coeffs K dimension must be at least ", num_sh_coeffs, ", got ", coeffs.size(1));
 
-        // Device checks before processing
-        TORCH_CHECK(sh_coeffs.is_cuda(), "sh_coeffs must be on CUDA");
-        TORCH_CHECK(means3D.is_cuda(), "means3D must be on CUDA");
-        TORCH_CHECK(viewmat.is_cuda(), "viewmat must be on CUDA");
-        TORCH_CHECK(radii.is_cuda(), "radii must be on CUDA");
-        TORCH_CHECK(sh_degree_tensor.is_cuda(), "sh_degree_tensor must be on CUDA");
-
-        // Ensure tensors are contiguous
-        sh_coeffs = sh_coeffs.contiguous();
-        means3D = means3D.contiguous();
-        viewmat = viewmat.contiguous();
-        radii = radii.contiguous();
-
-        torch::Tensor colors;
-        torch::Tensor sh_coeffs_used;
-        torch::Tensor dirs;
-        torch::Tensor dirs_normalized;
-        int num_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
-
-        // Compute view directions if degree > 0
-        if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
-            auto viewmat_inv = torch::inverse(viewmat);
-            auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3});
-            dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);
-
-            // IMPORTANT: Normalize directions before computing SH
-            dirs_normalized = torch::nn::functional::normalize(dirs,
-                                                               torch::nn::functional::NormalizeFuncOptions().dim(-1).p(2));
-        } else {
-            // For degree 0, directions don't matter but we still need to provide them
-            // Create dummy normalized directions
-            dirs = torch::zeros({C, N, 3}, means3D.options());
-            dirs_normalized = dirs;
+        if (masks.defined()) {
+            TORCH_CHECK(masks.dim() == 1 && masks.size(0) == N,
+                        "masks must be [N], got ", masks.sizes());
         }
 
-        // Create masks
-        auto masks = (radii > 0).all(-1);
-        TORCH_CHECK(masks.is_cuda(), "masks must be on CUDA");
+        // Device checks
+        TORCH_CHECK(dirs.is_cuda(), "dirs must be on CUDA");
+        TORCH_CHECK(coeffs.is_cuda(), "coeffs must be on CUDA");
+        TORCH_CHECK(sh_degree_tensor.is_cuda(), "sh_degree_tensor must be on CUDA");
+        if (masks.defined()) {
+            TORCH_CHECK(masks.is_cuda(), "masks must be on CUDA");
+        }
+
+        // Ensure tensors are contiguous
+        dirs = dirs.contiguous();
+        coeffs = coeffs.contiguous();
+        if (masks.defined()) {
+            masks = masks.contiguous();
+        } else {
+            // Create default masks (all true)
+            masks = torch::ones({N}, torch::TensorOptions().dtype(torch::kBool).device(dirs.device()));
+        }
 
         // Use only the coefficients we need
-        sh_coeffs_used = sh_coeffs.index({Slice(), Slice(None, num_sh_coeffs), Slice()}).contiguous();
+        auto coeffs_used = coeffs.index({torch::indexing::Slice(),
+                                         torch::indexing::Slice(torch::indexing::None, num_sh_coeffs),
+                                         torch::indexing::Slice()}).contiguous();
 
-        // ALWAYS call spherical_harmonics_fwd, just like Python!
-        colors = gsplat::spherical_harmonics_fwd(
-            sh_degree, dirs_normalized[0], sh_coeffs_used, masks[0]);
-        colors = colors.unsqueeze(0);
+        // Call spherical harmonics forward
+        auto colors = gsplat::spherical_harmonics_fwd(
+            sh_degree, dirs, coeffs_used, masks);
 
-        // Ensure colors is on CUDA and contiguous
+        // Ensure colors is contiguous
         colors = colors.contiguous();
         TORCH_CHECK(colors.is_cuda(), "colors must be on CUDA after SH computation");
 
         // Save for backward
-        ctx->save_for_backward({sh_coeffs, sh_coeffs_used, means3D, viewmat, radii, dirs});
+        ctx->save_for_backward({dirs, coeffs, coeffs_used, masks});
         ctx->saved_data["sh_degree"] = sh_degree;
         ctx->saved_data["num_sh_coeffs"] = num_sh_coeffs;
 
@@ -258,45 +240,38 @@ namespace gs {
         auto v_colors = grad_outputs[0].to(torch::kCUDA).contiguous();
 
         auto saved = ctx->get_saved_variables();
-        const auto& sh_coeffs = saved[0];
-        const auto& sh_coeffs_used = saved[1];
-        const auto& means3D = saved[2];
-        const auto& viewmat = saved[3];
-        const auto& radii = saved[4];
-        const auto& dirs = saved[5];
+        const auto& dirs = saved[0];
+        const auto& coeffs = saved[1];
+        const auto& coeffs_used = saved[2];
+        const auto& masks = saved[3];
 
         const int sh_degree = ctx->saved_data["sh_degree"].to<int>();
         const int num_sh_coeffs = ctx->saved_data["num_sh_coeffs"].to<int>();
 
-        torch::Tensor v_sh_coeffs = torch::zeros_like(sh_coeffs);
-        torch::Tensor v_means3D;
-
-        // Create masks
-        auto masks = (radii > 0).all(-1);
-
-        bool compute_v_dirs = (sh_degree > 0) && ctx->needs_input_grad(2);
-
-        // For degree 0, dirs[0] will be zeros but that's fine
-        auto dirs_to_use = (sh_degree > 0) ? dirs[0] : torch::zeros({means3D.size(0), 3}, means3D.options());
+        // Compute v_dirs based on needs_input_grad[1] (dirs is second input)
+        bool compute_v_dirs = ctx->needs_input_grad(1);
 
         auto sh_grads = gsplat::spherical_harmonics_bwd(
             num_sh_coeffs, sh_degree,
-            dirs_to_use,
-            sh_coeffs_used, masks[0],
-            v_colors[0], compute_v_dirs);
+            dirs, coeffs_used, masks,
+            v_colors, compute_v_dirs);
 
-        auto v_sh_coeffs_active = std::get<0>(sh_grads);
+        auto v_coeffs_active = std::get<0>(sh_grads);
         auto v_dirs = std::get<1>(sh_grads);
 
-        v_sh_coeffs.index_put_({Slice(), Slice(None, num_sh_coeffs), Slice()}, v_sh_coeffs_active);
+        // Create full gradient tensor for coeffs
+        torch::Tensor v_coeffs = torch::zeros_like(coeffs);
+        v_coeffs.index_put_({torch::indexing::Slice(),
+                             torch::indexing::Slice(torch::indexing::None, num_sh_coeffs),
+                             torch::indexing::Slice()},
+                            v_coeffs_active);
 
-        if (compute_v_dirs && v_dirs.defined()) {
-            v_means3D = v_dirs;
-        } else {
-            v_means3D = torch::zeros_like(means3D);
+        if (!compute_v_dirs) {
+            v_dirs = torch::Tensor();
         }
 
-        return {v_sh_coeffs, v_means3D, torch::Tensor(), torch::Tensor(), torch::Tensor()};
+        // Return gradients in same order as inputs: sh_degree_tensor, dirs, coeffs, masks
+        return {torch::Tensor(), v_dirs, v_coeffs, torch::Tensor()};
     }
 
     // RasterizationFunction implementation

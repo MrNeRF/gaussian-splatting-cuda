@@ -219,89 +219,101 @@ namespace reference {
 
     // Spherical harmonics evaluation
     torch::Tensor eval_sh_bases_fast(int basis_dim, const torch::Tensor& dirs) {
-        auto result = torch::empty({dirs.size(0), basis_dim}, dirs.options());
+        // Support arbitrary batch dimensions like Python version
+        auto result_shape = dirs.sizes().vec();
+        result_shape.back() = basis_dim;
+        auto result = torch::empty(result_shape, dirs.options());
 
-        result.select(-1, 0).fill_(0.2820947917738781f);
+        // Fill first coefficient
+        result.index({"...", 0}).fill_(0.2820947917738781f);
 
         if (basis_dim <= 1)
             return result;
 
-        auto x = dirs.select(-1, 0);
-        auto y = dirs.select(-1, 1);
-        auto z = dirs.select(-1, 2);
+        // Extract x, y, z components
+        auto x = dirs.index({"...", 0});
+        auto y = dirs.index({"...", 1});
+        auto z = dirs.index({"...", 2});
 
         float fTmpA = -0.48860251190292f;
-        result.select(-1, 2) = -fTmpA * z;
-        result.select(-1, 3) = fTmpA * x;
-        result.select(-1, 1) = fTmpA * y;
+        result.index({"...", 2}) = -fTmpA * z;
+        result.index({"...", 3}) = fTmpA * x;
+        result.index({"...", 1}) = fTmpA * y;
 
         if (basis_dim <= 4)
             return result;
 
         auto z2 = z * z;
-        auto fTmpB = -1.092548430592079f * z; // auto instead of float
+        auto fTmpB = -1.092548430592079f * z;
         fTmpA = 0.5462742152960395f;
         auto fC1 = x * x - y * y;
         auto fS1 = 2 * x * y;
-        result.select(-1, 6) = 0.9461746957575601f * z2 - 0.3153915652525201f;
-        result.select(-1, 7) = fTmpB * x;
-        result.select(-1, 5) = fTmpB * y;
-        result.select(-1, 8) = fTmpA * fC1;
-        result.select(-1, 4) = fTmpA * fS1;
+        result.index({"...", 6}) = 0.9461746957575601f * z2 - 0.3153915652525201f;
+        result.index({"...", 7}) = fTmpB * x;
+        result.index({"...", 5}) = fTmpB * y;
+        result.index({"...", 8}) = fTmpA * fC1;
+        result.index({"...", 4}) = fTmpA * fS1;
 
         if (basis_dim <= 9)
             return result;
 
         auto fTmpC = -2.285228997322329f * z2 + 0.4570457994644658f;
-        fTmpB = 1.445305721320277f * z; // reuse as tensor
+        fTmpB = 1.445305721320277f * z;
         fTmpA = -0.5900435899266435f;
         auto fC2 = x * fC1 - y * fS1;
         auto fS2 = x * fS1 + y * fC1;
-        result.select(-1, 12) = z * (1.865881662950577f * z2 - 1.119528997770346f);
-        result.select(-1, 13) = fTmpC * x;
-        result.select(-1, 11) = fTmpC * y;
-        result.select(-1, 14) = fTmpB * fC1;
-        result.select(-1, 10) = fTmpB * fS1;
-        result.select(-1, 15) = fTmpA * fC2;
-        result.select(-1, 9) = fTmpA * fS2;
+        result.index({"...", 12}) = z * (1.865881662950577f * z2 - 1.119528997770346f);
+        result.index({"...", 13}) = fTmpC * x;
+        result.index({"...", 11}) = fTmpC * y;
+        result.index({"...", 14}) = fTmpB * fC1;
+        result.index({"...", 10}) = fTmpB * fS1;
+        result.index({"...", 15}) = fTmpA * fC2;
+        result.index({"...", 9}) = fTmpA * fS2;
 
         if (basis_dim <= 16)
             return result;
 
         auto fTmpD = z * (-4.683325804901025f * z2 + 2.007139630671868f);
         fTmpC = 3.31161143515146f * z2 - 0.47308734787878f;
-        fTmpB = -1.770130769779931f * z; // reuse as tensor
+        fTmpB = -1.770130769779931f * z;
         fTmpA = 0.6258357354491763f;
         auto fC3 = x * fC2 - y * fS2;
         auto fS3 = x * fS2 + y * fC2;
-        result.select(-1, 20) = 1.984313483298443f * z2 * (1.865881662950577f * z2 - 1.119528997770346f) +
-                                -1.006230589874905f * (0.9461746957575601f * z2 - 0.3153915652525201f);
-        result.select(-1, 21) = fTmpD * x;
-        result.select(-1, 19) = fTmpD * y;
-        result.select(-1, 22) = fTmpC * fC1;
-        result.select(-1, 18) = fTmpC * fS1;
-        result.select(-1, 23) = fTmpB * fC2;
-        result.select(-1, 17) = fTmpB * fS2;
-        result.select(-1, 24) = fTmpA * fC3;
-        result.select(-1, 16) = fTmpA * fS3;
+        result.index({"...", 20}) = 1.984313483298443f * z2 * (1.865881662950577f * z2 - 1.119528997770346f) +
+                                    -1.006230589874905f * (0.9461746957575601f * z2 - 0.3153915652525201f);
+        result.index({"...", 21}) = fTmpD * x;
+        result.index({"...", 19}) = fTmpD * y;
+        result.index({"...", 22}) = fTmpC * fC1;
+        result.index({"...", 18}) = fTmpC * fS1;
+        result.index({"...", 23}) = fTmpB * fC2;
+        result.index({"...", 17}) = fTmpB * fS2;
+        result.index({"...", 24}) = fTmpA * fC3;
+        result.index({"...", 16}) = fTmpA * fS3;
 
         return result;
     }
 
     torch::Tensor spherical_harmonics(
         int degree,
-        const torch::Tensor& dirs,     // [N, 3]
-        const torch::Tensor& coeffs) { // [N, K, 3]
+        const torch::Tensor& dirs,     // [..., 3]
+        const torch::Tensor& coeffs) { // [..., K, 3]
 
+        // Normalize directions
         auto dirs_norm = torch::nn::functional::normalize(
             dirs, torch::nn::functional::NormalizeFuncOptions().dim(-1).p(2));
 
         int num_bases = (degree + 1) * (degree + 1);
-        auto bases = torch::zeros({coeffs.size(0), coeffs.size(1)}, coeffs.options());
 
-        if (num_bases > 0) {
+        // Create bases tensor with same shape as coeffs[..., 0]
+        auto bases_shape = coeffs.sizes().vec();
+        bases_shape.pop_back(); // Remove last dimension (3)
+        auto bases = torch::zeros(bases_shape, coeffs.options());
+
+        // Only fill up to num_bases if K >= num_bases
+        if (num_bases > 0 && bases.size(-1) >= num_bases) {
             auto sh_bases = eval_sh_bases_fast(num_bases, dirs_norm);
-            bases.slice(-1, 0, num_bases) = sh_bases;
+            // Use index instead of slice for better compatibility
+            bases.index({"...", torch::indexing::Slice(0, num_bases)}) = sh_bases;
         }
 
         // Compute colors: sum(bases * coeffs, dim=-2)
