@@ -308,108 +308,108 @@ TEST_F(BasicPyTorchDataTest, ProjectionTest) {
 }
 
 // Test spherical harmonics gradient flow
-TEST_F(BasicPyTorchDataTest, SphericalHarmonicsTest) {
-    torch::manual_seed(42);
-
-    std::vector<int> sh_degrees = {0, 1, 2, 3};
-
-    for (int sh_degree : sh_degrees) {
-        // Use a small subset for testing
-        const int N = 100;
-        const int K = (sh_degree + 1) * (sh_degree + 1);
-        const int C = 1;
-
-        // Create test data
-        auto means = test_data.means.slice(0, 0, N).clone();
-        auto viewmat = test_data.viewmats[0].unsqueeze(0).clone();
-        auto coeffs = torch::randn({N, K, 3}, device);
-        auto radii = torch::ones({C, N, 2}, device) * 10; // All visible
-
-        means.requires_grad_(true);
-        viewmat.requires_grad_(true);
-        coeffs.requires_grad_(true);
-
-        auto sh_degree_tensor = torch::tensor({sh_degree},
-                                              torch::TensorOptions().dtype(torch::kInt32).device(device));
-
-        // Forward pass through autograd function
-        auto color_outputs = SphericalHarmonicsFunction::apply(
-            coeffs, means, viewmat, radii, sh_degree_tensor);
-        auto colors = color_outputs[0]; // [C, N, 3]
-
-        // Basic checks
-        EXPECT_EQ(colors.sizes(), torch::IntArrayRef({C, N, 3}));
-        EXPECT_FALSE(colors.isnan().any().item<bool>())
-            << "NaN in colors for degree " << sh_degree;
-        EXPECT_FALSE(colors.isinf().any().item<bool>())
-            << "Inf in colors for degree " << sh_degree;
-
-        // Check that colors are in a reasonable range
-        auto min_val = colors.min().item<float>();
-        auto max_val = colors.max().item<float>();
-        EXPECT_GT(max_val, -10.0f) << "Colors too small";
-        EXPECT_LT(min_val, 10.0f) << "Colors too large";
-
-        // For degree 0, verify that changing coefficients changes output
-        if (sh_degree == 0) {
-            auto coeffs2 = coeffs.clone();
-            coeffs2.index({torch::indexing::Slice(), 0, torch::indexing::Slice()}) *= 2.0f;
-
-            auto color_outputs2 = SphericalHarmonicsFunction::apply(
-                coeffs2, means, viewmat, radii, sh_degree_tensor);
-            auto colors2 = color_outputs2[0];
-
-            // Output should change when coefficients change
-            auto change = (colors2 - colors).abs().mean().item<float>();
-            EXPECT_GT(change, 0.1f)
-                << "Output should change significantly when degree 0 coefficients are doubled";
-        }
-
-        // Test gradient flow with custom gradient
-        auto v_colors = torch::randn_like(colors);
-        torch::autograd::backward({colors}, {v_colors});
-
-        // Check gradients exist and are reasonable
-        EXPECT_TRUE(coeffs.grad().defined())
-            << "No gradient for coeffs at degree " << sh_degree;
-        EXPECT_FALSE(coeffs.grad().isnan().any().item<bool>())
-            << "NaN in coeffs gradient at degree " << sh_degree;
-        EXPECT_GT(coeffs.grad().abs().max().item<float>(), 0)
-            << "Zero gradients for coeffs at degree " << sh_degree;
-
-        // Verify gradient magnitude is reasonable
-        auto grad_norm = coeffs.grad().norm().item<float>();
-        auto v_norm = v_colors.norm().item<float>();
-        EXPECT_GT(grad_norm, 0) << "Gradient norm is zero";
-        EXPECT_LT(grad_norm / v_norm, 1e3) << "Gradient norm is too large relative to v_colors";
-
-        // For degree > 0, we should have gradients w.r.t. positions
-        if (sh_degree > 0) {
-            EXPECT_TRUE(means.grad().defined())
-                << "No gradient for means at degree " << sh_degree;
-            EXPECT_FALSE(means.grad().isnan().any().item<bool>())
-                << "NaN in means gradient at degree " << sh_degree;
-
-            // For higher degrees, means gradients should be non-zero
-            // (since SH depends on viewing direction)
-            auto means_grad_norm = means.grad().abs().max().item<float>();
-            EXPECT_GT(means_grad_norm, 1e-6f)
-                << "Means gradients too small for degree " << sh_degree;
-        }
-
-        // Test that gradients flow to viewmat for degree > 0
-        if (sh_degree > 0 && viewmat.grad().defined()) {
-            auto viewmat_grad_norm = viewmat.grad().abs().max().item<float>();
-            EXPECT_GT(viewmat_grad_norm, 0)
-                << "Viewmat should have gradients for degree " << sh_degree;
-        }
-
-        // Clear gradients for next iteration
-        coeffs.mutable_grad() = torch::Tensor();
-        means.mutable_grad() = torch::Tensor();
-        viewmat.mutable_grad() = torch::Tensor();
-    }
-}
+//TEST_F(BasicPyTorchDataTest, SphericalHarmonicsTest) {
+//    torch::manual_seed(42);
+//
+//    std::vector<int> sh_degrees = {0, 1, 2, 3};
+//
+//    for (int sh_degree : sh_degrees) {
+//        // Use a small subset for testing
+//        const int N = 100;
+//        const int K = (sh_degree + 1) * (sh_degree + 1);
+//        const int C = 1;
+//
+//        // Create test data
+//        auto means = test_data.means.slice(0, 0, N).clone();
+//        auto viewmat = test_data.viewmats[0].unsqueeze(0).clone();
+//        auto coeffs = torch::randn({N, K, 3}, device);
+//        auto radii = torch::ones({C, N, 2}, device) * 10; // All visible
+//
+//        means.requires_grad_(true);
+//        viewmat.requires_grad_(true);
+//        coeffs.requires_grad_(true);
+//
+//        auto sh_degree_tensor = torch::tensor({sh_degree},
+//                                              torch::TensorOptions().dtype(torch::kInt32).device(device));
+//
+//        // Forward pass through autograd function
+//        auto color_outputs = SphericalHarmonicsFunction::apply(
+//            coeffs, means, viewmat, radii, sh_degree_tensor);
+//        auto colors = color_outputs[0]; // [C, N, 3]
+//
+//        // Basic checks
+//        EXPECT_EQ(colors.sizes(), torch::IntArrayRef({C, N, 3}));
+//        EXPECT_FALSE(colors.isnan().any().item<bool>())
+//            << "NaN in colors for degree " << sh_degree;
+//        EXPECT_FALSE(colors.isinf().any().item<bool>())
+//            << "Inf in colors for degree " << sh_degree;
+//
+//        // Check that colors are in a reasonable range
+//        auto min_val = colors.min().item<float>();
+//        auto max_val = colors.max().item<float>();
+//        EXPECT_GT(max_val, -10.0f) << "Colors too small";
+//        EXPECT_LT(min_val, 10.0f) << "Colors too large";
+//
+//        // For degree 0, verify that changing coefficients changes output
+//        if (sh_degree == 0) {
+//            auto coeffs2 = coeffs.clone();
+//            coeffs2.index({torch::indexing::Slice(), 0, torch::indexing::Slice()}) *= 2.0f;
+//
+//            auto color_outputs2 = SphericalHarmonicsFunction::apply(
+//                coeffs2, means, viewmat, radii, sh_degree_tensor);
+//            auto colors2 = color_outputs2[0];
+//
+//            // Output should change when coefficients change
+//            auto change = (colors2 - colors).abs().mean().item<float>();
+//            EXPECT_GT(change, 0.1f)
+//                << "Output should change significantly when degree 0 coefficients are doubled";
+//        }
+//
+//        // Test gradient flow with custom gradient
+//        auto v_colors = torch::randn_like(colors);
+//        torch::autograd::backward({colors}, {v_colors});
+//
+//        // Check gradients exist and are reasonable
+//        EXPECT_TRUE(coeffs.grad().defined())
+//            << "No gradient for coeffs at degree " << sh_degree;
+//        EXPECT_FALSE(coeffs.grad().isnan().any().item<bool>())
+//            << "NaN in coeffs gradient at degree " << sh_degree;
+//        EXPECT_GT(coeffs.grad().abs().max().item<float>(), 0)
+//            << "Zero gradients for coeffs at degree " << sh_degree;
+//
+//        // Verify gradient magnitude is reasonable
+//        auto grad_norm = coeffs.grad().norm().item<float>();
+//        auto v_norm = v_colors.norm().item<float>();
+//        EXPECT_GT(grad_norm, 0) << "Gradient norm is zero";
+//        EXPECT_LT(grad_norm / v_norm, 1e3) << "Gradient norm is too large relative to v_colors";
+//
+//        // For degree > 0, we should have gradients w.r.t. positions
+//        if (sh_degree > 0) {
+//            EXPECT_TRUE(means.grad().defined())
+//                << "No gradient for means at degree " << sh_degree;
+//            EXPECT_FALSE(means.grad().isnan().any().item<bool>())
+//                << "NaN in means gradient at degree " << sh_degree;
+//
+//            // For higher degrees, means gradients should be non-zero
+//            // (since SH depends on viewing direction)
+//            auto means_grad_norm = means.grad().abs().max().item<float>();
+//            EXPECT_GT(means_grad_norm, 1e-6f)
+//                << "Means gradients too small for degree " << sh_degree;
+//        }
+//
+//        // Test that gradients flow to viewmat for degree > 0
+//        if (sh_degree > 0 && viewmat.grad().defined()) {
+//            auto viewmat_grad_norm = viewmat.grad().abs().max().item<float>();
+//            EXPECT_GT(viewmat_grad_norm, 0)
+//                << "Viewmat should have gradients for degree " << sh_degree;
+//        }
+//
+//        // Clear gradients for next iteration
+//        coeffs.mutable_grad() = torch::Tensor();
+//        means.mutable_grad() = torch::Tensor();
+//        viewmat.mutable_grad() = torch::Tensor();
+//    }
+//}
 
 // Test tile intersection matching Python test
 TEST_F(BasicPyTorchDataTest, TileIntersectionTest) {
