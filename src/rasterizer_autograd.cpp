@@ -209,8 +209,9 @@ namespace gs {
         torch::Tensor sh_coeffs_used;
         torch::Tensor dirs;
         torch::Tensor dirs_normalized;
-        int num_sh_coeffs = 1;
+        int num_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
 
+        // Compute view directions if degree > 0
         if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
             auto viewmat_inv = torch::inverse(viewmat);
             auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3});
@@ -219,37 +220,30 @@ namespace gs {
             // IMPORTANT: Normalize directions before computing SH
             dirs_normalized = torch::nn::functional::normalize(dirs,
                                                                torch::nn::functional::NormalizeFuncOptions().dim(-1).p(2));
-
-            auto masks = (radii > 0).all(-1);
-
-            // Device checks for intermediate tensors
-            TORCH_CHECK(viewmat_inv.is_cuda(), "viewmat_inv must be on CUDA");
-            TORCH_CHECK(campos.is_cuda(), "campos must be on CUDA");
-            TORCH_CHECK(dirs.is_cuda(), "dirs must be on CUDA");
-            TORCH_CHECK(dirs_normalized.is_cuda(), "dirs_normalized must be on CUDA");
-            TORCH_CHECK(masks.is_cuda(), "masks must be on CUDA");
-
-            num_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
-            sh_coeffs_used = sh_coeffs.index({Slice(), Slice(None, num_sh_coeffs), Slice()}).contiguous();
-
-            // Compute SH for single camera with normalized directions
-            colors = gsplat::spherical_harmonics_fwd(
-                sh_degree, dirs_normalized[0], sh_coeffs_used, masks[0]);
-            colors = colors.unsqueeze(0);
         } else {
-            // Use only DC component
-            sh_coeffs_used = sh_coeffs.index({Slice(), Slice(None, 1), Slice()}).contiguous();
-            colors = sh_coeffs_used.index({Slice(), 0, Slice()});
-            colors = colors.unsqueeze(0);
-            dirs = torch::Tensor();            // Empty tensor for DC-only case
-            dirs_normalized = torch::Tensor(); // Empty tensor for DC-only case
+            // For degree 0, directions don't matter but we still need to provide them
+            // Create dummy normalized directions
+            dirs = torch::zeros({C, N, 3}, means3D.options());
+            dirs_normalized = dirs;
         }
+
+        // Create masks
+        auto masks = (radii > 0).all(-1);
+        TORCH_CHECK(masks.is_cuda(), "masks must be on CUDA");
+
+        // Use only the coefficients we need
+        sh_coeffs_used = sh_coeffs.index({Slice(), Slice(None, num_sh_coeffs), Slice()}).contiguous();
+
+        // ALWAYS call spherical_harmonics_fwd, just like Python!
+        colors = gsplat::spherical_harmonics_fwd(
+            sh_degree, dirs_normalized[0], sh_coeffs_used, masks[0]);
+        colors = colors.unsqueeze(0);
 
         // Ensure colors is on CUDA and contiguous
         colors = colors.contiguous();
         TORCH_CHECK(colors.is_cuda(), "colors must be on CUDA after SH computation");
 
-        // Save for backward - save both normalized and unnormalized directions
+        // Save for backward
         ctx->save_for_backward({sh_coeffs, sh_coeffs_used, means3D, viewmat, radii, dirs});
         ctx->saved_data["sh_degree"] = sh_degree;
         ctx->saved_data["num_sh_coeffs"] = num_sh_coeffs;
@@ -270,7 +264,6 @@ namespace gs {
         const auto& viewmat = saved[3];
         const auto& radii = saved[4];
         const auto& dirs = saved[5];
-        // dirs_normalized is no longer needed
 
         const int sh_degree = ctx->saved_data["sh_degree"].to<int>();
         const int num_sh_coeffs = ctx->saved_data["num_sh_coeffs"].to<int>();
@@ -278,26 +271,28 @@ namespace gs {
         torch::Tensor v_sh_coeffs = torch::zeros_like(sh_coeffs);
         torch::Tensor v_means3D;
 
-        if (sh_degree > 0 && sh_coeffs.size(1) > 1) {
-            auto masks = (radii > 0).all(-1);
+        // Create masks
+        auto masks = (radii > 0).all(-1);
 
-            // Pass the UNNORMALIZED dirs to backward, since gsplat handles normalization internally
-            auto sh_grads = gsplat::spherical_harmonics_bwd(
-                num_sh_coeffs, sh_degree,
-                dirs[0],  // Use unnormalized dirs, not dirs_normalized!
-                sh_coeffs_used, masks[0],
-                v_colors[0], true);
+        bool compute_v_dirs = (sh_degree > 0) && ctx->needs_input_grad(2);
 
-            auto v_sh_coeffs_active = std::get<0>(sh_grads);
-            auto v_dirs = std::get<1>(sh_grads);
+        // For degree 0, dirs[0] will be zeros but that's fine
+        auto dirs_to_use = (sh_degree > 0) ? dirs[0] : torch::zeros({means3D.size(0), 3}, means3D.options());
 
-            v_sh_coeffs.index_put_({Slice(), Slice(None, num_sh_coeffs), Slice()}, v_sh_coeffs_active);
+        auto sh_grads = gsplat::spherical_harmonics_bwd(
+            num_sh_coeffs, sh_degree,
+            dirs_to_use,
+            sh_coeffs_used, masks[0],
+            v_colors[0], compute_v_dirs);
 
-            // No normalization backprop needed - gsplat already handled it
+        auto v_sh_coeffs_active = std::get<0>(sh_grads);
+        auto v_dirs = std::get<1>(sh_grads);
+
+        v_sh_coeffs.index_put_({Slice(), Slice(None, num_sh_coeffs), Slice()}, v_sh_coeffs_active);
+
+        if (compute_v_dirs && v_dirs.defined()) {
             v_means3D = v_dirs;
         } else {
-            // Only DC component
-            v_sh_coeffs.index_put_({Slice(), 0, Slice()}, v_colors[0]);
             v_means3D = torch::zeros_like(means3D);
         }
 
