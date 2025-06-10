@@ -331,8 +331,8 @@ TEST_F(BasicPyTorchDataTest, SphericalHarmonicsTest) {
         auto campos = viewmat_inv.index({0, torch::indexing::Slice(torch::indexing::None, 3), 3});
 
         // Compute directions from camera to each Gaussian
-        auto dirs = means3D - campos;  // [N, 3]
-        dirs = dirs.detach(); // Detach to test SH function in isolation
+        auto dirs = means3D - campos; // [N, 3]
+        dirs = dirs.detach();         // Detach to test SH function in isolation
 
         // Create masks (all visible)
         auto masks = torch::ones({N}, torch::TensorOptions().dtype(torch::kBool).device(device));

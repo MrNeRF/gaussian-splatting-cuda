@@ -1,7 +1,13 @@
 #include "Ops.h"
 #include "core/debug_utils.hpp"
+#include "core/image_io.hpp"
+#include "core/metrics.hpp"
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
+#include <iostream>
+#include <numeric>
 #include <torch/torch.h>
 
 class BasicOpsTest : public ::testing::Test {

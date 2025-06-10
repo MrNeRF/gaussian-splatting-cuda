@@ -5,7 +5,6 @@ namespace gs {
     using namespace torch::indexing;
 
     // ProjectionFunction implementation
-    // ProjectionFunction implementation
     torch::autograd::tensor_list ProjectionFunction::forward(
         torch::autograd::AutogradContext* ctx,
         torch::Tensor means3D,    // [N, 3]
@@ -182,10 +181,10 @@ namespace gs {
     // SphericalHarmonicsFunction implementation
     torch::autograd::tensor_list SphericalHarmonicsFunction::forward(
         torch::autograd::AutogradContext* ctx,
-        torch::Tensor sh_degree_tensor,  // [1] containing sh_degree
-        torch::Tensor dirs,              // [N, 3]
-        torch::Tensor coeffs,            // [N, K, 3]
-        torch::Tensor masks) {           // [N] optional
+        torch::Tensor sh_degree_tensor, // [1] containing sh_degree
+        torch::Tensor dirs,             // [N, 3]
+        torch::Tensor coeffs,           // [N, K, 3]
+        torch::Tensor masks) {          // [N] optional
 
         const int sh_degree = sh_degree_tensor.item<int>();
         const int N = static_cast<int>(dirs.size(0));
@@ -225,7 +224,8 @@ namespace gs {
         // Use only the coefficients we need
         auto coeffs_used = coeffs.index({torch::indexing::Slice(),
                                          torch::indexing::Slice(torch::indexing::None, num_sh_coeffs),
-                                         torch::indexing::Slice()}).contiguous();
+                                         torch::indexing::Slice()})
+                               .contiguous();
 
         // Call spherical harmonics forward
         auto colors = gsplat::spherical_harmonics_fwd(

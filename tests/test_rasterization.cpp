@@ -38,44 +38,18 @@ protected:
 
         std::cout << "\n=== Reference Rasterization Pipeline ===" << std::endl;
 
-        // Step 1: Apply scaling modifier
+        // Step 1: Convert quaternions and scales to covariance matrices
         auto scaled_scales = scales * scaling_modifier;
-        std::cout << "Step 1: Scaling applied" << std::endl;
+        auto [covars, _] = reference::quat_scale_to_covar_preci(quats, scaled_scales, true, false, false);
+        std::cout << "Step 1: Covariance matrices computed, shape: " << covars.sizes() << std::endl;
 
-        // Step 2: Projection - use gsplat directly with quats/scales (NOT pre-computed covars)
+        // Step 2: Projection
         const float eps2d = 0.3f;
         const float near_plane = 0.01f;
         const float far_plane = 10000.0f;
-        const float radius_clip = 0.0f;
 
-        // Use the SAME projection path as GS (quats/scales directly)
-        auto proj_results = gsplat::projection_ewa_3dgs_fused_fwd(
-            means,
-            {},  // empty covars - this is key!
-            quats,
-            scaled_scales,
-            opacities,
-            viewmats,
-            Ks,
-            width,
-            height,
-            eps2d,
-            near_plane,
-            far_plane,
-            radius_clip,
-            false,  // calc_compensations = false to match GS
-            gsplat::CameraModelType::PINHOLE);
-
-        auto radii = std::get<0>(proj_results);
-        auto means2d = std::get<1>(proj_results);
-        auto depths = std::get<2>(proj_results);
-        auto conics = std::get<3>(proj_results);
-        auto compensations = std::get<4>(proj_results);
-
-        // Handle undefined compensations
-        if (!compensations.defined()) {
-            compensations = torch::ones({C, N}, opacities.options());
-        }
+        auto [radii, means2d, depths, conics, compensations] = reference::fully_fused_projection(
+            means, covars, viewmats, Ks, width, height, eps2d, near_plane, far_plane, true, "pinhole");
 
         std::cout << "Step 2: Projection complete" << std::endl;
         std::cout << "  Visible gaussians: " << (radii > 0).all(-1).sum().item<int>() << "/" << (C * N) << std::endl;
@@ -102,27 +76,23 @@ protected:
         std::cout << "Step 3: SH colors computed, range: [" << colors.min().item<float>()
                   << ", " << colors.max().item<float>() << "]" << std::endl;
 
-        // Step 4: Apply opacity with compensations (should be 1.0)
+        // Step 4: Apply opacity with compensations
         auto final_opacities = opacities.unsqueeze(0) * compensations; // [C, N]
-        std::cout << "Step 4: Opacities applied" << std::endl;
+        std::cout << "Step 4: Opacities with compensations applied" << std::endl;
 
-        // Step 5: Tile intersection - use gsplat for consistency
+        // Step 5: Tile intersection
         const int tile_width = (width + tile_size - 1) / tile_size;
         const int tile_height = (height + tile_size - 1) / tile_size;
 
-        auto isect_results = gsplat::intersect_tile(
-            means2d, radii, depths, {}, {},
-            C, tile_size, tile_width, tile_height,
-            true);
-
-        auto tiles_per_gauss = std::get<0>(isect_results);
-        auto isect_ids = std::get<1>(isect_results);
-        auto flatten_ids = std::get<2>(isect_results);
+        auto [tiles_per_gauss, isect_ids, flatten_ids] = reference::isect_tiles(
+            means2d, radii, depths, tile_size, tile_width, tile_height, true);
 
         std::cout << "Step 5: Tile intersection complete" << std::endl;
         std::cout << "  Total intersections: " << isect_ids.size(0) << std::endl;
 
         // Step 6: Rasterization
+        // Since we don't have a reference rasterizer, we'll use gsplat's rasterization
+        // but with our computed intermediate values
         auto isect_offsets = gsplat::intersect_offset(isect_ids, C, tile_width, tile_height);
         isect_offsets = isect_offsets.reshape({C, tile_height, tile_width});
 
@@ -155,41 +125,40 @@ protected:
 TEST_F(RasterizationComparisonTest, StepByStepComparison) {
     torch::manual_seed(42);
 
-    // Test parameters matching Python test
-    const int C = 1;     // Single camera for easier debugging
-    const int N = 100;   // Number of gaussians
+    // Test parameters
+    const int C = 1;   // Single camera for simplicity
+    const int N = 100; // Fewer gaussians for easier debugging
     const int width = 64;
     const int height = 64;
     const float focal = 100.0f;
-    const int sh_degree = 2; // Test with SH degree 2
+    const int sh_degree = 2;
+    const int tile_size = 16;
 
     std::cout << "\n=== Step-by-Step Comparison Test ===" << std::endl;
     std::cout << "Parameters: C=" << C << ", N=" << N << ", width=" << width
               << ", height=" << height << ", SH degree=" << sh_degree << std::endl;
 
-    // Create test data with controlled values
-    auto means = torch::rand({N, 3}, device) * 2.0f - 1.0f;     // Range [-1, 1]
-    means.select(1, 2) = torch::abs(means.select(1, 2)) + 2.0f; // Ensure z in [2, 3]
+    // Create test data
+    auto means = torch::rand({N, 3}, device) * 2.0f - 1.0f;
+    means.select(1, 2) = torch::abs(means.select(1, 2)) + 2.0f;
 
     auto quats = torch::randn({N, 4}, device);
     quats = torch::nn::functional::normalize(quats, torch::nn::functional::NormalizeFuncOptions().dim(-1));
 
-    auto scales = torch::rand({N, 3}, device) * 0.05f + 0.01f; // Smaller scales
-    auto opacities = torch::rand({N}, device) * 0.5f + 0.3f;   // Range [0.3, 0.8]
+    auto scales = torch::rand({N, 3}, device) * 0.05f + 0.01f;
+    auto opacities = torch::rand({N}, device) * 0.5f + 0.3f;
 
-    // Create SH coefficients with proper scaling
     const int num_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
     auto sh_coeffs = (torch::rand({N, num_sh_coeffs, 3}, device) - 0.5f) * 0.3f;
 
-    // Create camera parameters
-    auto Ks = torch::tensor(
-                  {{focal, 0.0f, width / 2.0f},
-                   {0.0f, focal, height / 2.0f},
-                   {0.0f, 0.0f, 1.0f}},
-                  device)
-                  .expand({C, -1, -1});
+    auto K = torch::tensor(
+                 {{focal, 0.0f, width / 2.0f},
+                  {0.0f, focal, height / 2.0f},
+                  {0.0f, 0.0f, 1.0f}},
+                 device)
+                 .unsqueeze(0);
 
-    auto viewmats = torch::eye(4, device).expand({C, -1, -1}).contiguous();
+    auto viewmat = torch::eye(4, device).unsqueeze(0).contiguous();
     auto bg_color = torch::zeros({C, 3}, device);
 
     // Settings
@@ -199,33 +168,43 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
     const float radius_clip = 0.0f;
     const float scaling_modifier = 1.0f;
 
-    std::cout << "\n--- Step 1: Scaling ---" << std::endl;
+    std::cout << "\n--- Step 1: Covariance Matrix Computation ---" << std::endl;
 
+    // Reference implementation
     auto scaled_scales = scales * scaling_modifier;
-    std::cout << "Scales applied with modifier: " << scaling_modifier << std::endl;
+    auto [ref_covars, _] = reference::quat_scale_to_covar_preci(quats, scaled_scales, true, false, false);
+
+    // gs::rasterize uses autograd function internally, so we'll call it directly
+    auto covar_settings = torch::tensor({1.0f, 0.0f, 0.0f}, device); // compute_covar=true, compute_preci=false, triu=false
+    auto gs_covar_outputs = gs::QuatScaleToCovarPreciFunction::apply(quats, scaled_scales, covar_settings);
+    auto gs_covars = gs_covar_outputs[0];
+
+    std::cout << "Reference covars shape: " << ref_covars.sizes() << std::endl;
+    std::cout << "GS covars shape: " << gs_covars.sizes() << std::endl;
+
+    auto covar_diff = (ref_covars - gs_covars).abs();
+    std::cout << "Covariance max diff: " << covar_diff.max().item<float>() << std::endl;
+    std::cout << "Covariance mean diff: " << covar_diff.mean().item<float>() << std::endl;
+
+    EXPECT_TRUE(torch::allclose(ref_covars, gs_covars, 1e-5, 1e-5))
+        << "Covariance matrices don't match";
 
     std::cout << "\n--- Step 2: Projection ---" << std::endl;
 
-    // Both reference and GS now use the same projection path
-    auto proj_settings = torch::tensor({
-                                           (float)width, (float)height, eps2d, near_plane, far_plane,
-                                           radius_clip, scaling_modifier}, device);
-
-    // Reference projection (now using gsplat directly like GS)
-    auto ref_proj_outputs = gsplat::projection_ewa_3dgs_fused_fwd(
-        means, {}, quats, scaled_scales, opacities,
-        viewmats, Ks, width, height, eps2d, near_plane, far_plane, radius_clip,
-        false, gsplat::CameraModelType::PINHOLE);
-
-    auto ref_radii = std::get<0>(ref_proj_outputs);
-    auto ref_means2d = std::get<1>(ref_proj_outputs);
-    auto ref_depths = std::get<2>(ref_proj_outputs);
-    auto ref_conics = std::get<3>(ref_proj_outputs);
-    auto ref_compensations = std::get<4>(ref_proj_outputs);
+    // Reference projection
+    auto [ref_radii, ref_means2d, ref_depths, ref_conics, ref_compensations] =
+        reference::fully_fused_projection(
+            means, ref_covars, viewmat, K, width, height,
+            eps2d, near_plane, far_plane, false, "pinhole");
 
     // GS projection using autograd function
+    auto proj_settings = torch::tensor({(float)width, (float)height, eps2d, near_plane, far_plane,
+                                        radius_clip, scaling_modifier},
+                                       device);
+
+    opacities = torch::ones_like(opacities);
     auto gs_proj_outputs = gs::ProjectionFunction::apply(
-        means, quats, scales, opacities, viewmats, Ks, proj_settings);
+        means, quats, scales, opacities, viewmat, K, proj_settings);
 
     auto gs_radii = gs_proj_outputs[0];
     auto gs_means2d = gs_proj_outputs[1];
@@ -249,12 +228,9 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
     std::cout << "Depths max diff: " << depths_diff.max().item<float>() << std::endl;
     std::cout << "Conics max diff: " << conics_diff.max().item<float>() << std::endl;
 
-    // Check if compensations match (both should be undefined or 1.0 when calc_compensations=false)
+    // Check if compensations match (reference returns empty if calc_compensations=false)
     if (!ref_compensations.defined()) {
         ref_compensations = torch::ones({C, N}, device);
-    }
-    if (!gs_compensations.defined()) {
-        gs_compensations = torch::ones({C, N}, device);
     }
     auto comp_diff = (ref_compensations - gs_compensations).abs();
     std::cout << "Compensations max diff: " << comp_diff.max().item<float>() << std::endl;
@@ -262,7 +238,7 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
     std::cout << "\n--- Step 3: Spherical Harmonics ---" << std::endl;
 
     // Compute view directions
-    auto viewmat_inv = torch::inverse(viewmats);
+    auto viewmat_inv = torch::inverse(viewmat);
     auto campos = viewmat_inv.slice(1, 0, 3).select(2, 3);
     auto dirs = means.unsqueeze(0) - campos.unsqueeze(1);
 
@@ -304,18 +280,12 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
 
     std::cout << "\n--- Step 5: Tile Intersection ---" << std::endl;
 
-    const int tile_size = 16;
     const int tile_width = (width + tile_size - 1) / tile_size;
     const int tile_height = (height + tile_size - 1) / tile_size;
 
-    // Both now use gsplat tile intersection
-    auto ref_isect_results = gsplat::intersect_tile(
-        ref_means2d, ref_radii, ref_depths, {}, {},
-        C, tile_size, tile_width, tile_height, true);
-
-    auto ref_tiles_per_gauss = std::get<0>(ref_isect_results);
-    auto ref_isect_ids = std::get<1>(ref_isect_results);
-    auto ref_flatten_ids = std::get<2>(ref_isect_results);
+    // Reference tile intersection
+    auto [ref_tiles_per_gauss, ref_isect_ids, ref_flatten_ids] = reference::isect_tiles(
+        ref_means2d, ref_radii, ref_depths, tile_size, tile_width, tile_height, true);
 
     // GS tile intersection
     auto gs_isect_results = gsplat::intersect_tile(
@@ -331,12 +301,12 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
 
     // Compare tiles per gaussian
     auto tiles_diff = (ref_tiles_per_gauss.to(torch::kFloat32) -
-                       gs_tiles_per_gauss.to(torch::kFloat32)).abs();
+                       gs_tiles_per_gauss.to(torch::kFloat32))
+                          .abs();
     std::cout << "Tiles per gauss max diff: " << tiles_diff.max().item<float>() << std::endl;
 
     std::cout << "\n--- Step 6: Rasterization ---" << std::endl;
 
-    // Both implementations use the same gsplat rasterization
     auto ref_isect_offsets = gsplat::intersect_offset(ref_isect_ids, C, tile_width, tile_height);
     ref_isect_offsets = ref_isect_offsets.reshape({C, tile_height, tile_width});
 
@@ -347,7 +317,7 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
         ref_isect_offsets.contiguous(), ref_flatten_ids.contiguous());
 
     auto ref_rendered = std::get<0>(ref_raster_results);
-    ref_rendered = torch::clamp(ref_rendered.permute({0, 3, 1, 2}), 0.0f, 1.0f);
+    ref_rendered = torch::clamp_max(ref_rendered.permute({0, 3, 1, 2}), 1.0f);
 
     // GS uses autograd function
     auto gs_isect_offsets = gsplat::intersect_offset(gs_isect_ids, C, tile_width, tile_height);
@@ -359,7 +329,7 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
         gs_isect_offsets, gs_flatten_ids, raster_settings);
 
     auto gs_rendered = gs_raster_outputs[0];
-    gs_rendered = torch::clamp(gs_rendered.squeeze(0).permute({2, 0, 1}), 0.0f, 1.0f).unsqueeze(0);
+    gs_rendered = torch::clamp_max(gs_rendered.squeeze(0).permute({2, 0, 1}), 1.0f).unsqueeze(0);
 
     std::cout << "Reference render range: [" << ref_rendered.min().item<float>()
               << ", " << ref_rendered.max().item<float>() << "]" << std::endl;
@@ -372,11 +342,13 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
 
     // Summary
     std::cout << "\n=== SUMMARY ===" << std::endl;
+    std::cout << "Step 1 (Covariance): " << (covar_diff.max().item<float>() < 1e-5 ? "PASS" : "FAIL") << std::endl;
     std::cout << "Step 2 (Projection): " << (means2d_diff.max().item<float>() < 1e-3 ? "PASS" : "FAIL") << std::endl;
     std::cout << "Step 3 (SH Colors): " << (colors_diff.max().item<float>() < 1e-3 ? "PASS" : "FAIL") << std::endl;
     std::cout << "Step 4 (Opacities): " << (opacity_diff.max().item<float>() < 1e-5 ? "PASS" : "FAIL") << std::endl;
     std::cout << "Step 5 (Tile Intersection): " << (tiles_diff.max().item<float>() < 1 ? "PASS" : "FAIL") << std::endl;
-    std::cout << "Step 6 (Rasterization): " << (render_diff.mean().item<float>() < 0.001 ? "PASS" : "FAIL") << std::endl;
+    std::cout << "Step 6 (Rasterization): " << (render_diff.mean().item<float>() < 0.0001 ? "PASS" : "FAIL") << std::endl;
+    EXPECT_TRUE((render_diff.mean().item<float>() < 0.0001)) << "Rasterization outputs don't match";
 
     // Check for negative values
     bool ref_has_negative = (ref_rendered < 0).any().item<bool>();
@@ -384,6 +356,14 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
 
     std::cout << "\nReference has negative values: " << (ref_has_negative ? "YES" : "NO") << std::endl;
     std::cout << "GS has negative values: " << (gs_has_negative ? "YES" : "NO") << std::endl;
+
+    if (ref_has_negative) {
+        auto negative_mask = ref_rendered < 0;
+        auto num_negative = negative_mask.sum().item<int>();
+        auto min_value = ref_rendered.min().item<float>();
+        std::cout << "Number of negative pixels: " << num_negative << std::endl;
+        std::cout << "Most negative value: " << min_value << std::endl;
+    }
 }
 
 TEST_F(RasterizationComparisonTest, ProjectionDebug) {
@@ -408,7 +388,8 @@ TEST_F(RasterizationComparisonTest, ProjectionDebug) {
                  {{focal, 0.0f, width / 2.0f},
                   {0.0f, focal, height / 2.0f},
                   {0.0f, 0.0f, 1.0f}},
-                 device).unsqueeze(0);
+                 device)
+                 .unsqueeze(0);
 
     auto viewmat = torch::eye(4, device).unsqueeze(0);
 
@@ -429,7 +410,8 @@ TEST_F(RasterizationComparisonTest, ProjectionDebug) {
     auto scaled_scales = scales * scaling_modifier;
     auto [ref_covars, _] = reference::quat_scale_to_covar_preci(quats, scaled_scales, true, false, false);
 
-    std::cout << "Covariance matrix:\n" << ref_covars << std::endl;
+    std::cout << "Covariance matrix:\n"
+              << ref_covars << std::endl;
 
     auto [ref_radii, ref_means2d, ref_depths, ref_conics, ref_compensations] =
         reference::fully_fused_projection(
@@ -447,7 +429,7 @@ TEST_F(RasterizationComparisonTest, ProjectionDebug) {
 
     auto proj_results = gsplat::projection_ewa_3dgs_fused_fwd(
         means,
-        {},     // empty covars
+        {}, // empty covars
         quats,
         scaled_scales,
         opacities,
@@ -459,7 +441,7 @@ TEST_F(RasterizationComparisonTest, ProjectionDebug) {
         near_plane,
         far_plane,
         radius_clip,
-        false,  // calc_compensations
+        false, // calc_compensations
         gsplat::CameraModelType::PINHOLE);
 
     auto gs_radii = std::get<0>(proj_results);
@@ -480,14 +462,15 @@ TEST_F(RasterizationComparisonTest, ProjectionDebug) {
     auto [gs_covars, _2] = gsplat::quat_scale_to_covar_preci_fwd(
         quats, scaled_scales, true, false, false);
 
-    std::cout << "GS Covariance matrix:\n" << gs_covars << std::endl;
+    std::cout << "GS Covariance matrix:\n"
+              << gs_covars << std::endl;
     std::cout << "Covar diff from reference: " << (ref_covars - gs_covars).abs().max().item<float>() << std::endl;
 
     auto proj_results2 = gsplat::projection_ewa_3dgs_fused_fwd(
         means,
-        gs_covars,  // pass covars this time
-        {},         // empty quats
-        {},         // empty scales
+        gs_covars, // pass covars this time
+        {},        // empty quats
+        {},        // empty scales
         opacities,
         viewmat,
         K,
@@ -683,7 +666,8 @@ TEST_F(RasterizationComparisonTest, CompareWithGSRasterize) {
                    {0.0f, focal, height / 2.0f},
                    {0.0f, 0.0f, 1.0f}},
                   device)
-                  .expand({C, -1, -1});
+                  .expand({C, -1, -1})
+                  .contiguous();
 
     auto viewmats = torch::eye(4, device).expand({C, -1, -1}).contiguous();
 
@@ -692,17 +676,16 @@ TEST_F(RasterizationComparisonTest, CompareWithGSRasterize) {
         viewmats = viewmats.clone();
         // Create a rotation matrix for the second camera
         float angle = 0.3f; // radians
-        auto R = torch::tensor({
-                                   {std::cos(angle), 0.0f, std::sin(angle), 0.0f},
-                                   {0.0f, 1.0f, 0.0f, 0.0f},
-                                   {-std::sin(angle), 0.0f, std::cos(angle), 0.0f},
-                                   {0.0f, 0.0f, 0.0f, 1.0f}
-                               }, device);
+        auto R = torch::tensor({{std::cos(angle), 0.0f, std::sin(angle), 0.0f},
+                                {0.0f, 1.0f, 0.0f, 0.0f},
+                                {-std::sin(angle), 0.0f, std::cos(angle), 0.0f},
+                                {0.0f, 0.0f, 0.0f, 1.0f}},
+                               device);
 
         // Apply rotation and translation to second camera
         viewmats[1] = torch::matmul(R, viewmats[1]);
-        viewmats[1][0][3] = 0.5f;  // Translate in X
-        viewmats[1][2][3] = 0.5f;  // Translate in Z
+        viewmats[1][0][3] = 0.5f; // Translate in X
+        viewmats[1][2][3] = 0.5f; // Translate in Z
     }
 
     auto bg_color = torch::zeros({C, 3}, device);
