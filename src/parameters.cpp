@@ -99,7 +99,6 @@ namespace gs {
                     {"lambda_dssim", defaults.lambda_dssim, "DSSIM loss weight"},
                     {"min_opacity", defaults.min_opacity, "Minimum opacity threshold"},
                     {"growth_interval", defaults.growth_interval, "Interval between densification steps"},
-                    {"reset_opacity", defaults.reset_opacity, "Interval for opacity resets"},
                     {"start_densify", defaults.start_densify, "Starting iteration for densification"},
                     {"stop_densify", defaults.stop_densify, "Ending iteration for densification"},
                     {"grad_threshold", defaults.grad_threshold, "Gradient threshold for densification"},
@@ -218,7 +217,6 @@ namespace gs {
             params.lambda_dssim = json["lambda_dssim"];
             params.min_opacity = json["min_opacity"];
             params.growth_interval = json["growth_interval"];
-            params.reset_opacity = json["reset_opacity"];
             params.start_densify = json["start_densify"];
             params.stop_densify = json["stop_densify"];
             params.grad_threshold = json["grad_threshold"];

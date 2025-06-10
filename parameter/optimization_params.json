@@ -8,7 +8,6 @@
   "lambda_dssim": 0.2,
   "min_opacity": 0.005,
   "growth_interval": 100,
-  "reset_opacity": 3000,
   "start_densify": 500,
   "stop_densify": 15000,
   "grad_threshold": 0.0002,
