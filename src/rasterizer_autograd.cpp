@@ -5,12 +5,13 @@ namespace gs {
     using namespace torch::indexing;
 
     // ProjectionFunction implementation
+    // ProjectionFunction implementation
     torch::autograd::tensor_list ProjectionFunction::forward(
         torch::autograd::AutogradContext* ctx,
         torch::Tensor means3D,    // [N, 3]
         torch::Tensor quats,      // [N, 4]
         torch::Tensor scales,     // [N, 3]
-        torch::Tensor opacities,  // [N]
+        torch::Tensor opacities,  // [N] or undefined (optional)
         torch::Tensor viewmat,    // [C, 4, 4]
         torch::Tensor K,          // [C, 3, 3]
         torch::Tensor settings) { // [7] tensor containing projection settings
@@ -25,8 +26,13 @@ namespace gs {
                     "quats must be [N, 4], got ", quats.sizes());
         TORCH_CHECK(scales.dim() == 2 && scales.size(0) == N && scales.size(1) == 3,
                     "scales must be [N, 3], got ", scales.sizes());
-        TORCH_CHECK(opacities.dim() == 1 && opacities.size(0) == N,
-                    "opacities must be [N], got ", opacities.sizes());
+
+        // Opacities is optional - only validate if defined
+        if (opacities.defined()) {
+            TORCH_CHECK(opacities.dim() == 1 && opacities.size(0) == N,
+                        "opacities must be [N], got ", opacities.sizes());
+        }
+
         TORCH_CHECK(viewmat.dim() == 3 && viewmat.size(1) == 4 && viewmat.size(2) == 4,
                     "viewmat must be [C, 4, 4], got ", viewmat.sizes());
         TORCH_CHECK(K.dim() == 3 && K.size(0) == C && K.size(1) == 3 && K.size(2) == 3,
@@ -38,7 +44,9 @@ namespace gs {
         TORCH_CHECK(means3D.is_cuda(), "means3D must be on CUDA");
         TORCH_CHECK(quats.is_cuda(), "quats must be on CUDA");
         TORCH_CHECK(scales.is_cuda(), "scales must be on CUDA");
-        TORCH_CHECK(opacities.is_cuda(), "opacities must be on CUDA");
+        if (opacities.defined()) {
+            TORCH_CHECK(opacities.is_cuda(), "opacities must be on CUDA");
+        }
         TORCH_CHECK(viewmat.is_cuda(), "viewmat must be on CUDA");
         TORCH_CHECK(K.is_cuda(), "K must be on CUDA");
         TORCH_CHECK(settings.is_cuda(), "settings must be on CUDA");
@@ -56,20 +64,22 @@ namespace gs {
         means3D = means3D.contiguous();
         quats = quats.contiguous();
         scales = scales.contiguous();
-        opacities = opacities.contiguous();
+        if (opacities.defined()) {
+            opacities = opacities.contiguous();
+        }
         viewmat = viewmat.contiguous();
         K = K.contiguous();
 
         // Apply scaling modifier
         auto scaled_scales = scales * scaling_modifier;
 
-        // Call projection
+        // Call projection - pass undefined tensor if opacities not provided
         auto proj_results = gsplat::projection_ewa_3dgs_fused_fwd(
             means3D,
             {}, // covars
             quats,
             scaled_scales,
-            opacities,
+            opacities, // Pass as-is (might be undefined)
             viewmat,
             K,
             width,
@@ -158,12 +168,12 @@ namespace gs {
         auto v_scales = std::get<3>(proj_grads);
         auto v_viewmat = std::get<4>(proj_grads);
 
-        // v_opacities is computed from v_compensations
+        // v_opacities is computed from v_compensations only if opacities was defined
         torch::Tensor v_opacities;
-        if (v_compensations.defined() && compensations.defined()) {
+        if (opacities.defined() && v_compensations.defined() && compensations.defined()) {
             v_opacities = (v_compensations * compensations / opacities.unsqueeze(0)).sum(0);
         } else {
-            v_opacities = torch::zeros_like(opacities);
+            v_opacities = torch::Tensor(); // Return undefined tensor
         }
 
         return {v_means3D, v_quats, v_scales, v_opacities, v_viewmat, torch::Tensor(), torch::Tensor()};
