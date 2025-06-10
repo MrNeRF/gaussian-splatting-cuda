@@ -17,7 +17,6 @@ namespace gs {
             float lambda_dssim = 0.2f;
             float min_opacity = 0.005f;
             size_t growth_interval = 100;
-            size_t reset_opacity = 3'000;
             size_t start_densify = 500;
             size_t stop_densify = 15'000;
             float grad_threshold = 0.0002f;
