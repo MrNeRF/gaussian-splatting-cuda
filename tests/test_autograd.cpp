@@ -237,96 +237,144 @@ TEST_F(AutogradTest, ProjectionAutogradTest) {
     }
 }
 
-//TEST_F(AutogradTest, FullRenderingPipelineAutogradTest) {
-//    torch::manual_seed(42);
-//
-//    // Create a complete rendering pipeline test
-//    int N = 50;
-//    int width = 128, height = 128;
-//    int C = 1; // Single camera
-//
-//    // Create parameters with gradients
-//    auto means = torch::randn({N, 3}, device) * 2.0f;
-//    means.requires_grad_(true);
-//
-//    auto quats = torch::randn({N, 4}, device);
-//    quats = torch::nn::functional::normalize(quats, torch::nn::functional::NormalizeFuncOptions().dim(-1));
-//    quats.requires_grad_(true);
-//
-//    auto scales = torch::rand({N, 3}, device) * 0.5f;
-//    scales.requires_grad_(true);
-//
-//    auto opacities = torch::rand({N}, device);
-//    opacities.requires_grad_(true);
-//
-//    auto sh_coeffs = torch::randn({N, 1, 3}, device); // Only DC component
-//    sh_coeffs.requires_grad_(true);
-//
-//    // Camera
-//    auto viewmat = torch::eye(4, device).unsqueeze(0);
-//    viewmat.requires_grad_(true);
-//    auto K = torch::tensor({{200.0f, 0.0f, 64.0f},
-//                            {0.0f, 200.0f, 64.0f},
-//                            {0.0f, 0.0f, 1.0f}},
-//                           device)
-//                 .unsqueeze(0);
-//
-//    // 1. Projection
-//    auto proj_settings = torch::tensor({(float)width, (float)height, 0.3f, 0.01f, 1000.0f, 0.0f, 1.0f}, device);
-//    auto proj_outputs = ProjectionFunction::apply(
-//        means, quats, scales, opacities, viewmat, K, proj_settings);
-//
-//    auto radii = proj_outputs[0];
-//    auto means2d = proj_outputs[1];
-//    auto depths = proj_outputs[2];
-//    auto conics = proj_outputs[3];
-//    auto compensations = proj_outputs[4];
-//
-//    // 2. Colors from SH
-//    auto sh_degree_tensor = torch::tensor({0}, torch::TensorOptions().dtype(torch::kInt32).device(device));
-//    auto color_outputs = SphericalHarmonicsFunction::apply(sh_coeffs, means, viewmat, radii, sh_degree_tensor);
-//    auto colors = color_outputs[0]; // Extract tensor from tensor_list
-//
-//    // Create a combined loss that includes projection outputs and colors
-//    auto valid = (radii > 0).all(-1);
-//    auto loss = (means2d * valid.unsqueeze(-1).to(torch::kFloat32)).sum() * 0.001f +
-//                (depths * valid.to(torch::kFloat32)).sum() * 0.001f +
-//                (conics * valid.unsqueeze(-1).to(torch::kFloat32)).sum() * 0.001f +
-//                colors.mean();
-//
-//    // Compute gradients using backward()
-//    loss.backward();
-//
-//    // Check that all gradients are defined
-//    EXPECT_TRUE(means.grad().defined());     // means grad
-//    EXPECT_TRUE(quats.grad().defined());     // quats grad
-//    EXPECT_TRUE(scales.grad().defined());    // scales grad
-//    EXPECT_TRUE(opacities.grad().defined()); // opacities grad
-//    EXPECT_TRUE(sh_coeffs.grad().defined()); // sh_coeffs grad
-//    EXPECT_TRUE(viewmat.grad().defined());   // viewmat grad
-//
-//    // Check gradients are non-zero (at least some should be)
-//    auto means_grad_sum = means.grad().abs().sum().item<float>();
-//    auto quats_grad_sum = quats.grad().abs().sum().item<float>();
-//    auto scales_grad_sum = scales.grad().abs().sum().item<float>();
-//    auto sh_coeffs_grad_sum = sh_coeffs.grad().abs().sum().item<float>();
-//
-//    EXPECT_GT(means_grad_sum, 0);
-//    EXPECT_GT(quats_grad_sum, 0);
-//    EXPECT_GT(scales_grad_sum, 0);
-//    EXPECT_GT(sh_coeffs_grad_sum, 0);
-//
-//    // Check gradients are valid
-//    auto means_has_nan = means.grad().isnan().any().item<bool>();
-//    auto quats_has_nan = quats.grad().isnan().any().item<bool>();
-//    auto scales_has_nan = scales.grad().isnan().any().item<bool>();
-//    auto sh_coeffs_has_nan = sh_coeffs.grad().isnan().any().item<bool>();
-//
-//    EXPECT_FALSE(means_has_nan);
-//    EXPECT_FALSE(quats_has_nan);
-//    EXPECT_FALSE(scales_has_nan);
-//    EXPECT_FALSE(sh_coeffs_has_nan);
-//}
+TEST_F(AutogradTest, FullRenderingPipelineAutogradTest) {
+    torch::manual_seed(42);
+
+    // Create a complete rendering pipeline test
+    int N = 50;
+    int width = 128, height = 128;
+    int C = 1; // Single camera
+
+    // Create parameters with gradients
+    auto means = torch::randn({N, 3}, device) * 2.0f;
+    means.requires_grad_(true);
+
+    auto quats = torch::randn({N, 4}, device);
+    quats = torch::nn::functional::normalize(quats, torch::nn::functional::NormalizeFuncOptions().dim(-1));
+    quats.requires_grad_(true);
+
+    auto scales = torch::rand({N, 3}, device) * 0.5f;
+    scales.requires_grad_(true);
+
+    auto opacities = torch::ones({N}, device); // Use ones to avoid opacity gradient issues
+    opacities.requires_grad_(true);
+
+    auto sh_coeffs = torch::randn({N, 1, 3}, device); // Only DC component
+    sh_coeffs.requires_grad_(true);
+
+    // Camera
+    auto viewmat = torch::eye(4, device).unsqueeze(0);
+    viewmat.requires_grad_(true);
+    auto K = torch::tensor({{200.0f, 0.0f, 64.0f},
+                            {0.0f, 200.0f, 64.0f},
+                            {0.0f, 0.0f, 1.0f}},
+                           device)
+                 .unsqueeze(0);
+
+    // 1. Projection
+    auto proj_settings = torch::tensor({(float)width, (float)height, 0.3f, 0.01f, 1000.0f, 0.0f, 1.0f}, device);
+    auto proj_outputs = ProjectionFunction::apply(
+        means, quats, scales, opacities, viewmat, K, proj_settings);
+
+    auto radii = proj_outputs[0];
+    auto means2d = proj_outputs[1];
+    auto depths = proj_outputs[2];
+    auto conics = proj_outputs[3];
+    auto compensations = proj_outputs[4];
+
+    // 2. Colors from SH using the new interface
+    // Compute directions from camera position to gaussians
+    auto viewmat_inv = torch::inverse(viewmat);
+    auto campos = viewmat_inv.index({0, torch::indexing::Slice(torch::indexing::None, 3), 3});
+    auto dirs = means - campos;  // [N, 3]
+
+    // Create masks based on visibility
+    auto masks = (radii > 0).all(-1).squeeze(0); // [N]
+
+    auto sh_degree_tensor = torch::tensor({0}, torch::TensorOptions().dtype(torch::kInt32).device(device));
+    auto color_outputs = SphericalHarmonicsFunction::apply(
+        sh_degree_tensor, dirs, sh_coeffs, masks);
+    auto colors = color_outputs[0]; // [N, 3]
+
+    // Apply SH offset and clamp (like in rasterizer)
+    colors = torch::clamp_min(colors + 0.5f, 0.0f);
+
+    // Create a combined loss that includes projection outputs and colors
+    auto valid = (radii > 0).all(-1).squeeze(0); // Remove camera dimension
+    auto loss = (means2d.squeeze(0) * valid.unsqueeze(-1).to(torch::kFloat32)).sum() * 0.001f +
+                (depths.squeeze(0) * valid.to(torch::kFloat32)).sum() * 0.001f +
+                (conics.squeeze(0) * valid.unsqueeze(-1).to(torch::kFloat32)).sum() * 0.001f +
+                colors.mean();
+
+    // Compute gradients using torch::autograd::grad
+    std::vector<torch::Tensor> inputs = {means, quats, scales, opacities, sh_coeffs, viewmat};
+    std::vector<torch::Tensor> outputs = {loss};
+    std::vector<torch::Tensor> grad_outputs = {};
+
+    auto grads = torch::autograd::grad(
+        outputs,
+        inputs,
+        grad_outputs,
+        /*retain_graph=*/true,
+        /*create_graph=*/false,
+        /*allow_unused=*/true);
+
+    auto v_means = grads[0];
+    auto v_quats = grads[1];
+    auto v_scales = grads[2];
+    auto v_opacities = grads[3];
+    auto v_sh_coeffs = grads[4];
+    auto v_viewmat = grads[5];
+
+    // Check that all gradients are defined
+    EXPECT_TRUE(v_means.defined()) << "means grad not defined";
+    EXPECT_TRUE(v_quats.defined()) << "quats grad not defined";
+    EXPECT_TRUE(v_scales.defined()) << "scales grad not defined";
+    EXPECT_TRUE(v_opacities.defined()) << "opacities grad not defined";
+    EXPECT_TRUE(v_sh_coeffs.defined()) << "sh_coeffs grad not defined";
+    EXPECT_TRUE(v_viewmat.defined()) << "viewmat grad not defined";
+
+    // Check gradients are non-zero (at least some should be)
+    auto means_grad_sum = v_means.abs().sum().item<float>();
+    auto quats_grad_sum = v_quats.abs().sum().item<float>();
+    auto scales_grad_sum = v_scales.abs().sum().item<float>();
+    auto sh_coeffs_grad_sum = v_sh_coeffs.abs().sum().item<float>();
+
+    std::cout << "Gradient sums:" << std::endl;
+    std::cout << "  means: " << means_grad_sum << std::endl;
+    std::cout << "  quats: " << quats_grad_sum << std::endl;
+    std::cout << "  scales: " << scales_grad_sum << std::endl;
+    std::cout << "  sh_coeffs: " << sh_coeffs_grad_sum << std::endl;
+    std::cout << "  viewmat: " << v_viewmat.abs().sum().item<float>() << std::endl;
+
+    EXPECT_GT(means_grad_sum, 0) << "means gradients are all zero";
+    EXPECT_GT(quats_grad_sum, 0) << "quats gradients are all zero";
+    EXPECT_GT(scales_grad_sum, 0) << "scales gradients are all zero";
+    EXPECT_GT(sh_coeffs_grad_sum, 0) << "sh_coeffs gradients are all zero";
+
+    // Check gradients are valid
+    auto means_has_nan = v_means.isnan().any().item<bool>();
+    auto quats_has_nan = v_quats.isnan().any().item<bool>();
+    auto scales_has_nan = v_scales.isnan().any().item<bool>();
+    auto sh_coeffs_has_nan = v_sh_coeffs.isnan().any().item<bool>();
+
+    EXPECT_FALSE(means_has_nan) << "means grad has NaN";
+    EXPECT_FALSE(quats_has_nan) << "quats grad has NaN";
+    EXPECT_FALSE(scales_has_nan) << "scales grad has NaN";
+    EXPECT_FALSE(sh_coeffs_has_nan) << "sh_coeffs grad has NaN";
+
+    // Also check viewmat gradient
+    if (v_viewmat.defined()) {
+        auto viewmat_has_nan = v_viewmat.isnan().any().item<bool>();
+        EXPECT_FALSE(viewmat_has_nan) << "viewmat grad has NaN";
+
+        // For SH degree 0, viewmat gradients might be zero since colors don't depend on view direction
+        if (sh_coeffs.size(1) > 1) { // Only expect viewmat gradients for higher SH degrees
+            auto viewmat_grad_sum = v_viewmat.abs().sum().item<float>();
+            EXPECT_GT(viewmat_grad_sum, 0) << "viewmat gradients are all zero";
+        }
+    }
+}
 
 TEST_F(AutogradTest, GradientAccumulationTest) {
     torch::manual_seed(42);
