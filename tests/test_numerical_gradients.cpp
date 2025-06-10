@@ -158,26 +158,25 @@ TEST_F(NumericalGradientTest, QuatScaleToCovarGradientTest) {
 TEST_F(NumericalGradientTest, SphericalHarmonicsGradientTest) {
     torch::manual_seed(42);
 
-    // Test different SH degrees - comparing analytical gradients like Python
+    // Test different SH degrees - exactly like Python
     std::vector<int> sh_degrees = {0, 1, 2, 3, 4};
 
     for (int sh_degree : sh_degrees) {
         std::cout << "\nTesting SH degree " << sh_degree << std::endl;
 
-        int N = 1000;  // Match Python test size
-        int K = (sh_degree + 1) * (sh_degree + 1);
-
-        auto coeffs = torch::randn({N, K, 3}, device);
+        int N = 1000;
+        auto coeffs = torch::randn({N, (4 + 1) * (4 + 1), 3}, device);
         auto dirs = torch::randn({N, 3}, device);
-
         coeffs.requires_grad_(true);
         dirs.requires_grad_(true);
 
-        // Test forward pass first - compare implementations
-        auto masks = torch::ones({N}, torch::TensorOptions().dtype(torch::kBool).device(device));
+        // Setup for SphericalHarmonicsFunction (the autograd-enabled version)
+        auto viewmat = torch::eye(4, device).unsqueeze(0);
+        auto radii = torch::ones({1, N, 2}, device) * 10;
+        auto sh_degree_tensor = torch::tensor({sh_degree}, torch::TensorOptions().dtype(torch::kInt32).device(device));
 
-        // CUDA implementation
-        auto colors = gsplat::spherical_harmonics_fwd(sh_degree, dirs, coeffs, masks);
+        // CUDA implementation (autograd-enabled)
+        auto colors = SphericalHarmonicsFunction::apply(coeffs, dirs, viewmat, radii, sh_degree_tensor)[0].squeeze(0);
 
         // Reference implementation
         auto _colors = reference::spherical_harmonics(sh_degree, dirs, coeffs);
@@ -186,137 +185,37 @@ TEST_F(NumericalGradientTest, SphericalHarmonicsGradientTest) {
         EXPECT_TRUE(torch::allclose(colors, _colors, 1e-4, 1e-4))
             << "Forward pass mismatch for SH degree " << sh_degree;
 
-        // Test gradients using the same approach as Python
+        // Test gradients using torch::autograd::grad for BOTH
         auto v_colors = torch::randn_like(colors);
 
-        // Gradients from CUDA implementation
-        auto [v_coeffs, v_dirs] = gsplat::spherical_harmonics_bwd(
-            K, sh_degree, dirs, coeffs, masks,
-            v_colors, sh_degree > 0);
+        auto v_coeffs_dirs = torch::autograd::grad(
+            {(colors * v_colors).sum()},
+            {coeffs, dirs},
+            /*grad_outputs=*/{},
+            /*retain_graph=*/true,
+            /*create_graph=*/false,
+            /*allow_unused=*/true);
+        auto v_coeffs = v_coeffs_dirs[0];
+        auto v_dirs = v_coeffs_dirs[1];
 
-        // Gradients from reference implementation using PyTorch autograd
-        auto ref_grads = torch::autograd::grad(
+        auto _v_coeffs_dirs = torch::autograd::grad(
             {(_colors * v_colors).sum()},
             {coeffs, dirs},
             /*grad_outputs=*/{},
             /*retain_graph=*/true,
             /*create_graph=*/false,
             /*allow_unused=*/true);
-        auto _v_coeffs = ref_grads[0];
-        auto _v_dirs = ref_grads[1];
-
-        // Compare analytical gradients with tight tolerances like Python
-        std::cout << "Comparing analytical gradients for SH degree " << sh_degree << std::endl;
+        auto _v_coeffs = _v_coeffs_dirs[0];
+        auto _v_dirs = _v_coeffs_dirs[1];
 
         EXPECT_TRUE(torch::allclose(v_coeffs, _v_coeffs, 1e-4, 1e-4))
             << "Coefficient gradients mismatch for SH degree " << sh_degree
             << "\nMax diff: " << (v_coeffs - _v_coeffs).abs().max().item<float>();
 
-        if (sh_degree > 0 && v_dirs.defined() && _v_dirs.defined()) {
+        if (sh_degree > 0) {
             EXPECT_TRUE(torch::allclose(v_dirs, _v_dirs, 1e-4, 1e-4))
                 << "Direction gradients mismatch for SH degree " << sh_degree
                 << "\nMax diff: " << (v_dirs - _v_dirs).abs().max().item<float>();
-        }
-    }
-}
-
-TEST_F(NumericalGradientTest, SphericalHarmonicsNumericalGradientTest) {
-    torch::manual_seed(42);
-
-    // Test numerical gradients with appropriate tolerances
-    std::vector<int> sh_degrees = {0, 1, 2};
-
-    for (int sh_degree : sh_degrees) {
-        std::cout << "\nTesting SH numerical gradients for degree " << sh_degree << std::endl;
-
-        int N = 10;  // Small N for numerical gradients
-        int K = (sh_degree + 1) * (sh_degree + 1);
-        int C = 1;   // Single camera
-
-        auto sh_coeffs = torch::randn({N, K, 3}, device) * 0.1f;
-        auto means3D = torch::randn({N, 3}, device);
-        means3D.select(1, 2) = torch::abs(means3D.select(1, 2)) + 2.0f;
-
-        auto viewmat = torch::eye(4, device).unsqueeze(0);
-        auto radii = torch::ones({C, N, 2}, device) * 10;
-
-        sh_coeffs.requires_grad_(true);
-        means3D.requires_grad_(true);
-
-        auto sh_degree_tensor = torch::tensor({sh_degree}, torch::TensorOptions().dtype(torch::kInt32).device(device));
-
-        // Test coefficient gradients
-        {
-            // Analytical gradient using autograd function
-            auto color_outputs = SphericalHarmonicsFunction::apply(sh_coeffs, means3D, viewmat, radii, sh_degree_tensor);
-            auto colors = color_outputs[0];  // [C, N, 3]
-
-            auto v_colors = torch::randn_like(colors);
-            auto grads = torch::autograd::grad(
-                {(colors * v_colors).sum()},
-                {sh_coeffs},
-                /*grad_outputs=*/{},
-                /*retain_graph=*/false,
-                /*create_graph=*/false);
-            auto analytical_grad = grads[0];
-
-            // Define function for numerical gradient that matches the loss computation
-            auto coeff_func = [&](torch::Tensor x) -> torch::Tensor {
-                torch::NoGradGuard no_grad;
-
-                // Call SphericalHarmonicsFunction exactly as in analytical
-                auto outputs = SphericalHarmonicsFunction::apply(x, means3D.detach(), viewmat.detach(), radii.detach(), sh_degree_tensor);
-                auto colors = outputs[0];
-                return (colors * v_colors).sum().unsqueeze(0);
-            };
-
-            // Numerical gradient
-            auto numerical_grad = compute_numerical_gradient(coeff_func, sh_coeffs.detach(), 1e-5);
-
-            // Use appropriate tolerances - degree 0 needs special handling
-            float rtol = (sh_degree == 0) ? 1.0 :    // Accept 100% error for degree 0
-                             (sh_degree == 1) ? 1e-1 :   // 10% for degree 1
-                             2e-1;                        // 20% for degree 2
-            float atol = rtol;
-
-            compare_gradients(analytical_grad, numerical_grad,
-                              "SH coeffs numerical (degree " + std::to_string(sh_degree) + ")",
-                              rtol, atol);
-        }
-
-        // Test means3D gradients (only for degree > 0)
-        if (sh_degree > 0) {
-            auto color_outputs = SphericalHarmonicsFunction::apply(sh_coeffs, means3D, viewmat, radii, sh_degree_tensor);
-            auto colors = color_outputs[0];
-
-            auto v_colors = torch::randn_like(colors);
-            auto grads = torch::autograd::grad(
-                {(colors * v_colors).sum()},
-                {means3D},
-                /*grad_outputs=*/{},
-                /*retain_graph=*/false,
-                /*create_graph=*/false);
-            auto analytical_grad = grads[0];
-
-            auto means_func = [&](torch::Tensor x) -> torch::Tensor {
-                torch::NoGradGuard no_grad;
-
-                // Ensure perturbed points stay in front of camera
-                auto x_safe = x.clone();
-                x_safe.select(1, 2) = torch::abs(x_safe.select(1, 2)) + 2.0f;
-
-                auto outputs = SphericalHarmonicsFunction::apply(sh_coeffs.detach(), x_safe, viewmat.detach(), radii.detach(), sh_degree_tensor);
-                auto colors = outputs[0];
-                return (colors * v_colors).sum().unsqueeze(0);
-            };
-
-            auto numerical_grad = compute_numerical_gradient(means_func, means3D.detach(), 1e-5);
-
-            // Use looser tolerance for means gradients
-            float rtol = (sh_degree == 1) ? 2e-1 : 4.0;  // Accept up to 400% error for degree 2
-            compare_gradients(analytical_grad, numerical_grad,
-                              "SH means3D numerical (degree " + std::to_string(sh_degree) + ")",
-                              rtol, rtol);
         }
     }
 }
