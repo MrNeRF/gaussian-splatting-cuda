@@ -7,7 +7,6 @@ namespace gs {
 
     using namespace torch::indexing;
 
-
     inline torch::Tensor spherical_harmonics(
         int sh_degree,
         const torch::Tensor& dirs,
@@ -138,15 +137,15 @@ namespace gs {
         // Step 2: Compute colors from SH
         // First, compute camera position from inverse viewmat
         auto viewmat_inv = torch::inverse(viewmat);
-        auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3});  // [C, 3]
+        auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3}); // [C, 3]
 
         // Compute directions from camera to each Gaussian
         // Since C = 1 in our case, we can simplify
-        auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);  // [1, N, 3]
-        dirs = dirs.squeeze(0);  // [N, 3]
+        auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1); // [1, N, 3]
+        dirs = dirs.squeeze(0);                                 // [N, 3]
 
         // Create masks based on radii
-        auto masks = (radii > 0).all(-1).squeeze(0);  // [N]
+        auto masks = (radii > 0).all(-1).squeeze(0); // [N]
 
         // Now call spherical harmonics with proper directions
         auto colors = spherical_harmonics(sh_degree, dirs, sh_coeffs, masks);
@@ -198,7 +197,7 @@ namespace gs {
 
         // Prepare output
         RenderOutput result;
-        result.image = torch::clamp_max(rendered_image.squeeze(0).permute({2, 0, 1}), 1.0f);
+        result.image = torch::clamp(rendered_image.squeeze(0).permute({2, 0, 1}), 0.0f, 1.0f);
         result.means2d = means2d_with_grad;
         result.depths = depths.squeeze(0);
         result.radii = std::get<0>(radii.squeeze(0).max(-1));

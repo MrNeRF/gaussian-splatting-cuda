@@ -17,6 +17,14 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 Currently the implementation does not achieve on par results with gsplat-mcmc, but it is a work in progress.
 It is just a matter of time to fix the bug. Help is welcome :) The metrics for the mcmc strategy are as follows:
 
+### LPIPS Model
+The implementation uses `weights/lpips_vgg.pt`, which is exported from `torchmetrics.image.lpip.LearnedPerceptualImagePatchSimilarity` with:
+- **Network type**: VGG
+- **Normalize**: False (model expects inputs in [-1, 1] range)
+- **Model includes**: VGG backbone with pretrained ImageNet weights and the scaling normalization layer
+
+**Note**: While the model was exported with `normalize=False`, the C++ implementation handles the [0,1] to [-1,1] conversion internally during LPIPS computation, ensuring compatibility with images loaded in [0,1] range.
+
 | Scene    | Iteration | PSNR          | SSIM         | LPIPS        | Time per Image | Num Gaussians |
 | -------- | --------- | ------------- | ------------ | ------------ | -------------- | ------------- |
 | garden   | 30000     | 27.112114     | 0.854833     | 0.157624     | 0.304765       | 1000000       |

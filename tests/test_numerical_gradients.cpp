@@ -243,7 +243,7 @@ TEST_F(NumericalGradientTest, ProjectionGradientTest) {
     float far_plane = 10000.0f;
     float radius_clip = 0.0f;
     float scaling_modifier = 1.0f;
-    bool calc_compensations = false;  // C++ version always returns compensations but set to 1.0
+    bool calc_compensations = false; // C++ version always returns compensations but set to 1.0
 
     // Create test data
     auto means3D = torch::randn({N, 3}, device) * 5.0;
@@ -253,13 +253,13 @@ TEST_F(NumericalGradientTest, ProjectionGradientTest) {
 
     // Camera parameters
     auto viewmat = torch::eye(4, device).unsqueeze(0);
-    viewmat.index_put_({0, 2, 3}, 10.0f);  // Move camera back
+    viewmat.index_put_({0, 2, 3}, 10.0f); // Move camera back
 
-    auto K = torch::tensor({
-                               {width / 2.0f, 0.0f, width / 2.0f},
-                               {0.0f, height / 2.0f, height / 2.0f},
-                               {0.0f, 0.0f, 1.0f}
-                           }, device).unsqueeze(0);
+    auto K = torch::tensor({{width / 2.0f, 0.0f, width / 2.0f},
+                            {0.0f, height / 2.0f, height / 2.0f},
+                            {0.0f, 0.0f, 1.0f}},
+                           device)
+                 .unsqueeze(0);
 
     // Set requires_grad
     means3D.requires_grad_(true);
@@ -269,15 +269,14 @@ TEST_F(NumericalGradientTest, ProjectionGradientTest) {
     viewmat.requires_grad_(true);
 
     // Pack settings for C++ version
-    auto settings = torch::tensor({
-                                      (float)width,
-                                      (float)height,
-                                      eps2d,
-                                      near_plane,
-                                      far_plane,
-                                      radius_clip,
-                                      scaling_modifier
-                                  }, torch::TensorOptions().dtype(torch::kFloat32).device(device));
+    auto settings = torch::tensor({(float)width,
+                                   (float)height,
+                                   eps2d,
+                                   near_plane,
+                                   far_plane,
+                                   radius_clip,
+                                   scaling_modifier},
+                                  torch::TensorOptions().dtype(torch::kFloat32).device(device));
 
     // C++ implementation - use opacities=1.0 to disable opacity-based optimization
     // This makes the behavior equivalent to not using opacities
@@ -302,7 +301,7 @@ TEST_F(NumericalGradientTest, ProjectionGradientTest) {
     // Note: reference implementation expects camera_model as string parameter
     auto ref_outputs = reference::fully_fused_projection(
         means3D, covars, viewmat, K, width, height, eps2d, near_plane, far_plane,
-        false, // calc_compensations
+        false,    // calc_compensations
         "pinhole" // camera_model
     );
 

@@ -108,54 +108,54 @@ TEST_F(AutogradTest, QuatScaleToCovarPreciAutogradTest) {
     }
 }
 
-//TEST_F(AutogradTest, SphericalHarmonicsAutogradTest) {
-//    torch::manual_seed(42);
+// TEST_F(AutogradTest, SphericalHarmonicsAutogradTest) {
+//     torch::manual_seed(42);
 //
-//    std::vector<int> sh_degrees = {0, 1, 2, 3};
+//     std::vector<int> sh_degrees = {0, 1, 2, 3};
 //
-//    for (int sh_degree : sh_degrees) {
-//        int N = 1000;
-//        int K = (sh_degree + 1) * (sh_degree + 1);
-//        int C = 1; // Single camera for this test
+//     for (int sh_degree : sh_degrees) {
+//         int N = 1000;
+//         int K = (sh_degree + 1) * (sh_degree + 1);
+//         int C = 1; // Single camera for this test
 //
-//        auto sh_coeffs = torch::randn({N, K, 3}, device).set_requires_grad(true);
-//        auto means3D = torch::randn({N, 3}, device).set_requires_grad(true);
-//        auto viewmat = torch::eye(4, device).unsqueeze(0).set_requires_grad(true); // [1, 4, 4]
-//        auto radii = torch::ones({C, N, 2}, device) * 10;                          // All visible
-//        auto sh_degree_tensor = torch::tensor({sh_degree}, torch::TensorOptions().dtype(torch::kInt32).device(device));
+//         auto sh_coeffs = torch::randn({N, K, 3}, device).set_requires_grad(true);
+//         auto means3D = torch::randn({N, 3}, device).set_requires_grad(true);
+//         auto viewmat = torch::eye(4, device).unsqueeze(0).set_requires_grad(true); // [1, 4, 4]
+//         auto radii = torch::ones({C, N, 2}, device) * 10;                          // All visible
+//         auto sh_degree_tensor = torch::tensor({sh_degree}, torch::TensorOptions().dtype(torch::kInt32).device(device));
 //
-//        // Forward through autograd function
-//        auto outputs = SphericalHarmonicsFunction::apply(sh_coeffs, means3D, viewmat, radii, sh_degree_tensor);
-//        auto colors = outputs[0]; // Extract the tensor from tensor_list
+//         // Forward through autograd function
+//         auto outputs = SphericalHarmonicsFunction::apply(sh_coeffs, means3D, viewmat, radii, sh_degree_tensor);
+//         auto colors = outputs[0]; // Extract the tensor from tensor_list
 //
-//        EXPECT_EQ(colors.sizes(), torch::IntArrayRef({C, N, 3}));
-//        auto colors_has_nan = colors.isnan().any().item<bool>();
-//        EXPECT_FALSE(colors_has_nan);
+//         EXPECT_EQ(colors.sizes(), torch::IntArrayRef({C, N, 3}));
+//         auto colors_has_nan = colors.isnan().any().item<bool>();
+//         EXPECT_FALSE(colors_has_nan);
 //
-//        // Create a simple loss
-//        auto loss = colors.sum();
-//        loss.backward();
+//         // Create a simple loss
+//         auto loss = colors.sum();
+//         loss.backward();
 //
-//        // Check gradients on ORIGINAL inputs
-//        EXPECT_TRUE(sh_coeffs.grad().defined());
-//        auto sh_coeffs_grad_has_nan = sh_coeffs.grad().isnan().any().item<bool>();
-//        EXPECT_FALSE(sh_coeffs_grad_has_nan);
+//         // Check gradients on ORIGINAL inputs
+//         EXPECT_TRUE(sh_coeffs.grad().defined());
+//         auto sh_coeffs_grad_has_nan = sh_coeffs.grad().isnan().any().item<bool>();
+//         EXPECT_FALSE(sh_coeffs_grad_has_nan);
 //
-//        if (sh_degree > 0) {
-//            EXPECT_TRUE(means3D.grad().defined());
-//            auto means3D_grad_has_nan = means3D.grad().isnan().any().item<bool>();
-//            EXPECT_FALSE(means3D_grad_has_nan);
-//        }
+//         if (sh_degree > 0) {
+//             EXPECT_TRUE(means3D.grad().defined());
+//             auto means3D_grad_has_nan = means3D.grad().isnan().any().item<bool>();
+//             EXPECT_FALSE(means3D_grad_has_nan);
+//         }
 //
-//        // Clear gradients for next iteration
-//        if (sh_coeffs.grad().defined())
-//            sh_coeffs.grad().zero_();
-//        if (means3D.grad().defined())
-//            means3D.grad().zero_();
-//        if (viewmat.grad().defined())
-//            viewmat.grad().zero_();
-//    }
-//}
+//         // Clear gradients for next iteration
+//         if (sh_coeffs.grad().defined())
+//             sh_coeffs.grad().zero_();
+//         if (means3D.grad().defined())
+//             means3D.grad().zero_();
+//         if (viewmat.grad().defined())
+//             viewmat.grad().zero_();
+//     }
+// }
 
 TEST_F(AutogradTest, ProjectionAutogradTest) {
     torch::manual_seed(42);
@@ -286,7 +286,7 @@ TEST_F(AutogradTest, FullRenderingPipelineAutogradTest) {
     // Compute directions from camera position to gaussians
     auto viewmat_inv = torch::inverse(viewmat);
     auto campos = viewmat_inv.index({0, torch::indexing::Slice(torch::indexing::None, 3), 3});
-    auto dirs = means - campos;  // [N, 3]
+    auto dirs = means - campos; // [N, 3]
 
     // Create masks based on visibility
     auto masks = (radii > 0).all(-1).squeeze(0); // [N]
