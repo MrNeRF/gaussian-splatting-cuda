@@ -7,6 +7,39 @@ namespace gs {
 
     using namespace torch::indexing;
 
+
+    inline torch::Tensor spherical_harmonics(
+        int sh_degree,
+        const torch::Tensor& dirs,
+        const torch::Tensor& coeffs,
+        const torch::Tensor& masks = {}) {
+
+        // Validate inputs
+        TORCH_CHECK((sh_degree + 1) * (sh_degree + 1) <= coeffs.size(-2),
+                    "coeffs K dimension must be at least ", (sh_degree + 1) * (sh_degree + 1),
+                    ", got ", coeffs.size(-2));
+        TORCH_CHECK(dirs.sizes().slice(0, dirs.dim() - 1) == coeffs.sizes().slice(0, coeffs.dim() - 2),
+                    "dirs and coeffs batch dimensions must match");
+        TORCH_CHECK(dirs.size(-1) == 3, "dirs last dimension must be 3, got ", dirs.size(-1));
+        TORCH_CHECK(coeffs.size(-1) == 3, "coeffs last dimension must be 3, got ", coeffs.size(-1));
+
+        if (masks.defined()) {
+            TORCH_CHECK(masks.sizes() == dirs.sizes().slice(0, dirs.dim() - 1),
+                        "masks shape must match dirs shape without last dimension");
+        }
+
+        // Create sh_degree tensor
+        auto sh_degree_tensor = torch::tensor({sh_degree},
+                                              torch::TensorOptions().dtype(torch::kInt32).device(dirs.device()));
+
+        // Call the autograd function
+        return SphericalHarmonicsFunction::apply(
+            sh_degree_tensor,
+            dirs.contiguous(),
+            coeffs.contiguous(),
+            masks.defined() ? masks.contiguous() : masks)[0];
+    }
+
     // Main render function
     RenderOutput rasterize(
         Camera& viewpoint_camera,
@@ -103,13 +136,26 @@ namespace gs {
         means2d_with_grad.retain_grad();
 
         // Step 2: Compute colors from SH
-        auto sh_degree_tensor = torch::tensor({sh_degree}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
-        auto color_outputs = SphericalHarmonicsFunction::apply(
-            sh_coeffs, means3D, viewmat, radii, sh_degree_tensor);
-        auto colors = color_outputs[0];
+        // First, compute camera position from inverse viewmat
+        auto viewmat_inv = torch::inverse(viewmat);
+        auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3});  // [C, 3]
+
+        // Compute directions from camera to each Gaussian
+        // Since C = 1 in our case, we can simplify
+        auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);  // [1, N, 3]
+        dirs = dirs.squeeze(0);  // [N, 3]
+
+        // Create masks based on radii
+        auto masks = (radii > 0).all(-1).squeeze(0);  // [N]
+
+        // Now call spherical harmonics with proper directions
+        auto colors = spherical_harmonics(sh_degree, dirs, sh_coeffs, masks);
 
         // Apply the SH offset and clamping for rendering (shift from [-0.5, 0.5] to [0, 1])
         colors = torch::clamp_min(colors + 0.5f, 0.0f);
+
+        // Expand colors to [C, N, 3] format expected by rasterization
+        colors = colors.unsqueeze(0);
 
         // Step 3: Apply opacity with compensations
         auto final_opacities = opacities.unsqueeze(0) * compensations;
