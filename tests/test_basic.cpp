@@ -1,8 +1,8 @@
-#include <gtest/gtest.h>
-#include <torch/torch.h>
 #include "Ops.h"
 #include "core/debug_utils.hpp"
 #include <cmath>
+#include <gtest/gtest.h>
+#include <torch/torch.h>
 
 class BasicOpsTest : public ::testing::Test {
 protected:
@@ -95,11 +95,12 @@ TEST_F(BasicOpsTest, ProjectionTest) {
     auto quats = torch::randn({N, 4}, device);
     auto scales = torch::rand({N, 3}, device) * 0.1;
     auto viewmats = torch::eye(4, device).unsqueeze(0).repeat({C, 1, 1});
-    auto Ks = torch::tensor({
-                                {300.0f, 0.0f, 320.0f},
-                                {0.0f, 300.0f, 240.0f},
-                                {0.0f, 0.0f, 1.0f}
-                            }, device).unsqueeze(0).repeat({C, 1, 1});
+    auto Ks = torch::tensor({{300.0f, 0.0f, 320.0f},
+                             {0.0f, 300.0f, 240.0f},
+                             {0.0f, 0.0f, 1.0f}},
+                            device)
+                  .unsqueeze(0)
+                  .repeat({C, 1, 1});
 
     // Create empty CUDA tensor for covars
     auto empty_covars = torch::empty({0, 3, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(device));
@@ -120,8 +121,7 @@ TEST_F(BasicOpsTest, ProjectionTest) {
         10000.0f, // far_plane
         0.0f,     // radius_clip
         false,    // calc_compensations
-        gsplat::CameraModelType::PINHOLE
-    );
+        gsplat::CameraModelType::PINHOLE);
 
     auto radii = std::get<0>(proj_results);
     auto means2d = std::get<1>(proj_results);
@@ -170,8 +170,7 @@ TEST_F(BasicOpsTest, SphericalHarmonicsTest) {
         auto v_colors = torch::randn_like(colors);
         auto grad_results = gsplat::spherical_harmonics_bwd(
             K, sh_degree, dirs, coeffs, masks,
-            v_colors, sh_degree > 0
-        );
+            v_colors, sh_degree > 0);
 
         auto v_coeffs = std::get<0>(grad_results);
         auto v_dirs = std::get<1>(grad_results);
@@ -190,8 +189,8 @@ TEST_F(BasicOpsTest, SphericalHarmonicsTest) {
 TEST_F(BasicOpsTest, IntersectTilesTest) {
     torch::manual_seed(42);
 
-    int C = 3;  // Multiple cameras
-    int N = 100;  // Number of Gaussians
+    int C = 3;   // Multiple cameras
+    int N = 100; // Number of Gaussians
     int width = 40, height = 60;
     int tile_size = 16;
 
@@ -212,7 +211,7 @@ TEST_F(BasicOpsTest, IntersectTilesTest) {
         empty_orders,
         empty_tiles_per_gauss,
         C, tile_size, tile_width, tile_height,
-        true  // sort
+        true // sort
     );
 
     auto tiles_per_gauss = std::get<0>(isect_results);
@@ -279,11 +278,11 @@ TEST_F(BasicOpsTest, RasterizationIntegrationTest) {
 
     // Camera setup
     auto viewmat = torch::eye(4, device).unsqueeze(0);
-    auto K = torch::tensor({
-                               {200.0f, 0.0f, 128.0f},
-                               {0.0f, 200.0f, 128.0f},
-                               {0.0f, 0.0f, 1.0f}
-                           }, device).unsqueeze(0);
+    auto K = torch::tensor({{200.0f, 0.0f, 128.0f},
+                            {0.0f, 200.0f, 128.0f},
+                            {0.0f, 0.0f, 1.0f}},
+                           device)
+                 .unsqueeze(0);
 
     // Create empty CUDA tensor for covars
     auto empty_covars = torch::empty({0, 3, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(device));
@@ -299,13 +298,12 @@ TEST_F(BasicOpsTest, RasterizationIntegrationTest) {
         K,
         width,
         height,
-        0.3f,     // eps2d
-        0.01f,    // near_plane
-        1000.0f,  // far_plane
-        0.0f,     // radius_clip
-        false,    // calc_compensations
-        gsplat::CameraModelType::PINHOLE
-    );
+        0.3f,    // eps2d
+        0.01f,   // near_plane
+        1000.0f, // far_plane
+        0.0f,    // radius_clip
+        false,   // calc_compensations
+        gsplat::CameraModelType::PINHOLE);
 
     auto radii = std::get<0>(proj_results);
     auto means2d = std::get<1>(proj_results);
@@ -324,7 +322,7 @@ TEST_F(BasicOpsTest, RasterizationIntegrationTest) {
         empty_orders,
         empty_tiles_per_gauss,
         1, tile_size, tile_width, tile_height,
-        true  // sort
+        true // sort
     );
 
     auto tiles_per_gauss = std::get<0>(isect_results);
@@ -335,8 +333,8 @@ TEST_F(BasicOpsTest, RasterizationIntegrationTest) {
     isect_offsets = isect_offsets.reshape({1, tile_height, tile_width});
 
     // Prepare for rasterization - need [C, N, D] format
-    colors = colors.unsqueeze(0);  // [1, N, 3]
-    opacities = opacities.unsqueeze(0);  // [1, N]
+    colors = colors.unsqueeze(0);       // [1, N, 3]
+    opacities = opacities.unsqueeze(0); // [1, N]
     auto background = torch::zeros({1, 3}, device);
     auto empty_masks = torch::empty({0}, torch::TensorOptions().dtype(torch::kBool).device(device));
 
@@ -352,8 +350,7 @@ TEST_F(BasicOpsTest, RasterizationIntegrationTest) {
         height,
         tile_size,
         isect_offsets,
-        flatten_ids
-    );
+        flatten_ids);
 
     auto render_colors = std::get<0>(raster_results);
     auto render_alphas = std::get<1>(raster_results);
@@ -383,11 +380,12 @@ TEST_F(BasicOpsTest, ProjectionPackedModeTest) {
     auto scales = torch::rand({N, 3}, device) * 0.1;
     auto opacities = torch::rand({N}, device);
     auto viewmats = torch::eye(4, device).unsqueeze(0).repeat({C, 1, 1});
-    auto Ks = torch::tensor({
-                                {300.0f, 0.0f, 320.0f},
-                                {0.0f, 300.0f, 240.0f},
-                                {0.0f, 0.0f, 1.0f}
-                            }, device).unsqueeze(0).repeat({C, 1, 1});
+    auto Ks = torch::tensor({{300.0f, 0.0f, 320.0f},
+                             {0.0f, 300.0f, 240.0f},
+                             {0.0f, 0.0f, 1.0f}},
+                            device)
+                  .unsqueeze(0)
+                  .repeat({C, 1, 1});
 
     // Create empty CUDA tensor for covars
     auto empty_covars = torch::empty({0, 3, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(device));
@@ -408,8 +406,7 @@ TEST_F(BasicOpsTest, ProjectionPackedModeTest) {
         10000.0f, // far_plane
         0.0f,     // radius_clip
         false,    // calc_compensations
-        gsplat::CameraModelType::PINHOLE
-    );
+        gsplat::CameraModelType::PINHOLE);
 
     auto radii = std::get<0>(proj_results);
     auto means2d = std::get<1>(proj_results);
@@ -440,11 +437,11 @@ TEST_F(BasicOpsTest, CameraModelsTest) {
     auto quats = torch::randn({N, 4}, device);
     auto scales = torch::rand({N, 3}, device) * 0.1;
     auto viewmat = torch::eye(4, device).unsqueeze(0);
-    auto K = torch::tensor({
-                               {300.0f, 0.0f, 320.0f},
-                               {0.0f, 300.0f, 240.0f},
-                               {0.0f, 0.0f, 1.0f}
-                           }, device).unsqueeze(0);
+    auto K = torch::tensor({{300.0f, 0.0f, 320.0f},
+                            {0.0f, 300.0f, 240.0f},
+                            {0.0f, 0.0f, 1.0f}},
+                           device)
+                 .unsqueeze(0);
 
     // Create empty CUDA tensor for covars
     auto empty_covars = torch::empty({0, 3, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(device));
@@ -453,8 +450,7 @@ TEST_F(BasicOpsTest, CameraModelsTest) {
     std::vector<gsplat::CameraModelType> models = {
         gsplat::CameraModelType::PINHOLE,
         gsplat::CameraModelType::ORTHO,
-        gsplat::CameraModelType::FISHEYE
-    };
+        gsplat::CameraModelType::FISHEYE};
 
     for (auto model : models) {
         auto proj_results = gsplat::projection_ewa_3dgs_fused_fwd(
@@ -472,8 +468,7 @@ TEST_F(BasicOpsTest, CameraModelsTest) {
             10000.0f, // far_plane
             0.0f,     // radius_clip
             false,    // calc_compensations
-            model
-        );
+            model);
 
         auto radii = std::get<0>(proj_results);
         auto means2d = std::get<1>(proj_results);

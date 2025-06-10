@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
-#include <torch/torch.h>
 #include "Ops.h"
+#include <gtest/gtest.h>
 #include <iostream>
+#include <torch/torch.h>
 
 class IntersectDebugTest : public ::testing::Test {
 protected:
@@ -20,7 +20,7 @@ TEST_F(IntersectDebugTest, SingleCameraTest) {
 
     // Test with single camera first
     int C = 1;
-    int N = 10;  // Small number for debugging
+    int N = 10; // Small number for debugging
     int width = 64, height = 64;
     int tile_size = 16;
 
@@ -45,7 +45,7 @@ TEST_F(IntersectDebugTest, SingleCameraTest) {
         empty_orders,
         empty_tiles_per_gauss,
         C, tile_size, tile_width, tile_height,
-        true  // sort
+        true // sort
     );
 
     std::cout << "\nOutput shapes:" << std::endl;
@@ -64,7 +64,7 @@ TEST_F(IntersectDebugTest, MultiCameraTest) {
 
     // Test with multiple cameras
     int C = 3;
-    int N = 5;  // Very small for debugging
+    int N = 5; // Very small for debugging
     int width = 32, height = 32;
     int tile_size = 16;
 
@@ -88,7 +88,7 @@ TEST_F(IntersectDebugTest, MultiCameraTest) {
         empty_orders,
         empty_tiles_per_gauss,
         C, tile_size, tile_width, tile_height,
-        true  // sort
+        true // sort
     );
 
     std::cout << "\nOutput shapes:" << std::endl;
