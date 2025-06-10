@@ -4,10 +4,10 @@
 #include "core/rasterizer_autograd.hpp"
 #include "core/splat_data.hpp"
 #include "torch_impl.hpp"
-#include <gtest/gtest.h>
-#include <torch/torch.h>
-#include <iostream>
 #include <cmath>
+#include <gtest/gtest.h>
+#include <iostream>
+#include <torch/torch.h>
 
 class RasterizationComparisonTest : public ::testing::Test {
 protected:
@@ -20,14 +20,14 @@ protected:
 
     // Reference rasterization implementation using the reference functions
     torch::Tensor reference_rasterize(
-        const torch::Tensor& means,           // [N, 3]
-        const torch::Tensor& quats,          // [N, 4]
-        const torch::Tensor& scales,         // [N, 3]
-        const torch::Tensor& opacities,      // [N]
-        const torch::Tensor& sh_coeffs,      // [N, K, 3]
-        const torch::Tensor& viewmats,       // [C, 4, 4]
-        const torch::Tensor& Ks,            // [C, 3, 3]
-        const torch::Tensor& bg_color,      // [C, 3]
+        const torch::Tensor& means,     // [N, 3]
+        const torch::Tensor& quats,     // [N, 4]
+        const torch::Tensor& scales,    // [N, 3]
+        const torch::Tensor& opacities, // [N]
+        const torch::Tensor& sh_coeffs, // [N, K, 3]
+        const torch::Tensor& viewmats,  // [C, 4, 4]
+        const torch::Tensor& Ks,        // [C, 3, 3]
+        const torch::Tensor& bg_color,  // [C, 3]
         int width, int height,
         int sh_degree,
         float scaling_modifier = 1.0f) {
@@ -60,7 +60,7 @@ protected:
             // Compute view directions
             auto viewmat_inv = torch::inverse(viewmats);
             auto campos = viewmat_inv.slice(1, 0, 3).select(2, 3); // [C, 3]
-            auto dirs = means.unsqueeze(0) - campos.unsqueeze(1); // [C, N, 3]
+            auto dirs = means.unsqueeze(0) - campos.unsqueeze(1);  // [C, N, 3]
 
             // For single camera, use first view
             colors = reference::spherical_harmonics(sh_degree, dirs[0], sh_coeffs);
@@ -68,7 +68,7 @@ protected:
         } else {
             // Use DC component only
             colors = sh_coeffs.select(1, 0); // [N, 3]
-            colors = colors.unsqueeze(0); // [1, N, 3]
+            colors = colors.unsqueeze(0);    // [1, N, 3]
         }
 
         // Apply SH offset and clamp
@@ -126,26 +126,26 @@ TEST_F(RasterizationComparisonTest, CompareWithGSRasterize) {
     torch::manual_seed(42);
 
     // Test parameters matching Python test
-    const int C = 2;      // Number of cameras
-    const int N = 10000;  // Number of gaussians
+    const int C = 2;     // Number of cameras
+    const int N = 10000; // Number of gaussians
     const int width = 300;
     const int height = 200;
     const float focal = 300.0f;
-    const int sh_degree = 2;  // Test with SH degree 2
+    const int sh_degree = 2; // Test with SH degree 2
 
     std::cout << "\n=== Rasterization Comparison Test ===" << std::endl;
     std::cout << "Parameters: C=" << C << ", N=" << N << ", width=" << width
               << ", height=" << height << ", SH degree=" << sh_degree << std::endl;
 
     // Create test data with controlled values
-    auto means = torch::rand({N, 3}, device) * 2.0f - 1.0f;  // Range [-1, 1]
-    means.select(1, 2) = torch::abs(means.select(1, 2)) + 2.0f;  // Ensure z in [2, 3]
+    auto means = torch::rand({N, 3}, device) * 2.0f - 1.0f;     // Range [-1, 1]
+    means.select(1, 2) = torch::abs(means.select(1, 2)) + 2.0f; // Ensure z in [2, 3]
 
     auto quats = torch::randn({N, 4}, device);
     quats = torch::nn::functional::normalize(quats, torch::nn::functional::NormalizeFuncOptions().dim(-1));
 
-    auto scales = torch::rand({N, 3}, device) * 0.05f + 0.01f;  // Smaller scales
-    auto opacities = torch::rand({N}, device) * 0.5f + 0.3f;    // Range [0.3, 0.8]
+    auto scales = torch::rand({N, 3}, device) * 0.05f + 0.01f; // Smaller scales
+    auto opacities = torch::rand({N}, device) * 0.5f + 0.3f;   // Range [0.3, 0.8]
 
     // Create SH coefficients with proper scaling
     const int num_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
@@ -157,7 +157,9 @@ TEST_F(RasterizationComparisonTest, CompareWithGSRasterize) {
     auto Ks = torch::tensor(
                   {{focal, 0.0f, width / 2.0f},
                    {0.0f, focal, height / 2.0f},
-                   {0.0f, 0.0f, 1.0f}}, device).expand({C, -1, -1});
+                   {0.0f, 0.0f, 1.0f}},
+                  device)
+                  .expand({C, -1, -1});
 
     auto viewmats = torch::eye(4, device).expand({C, -1, -1});
 
@@ -189,19 +191,18 @@ TEST_F(RasterizationComparisonTest, CompareWithGSRasterize) {
     std::cout << "\n=== Testing gs::rasterize ===" << std::endl;
 
     // Create SplatData
-    auto sh0 = sh_coeffs.slice(1, 0, 1);  // [N, 1, 3]
-    auto shN = sh_coeffs.slice(1, 1, num_sh_coeffs);  // [N, K-1, 3]
+    auto sh0 = sh_coeffs.slice(1, 0, 1);             // [N, 1, 3]
+    auto shN = sh_coeffs.slice(1, 1, num_sh_coeffs); // [N, K-1, 3]
 
     auto gaussians = SplatData(
         sh_degree,
         means,
         sh0,
         shN,
-        torch::log(scales),  // SplatData expects log scales
+        torch::log(scales), // SplatData expects log scales
         quats,
-        torch::logit(opacities).unsqueeze(-1),  // SplatData expects logit opacities
-        1.0f
-    );
+        torch::logit(opacities).unsqueeze(-1), // SplatData expects logit opacities
+        1.0f);
 
     // Activate all SH degrees
     while (gaussians.get_active_sh_degree() < sh_degree) {
@@ -221,7 +222,7 @@ TEST_F(RasterizationComparisonTest, CompareWithGSRasterize) {
         auto bg_single = bg_color[cam_idx];
         auto output = gs::rasterize(camera, gaussians, bg_single, 1.0f, false);
 
-        gs_renders.push_back(output.image.unsqueeze(0));  // Add camera dimension
+        gs_renders.push_back(output.image.unsqueeze(0)); // Add camera dimension
 
         std::cout << "Camera " << cam_idx << " render stats: min=" << output.image.min().item<float>()
                   << ", max=" << output.image.max().item<float>()
@@ -229,7 +230,7 @@ TEST_F(RasterizationComparisonTest, CompareWithGSRasterize) {
     }
 
     // Stack renders
-    auto gs_renders_stacked = torch::cat(gs_renders, 0);  // [C, 3, H, W]
+    auto gs_renders_stacked = torch::cat(gs_renders, 0); // [C, 3, H, W]
 
     std::cout << "\ngs::rasterize shape: " << gs_renders_stacked.sizes() << std::endl;
 
@@ -285,8 +286,7 @@ TEST_F(RasterizationComparisonTest, TestDifferentRenderModes) {
         {0, "DC only"},
         {1, "SH degree 1"},
         {2, "SH degree 2"},
-        {3, "SH degree 3"}
-    };
+        {3, "SH degree 3"}};
 
     for (const auto& [sh_degree, desc] : configs) {
         std::cout << "\n=== Testing " << desc << " ===" << std::endl;
@@ -308,10 +308,12 @@ TEST_F(RasterizationComparisonTest, TestDifferentRenderModes) {
         auto K = torch::tensor(
                      {{focal, 0.0f, width / 2.0f},
                       {0.0f, focal, height / 2.0f},
-                      {0.0f, 0.0f, 1.0f}}, device).unsqueeze(0);
+                      {0.0f, 0.0f, 1.0f}},
+                     device)
+                     .unsqueeze(0);
 
         auto viewmat = torch::eye(4, device).unsqueeze(0);
-        auto bg_color = torch::ones({1, 3}, device) * 0.1f;  // Gray background
+        auto bg_color = torch::ones({1, 3}, device) * 0.1f; // Gray background
 
         // Reference implementation
         auto ref_render = reference_rasterize(
@@ -376,14 +378,16 @@ TEST_F(RasterizationComparisonTest, TestEdgeCases) {
              {0.5f, 0.5f, 2.5f},
              {-0.5f, 0.5f, 3.0f},
              {0.5f, -0.5f, 3.5f},
-             {-0.5f, -0.5f, 4.0f}}, device);
+             {-0.5f, -0.5f, 4.0f}},
+            device);
 
         auto quats = torch::tensor(
             {{1.0f, 0.0f, 0.0f, 0.0f},
              {1.0f, 0.0f, 0.0f, 0.0f},
              {1.0f, 0.0f, 0.0f, 0.0f},
              {1.0f, 0.0f, 0.0f, 0.0f},
-             {1.0f, 0.0f, 0.0f, 0.0f}}, device);
+             {1.0f, 0.0f, 0.0f, 0.0f}},
+            device);
 
         auto scales = torch::ones({N, 3}, device) * 0.1f;
         auto opacities = torch::ones({N}, device) * 0.8f;
@@ -392,7 +396,9 @@ TEST_F(RasterizationComparisonTest, TestEdgeCases) {
         auto K = torch::tensor(
                      {{focal, 0.0f, width / 2.0f},
                       {0.0f, focal, height / 2.0f},
-                      {0.0f, 0.0f, 1.0f}}, device).unsqueeze(0);
+                      {0.0f, 0.0f, 1.0f}},
+                     device)
+                     .unsqueeze(0);
 
         auto viewmat = torch::eye(4, device).unsqueeze(0);
         auto bg_color = torch::zeros({1, 3}, device);
@@ -414,7 +420,7 @@ TEST_F(RasterizationComparisonTest, TestEdgeCases) {
         const int N = 10;
 
         auto means = torch::randn({N, 3}, device);
-        means.select(1, 2) = -torch::abs(means.select(1, 2)) - 0.1f;  // All behind camera
+        means.select(1, 2) = -torch::abs(means.select(1, 2)) - 0.1f; // All behind camera
 
         auto quats = torch::randn({N, 4}, device);
         quats = torch::nn::functional::normalize(quats, torch::nn::functional::NormalizeFuncOptions().dim(-1));
@@ -426,7 +432,9 @@ TEST_F(RasterizationComparisonTest, TestEdgeCases) {
         auto K = torch::tensor(
                      {{focal, 0.0f, width / 2.0f},
                       {0.0f, focal, height / 2.0f},
-                      {0.0f, 0.0f, 1.0f}}, device).unsqueeze(0);
+                      {0.0f, 0.0f, 1.0f}},
+                     device)
+                     .unsqueeze(0);
 
         auto viewmat = torch::eye(4, device).unsqueeze(0);
         auto bg_color = torch::ones({1, 3}, device) * 0.5f;
@@ -453,17 +461,20 @@ TEST_F(RasterizationComparisonTest, TestEdgeCases) {
         auto means = torch::tensor(
             {{0.0f, 0.0f, 2.0f},
              {1.0f, 1.0f, 3.0f},
-             {-1.0f, -1.0f, 4.0f}}, device);
+             {-1.0f, -1.0f, 4.0f}},
+            device);
 
         auto quats = torch::eye(4, device).slice(0, 0, N).slice(1, 0, 4);
-        auto scales = torch::ones({N, 3}, device) * 2.0f;  // Very large
+        auto scales = torch::ones({N, 3}, device) * 2.0f; // Very large
         auto opacities = torch::ones({N}, device) * 0.3f;
         auto sh_coeffs = torch::rand({N, 1, 3}, device);
 
         auto K = torch::tensor(
                      {{focal, 0.0f, width / 2.0f},
                       {0.0f, focal, height / 2.0f},
-                      {0.0f, 0.0f, 1.0f}}, device).unsqueeze(0);
+                      {0.0f, 0.0f, 1.0f}},
+                     device)
+                     .unsqueeze(0);
 
         auto viewmat = torch::eye(4, device).unsqueeze(0);
         auto bg_color = torch::zeros({1, 3}, device);
