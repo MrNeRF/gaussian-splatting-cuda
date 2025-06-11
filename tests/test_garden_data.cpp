@@ -216,15 +216,26 @@ TEST_F(BasicPyTorchDataTest, ProjectionTest) {
 
     // Fused projection test
     {
-        // gsplat implementation
-        auto empty_covars = torch::empty({0, 3, 3}, means.options());
-        auto empty_opacities = torch::empty({0}, means.options());
+        // Prepare settings tensor for ProjectionFunction
+        auto proj_settings = torch::tensor({(float)width, (float)height,
+                                            eps2d, near_plane, far_plane,
+                                            0.0f, 1.0f},  // radius_clip=0.0, scaling_modifier=1.0
+                                           device);
 
-        auto [radii, means2d, depths, conics, compensations] =
-            gsplat::projection_ewa_3dgs_fused_fwd(
-                means, empty_covars, quats, scales, empty_opacities,
-                viewmats, Ks, width, height, eps2d, near_plane, far_plane,
-                0.0f, calc_compensations, gsplat::CameraModelType::PINHOLE);
+        // Create opacities tensor of all ones
+        const int N = means.size(0);
+        auto opacities = torch::ones({N}, means.options());
+
+        // gsplat implementation using ProjectionFunction
+        auto outputs = ProjectionFunction::apply(
+            means, quats, scales, opacities,
+            viewmats, Ks, proj_settings);
+
+        auto radii = outputs[0];
+        auto means2d = outputs[1];
+        auto depths = outputs[2];
+        auto conics = outputs[3];
+        auto compensations = outputs[4];
 
         // Reference implementation
         auto [_covars, _] = reference::quat_scale_to_covar_preci(quats, scales, true, false, false);
@@ -266,14 +277,22 @@ TEST_F(BasicPyTorchDataTest, ProjectionTest) {
         }
     }
 
-    // Backward test
+    // Backward test using torch::autograd::grad (identical to Python test)
     {
-        auto proj_settings = torch::tensor({(float)width, (float)height,
-                                            eps2d, near_plane, far_plane,
-                                            0.0f, 1.0f},
-                                           device);
+        // Clone tensors and set requires_grad to match Python test
+        means = test_data.means.clone().set_requires_grad(true);
+        quats = test_data.quats.clone().set_requires_grad(true);
+        scales = test_data.scales.clone().set_requires_grad(true);
+        viewmats = test_data.viewmats.clone().set_requires_grad(true);
         auto opacities = test_data.opacities.clone().set_requires_grad(true);
 
+        // Prepare settings tensor for ProjectionFunction
+        auto proj_settings = torch::tensor({(float)width, (float)height,
+                                            eps2d, near_plane, far_plane,
+                                            0.0f, 1.0f},  // radius_clip=0.0, scaling_modifier=1.0
+                                           device);
+
+        // Forward pass - using ProjectionFunction (equivalent to fully_fused_projection with fused=true)
         auto outputs = ProjectionFunction::apply(
             means, quats, scales, opacities, viewmats, Ks, proj_settings);
 
@@ -281,29 +300,77 @@ TEST_F(BasicPyTorchDataTest, ProjectionTest) {
         auto means2d = outputs[1];
         auto depths = outputs[2];
         auto conics = outputs[3];
+        auto compensations = outputs[4];
 
-        auto valid = (radii > 0).all(-1);
+        // Reference forward - using non-triu covariance for reference
+        auto [_covars, _] = reference::quat_scale_to_covar_preci(quats, scales, true, false, false);
+        auto [_radii, _means2d, _depths, _conics, _compensations] =
+            reference::fully_fused_projection(
+                means, _covars, viewmats, Ks, width, height,
+                eps2d, near_plane, far_plane, calc_compensations, "pinhole");
+
+        // Create valid mask (matching Python: valid = (radii > 0).all(dim=-1) & (_radii > 0).all(dim=-1))
+        auto valid = (radii > 0).all(-1) & (_radii > 0).all(-1);
+
+        // Create random gradients for valid Gaussians (matching Python exactly)
         auto v_means2d = torch::randn_like(means2d) * valid.unsqueeze(-1).to(torch::kFloat32);
         auto v_depths = torch::randn_like(depths) * valid.to(torch::kFloat32);
         auto v_conics = torch::randn_like(conics) * valid.unsqueeze(-1).to(torch::kFloat32);
+        torch::Tensor v_compensations;
+        if (calc_compensations && compensations.defined()) {
+            v_compensations = torch::randn_like(compensations) * valid.to(torch::kFloat32);
+        }
 
+        // Compute loss for our implementation (matching Python exactly)
         auto loss = (means2d * v_means2d).sum() +
                     (depths * v_depths).sum() +
                     (conics * v_conics).sum();
+        if (calc_compensations && v_compensations.defined()) {
+            loss = loss + (compensations * v_compensations).sum();
+        }
 
-        loss.backward();
+        // Compute gradients using torch::autograd::grad (matching Python order: viewmats, quats, scales, means)
+        std::vector<torch::Tensor> inputs = {viewmats, quats, scales, means};
+        auto grads = torch::autograd::grad(
+            {loss},
+            inputs,
+            {},
+            /*retain_graph=*/false,
+            /*create_graph=*/false,
+            /*allow_unused=*/false);
 
-        EXPECT_TRUE(means.grad().defined());
-        EXPECT_TRUE(quats.grad().defined());
-        EXPECT_TRUE(scales.grad().defined());
-        EXPECT_TRUE(viewmats.grad().defined());
+        auto v_viewmats = grads[0];
+        auto v_quats = grads[1];
+        auto v_scales = grads[2];
+        auto v_means = grads[3];
 
-        // Check gradients are reasonable
-        EXPECT_FALSE(means.grad().isnan().any().item<bool>());
-        EXPECT_FALSE(quats.grad().isnan().any().item<bool>());
-        EXPECT_FALSE(scales.grad().isnan().any().item<bool>());
-        EXPECT_GT(means.grad().abs().max().item<float>(), 0)
-            << "means gradients are all zero";
+        // Compute loss for reference implementation
+        auto _loss = (_means2d * v_means2d).sum() +
+                     (_depths * v_depths).sum() +
+                     (_conics * v_conics).sum();
+        if (calc_compensations && v_compensations.defined()) {
+            _loss = _loss + (_compensations * v_compensations).sum();
+        }
+
+        // Compute reference gradients
+        auto _grads = torch::autograd::grad(
+            {_loss},
+            inputs,
+            {},
+            /*retain_graph=*/false,
+            /*create_graph=*/false,
+            /*allow_unused=*/false);
+
+        auto _v_viewmats = _grads[0];
+        auto _v_quats = _grads[1];
+        auto _v_scales = _grads[2];
+        auto _v_means = _grads[3];
+
+        // Compare gradients with reference implementation using Python test tolerances
+        assertTensorClose(v_viewmats, _v_viewmats, 2e-3, 2e-3, "viewmats gradients");
+        assertTensorClose(v_quats, _v_quats, 2e-1, 2e-2, "quats gradients");
+        assertTensorClose(v_scales, _v_scales, 1e-1, 2e-1, "scales gradients");
+        assertTensorClose(v_means, _v_means, 1e-2, 6e-2, "means gradients");
     }
 }
 

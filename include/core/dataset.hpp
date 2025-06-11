@@ -33,7 +33,7 @@ public:
         // Create indices based on split
         _indices.clear();
         for (size_t i = 0; i < _cameras.size(); ++i) {
-            bool is_test = (i % params.test_every) == 0;
+            const bool is_test = (i % params.test_every) == 0;
 
             if (_split == Split::ALL ||
                 (_split == Split::TRAIN && !is_test) ||
