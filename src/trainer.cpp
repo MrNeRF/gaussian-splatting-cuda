@@ -138,7 +138,7 @@ namespace gs {
 
                     // Save model at specified steps
                     for (size_t save_step : params_.optimization.save_steps) {
-                        if (iter == static_cast<int>(save_step)) {
+                        if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
                             strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/false);
                         }
                     }

@@ -36,6 +36,21 @@ The implementation uses `weights/lpips_vgg.pt`, which is exported from `torchmet
 | room     | 30000     | 32.075516     | 0.930377     | 0.276833     | 0.418027       | 1000000       |
 | **mean** | **30000** | **29.329015** | **0.879974** | **0.227821** | **0.372190**   | **1000000**   |
 
+
+For reference, here are the metrics for the official gsplat-mcmc implementation below. However, the 
+lpips results are not directly comparable, as the gsplat-mcmc implementation uses a different lpips model.
+
+| Scene    | Iteration | PSNR          | SSIM         | LPIPS        | Time per Image | Num Gaussians |
+| -------- | --------- | ------------- | ------------ | ------------ | -------------- | ------------- |
+| garden   | 30000     | 27.307266     | 0.854643     | 0.103883     | 0.015346       | 1000000       |
+| bicycle  | 30000     | 25.615253     | 0.774689     | 0.182401     | 0.014299       | 1000000       |
+| stump    | 30000     | 26.964493     | 0.789816     | 0.162758     | 0.021624       | 1000000       |
+| bonsai   | 30000     | 32.735737     | 0.953360     | 0.105922     | 0.012344       | 1000000       |
+| counter  | 30000     | 29.495266     | 0.924103     | 0.129898     | 0.015629       | 1000000       |
+| kitchen  | 30000     | 31.660593     | 0.935315     | 0.087113     | 0.013513       | 1000000       |
+| room     | 30000     | 32.265732     | 0.937518     | 0.132472     | 0.010859       | 1000000       |
+| **mean** | **30000** | **29.434906** | **0.881349** | **0.129207** | **0.014802**   | **1000000**   |
+
 ## Community & Support
 
 Join our growing community for discussions, support, and updates:
