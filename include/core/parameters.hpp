@@ -18,7 +18,7 @@ namespace gs {
             float min_opacity = 0.005f;
             size_t growth_interval = 100;
             size_t start_densify = 500;
-            size_t stop_densify = 15'000;
+            size_t stop_densify = 25'000;
             float grad_threshold = 0.0002f;
             int sh_degree = 3;
             float opacity_reg = 0.01f;
