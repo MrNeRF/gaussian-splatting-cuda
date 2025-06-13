@@ -24,6 +24,7 @@ namespace gs {
         const SplatData& gaussian_model,
         torch::Tensor& bg_color,
         float scaling_modifier = 1.0,
-        bool packed = false);
+        bool packed = false,
+        bool antialiased = false);
 
 } // namespace gs

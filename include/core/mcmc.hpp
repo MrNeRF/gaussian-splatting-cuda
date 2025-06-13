@@ -62,7 +62,7 @@ private:
 
     // MCMC specific parameters
     int _cap_max = 1000000;
-    float _noise_lr = 5e5;
+    const float _noise_lr = 5e5;
     int _refine_start_iter = 500;
     int _refine_stop_iter = 25000;
     int _refine_every = 100;

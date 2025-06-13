@@ -17,16 +17,24 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 Currently the implementation does not achieve on par results with gsplat-mcmc, but it is a work in progress.
 It is just a matter of time to fix the bug. Help is welcome :) The metrics for the mcmc strategy are as follows:
 
+### LPIPS Model
+The implementation uses `weights/lpips_vgg.pt`, which is exported from `torchmetrics.image.lpip.LearnedPerceptualImagePatchSimilarity` with:
+- **Network type**: VGG
+- **Normalize**: False (model expects inputs in [-1, 1] range)
+- **Model includes**: VGG backbone with pretrained ImageNet weights and the scaling normalization layer
+
+**Note**: While the model was exported with `normalize=False`, the C++ implementation handles the [0,1] to [-1,1] conversion internally during LPIPS computation, ensuring compatibility with images loaded in [0,1] range.
+
 | Scene    | Iteration | PSNR          | SSIM         | LPIPS        | Time per Image | Num Gaussians |
 | -------- | --------- | ------------- | ------------ | ------------ | -------------- | ------------- |
-| garden   | 30000     | 27.112114     | 0.854833     | 0.157624     | 0.304765       | 1000000       |
-| bicycle  | 30000     | 25.047745     | 0.767729     | 0.254825     | 0.293618       | 1000000       |
-| stump    | 30000     | 26.554749     | 0.784203     | 0.263013     | 0.296536       | 1000000       |
-| bonsai   | 30000     | 32.534199     | 0.948675     | 0.246924     | 0.436188       | 1000000       |
-| counter  | 30000     | 29.187017     | 0.915823     | 0.242159     | 0.441259       | 1000000       |
-| kitchen  | 30000     | 31.680832     | 0.933897     | 0.154965     | 0.449078       | 1000000       |
-| room     | 30000     | 32.211632     | 0.930754     | 0.273719     | 0.413519       | 1000000       |
-| **mean** | **30000** | **29.189755** | **0.876559** | **0.227604** | **0.376423**   | **1000000**   |
+| garden   | 30000     | 27.174416     | 0.857002     | 0.157627     | 0.299779       | 1000000       |
+| bicycle  | 30000     | 25.398046     | 0.777291     | 0.255703     | 0.284142       | 1000000       |
+| stump    | 30000     | 26.797558     | 0.794485     | 0.258573     | 0.285496       | 1000000       |
+| bonsai   | 30000     | 32.632896     | 0.948878     | 0.248194     | 0.429072       | 1000000       |
+| counter  | 30000     | 29.357792     | 0.917621     | 0.242679     | 0.442235       | 1000000       |
+| kitchen  | 30000     | 31.866880     | 0.934161     | 0.155137     | 0.446580       | 1000000       |
+| room     | 30000     | 32.075516     | 0.930377     | 0.276833     | 0.418027       | 1000000       |
+| **mean** | **30000** | **29.329015** | **0.879974** | **0.227821** | **0.372190**   | **1000000**   |
 
 
 For reference, here are the metrics for the official gsplat-mcmc implementation below. However, the 

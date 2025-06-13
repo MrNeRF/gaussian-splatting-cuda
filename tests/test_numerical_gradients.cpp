@@ -229,78 +229,187 @@ TEST_F(NumericalGradientTest, SphericalHarmonicsGradientTest) {
 }
 
 TEST_F(NumericalGradientTest, ProjectionGradientTest) {
+    // This test compares ProjectionFunction against reference implementation
+    // Both now support optional opacities - pass undefined to match behavior
     torch::manual_seed(42);
 
-    int N = 5;
+    // Test data
+    int N = 100;
     int C = 1;
-    int width = 64, height = 64;
+    int width = 256;
+    int height = 256;
+    float eps2d = 0.3f;
+    float near_plane = 0.01f;
+    float far_plane = 10000.0f;
+    float radius_clip = 0.0f;
+    float scaling_modifier = 1.0f;
+    bool calc_compensations = false; // C++ version always returns compensations but set to 1.0
 
-    auto means = torch::randn({N, 3}, device);
-    means.select(1, 2) = torch::abs(means.select(1, 2)) + 2.0f;
-    means.requires_grad_(true);
-
+    // Create test data
+    auto means3D = torch::randn({N, 3}, device) * 5.0;
     auto quats = torch::randn({N, 4}, device);
-    quats = torch::nn::functional::normalize(quats, torch::nn::functional::NormalizeFuncOptions().dim(-1));
-    quats.requires_grad_(true);
+    auto scales = torch::rand({N, 3}, device) * 0.5;
+    // Don't create opacities - pass undefined tensor to match reference
 
-    auto scales = torch::rand({N, 3}, device) * 0.1f + 0.01f;
-    scales.requires_grad_(true);
-
-    auto opacities = torch::rand({N}, device);
-    opacities.requires_grad_(true);
-
+    // Camera parameters
     auto viewmat = torch::eye(4, device).unsqueeze(0);
-    viewmat.requires_grad_(true);
+    viewmat.index_put_({0, 2, 3}, 10.0f); // Move camera back
 
-    auto K = torch::tensor({{50.0f, 0.0f, 32.0f},
-                            {0.0f, 50.0f, 32.0f},
+    auto K = torch::tensor({{width / 2.0f, 0.0f, width / 2.0f},
+                            {0.0f, height / 2.0f, height / 2.0f},
                             {0.0f, 0.0f, 1.0f}},
                            device)
                  .unsqueeze(0);
-    auto settings = torch::tensor({(float)width, (float)height, 0.3f, 0.01f, 1000.0f, 0.0f, 1.0f}, device);
 
-    // Test means gradient
-    {
-        auto outputs = ProjectionFunction::apply(
-            means, quats, scales, opacities, viewmat, K, settings);
+    // Set requires_grad
+    means3D.requires_grad_(true);
+    quats.requires_grad_(true);
+    scales.requires_grad_(true);
+    // Don't set requires_grad for opacities since reference doesn't use them
+    viewmat.requires_grad_(true);
 
-        auto radii = outputs[0];
-        auto means2d = outputs[1];
-        auto depths = outputs[2];
-        auto conics = outputs[3];
+    // Pack settings for C++ version
+    auto settings = torch::tensor({(float)width,
+                                   (float)height,
+                                   eps2d,
+                                   near_plane,
+                                   far_plane,
+                                   radius_clip,
+                                   scaling_modifier},
+                                  torch::TensorOptions().dtype(torch::kFloat32).device(device));
 
-        // Use random gradient outputs like Python
-        auto v_means2d = torch::randn_like(means2d);
-        auto v_depths = torch::randn_like(depths);
-        auto v_conics = torch::randn_like(conics);
+    // C++ implementation - use opacities=1.0 to disable opacity-based optimization
+    // This makes the behavior equivalent to not using opacities
+    auto opacities = torch::ones({N}, device);
+    auto proj_outputs = ProjectionFunction::apply(
+        means3D, quats, scales, opacities, viewmat, K, settings);
 
-        // Compute gradient like Python does
-        auto grads = torch::autograd::grad(
-            {(means2d * v_means2d).sum() + (depths * v_depths).sum() + (conics * v_conics).sum()},
-            {means},
-            /*grad_outputs=*/{},
-            /*retain_graph=*/false,
-            /*create_graph=*/false);
-        auto analytical_grad = grads[0];
+    auto radii = proj_outputs[0];
+    auto means2d = proj_outputs[1];
+    auto depths = proj_outputs[2];
+    auto conics = proj_outputs[3];
+    auto compensations = proj_outputs[4];
 
-        auto means_func = [&](torch::Tensor x) -> torch::Tensor {
-            torch::NoGradGuard no_grad;
-            auto outputs = ProjectionFunction::apply(
-                x, quats.detach(), scales.detach(), opacities.detach(),
-                viewmat.detach(), K.detach(), settings);
-            auto means2d = outputs[1];
-            auto depths = outputs[2];
-            auto conics = outputs[3];
-            return (means2d * v_means2d).sum() + (depths * v_depths).sum() + (conics * v_conics).sum();
-        };
+    // Reference implementation using quat_scale_to_covar_preci first
+    // IMPORTANT: Apply scaling_modifier to scales just like C++ implementation does
+    auto scaled_scales = scales * scaling_modifier;
+    auto covar_settings = torch::tensor({1.0f, 0.0f, 0.0f}, device); // compute_covar=true, compute_preci=false, triu=false
+    auto covar_outputs = QuatScaleToCovarPreciFunction::apply(quats, scaled_scales, covar_settings);
+    auto covars = covar_outputs[0]; // [N, 3, 3]
 
-        auto numerical_grad = compute_numerical_gradient(means_func, means.detach(), 1e-5);
+    // Call reference projection
+    // Note: reference implementation expects camera_model as string parameter
+    auto ref_outputs = reference::fully_fused_projection(
+        means3D, covars, viewmat, K, width, height, eps2d, near_plane, far_plane,
+        false,    // calc_compensations
+        "pinhole" // camera_model
+    );
 
-        // Projection numerical gradients are notoriously unstable
-        // Python tests don't actually test numerical gradients for projection
-        // So we use very loose tolerances
-        compare_gradients(analytical_grad, numerical_grad, "projection means", 1e6, 1e6);
+    auto _radii = std::get<0>(ref_outputs);
+    auto _means2d = std::get<1>(ref_outputs);
+    auto _depths = std::get<2>(ref_outputs);
+    auto _conics = std::get<3>(ref_outputs);
+    auto _compensations = std::get<4>(ref_outputs);
+
+    // Note: When calc_compensations=false, reference returns undefined tensor
+    // but C++ version always returns defined tensor (ones)
+    if (!_compensations.defined()) {
+        _compensations = torch::ones({C, N}, torch::TensorOptions().dtype(torch::kFloat32).device(device));
     }
+
+    // Forward pass checks
+    auto valid = (radii > 0).all(-1) & (_radii > 0).all(-1);
+    valid = valid.squeeze(0); // Remove camera dimension
+
+    // radii is integer so we allow for 1 unit difference
+    EXPECT_TRUE(torch::allclose(radii, _radii, 0, 1))
+        << "Radii mismatch";
+
+    // Check other outputs only for valid Gaussians
+    if (valid.any().item().toBool()) {
+        auto valid_mask = valid.unsqueeze(0).unsqueeze(-1);
+        EXPECT_TRUE(torch::allclose(
+            means2d.masked_select(valid_mask.expand_as(means2d)),
+            _means2d.masked_select(valid_mask.expand_as(_means2d)),
+            1e-4, 1e-4))
+            << "Means2D mismatch for valid Gaussians";
+
+        auto valid_mask_1d = valid.unsqueeze(0);
+        EXPECT_TRUE(torch::allclose(
+            depths.masked_select(valid_mask_1d),
+            _depths.masked_select(valid_mask_1d),
+            1e-4, 1e-4))
+            << "Depths mismatch for valid Gaussians";
+
+        EXPECT_TRUE(torch::allclose(
+            conics.masked_select(valid_mask.expand_as(conics)),
+            _conics.masked_select(valid_mask.expand_as(_conics)),
+            1e-4, 1e-4))
+            << "Conics mismatch for valid Gaussians";
+    }
+
+    // Backward pass test
+    auto v_means2d = torch::randn_like(means2d) * valid.unsqueeze(0).unsqueeze(-1);
+    auto v_depths = torch::randn_like(depths) * valid.unsqueeze(0);
+    auto v_conics = torch::randn_like(conics) * valid.unsqueeze(0).unsqueeze(-1);
+    auto v_compensations = torch::zeros_like(compensations); // No gradient for compensations in this test
+
+    // Compute loss for C++ version
+    auto loss = (means2d * v_means2d).sum() +
+                (depths * v_depths).sum() +
+                (conics * v_conics).sum();
+
+    // Get gradients
+    // Note: Don't include opacities in inputs since reference doesn't use them
+    std::vector<torch::Tensor> inputs = {means3D, quats, scales, viewmat};
+    std::vector<torch::Tensor> outputs = {loss};
+    std::vector<torch::Tensor> grad_outputs = {};
+
+    auto grads = torch::autograd::grad(
+        outputs,
+        inputs,
+        grad_outputs,
+        /*retain_graph=*/true,
+        /*create_graph=*/false,
+        /*allow_unused=*/true);
+
+    auto v_means3D = grads[0];
+    auto v_quats = grads[1];
+    auto v_scales = grads[2];
+    auto v_viewmat = grads[3];
+
+    // Reference gradients - note that reference doesn't use opacities
+    std::vector<torch::Tensor> ref_inputs = {means3D, quats, scales, viewmat};
+    auto _loss = (_means2d * v_means2d).sum() +
+                 (_depths * v_depths).sum() +
+                 (_conics * v_conics).sum();
+    std::vector<torch::Tensor> ref_outputs_grad = {_loss};
+
+    auto _grads = torch::autograd::grad(
+        ref_outputs_grad,
+        ref_inputs,
+        grad_outputs,
+        /*retain_graph=*/true,
+        /*create_graph=*/false,
+        /*allow_unused=*/true);
+
+    auto _v_means3D = _grads[0];
+    auto _v_quats = _grads[1];
+    auto _v_scales = _grads[2];
+    auto _v_viewmat = _grads[3];
+
+    // Check gradients with relaxed tolerances as in Python test
+    EXPECT_TRUE(torch::allclose(v_viewmat, _v_viewmat, 2e-3, 2e-3))
+        << "Viewmat gradients mismatch\nMax diff: " << (v_viewmat - _v_viewmat).abs().max().item().toFloat();
+
+    EXPECT_TRUE(torch::allclose(v_quats, _v_quats, 2e-1, 2e-2))
+        << "Quaternion gradients mismatch\nMax diff: " << (v_quats - _v_quats).abs().max().item().toFloat();
+
+    EXPECT_TRUE(torch::allclose(v_scales, _v_scales, 1e-1, 2e-1))
+        << "Scale gradients mismatch\nMax diff: " << (v_scales - _v_scales).abs().max().item().toFloat();
+
+    EXPECT_TRUE(torch::allclose(v_means3D, _v_means3D, 1e-2, 6e-2))
+        << "Means3D gradients mismatch\nMax diff: " << (v_means3D - _v_means3D).abs().max().item().toFloat();
 }
 
 TEST_F(NumericalGradientTest, CompareWithReferenceImplementation) {
