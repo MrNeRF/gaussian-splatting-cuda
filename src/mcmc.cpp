@@ -150,11 +150,6 @@ int MCMC::relocate_gs() {
     }
     _splat_data.scaling_raw().index_put_({sampled_idxs}, torch::log(new_scales));
 
-    // Update optimizer states for sampled indices
-    for (int i = 0; i < 6; ++i) {
-        update_optimizer_for_relocate(_optimizer.get(), sampled_idxs, dead_indices, i);
-    }
-
     // Copy from sampled to dead indices
     _splat_data.means().index_put_({dead_indices}, _splat_data.means().index_select(0, sampled_idxs));
     _splat_data.sh0().index_put_({dead_indices}, _splat_data.sh0().index_select(0, sampled_idxs));
@@ -162,6 +157,11 @@ int MCMC::relocate_gs() {
     _splat_data.scaling_raw().index_put_({dead_indices}, _splat_data.scaling_raw().index_select(0, sampled_idxs));
     _splat_data.rotation_raw().index_put_({dead_indices}, _splat_data.rotation_raw().index_select(0, sampled_idxs));
     _splat_data.opacity_raw().index_put_({dead_indices}, _splat_data.opacity_raw().index_select(0, sampled_idxs));
+
+    // Update optimizer states for sampled indices
+    for (int i = 0; i < 6; ++i) {
+        update_optimizer_for_relocate(_optimizer.get(), sampled_idxs, dead_indices, i);
+    }
 
     return n_dead;
 }

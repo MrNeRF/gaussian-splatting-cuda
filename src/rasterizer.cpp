@@ -5,9 +5,8 @@
 
 namespace gs {
 
-    using namespace torch::indexing;
-
-
+    using torch::indexing::None;
+    using torch::indexing::Slice;
     inline torch::Tensor spherical_harmonics(
         int sh_degree,
         const torch::Tensor& dirs,
@@ -46,7 +45,8 @@ namespace gs {
         const SplatData& gaussian_model,
         torch::Tensor& bg_color,
         float scaling_modifier,
-        bool packed) {
+        bool packed,
+        bool antialiased) {
 
         // Ensure we don't use packed mode (not supported in this implementation)
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
@@ -110,6 +110,7 @@ namespace gs {
         const float far_plane = 10000.0f;
         const float radius_clip = 0.0f;
         const int tile_size = 16;
+        const bool calc_compensations = antialiased;
 
         // Step 1: Projection
         auto proj_settings = torch::tensor({(float)image_width,
@@ -138,15 +139,15 @@ namespace gs {
         // Step 2: Compute colors from SH
         // First, compute camera position from inverse viewmat
         auto viewmat_inv = torch::inverse(viewmat);
-        auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3});  // [C, 3]
+        auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3}); // [C, 3]
 
         // Compute directions from camera to each Gaussian
         // Since C = 1 in our case, we can simplify
-        auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1);  // [1, N, 3]
-        dirs = dirs.squeeze(0);  // [N, 3]
+        auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1); // [1, N, 3]
+        dirs = dirs.squeeze(0);                                 // [N, 3]
 
         // Create masks based on radii
-        auto masks = (radii > 0).all(-1).squeeze(0);  // [N]
+        auto masks = (radii > 0).all(-1).squeeze(0); // [N]
 
         // Now call spherical harmonics with proper directions
         auto colors = spherical_harmonics(sh_degree, dirs, sh_coeffs, masks);
@@ -158,10 +159,15 @@ namespace gs {
         colors = colors.unsqueeze(0);
 
         // Step 3: Apply opacity with compensations
-        auto final_opacities = opacities.unsqueeze(0) * compensations;
+        torch::Tensor final_opacities;
+        if (calc_compensations && compensations.defined() && compensations.numel() > 0) {
+            final_opacities = opacities.unsqueeze(0) * compensations;
+        } else {
+            final_opacities = opacities.unsqueeze(0);
+        }
         TORCH_CHECK(final_opacities.is_cuda(), "final_opacities must be on CUDA");
 
-        // Step 4: Tile intersection (no autograd needed)
+        // Step 4: Tile intersection
         const int tile_width = (image_width + tile_size - 1) / tile_size;
         const int tile_height = (image_height + tile_size - 1) / tile_size;
 
@@ -198,7 +204,7 @@ namespace gs {
 
         // Prepare output
         RenderOutput result;
-        result.image = torch::clamp_max(rendered_image.squeeze(0).permute({2, 0, 1}), 1.0f);
+        result.image = torch::clamp(rendered_image.squeeze(0).permute({2, 0, 1}), 0.0f, 1.0f);
         result.means2d = means2d_with_grad;
         result.depths = depths.squeeze(0);
         result.radii = std::get<0>(radii.squeeze(0).max(-1));

@@ -33,7 +33,7 @@ public:
         // Create indices based on split
         _indices.clear();
         for (size_t i = 0; i < _cameras.size(); ++i) {
-            bool is_test = (i % params.test_every) == 0;
+            const bool is_test = (i % params.test_every) == 0;
 
             if (_split == Split::ALL ||
                 (_split == Split::TRAIN && !is_test) ||
@@ -92,7 +92,7 @@ inline std::tuple<std::shared_ptr<CameraDataset>, float> create_dataset_from_col
     }
 
     // Read COLMAP data with specified images folder
-    auto [camera_infos, nerf_norm] = read_colmap_cameras_and_images(
+    auto [camera_infos, scene_scale] = read_colmap_cameras_and_images(
         datasetConfig.data_path, datasetConfig.images);
 
     std::vector<std::shared_ptr<Camera>> cameras;
@@ -119,7 +119,7 @@ inline std::tuple<std::shared_ptr<CameraDataset>, float> create_dataset_from_col
     auto dataset = std::make_shared<CameraDataset>(
         std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
 
-    return {dataset, nerf_norm};
+    return {dataset, scene_scale};
 }
 
 inline auto create_dataloader_from_dataset(
