@@ -26,7 +26,7 @@ protected:
         params.optimization.max_cap = 10000;
         params.optimization.min_opacity = 0.005f;
         params.optimization.start_densify = 500;
-        params.optimization.stop_densify = 15000;
+        params.optimization.stop_densify = 25000;
         params.optimization.growth_interval = 100;
         params.optimization.sh_degree = 3;
 

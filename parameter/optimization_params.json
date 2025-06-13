@@ -9,7 +9,7 @@
   "min_opacity": 0.005,
   "growth_interval": 100,
   "start_densify": 500,
-  "stop_densify": 15000,
+  "stop_densify": 25000,
   "grad_threshold": 0.0002,
   "sh_degree": 3,
   "opacity_reg": 0.01,

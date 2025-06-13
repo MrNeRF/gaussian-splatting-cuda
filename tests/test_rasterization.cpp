@@ -366,7 +366,6 @@ TEST_F(RasterizationComparisonTest, StepByStepComparison) {
     }
 }
 
-
 // Also add a test specifically for SH colors issue
 TEST_F(RasterizationComparisonTest, SphericalHarmonicsClampingDebug) {
     torch::manual_seed(42);

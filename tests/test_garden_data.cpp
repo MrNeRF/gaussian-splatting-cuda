@@ -219,7 +219,7 @@ TEST_F(BasicPyTorchDataTest, ProjectionTest) {
         // Prepare settings tensor for ProjectionFunction
         auto proj_settings = torch::tensor({(float)width, (float)height,
                                             eps2d, near_plane, far_plane,
-                                            0.0f, 1.0f},  // radius_clip=0.0, scaling_modifier=1.0
+                                            0.0f, 1.0f}, // radius_clip=0.0, scaling_modifier=1.0
                                            device);
 
         // Create opacities tensor of all ones
@@ -289,7 +289,7 @@ TEST_F(BasicPyTorchDataTest, ProjectionTest) {
         // Prepare settings tensor for ProjectionFunction
         auto proj_settings = torch::tensor({(float)width, (float)height,
                                             eps2d, near_plane, far_plane,
-                                            0.0f, 1.0f},  // radius_clip=0.0, scaling_modifier=1.0
+                                            0.0f, 1.0f}, // radius_clip=0.0, scaling_modifier=1.0
                                            device);
 
         // Forward pass - using ProjectionFunction (equivalent to fully_fused_projection with fused=true)

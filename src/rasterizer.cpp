@@ -5,8 +5,8 @@
 
 namespace gs {
 
-    using namespace torch::indexing;
-
+    using torch::indexing::None;
+    using torch::indexing::Slice;
     inline torch::Tensor spherical_harmonics(
         int sh_degree,
         const torch::Tensor& dirs,
@@ -45,7 +45,8 @@ namespace gs {
         const SplatData& gaussian_model,
         torch::Tensor& bg_color,
         float scaling_modifier,
-        bool packed) {
+        bool packed,
+        bool antialiased) {
 
         // Ensure we don't use packed mode (not supported in this implementation)
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
@@ -109,6 +110,7 @@ namespace gs {
         const float far_plane = 10000.0f;
         const float radius_clip = 0.0f;
         const int tile_size = 16;
+        const bool calc_compensations = antialiased;
 
         // Step 1: Projection
         auto proj_settings = torch::tensor({(float)image_width,
@@ -157,10 +159,15 @@ namespace gs {
         colors = colors.unsqueeze(0);
 
         // Step 3: Apply opacity with compensations
-        auto final_opacities = opacities.unsqueeze(0) * compensations;
+        torch::Tensor final_opacities;
+        if (calc_compensations && compensations.defined() && compensations.numel() > 0) {
+            final_opacities = opacities.unsqueeze(0) * compensations;
+        } else {
+            final_opacities = opacities.unsqueeze(0);
+        }
         TORCH_CHECK(final_opacities.is_cuda(), "final_opacities must be on CUDA");
 
-        // Step 4: Tile intersection (no autograd needed)
+        // Step 4: Tile intersection
         const int tile_width = (image_width + tile_size - 1) / tile_size;
         const int tile_height = (image_height + tile_size - 1) / tile_size;
 
