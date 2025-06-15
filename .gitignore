@@ -4,7 +4,9 @@ cmake-build-debug/
 cmake-build-release/
 external/libtorch/
 output*
+results
 .idea
+data
 *.pt
 .venv/
 *.png
@@ -12,3 +14,6 @@ output*
 test.py
 *.nsys-rep
 testdata
+
+*.pt
+!weights/*.pt

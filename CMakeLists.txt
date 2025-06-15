@@ -40,7 +40,6 @@ add_subdirectory(gsplat)
 # =============================================================================
 
 set(HOST_SOURCES
-        src/main.cpp
         src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp
@@ -50,6 +49,8 @@ set(HOST_SOURCES
         src/trainer.cpp
         src/argument_parser.cpp
         src/rasterizer.cpp
+        src/metrics.cpp
+        src/rasterizer_autograd.cpp
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
 )
@@ -164,15 +165,15 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 if(WIN32)
-  file(GLOB TORCH_DLLS "${Torch_DIR}/../../../lib/*.dll")
+    file(GLOB TORCH_DLLS "${Torch_DIR}/../../../lib/*.dll")
 
-  foreach(TORCH_DLL ${TORCH_DLLS})
-    add_custom_command(
-      TARGET ${PROJECT_NAME}
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TORCH_DLL}"
-              "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
-  endforeach()
+    foreach(TORCH_DLL ${TORCH_DLLS})
+        add_custom_command(
+                TARGET ${PROJECT_NAME}
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TORCH_DLL}"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+    endforeach()
 endif()
 
 # Build type configuration - Updated to handle INTERFACE libraries
@@ -210,27 +211,91 @@ option(BUILD_TESTS "Build tests" OFF)
 if(BUILD_TESTS)
     enable_testing()
 
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host.cpp")
-        add_executable(test_host tests/test_host.cpp)
-        target_include_directories(test_host PRIVATE
-                ${CMAKE_CURRENT_SOURCE_DIR}/include
+    # Find or fetch GoogleTest
+    find_package(GTest CONFIG)
+    if(NOT GTest_FOUND)
+        message(STATUS "GoogleTest not found, fetching from GitHub...")
+        include(FetchContent)
+        FetchContent_Declare(
+                googletest
+                GIT_REPOSITORY https://github.com/google/googletest.git
+                GIT_TAG        v1.14.0
         )
-        target_link_libraries(test_host PRIVATE gaussian_host)
-        add_test(NAME HostTests COMMAND test_host)
+        FetchContent_MakeAvailable(googletest)
     endif()
 
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kernels.cu")
-        add_executable(test_kernels tests/test_kernels.cu)
-        set_target_properties(test_kernels PROPERTIES
-                CUDA_ARCHITECTURES native
-                CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    # Test sources
+    set(TEST_SOURCES
+            tests/test_mcmc.cpp
+            tests/test_basic.cpp
+            tests/test_rasterization.cpp
+            tests/test_gsplat_ops.cpp
+            tests/test_intersect_debug.cpp
+            tests/test_autograd.cpp
+            tests/test_numerical_gradients.cpp
+            tests/test_garden_data.cpp
+            tests/torch_impl.cpp
+    )
+
+    # Create test executable
+    add_executable(gaussian_tests ${TEST_SOURCES})
+
+    set_target_properties(gaussian_tests PROPERTIES
+            CUDA_ARCHITECTURES native
+            CUDA_SEPARABLE_COMPILATION ON
+            CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    )
+
+    target_include_directories(gaussian_tests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+            ${Python3_INCLUDE_DIRS}
+    )
+
+    target_link_libraries(gaussian_tests PRIVATE
+            gaussian_host
+            gaussian_kernels
+            gsplat_backend
+            GTest::gtest
+            GTest::gtest_main
+            Python3::Python
+    )
+
+    target_compile_options(gaussian_tests PRIVATE
+            $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G -lineinfo -Xcudafe --device-debug>
+    )
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_data")
+        add_custom_command(TARGET gaussian_tests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/test_data"
+                "$<TARGET_FILE_DIR:gaussian_tests>/test_data"
         )
-        target_include_directories(test_kernels PRIVATE
-                ${CMAKE_CURRENT_SOURCE_DIR}/include
-        )
-        target_link_libraries(test_kernels PRIVATE gaussian_kernels gaussian_host)
-        add_test(NAME KernelTests COMMAND test_kernels)
     endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt")
+        add_custom_command(TARGET gaussian_tests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:gaussian_tests>/tests/data"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt"
+                "$<TARGET_FILE_DIR:gaussian_tests>/tests/data/"
+        )
+    endif()
+
+    # Add tests to CTest
+    include(GoogleTest)
+    gtest_discover_tests(gaussian_tests)
+
+    # Add a custom target to run tests
+    add_custom_target(run_tests
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            DEPENDS gaussian_tests
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+
+    message(STATUS "Tests enabled. Build with 'make gaussian_tests' and run with 'make run_tests' or 'ctest'")
 endif()
 
 # =============================================================================
@@ -241,6 +306,7 @@ message(STATUS "CUDA Version: ${CUDAToolkit_VERSION}")
 message(STATUS "Torch Version: ${Torch_VERSION}")
 message(STATUS "Python Version: ${Python3_VERSION}")
 message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "Tests: ${BUILD_TESTS}")
 message(STATUS "Include paths:")
 message(STATUS "  - Main: ${CMAKE_CURRENT_SOURCE_DIR}/include")
 message(STATUS "  - Kernels: ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels")

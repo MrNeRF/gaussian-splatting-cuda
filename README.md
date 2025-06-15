@@ -7,10 +7,49 @@
 A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built upon the [gsplat](https://github.com/nerfstudio-project/gsplat) rasterization backend.
 
 ## News
+- **[2025-06-13]**: Metrics are getting very close to gsplat-mcmc. LPIPS and time estimates are not comparable as of now.
+- **[2025-06-10]**: Fixed some issues. We are closing the gap to the gsplat metrics. However, there is still a small mismatch.
 - **[2025-06-04]**: Added MCMC strategy with `--max-cap` command line option for controlling maximum Gaussian count.
-- **[2025-06-03]**: Switched to Gsplat backend and updated license.
+- **[2025-06-03]**: Switched to Gsplat backend and updated license to Apache 2.0.
 - **[2024-05-27]**: Updated to LibTorch 2.7.0 for better compatibility and performance. Breaking changes in optimizer state management have been addressed.
-- **[2024-05-26]**: The current goal of this repo is to move towards a permissive license. Major work has been done to replace the rasterizer with the gsplat implementation.
+
+## Metrics
+Currently the implementation does not achieve on par results with gsplat-mcmc, but it is a work in progress.
+It is just a matter of time to fix the bug. Help is welcome :) The metrics for the mcmc strategy are as follows:
+
+### LPIPS Model
+The implementation uses `weights/lpips_vgg.pt`, which is exported from `torchmetrics.image.lpip.LearnedPerceptualImagePatchSimilarity` with:
+- **Network type**: VGG
+- **Normalize**: False (model expects inputs in [-1, 1] range)
+- **Model includes**: VGG backbone with pretrained ImageNet weights and the scaling normalization layer
+
+**Note**: While the model was exported with `normalize=False`, the C++ implementation handles the [0,1] to [-1,1] conversion internally during LPIPS computation, ensuring compatibility with images loaded in [0,1] range.
+
+| Scene    | Iteration | PSNR          | SSIM         | LPIPS        | Time per Image | Num Gaussians |
+| -------- | --------- | ------------- | ------------ | ------------ | -------------- | ------------- |
+| garden   | 30000     | 27.174416     | 0.857002     | 0.157627     | 0.299779       | 1000000       |
+| bicycle  | 30000     | 25.398046     | 0.777291     | 0.255703     | 0.284142       | 1000000       |
+| stump    | 30000     | 26.797558     | 0.794485     | 0.258573     | 0.285496       | 1000000       |
+| bonsai   | 30000     | 32.632896     | 0.948878     | 0.248194     | 0.429072       | 1000000       |
+| counter  | 30000     | 29.357792     | 0.917621     | 0.242679     | 0.442235       | 1000000       |
+| kitchen  | 30000     | 31.866880     | 0.934161     | 0.155137     | 0.446580       | 1000000       |
+| room     | 30000     | 32.075516     | 0.930377     | 0.276833     | 0.418027       | 1000000       |
+| **mean** | **30000** | **29.329015** | **0.879974** | **0.227821** | **0.372190**   | **1000000**   |
+
+
+For reference, here are the metrics for the official gsplat-mcmc implementation below. However, the 
+lpips results are not directly comparable, as the gsplat-mcmc implementation uses a different lpips model.
+
+| Scene    | Iteration | PSNR          | SSIM         | LPIPS        | Time per Image | Num Gaussians |
+| -------- | --------- | ------------- | ------------ | ------------ | -------------- | ------------- |
+| garden   | 30000     | 27.307266     | 0.854643     | 0.103883     | 0.015346       | 1000000       |
+| bicycle  | 30000     | 25.615253     | 0.774689     | 0.182401     | 0.014299       | 1000000       |
+| stump    | 30000     | 26.964493     | 0.789816     | 0.162758     | 0.021624       | 1000000       |
+| bonsai   | 30000     | 32.735737     | 0.953360     | 0.105922     | 0.012344       | 1000000       |
+| counter  | 30000     | 29.495266     | 0.924103     | 0.129898     | 0.015629       | 1000000       |
+| kitchen  | 30000     | 31.660593     | 0.935315     | 0.087113     | 0.013513       | 1000000       |
+| room     | 30000     | 32.265732     | 0.937518     | 0.132472     | 0.010859       | 1000000       |
+| **mean** | **30000** | **29.434906** | **0.881349** | **0.129207** | **0.014802**   | **1000000**   |
 
 ## Community & Support
 

@@ -17,12 +17,34 @@ using CameraExample = torch::data::Example<CameraWithImage, torch::Tensor>;
 
 class CameraDataset : public torch::data::Dataset<CameraDataset, CameraExample> {
 public:
-    CameraDataset(std::vector<std::shared_ptr<Camera>> cameras,
-                  const gs::param::DatasetConfig& params)
-        : _cameras(std::move(cameras)),
-          _datasetConfig(params) {
-    }
+    enum class Split {
+        TRAIN,
+        VAL,
+        ALL
+    };
 
+    CameraDataset(std::vector<std::shared_ptr<Camera>> cameras,
+                  const gs::param::DatasetConfig& params,
+                  Split split = Split::ALL)
+        : _cameras(std::move(cameras)),
+          _datasetConfig(params),
+          _split(split) {
+
+        // Create indices based on split
+        _indices.clear();
+        for (size_t i = 0; i < _cameras.size(); ++i) {
+            const bool is_test = (i % params.test_every) == 0;
+
+            if (_split == Split::ALL ||
+                (_split == Split::TRAIN && !is_test) ||
+                (_split == Split::VAL && is_test)) {
+                _indices.push_back(i);
+            }
+        }
+
+        std::cout << "Dataset created with " << _indices.size()
+                  << " images (split: " << static_cast<int>(_split) << ")" << std::endl;
+    }
     // Default copy constructor works with shared_ptr
     CameraDataset(const CameraDataset&) = default;
     CameraDataset(CameraDataset&&) noexcept = default;
@@ -30,11 +52,12 @@ public:
     CameraDataset& operator=(const CameraDataset&) = default;
 
     CameraExample get(size_t index) override {
-        if (index >= _cameras.size()) {
-            throw std::out_of_range("Camera index out of range");
+        if (index >= _indices.size()) {
+            throw std::out_of_range("Dataset index out of range");
         }
 
-        auto& cam = _cameras[index];
+        size_t camera_idx = _indices[index];
+        auto& cam = _cameras[camera_idx];
 
         // Just load image - no prefetching since indices are random
         torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
@@ -44,16 +67,20 @@ public:
     }
 
     torch::optional<size_t> size() const override {
-        return _cameras.size();
+        return _indices.size();
     }
 
     const std::vector<std::shared_ptr<Camera>>& get_cameras() const {
         return _cameras;
     }
 
+    Split get_split() const { return _split; }
+
 private:
     std::vector<std::shared_ptr<Camera>> _cameras;
     const gs::param::DatasetConfig& _datasetConfig;
+    Split _split;
+    std::vector<size_t> _indices;
 };
 
 inline std::tuple<std::shared_ptr<CameraDataset>, float> create_dataset_from_colmap(
@@ -64,7 +91,9 @@ inline std::tuple<std::shared_ptr<CameraDataset>, float> create_dataset_from_col
                                  datasetConfig.data_path.string());
     }
 
-    auto [camera_infos, nerf_norm] = read_colmap_cameras_and_images(datasetConfig.data_path);
+    // Read COLMAP data with specified images folder
+    auto [camera_infos, scene_scale] = read_colmap_cameras_and_images(
+        datasetConfig.data_path, datasetConfig.images);
 
     std::vector<std::shared_ptr<Camera>> cameras;
     cameras.reserve(camera_infos.size());
@@ -86,9 +115,11 @@ inline std::tuple<std::shared_ptr<CameraDataset>, float> create_dataset_from_col
         cameras.push_back(std::move(cam));
     }
 
-    auto dataset = std::make_shared<CameraDataset>(std::move(cameras), datasetConfig);
+    // Create dataset with ALL images
+    auto dataset = std::make_shared<CameraDataset>(
+        std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
 
-    return {dataset, nerf_norm};
+    return {dataset, scene_scale};
 }
 
 inline auto create_dataloader_from_dataset(

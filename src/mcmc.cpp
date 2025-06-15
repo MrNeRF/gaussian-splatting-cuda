@@ -64,24 +64,37 @@ void MCMC::update_optimizer_for_relocate(torch::optim::Adam* optimizer,
     auto& param = optimizer->param_groups()[param_position].params()[0];
     void* param_key = param.unsafeGetTensorImpl();
 
-    auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(
-        static_cast<torch::optim::AdamParamState&>(*optimizer->state()[param_key]));
+    // Check if optimizer state exists
+    auto state_it = optimizer->state().find(param_key);
+    if (state_it == optimizer->state().end()) {
+        // No state exists yet - this can happen if optimizer.step() hasn't been called
+        // In this case, there's nothing to reset, so we can safely return
+        return;
+    }
 
-    // Reset the states for sampled indices
-    adamParamStates->exp_avg().index_put_({sampled_indices}, 0);
-    adamParamStates->exp_avg_sq().index_put_({sampled_indices}, 0);
+    // Get the optimizer state
+    auto& param_state = *state_it->second;
+    auto& adam_state = static_cast<torch::optim::AdamParamState&>(param_state);
 
-    // No need to update optimizer state since we're modifying in-place
+    // Reset the states for sampled indices (set to zero)
+    adam_state.exp_avg().index_put_({sampled_indices}, 0);
+    adam_state.exp_avg_sq().index_put_({sampled_indices}, 0);
+
+    // Also reset max_exp_avg_sq if it exists (used in some Adam variants)
+    if (adam_state.max_exp_avg_sq().defined()) {
+        adam_state.max_exp_avg_sq().index_put_({sampled_indices}, 0);
+    }
 }
 
 int MCMC::relocate_gs() {
     // Get opacities and handle both [N] and [N, 1] shapes
+    torch::NoGradGuard no_grad;
     auto opacities = _splat_data.get_opacity();
     if (opacities.dim() == 2 && opacities.size(1) == 1) {
         opacities = opacities.squeeze(-1);
     }
 
-    auto dead_mask = opacities <= _min_opacity;
+    auto dead_mask = opacities <= _params->min_opacity;
     auto dead_indices = dead_mask.nonzero().squeeze(-1);
     int n_dead = dead_indices.numel();
 
@@ -125,7 +138,7 @@ int MCMC::relocate_gs() {
     auto new_scales = std::get<1>(relocation_result);
 
     // Clamp new opacities
-    new_opacities = torch::clamp(new_opacities, _min_opacity, 1.0f - 1e-7f);
+    new_opacities = torch::clamp(new_opacities, _params->min_opacity, 1.0f - 1e-7f);
 
     // Update parameters for sampled indices
     // Handle opacity shape properly
@@ -137,9 +150,6 @@ int MCMC::relocate_gs() {
     }
     _splat_data.scaling_raw().index_put_({sampled_idxs}, torch::log(new_scales));
 
-    // Update optimizer states for sampled indices
-    update_optimizer_for_relocate(_optimizer.get(), sampled_idxs, dead_indices, 5); // opacity
-
     // Copy from sampled to dead indices
     _splat_data.means().index_put_({dead_indices}, _splat_data.means().index_select(0, sampled_idxs));
     _splat_data.sh0().index_put_({dead_indices}, _splat_data.sh0().index_select(0, sampled_idxs));
@@ -148,13 +158,25 @@ int MCMC::relocate_gs() {
     _splat_data.rotation_raw().index_put_({dead_indices}, _splat_data.rotation_raw().index_select(0, sampled_idxs));
     _splat_data.opacity_raw().index_put_({dead_indices}, _splat_data.opacity_raw().index_select(0, sampled_idxs));
 
+    // Update optimizer states for sampled indices
+    for (int i = 0; i < 6; ++i) {
+        update_optimizer_for_relocate(_optimizer.get(), sampled_idxs, dead_indices, i);
+    }
+
     return n_dead;
 }
 
 int MCMC::add_new_gs() {
-    int current_n = _splat_data.size();
-    int n_target = std::min(_cap_max, static_cast<int>(1.05f * current_n));
-    int n_new = std::max(0, n_target - current_n);
+    // Add this check at the beginning
+    torch::NoGradGuard no_grad;
+    if (!_optimizer) {
+        std::cerr << "Warning: add_new_gs called but optimizer not initialized" << std::endl;
+        return 0;
+    }
+
+    const int current_n = _splat_data.size();
+    const int n_target = std::min(_params->max_cap, static_cast<int>(1.05f * current_n));
+    const int n_new = std::max(0, n_target - current_n);
 
     if (n_new == 0)
         return 0;
@@ -194,10 +216,9 @@ int MCMC::add_new_gs() {
     auto new_scales = std::get<1>(relocation_result);
 
     // Clamp new opacities
-    new_opacities = torch::clamp(new_opacities, _min_opacity, 1.0f - 1e-7f);
+    new_opacities = torch::clamp(new_opacities, _params->min_opacity, 1.0f - 1e-7f);
 
-    // Update existing Gaussians
-    // Handle opacity shape properly
+    // Update existing Gaussians FIRST (before concatenation)
     if (_splat_data.opacity_raw().dim() == 2) {
         _splat_data.opacity_raw().index_put_({sampled_idxs, torch::indexing::Slice()},
                                              torch::logit(new_opacities).unsqueeze(-1));
@@ -214,85 +235,100 @@ int MCMC::add_new_gs() {
     auto new_rotation = _splat_data.rotation_raw().index_select(0, sampled_idxs);
     auto new_opacity = _splat_data.opacity_raw().index_select(0, sampled_idxs);
 
-    // CRITICAL: Update optimizer states BEFORE concatenating parameters
-    // This follows the Python pattern where optimizer states are extended first
+    // Step 1: Concatenate all parameters
+    auto concat_means = torch::cat({_splat_data.means(), new_means}, 0).set_requires_grad(true);
+    auto concat_sh0 = torch::cat({_splat_data.sh0(), new_sh0}, 0).set_requires_grad(true);
+    auto concat_shN = torch::cat({_splat_data.shN(), new_shN}, 0).set_requires_grad(true);
+    auto concat_scaling = torch::cat({_splat_data.scaling_raw(), new_scaling}, 0).set_requires_grad(true);
+    auto concat_rotation = torch::cat({_splat_data.rotation_raw(), new_rotation}, 0).set_requires_grad(true);
+    auto concat_opacity = torch::cat({_splat_data.opacity_raw(), new_opacity}, 0).set_requires_grad(true);
 
-    // For each parameter group, we need to:
-    // 1. Get current optimizer state
-    // 2. Extend it with zeros for new parameters
-    // 3. Update the parameter in the optimizer
+    // Step 2: SAFER optimizer state update
+    // Store the new parameters in a temporary array first
+    std::array<torch::Tensor*, 6> new_params = {
+        &concat_means, &concat_sh0, &concat_shN,
+        &concat_scaling, &concat_rotation, &concat_opacity};
+
+    // Collect old parameter keys and states
+    std::vector<void*> old_param_keys;
+    std::vector<std::unique_ptr<torch::optim::OptimizerParamState>> saved_states;
 
     for (int i = 0; i < 6; ++i) {
-        auto& param = _optimizer->param_groups()[i].params()[0];
-        void* param_key = param.unsafeGetTensorImpl();
+        auto& old_param = _optimizer->param_groups()[i].params()[0];
+        void* old_param_key = old_param.unsafeGetTensorImpl();
+        old_param_keys.push_back(old_param_key);
 
-        // Get current state
-        auto adamParamStates = std::make_unique<torch::optim::AdamParamState>(
-            static_cast<torch::optim::AdamParamState&>(*_optimizer->state()[param_key]));
+        // Check if state exists
+        auto state_it = _optimizer->state().find(old_param_key);
+        if (state_it != _optimizer->state().end()) {
+            // Clone the state before modifying
+            auto& adam_state = static_cast<torch::optim::AdamParamState&>(*state_it->second);
 
-        // Remove old state
-        _optimizer->state().erase(param_key);
+            // Create extended states
+            torch::IntArrayRef new_shape;
+            if (i == 0)
+                new_shape = new_means.sizes();
+            else if (i == 1)
+                new_shape = new_sh0.sizes();
+            else if (i == 2)
+                new_shape = new_shN.sizes();
+            else if (i == 3)
+                new_shape = new_scaling.sizes();
+            else if (i == 4)
+                new_shape = new_rotation.sizes();
+            else
+                new_shape = new_opacity.sizes();
 
-        // Prepare new concatenated parameter
-        torch::Tensor new_param;
-        if (i == 0) {
-            new_param = torch::cat({_splat_data.means(), new_means}, 0).set_requires_grad(true);
-        } else if (i == 1) {
-            new_param = torch::cat({_splat_data.sh0(), new_sh0}, 0).set_requires_grad(true);
-        } else if (i == 2) {
-            new_param = torch::cat({_splat_data.shN(), new_shN}, 0).set_requires_grad(true);
-        } else if (i == 3) {
-            new_param = torch::cat({_splat_data.scaling_raw(), new_scaling}, 0).set_requires_grad(true);
-        } else if (i == 4) {
-            new_param = torch::cat({_splat_data.rotation_raw(), new_rotation}, 0).set_requires_grad(true);
+            auto zeros_to_add = torch::zeros(new_shape, adam_state.exp_avg().options());
+            auto new_exp_avg = torch::cat({adam_state.exp_avg(), zeros_to_add}, 0);
+            auto new_exp_avg_sq = torch::cat({adam_state.exp_avg_sq(), zeros_to_add}, 0);
+
+            // Create new state
+            auto new_state = std::make_unique<torch::optim::AdamParamState>();
+            new_state->step(adam_state.step());
+            new_state->exp_avg(new_exp_avg);
+            new_state->exp_avg_sq(new_exp_avg_sq);
+            if (adam_state.max_exp_avg_sq().defined()) {
+                auto new_max_exp_avg_sq = torch::cat({adam_state.max_exp_avg_sq(), zeros_to_add}, 0);
+                new_state->max_exp_avg_sq(new_max_exp_avg_sq);
+            }
+
+            saved_states.push_back(std::move(new_state));
         } else {
-            new_param = torch::cat({_splat_data.opacity_raw(), new_opacity}, 0).set_requires_grad(true);
-        }
-
-        // Create extended optimizer states
-        auto new_shape = new_param.sizes().vec();
-        new_shape[0] = n_new; // Shape for the new part
-
-        auto device = adamParamStates->exp_avg().device();
-        auto new_exp_avg = torch::cat({adamParamStates->exp_avg(),
-                                       torch::zeros(new_shape, torch::TensorOptions().device(device))},
-                                      0);
-        auto new_exp_avg_sq = torch::cat({adamParamStates->exp_avg_sq(),
-                                          torch::zeros(new_shape, torch::TensorOptions().device(device))},
-                                         0);
-
-        // Update Adam state
-        adamParamStates->exp_avg(new_exp_avg);
-        adamParamStates->exp_avg_sq(new_exp_avg_sq);
-
-        // Update parameter in optimizer
-        _optimizer->param_groups()[i].params()[0] = new_param;
-
-        // Store new state
-        void* new_param_key = new_param.unsafeGetTensorImpl();
-        _optimizer->state()[new_param_key] = std::move(adamParamStates);
-
-        // Update the actual model parameters
-        if (i == 0) {
-            _splat_data.means() = new_param;
-        } else if (i == 1) {
-            _splat_data.sh0() = new_param;
-        } else if (i == 2) {
-            _splat_data.shN() = new_param;
-        } else if (i == 3) {
-            _splat_data.scaling_raw() = new_param;
-        } else if (i == 4) {
-            _splat_data.rotation_raw() = new_param;
-        } else {
-            _splat_data.opacity_raw() = new_param;
+            saved_states.push_back(nullptr);
         }
     }
+
+    // Now remove all old states
+    for (auto key : old_param_keys) {
+        _optimizer->state().erase(key);
+    }
+
+    // Update parameters and add new states
+    for (int i = 0; i < 6; ++i) {
+        _optimizer->param_groups()[i].params()[0] = *new_params[i];
+
+        if (saved_states[i]) {
+            void* new_param_key = new_params[i]->unsafeGetTensorImpl();
+            _optimizer->state()[new_param_key] = std::move(saved_states[i]);
+        }
+    }
+
+    // Step 3: Finally update the model's parameters
+    _splat_data.means() = concat_means;
+    _splat_data.sh0() = concat_sh0;
+    _splat_data.shN() = concat_shN;
+    _splat_data.scaling_raw() = concat_scaling;
+    _splat_data.rotation_raw() = concat_rotation;
+    _splat_data.opacity_raw() = concat_opacity;
 
     return n_new;
 }
 
 void MCMC::inject_noise() {
     // Get opacities and handle both [N] and [N, 1] shapes
+    torch::NoGradGuard no_grad;
+
     auto opacities = _splat_data.get_opacity();
     if (opacities.dim() == 2 && opacities.size(1) == 1) {
         opacities = opacities.squeeze(-1);
@@ -333,24 +369,18 @@ void MCMC::inject_noise() {
 
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     // Increment SH degree every 1000 iterations
+    torch::NoGradGuard no_grad;
     if (iter % 1000 == 0) {
         _splat_data.increment_sh_degree();
     }
 
     // Refine Gaussians
-    if (iter < _refine_stop_iter && iter > _refine_start_iter && iter % _refine_every == 0) {
+    if (is_refining(iter)) {
         // Relocate dead Gaussians
-        int n_relocated = relocate_gs();
-        if (_verbose) {
-            std::cout << "Step " << iter << ": Relocated " << n_relocated << " GSs." << std::endl;
-        }
+        relocate_gs();
 
         // Add new Gaussians
-        int n_added = add_new_gs();
-        if (_verbose) {
-            std::cout << "Step " << iter << ": Added " << n_added << " GSs. "
-                      << "Now having " << _splat_data.size() << " GSs." << std::endl;
-        }
+        add_new_gs();
 
         c10::cuda::CUDACachingAllocator::emptyCache();
     }
@@ -369,10 +399,8 @@ void MCMC::step(int iter) {
 
 void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _params = std::make_unique<gs::param::OptimizationParameters>(optimParams);
-    _cap_max = _params->max_cap;
-    const auto dev = torch::kCUDA;
 
-    // Initialize parameters on CUDA
+    const auto dev = torch::kCUDA;
     _splat_data.means() = _splat_data.means().to(dev).set_requires_grad(true);
     _splat_data.scaling_raw() = _splat_data.scaling_raw().to(dev).set_requires_grad(true);
     _splat_data.rotation_raw() = _splat_data.rotation_raw().to(dev).set_requires_grad(true);
@@ -424,4 +452,10 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     // This means after max_steps, lr will be 0.01 * initial_lr
     const double gamma = std::pow(0.01, 1.0 / _params->iterations);
     _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma, 0);
+}
+
+bool MCMC::is_refining(int iter) const {
+    return (iter < _params->stop_refine &&
+            iter > _params->start_refine &&
+            iter % _params->refine_every == 0);
 }

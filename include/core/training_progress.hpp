@@ -45,7 +45,7 @@ public:
         start_time_ = std::chrono::steady_clock::now();
     }
 
-    void update(int current_iteration, float loss, int splat_count, bool is_densifying = false) {
+    void update(int current_iteration, float loss, int splat_count, bool is_refining = false) {
         if (current_iteration % update_frequency_ != 0)
             return;
 
@@ -57,11 +57,25 @@ public:
                 << " | Loss: " << std::fixed << std::setprecision(4) << loss
                 << " | Splats: " << splat_count;
 
-        if (is_densifying) {
+        if (is_refining) {
             postfix << " (+)";
         }
 
         progress_bar_->set_option(indicators::option::PostfixText(postfix.str()));
+    }
+
+    void pause() {
+        if (!progress_bar_->is_completed()) {
+            progress_bar_->mark_as_completed();
+            std::cout << std::endl;
+        }
+    }
+
+    void resume(int current_iteration, float loss, int splat_count) {
+        // Reset the progress bar
+        progress_bar_->set_progress(static_cast<size_t>(
+            static_cast<float>(current_iteration) / total_iterations_ * 100));
+        update(current_iteration, loss, splat_count, false);
     }
 
     void complete() {
