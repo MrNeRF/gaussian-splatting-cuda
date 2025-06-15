@@ -45,7 +45,7 @@ public:
         start_time_ = std::chrono::steady_clock::now();
     }
 
-    void update(int current_iteration, float loss, int splat_count, bool is_densifying = false) {
+    void update(int current_iteration, float loss, int splat_count, bool is_refining = false) {
         if (current_iteration % update_frequency_ != 0)
             return;
 
@@ -57,7 +57,7 @@ public:
                 << " | Loss: " << std::fixed << std::setprecision(4) << loss
                 << " | Splats: " << splat_count;
 
-        if (is_densifying) {
+        if (is_refining) {
             postfix << " (+)";
         }
 
