@@ -40,6 +40,7 @@ namespace gs {
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Maximum number of Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name (e.g., images, images_2, images_4, images_8)", {"images"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Every N-th image is a test image", {"test-every"});
+            ::args::Flag enable_save_eval_images(parser, "save_eval_images", "During evaluation saves imags and depth if specified in render-mode", {"save-eval-images"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
 
             // Add render mode arguments
@@ -107,6 +108,10 @@ namespace gs {
 
             if (enable_eval) {
                 params.optimization.enable_eval = true;
+            }
+
+            if (enable_save_eval_images) {
+                params.optimization.enable_eval = true; // Enable evaluation if saving images
             }
 
             // Process render mode arguments

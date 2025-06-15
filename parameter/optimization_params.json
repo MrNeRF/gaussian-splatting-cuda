@@ -17,5 +17,6 @@
   "max_cap": 1000000,
   "render_mode": "RGB",
   "eval_steps": [7000, 30000],
-  "save_steps": [7000, 30000]
+  "save_steps": [7000, 30000],
+  "save_eval_images": false
 }
