@@ -284,8 +284,7 @@ void SplatData::cleanup_finished_threads() const {
                            }
                            return true;
                        }),
-        _save_threads.end()
-    );
+        _save_threads.end());
 }
 
 // Export to PLY
