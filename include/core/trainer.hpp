@@ -28,9 +28,6 @@ namespace gs {
         // Main training method
         virtual void train();
 
-        // Evaluation method
-        metrics::EvalMetrics evaluate(int iteration, bool save_images);
-
         // Get the strategy (for external access if needed)
         IStrategy& get_strategy() { return *strategy_; }
         const IStrategy& get_strategy() const { return *strategy_; }
@@ -51,14 +48,8 @@ namespace gs {
         size_t train_dataset_size_;
         size_t val_dataset_size_;
 
-        // Metrics
-        std::unique_ptr<metrics::PSNR> psnr_metric_;
-        std::unique_ptr<metrics::SSIM> ssim_metric_;
-        std::unique_ptr<metrics::LPIPS> lpips_metric_;
-        std::unique_ptr<metrics::MetricsReporter> metrics_reporter_;
-
-        void save_depth_visualization(const torch::Tensor& depth, int iteration, const std::string& prefix);
-        torch::Tensor apply_depth_colormap(const torch::Tensor& depth_normalized);
+        // Metrics evaluator - handles all evaluation logic
+        std::unique_ptr<metrics::MetricsEvaluator> evaluator_;
     };
 
 } // namespace gs
