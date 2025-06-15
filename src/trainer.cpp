@@ -21,11 +21,7 @@ namespace gs {
         if (gt.dim() == 3)
             gt = gt.unsqueeze(0);
 
-        if (rendered.sizes() != gt.sizes()) {
-            std::cerr << "ERROR: size mismatch – rendered " << rendered.sizes()
-                      << " vs. ground truth " << gt.sizes() << '\n';
-            throw std::runtime_error("Image size mismatch");
-        }
+        TORCH_CHECK(rendered.sizes() == gt.sizes(), "ERROR: size mismatch – rendered ", rendered.sizes(), " vs. ground truth ", gt.sizes());
 
         // Base loss: L1 + SSIM
         auto l1_loss = torch::l1_loss(rendered.squeeze(0), gt.squeeze(0));
@@ -149,7 +145,7 @@ namespace gs {
 
     void Trainer::train() {
         int iter = 1;
-        int epochs_needed = (params_.optimization.iterations + train_dataset_size_ - 1) / train_dataset_size_;
+        const int epochs_needed = (params_.optimization.iterations + train_dataset_size_ - 1) / train_dataset_size_;
 
         const int num_workers = 4;
 
