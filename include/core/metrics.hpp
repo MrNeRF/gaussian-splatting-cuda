@@ -8,7 +8,12 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 #include <vector>
+#include <memory>
+#include "core/parameters.hpp"
+#include "core/dataset.hpp"
+#include "core/rasterizer.hpp"
 
+class splatData;
 namespace gs {
     namespace metrics {
 
@@ -106,6 +111,61 @@ namespace gs {
             std::vector<EvalMetrics> all_metrics_;
             std::filesystem::path csv_path_;
             std::filesystem::path txt_path_;
+        };
+
+        // Main evaluator class that handles all metrics computation and visualization
+        class MetricsEvaluator {
+        public:
+            MetricsEvaluator(const param::TrainingParameters& params);
+
+            // Check if evaluation is enabled
+            bool is_enabled() const { return enabled_; }
+
+            // Check if we should evaluate at this iteration
+            bool should_evaluate(int iteration) const;
+
+            // Main evaluation method
+            EvalMetrics evaluate(int iteration,
+                                 const SplatData& splatData,
+                                 std::shared_ptr<CameraDataset> val_dataset,
+                                 torch::Tensor& background);
+
+            // Save final report
+            void save_report() { if (reporter_) reporter_->save_report(); }
+
+            // Print evaluation header
+            void print_evaluation_header(int iteration) const {
+                std::cout << std::endl;
+                std::cout << "[Evaluation at step " << iteration << "]" << std::endl;
+            }
+
+            // Print final evaluation header
+            void print_final_evaluation_header() const {
+                std::cout << "\n[Final Evaluation]" << std::endl;
+            }
+
+        private:
+            // Configuration
+            bool enabled_;
+            bool save_images_;
+            std::string render_mode_str_;
+            RenderMode render_mode_;
+            std::filesystem::path output_path_;
+            std::vector<size_t> eval_steps_;
+
+            // Metrics
+            std::unique_ptr<PSNR> psnr_metric_;
+            std::unique_ptr<SSIM> ssim_metric_;
+            std::unique_ptr<LPIPS> lpips_metric_;
+            std::unique_ptr<MetricsReporter> reporter_;
+
+            // Helper functions
+            torch::Tensor apply_depth_colormap(const torch::Tensor& depth_normalized);
+            bool has_rgb() const;
+            bool has_depth() const;
+
+            // Create dataloader from dataset
+            auto make_dataloader(std::shared_ptr<CameraDataset> dataset, int workers = 1) const;
         };
 
     } // namespace metrics
