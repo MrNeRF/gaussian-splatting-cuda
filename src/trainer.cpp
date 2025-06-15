@@ -8,6 +8,27 @@
 
 namespace gs {
 
+    static inline torch::Tensor ensure_4d(const torch::Tensor& image) {
+        return image.dim() == 3 ? image.unsqueeze(0) : image;
+    }
+
+    void Trainer::initialize_bilateral_grid() {
+        if (!params_.optimization.use_bilateral_grid) {
+            return;
+        }
+
+        bilateral_grid_ = std::make_unique<gs::BilateralGrid>(
+            train_dataset_size_,
+            params_.optimization.bilateral_grid_X,
+            params_.optimization.bilateral_grid_Y,
+            params_.optimization.bilateral_grid_W);
+
+        bilateral_grid_optimizer_ = std::make_unique<torch::optim::Adam>(
+            std::vector<torch::Tensor>{bilateral_grid_->parameters()},
+            torch::optim::AdamOptions(params_.optimization.bilateral_grid_lr)
+                .eps(1e-15));
+    }
+
     torch::Tensor Trainer::compute_loss(const RenderOutput& render_output,
                                         const torch::Tensor& gt_image,
                                         const SplatData& splatData,
@@ -16,10 +37,9 @@ namespace gs {
         torch::Tensor rendered = render_output.image;
         torch::Tensor gt = gt_image;
 
-        if (rendered.dim() == 3)
-            rendered = rendered.unsqueeze(0);
-        if (gt.dim() == 3)
-            gt = gt.unsqueeze(0);
+        // Ensure both tensors are 4D (batch, height, width, channels)
+        rendered = rendered.dim() == 3 ? rendered.unsqueeze(0) : rendered;
+        gt = gt.dim() == 3 ? gt.unsqueeze(0) : gt;
 
         TORCH_CHECK(rendered.sizes() == gt.sizes(), "ERROR: size mismatch – rendered ", rendered.sizes(), " vs. ground truth ", gt.sizes());
 
@@ -38,6 +58,10 @@ namespace gs {
         if (opt_params.scale_reg > 0.0f) {
             auto scale_l1 = torch::abs(splatData.get_scaling()).mean();
             loss += opt_params.scale_reg * scale_l1;
+        }
+        // Total variation loss for bilateral grid
+        if (params_.optimization.use_bilateral_grid) {
+            loss += params_.optimization.tv_loss_weight * bilateral_grid_->tv_loss();
         }
 
         return loss;
@@ -77,6 +101,9 @@ namespace gs {
 
         strategy_->initialize(params.optimization);
 
+        // Initialize bilateral grid if enabled
+        initialize_bilateral_grid();
+
         background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
         background_ = background_.to(torch::kCUDA);
 
@@ -102,6 +129,10 @@ namespace gs {
             false,
             render_mode);
 
+        // Apply bilateral grid if enabled
+        if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
+            r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
+        }
         // Compute loss using the factored-out function
         torch::Tensor loss = compute_loss(r_output,
                                           gt_image,
@@ -133,6 +164,10 @@ namespace gs {
 
             strategy_->post_backward(iter, r_output);
             strategy_->step(iter);
+            if (params_.optimization.use_bilateral_grid) {
+                bilateral_grid_optimizer_->step();
+                bilateral_grid_optimizer_->zero_grad(true);
+            }
         }
 
         progress_->update(iter, loss.item<float>(),

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/bilateral_grid.hpp"
 #include "core/dataset.hpp"
 #include "core/istrategy.hpp"
 #include "core/metrics.hpp"
@@ -39,6 +40,8 @@ namespace gs {
                                    const SplatData& splatData,
                                    const param::OptimizationParameters& opt_params);
 
+        void initialize_bilateral_grid();
+
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;
@@ -48,6 +51,10 @@ namespace gs {
         torch::Tensor background_;
         std::unique_ptr<TrainingProgress> progress_;
         size_t train_dataset_size_;
+
+        // Bilateral grid components
+        std::unique_ptr<gs::BilateralGrid> bilateral_grid_;
+        std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
 
         // Metrics evaluator - handles all evaluation logic
         std::unique_ptr<metrics::MetricsEvaluator> evaluator_;
