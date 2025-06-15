@@ -468,3 +468,9 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     const double gamma = std::pow(0.01, 1.0 / _params->iterations);
     _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma, 0);
 }
+
+bool MCMC::is_densifying(int iter) const {
+    return (iter < _params->stop_densify &&
+            iter > _params->start_densify &&
+            iter % _params->growth_interval == 0);
+}

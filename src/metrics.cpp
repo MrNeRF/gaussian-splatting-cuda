@@ -303,7 +303,8 @@ namespace gs {
         }
 
         bool MetricsEvaluator::should_evaluate(int iteration) const {
-            if (!enabled_) return false;
+            if (!enabled_)
+                return false;
 
             return std::find(eval_steps_.begin(), eval_steps_.end(), iteration) != eval_steps_.end();
         }
@@ -436,8 +437,8 @@ namespace gs {
                     if (save_images_) {
                         save_image(eval_dir / (std::to_string(image_idx) + ".png"),
                                    {gt_image.squeeze(0), r_output.image.squeeze(0)},
-                                   true,  // horizontal
-                                   4);    // separator width
+                                   true, // horizontal
+                                   4);   // separator width
                     }
                 }
 
@@ -458,8 +459,8 @@ namespace gs {
                         if (has_rgb()) {
                             save_image(depth_dir / (std::to_string(image_idx) + "_rgb_depth.png"),
                                        {r_output.image.squeeze(0), depth_colormap},
-                                       true,  // horizontal
-                                       4);    // separator width
+                                       true, // horizontal
+                                       4);   // separator width
                         } else {
                             // Save depth alone if no RGB
                             auto depth_gray_rgb = depth_normalized.unsqueeze(0).repeat({3, 1, 1});

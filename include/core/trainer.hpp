@@ -26,16 +26,18 @@ namespace gs {
         Trainer& operator=(Trainer&&) = default;
 
         // Main training method
-        virtual void train();
+        void train();
 
-        // Get the strategy (for external access if needed)
-        IStrategy& get_strategy() { return *strategy_; }
-        const IStrategy& get_strategy() const { return *strategy_; }
+    private:
+        // Protected method for processing a single training step
+        // Returns true if training should continue
+        bool train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode);
 
-    protected:
-        // Helper to create fresh dataloaders
-        auto make_train_dataloader(int workers = 4) const;
-        auto make_val_dataloader(int workers = 1) const;
+        // Protected method for computing loss
+        torch::Tensor compute_loss(const RenderOutput& render_output,
+                                   const torch::Tensor& gt_image,
+                                   const SplatData& splatData,
+                                   const param::OptimizationParameters& opt_params);
 
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
@@ -46,7 +48,6 @@ namespace gs {
         torch::Tensor background_;
         std::unique_ptr<TrainingProgress> progress_;
         size_t train_dataset_size_;
-        size_t val_dataset_size_;
 
         // Metrics evaluator - handles all evaluation logic
         std::unique_ptr<metrics::MetricsEvaluator> evaluator_;

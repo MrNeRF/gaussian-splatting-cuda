@@ -8,6 +8,44 @@
 
 namespace gs {
 
+    torch::Tensor Trainer::compute_loss(const RenderOutput& render_output,
+                                        const torch::Tensor& gt_image,
+                                        const SplatData& splatData,
+                                        const param::OptimizationParameters& opt_params) {
+        // Ensure images have same dimensions
+        torch::Tensor rendered = render_output.image;
+        torch::Tensor gt = gt_image;
+
+        if (rendered.dim() == 3)
+            rendered = rendered.unsqueeze(0);
+        if (gt.dim() == 3)
+            gt = gt.unsqueeze(0);
+
+        if (rendered.sizes() != gt.sizes()) {
+            std::cerr << "ERROR: size mismatch – rendered " << rendered.sizes()
+                      << " vs. ground truth " << gt.sizes() << '\n';
+            throw std::runtime_error("Image size mismatch");
+        }
+
+        // Base loss: L1 + SSIM
+        auto l1_loss = torch::l1_loss(rendered.squeeze(0), gt.squeeze(0));
+        auto ssim_loss = fused_ssim(rendered, gt, "same", /*train=*/true);
+        torch::Tensor loss = (1.f - opt_params.lambda_dssim) * l1_loss +
+                             opt_params.lambda_dssim * (1.f - ssim_loss);
+
+        // Regularization terms
+        if (opt_params.opacity_reg > 0.0f) {
+            auto opacity_l1 = torch::abs(splatData.get_opacity()).mean();
+            loss += opt_params.opacity_reg * opacity_l1;
+        }
+
+        if (opt_params.scale_reg > 0.0f) {
+            auto scale_l1 = torch::abs(splatData.get_scaling()).mean();
+            loss += opt_params.scale_reg * scale_l1;
+        }
+
+        return loss;
+    }
 
     Trainer::Trainer(std::shared_ptr<CameraDataset> dataset,
                      std::unique_ptr<IStrategy> strategy,
@@ -40,7 +78,6 @@ namespace gs {
         }
 
         train_dataset_size_ = train_dataset_->size().value();
-        val_dataset_size_ = val_dataset_ ? val_dataset_->size().value() : 0;
 
         strategy_->initialize(params.optimization);
 
@@ -58,141 +95,88 @@ namespace gs {
         std::cout << "Render mode: " << params.optimization.render_mode << std::endl;
     }
 
-    auto Trainer::make_train_dataloader(int workers) const {
-        return create_dataloader_from_dataset(train_dataset_, workers);
-    }
+    bool Trainer::train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode) {
+        // Use the render mode from parameters
+        auto r_output = gs::rasterize(
+            *cam,
+            strategy_->get_model(),
+            background_,
+            1.0f,
+            false,
+            false,
+            render_mode);
 
-    auto Trainer::make_val_dataloader(int workers) const {
-        return create_dataloader_from_dataset(val_dataset_, workers);
+        // Compute loss using the factored-out function
+        torch::Tensor loss = compute_loss(r_output,
+                                          gt_image,
+                                          strategy_->get_model(),
+                                          params_.optimization);
+
+        loss.backward();
+
+        {
+            torch::NoGradGuard no_grad;
+
+            // Clean evaluation - let the evaluator handle everything
+            if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
+                evaluator_->print_evaluation_header(iter);
+                auto metrics = evaluator_->evaluate(iter,
+                                                    strategy_->get_model(),
+                                                    val_dataset_,
+                                                    background_);
+                std::cout << metrics.to_string() << std::endl;
+            }
+
+            // Save model at specified steps
+            for (size_t save_step : params_.optimization.save_steps) {
+                if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
+                    const bool join_threads = (iter == params_.optimization.save_steps.back());
+                    strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/join_threads);
+                }
+            }
+
+            strategy_->post_backward(iter, r_output);
+            strategy_->step(iter);
+        }
+
+        progress_->update(iter, loss.item<float>(),
+                          static_cast<int>(strategy_->get_model().size()),
+                          strategy_->is_densifying(iter));
+
+        // Return true if we should continue training
+        return iter < params_.optimization.iterations;
     }
 
     void Trainer::train() {
         int iter = 1;
         int epochs_needed = (params_.optimization.iterations + train_dataset_size_ - 1) / train_dataset_size_;
 
-        auto train_dataloader = make_train_dataloader();
+        const int num_workers = 4;
 
-        // Convert string render mode to enum once
-        RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
-        const bool has_rgb = renderModeHasRGB(render_mode);
-        const bool has_depth = renderModeHasDepth(render_mode);
+        const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
-        for (int epoch = 0; epoch < epochs_needed && iter <= params_.optimization.iterations; ++epoch) {
+        bool should_continue = true;
+
+        for (int epoch = 0; epoch < epochs_needed && should_continue; ++epoch) {
+            auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
+
             for (auto& batch : *train_dataloader) {
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera;
                 torch::Tensor gt_image = std::move(camera_with_image.image);
 
-                // Use the render mode from parameters
-                auto r_output = gs::rasterize(
-                    *cam,
-                    strategy_->get_model(),
-                    background_,
-                    1.0f,
-                    false,
-                    false,
-                    render_mode // Use the configured render mode
-                );
+                should_continue = train_step(iter, cam, gt_image, render_mode);
 
-                torch::Tensor loss;
-
-                // Only process RGB if render mode includes it
-                if (has_rgb) {
-                    if (r_output.image.dim() == 3)
-                        r_output.image = r_output.image.unsqueeze(0);
-
-                    if (gt_image.dim() == 3)
-                        gt_image = gt_image.unsqueeze(0);
-
-                    if (r_output.image.sizes() != gt_image.sizes()) {
-                        std::cerr << "ERROR: size mismatch – rendered " << r_output.image.sizes()
-                                  << " vs. ground truth " << gt_image.sizes() << '\n';
-                        throw std::runtime_error("Image size mismatch");
-                    }
-
-                    // Base loss computation
-                    auto l1l = torch::l1_loss(r_output.image.squeeze(0), gt_image.squeeze(0));
-                    auto ssim_loss = fused_ssim(r_output.image, gt_image, "same", /*train=*/true);
-                    loss = (1.f - params_.optimization.lambda_dssim) * l1l +
-                           params_.optimization.lambda_dssim * (1.f - ssim_loss);
-
-                    // Add opacity regularization
-                    if (params_.optimization.opacity_reg > 0.0f) {
-                        auto opacity_l1 = torch::abs(strategy_->get_model().get_opacity()).mean();
-                        loss += params_.optimization.opacity_reg * opacity_l1;
-                    }
-
-                    // Add scale regularization
-                    if (params_.optimization.scale_reg > 0.0f) {
-                        auto scale_l1 = torch::abs(strategy_->get_model().get_scaling()).mean();
-                        loss += params_.optimization.scale_reg * scale_l1;
-                    }
-                } else {
-                    // For depth-only modes, create a dummy loss or implement depth supervision
-                    std::cerr << "Warning: Training with depth-only mode without RGB loss. ";
-                    std::cerr << "Consider implementing depth supervision or switching to RGB_D/RGB_ED mode.\n";
-
-                    // Create a small dummy loss to allow gradient computation
-                    loss = torch::zeros({1}, torch::kFloat32).to(torch::kCUDA);
-                    loss.requires_grad_(true);
-                }
-
-                loss.backward();
-
-                {
-                    torch::NoGradGuard no_grad;
-
-                    // Clean evaluation - let the evaluator handle everything
-                    if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
-                        evaluator_->print_evaluation_header(iter);
-                        auto metrics = evaluator_->evaluate(iter,
-                                                            strategy_->get_model(),
-                                                            val_dataset_,
-                                                            background_);
-                        std::cout << metrics.to_string() << std::endl;
-                    }
-
-                    // Save model at specified steps
-                    for (size_t save_step : params_.optimization.save_steps) {
-                        if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
-                            strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/false);
-                        }
-                    }
-
-                    strategy_->post_backward(iter, r_output);
-                    strategy_->step(iter);
-                }
-
-                const bool is_densifying = (iter < params_.optimization.stop_densify &&
-                                            iter > params_.optimization.start_densify &&
-                                            iter % params_.optimization.growth_interval == 0);
-
-                progress_->update(iter, loss.item<float>(), static_cast<int>(strategy_->get_model().size()), is_densifying);
-
-                if (iter == params_.optimization.iterations) {
+                if (!should_continue) {
                     break;
                 }
 
                 ++iter;
             }
-
-            train_dataloader = make_train_dataloader();
         }
 
-        // Final evaluation and save
         progress_->complete();
-        if (evaluator_->is_enabled()) {
-            evaluator_->print_final_evaluation_header();
-            auto final_metrics = evaluator_->evaluate(params_.optimization.iterations,
-                                                      strategy_->get_model(),
-                                                      val_dataset_,
-                                                      background_);
-            std::cout << final_metrics.to_string() << std::endl;
-            evaluator_->save_report();
-        } else {
-        }
-
-        strategy_->get_model().save_ply(params_.dataset.output_path, params_.optimization.iterations, /*join=*/true);
+        evaluator_->save_report();
         progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
     }
 
