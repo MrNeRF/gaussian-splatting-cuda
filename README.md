@@ -128,9 +128,6 @@ Extract it to the `data` folder in the project root.
 - **`-o, --output-path [PATH]`**  
   Path to save the trained model (default: `./output`)
 
-- **`-f, --force`**  
-  Force overwrite of existing output folder
-
 ### Training Options
 
 - **`-i, --iter [NUM]`**  
@@ -189,9 +186,6 @@ Extract it to the `data` folder in the project root.
   Enable bilateral grid for appearance modeling
     - Helps with per-image appearance variations
     - Adds TV (Total Variation) regularization
-
-- **`-c, --convergence-rate [FLOAT]`**  
-  Set convergence rate (currently not used in implementation)
 
 - **`-h, --help`**  
   Display the help menu
