@@ -86,10 +86,9 @@ namespace {
         return result.to(points.device());
     }
 
-    void write_ply(const PointCloud& pc,
-                   const std::filesystem::path& root,
-                   int iteration,
-                   bool join_thread = false) {
+    void write_ply_impl(const PointCloud& pc,
+                        const std::filesystem::path& root,
+                        int iteration) {
         namespace fs = std::filesystem;
         fs::create_directories(root);
 
@@ -109,44 +108,99 @@ namespace {
         if (pc.rotation.defined())
             tensors.push_back(pc.rotation);
 
-        std::thread t([root,
-                       tensors = std::move(tensors),
-                       names = pc.attribute_names,
-                       iter = iteration]() mutable {
-            auto write_output_ply =
-                [](const fs::path& file_path,
-                   const std::vector<torch::Tensor>& data,
-                   const std::vector<std::string>& attr_names) {
-                    tinyply::PlyFile ply;
-                    size_t attr_off = 0;
+        auto write_output_ply =
+            [](const fs::path& file_path,
+               const std::vector<torch::Tensor>& data,
+               const std::vector<std::string>& attr_names) {
+                tinyply::PlyFile ply;
+                size_t attr_off = 0;
 
-                    for (const auto& tensor : data) {
-                        const size_t cols = tensor.size(1);
-                        std::vector<std::string> attrs(attr_names.begin() + attr_off,
-                                                       attr_names.begin() + attr_off + cols);
+                for (const auto& tensor : data) {
+                    const size_t cols = tensor.size(1);
+                    std::vector<std::string> attrs(attr_names.begin() + attr_off,
+                                                   attr_names.begin() + attr_off + cols);
 
-                        ply.add_properties_to_element(
-                            "vertex",
-                            attrs,
-                            tinyply::Type::FLOAT32,
-                            tensor.size(0),
-                            reinterpret_cast<uint8_t*>(tensor.data_ptr<float>()),
-                            tinyply::Type::INVALID, 0);
+                    ply.add_properties_to_element(
+                        "vertex",
+                        attrs,
+                        tinyply::Type::FLOAT32,
+                        tensor.size(0),
+                        reinterpret_cast<uint8_t*>(tensor.data_ptr<float>()),
+                        tinyply::Type::INVALID, 0);
 
-                        attr_off += cols;
-                    }
+                    attr_off += cols;
+                }
 
-                    std::filebuf fb;
-                    fb.open(file_path, std::ios::out | std::ios::binary);
-                    std::ostream out_stream(&fb);
-                    ply.write(out_stream, /*binary=*/true);
-                };
-            write_output_ply(root / ("splat_" + std::to_string(iter) + ".ply"), tensors, names);
-        });
+                std::filebuf fb;
+                fb.open(file_path, std::ios::out | std::ios::binary);
+                std::ostream out_stream(&fb);
+                ply.write(out_stream, /*binary=*/true);
+            };
 
-        join_thread ? t.join() : t.detach();
+        write_output_ply(root / ("splat_" + std::to_string(iteration) + ".ply"), tensors, pc.attribute_names);
     }
 } // namespace
+
+SplatData::~SplatData() {
+    // Wait for all save threads to complete
+    std::lock_guard<std::mutex> lock(_threads_mutex);
+    for (auto& t : _save_threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+}
+
+// Move constructor
+SplatData::SplatData(SplatData&& other) noexcept
+    : _active_sh_degree(other._active_sh_degree),
+      _max_sh_degree(other._max_sh_degree),
+      _scene_scale(other._scene_scale),
+      _means(std::move(other._means)),
+      _sh0(std::move(other._sh0)),
+      _shN(std::move(other._shN)),
+      _scaling(std::move(other._scaling)),
+      _rotation(std::move(other._rotation)),
+      _opacity(std::move(other._opacity)),
+      _max_radii2D(std::move(other._max_radii2D)) {
+    // Move threads under lock
+    std::lock_guard<std::mutex> lock(other._threads_mutex);
+    _save_threads = std::move(other._save_threads);
+}
+
+// Move assignment operator
+SplatData& SplatData::operator=(SplatData&& other) noexcept {
+    if (this != &other) {
+        // First, wait for our own threads to complete
+        {
+            std::lock_guard<std::mutex> lock(_threads_mutex);
+            for (auto& t : _save_threads) {
+                if (t.joinable()) {
+                    t.join();
+                }
+            }
+        }
+
+        // Move scalar members
+        _active_sh_degree = other._active_sh_degree;
+        _max_sh_degree = other._max_sh_degree;
+        _scene_scale = other._scene_scale;
+
+        // Move tensors
+        _means = std::move(other._means);
+        _sh0 = std::move(other._sh0);
+        _shN = std::move(other._shN);
+        _scaling = std::move(other._scaling);
+        _rotation = std::move(other._rotation);
+        _opacity = std::move(other._opacity);
+        _max_radii2D = std::move(other._max_radii2D);
+
+        // Move threads under lock
+        std::lock_guard<std::mutex> lock(other._threads_mutex);
+        _save_threads = std::move(other._save_threads);
+    }
+    return *this;
+}
 
 // Constructor from tensors
 SplatData::SplatData(int sh_degree,
@@ -216,10 +270,41 @@ std::vector<std::string> SplatData::get_attribute_names() const {
     return a;
 }
 
+void SplatData::cleanup_finished_threads() const {
+    std::lock_guard<std::mutex> lock(_threads_mutex);
+
+    // Remove threads that have finished
+    _save_threads.erase(
+        std::remove_if(_save_threads.begin(), _save_threads.end(),
+                       [](std::thread& t) {
+                           if (t.joinable()) {
+                               // Try to join with zero timeout to check if finished
+                               // Since C++11 doesn't have try_join, we'll keep all threads
+                               return false;
+                           }
+                           return true;
+                       }),
+        _save_threads.end()
+    );
+}
+
 // Export to PLY
 void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_thread) const {
     auto pc = to_point_cloud();
-    write_ply(pc, root, iteration, join_thread);
+
+    if (join_thread) {
+        // Synchronous save
+        write_ply_impl(pc, root, iteration);
+    } else {
+        // Clean up any finished threads first
+        cleanup_finished_threads();
+
+        // Asynchronous save with thread tracking
+        std::lock_guard<std::mutex> lock(_threads_mutex);
+        _save_threads.emplace_back([pc = std::move(pc), root, iteration]() {
+            write_ply_impl(pc, root, iteration);
+        });
+    }
 }
 
 PointCloud SplatData::to_point_cloud() const {
