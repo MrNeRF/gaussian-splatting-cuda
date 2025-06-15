@@ -289,9 +289,9 @@ namespace gs {
         torch::autograd::AutogradContext* ctx,
         torch::Tensor means2d,       // [C, N, 2]
         torch::Tensor conics,        // [C, N, 3]
-        torch::Tensor colors,        // [C, N, 3]
+        torch::Tensor colors,        // [C, N, channels] - may include depth
         torch::Tensor opacities,     // [C, N]
-        torch::Tensor bg_color,      // [C, 3]
+        torch::Tensor bg_color,      // [C, channels] - may include depth
         torch::Tensor isect_offsets, // [C, tile_height, tile_width]
         torch::Tensor flatten_ids,   // [nnz]
         torch::Tensor settings) {    // [3] containing width, height, tile_size
@@ -303,18 +303,20 @@ namespace gs {
 
         const int C = static_cast<int>(means2d.size(0));
         const int N = static_cast<int>(means2d.size(1));
+        const int channels = static_cast<int>(colors.size(2)); // Get actual channel count
 
-        // Input validation
+        // Input validation - DO NOT hardcode channels to 3!
         TORCH_CHECK(means2d.dim() == 3 && means2d.size(2) == 2,
                     "means2d must be [C, N, 2], got ", means2d.sizes());
         TORCH_CHECK(conics.dim() == 3 && conics.size(0) == C && conics.size(1) == N && conics.size(2) == 3,
                     "conics must be [C, N, 3], got ", conics.sizes());
-        TORCH_CHECK(colors.dim() == 3 && colors.size(0) == C && colors.size(1) == N && colors.size(2) == 3,
-                    "colors must be [C, N, 3], got ", colors.sizes());
+        // Remove the hardcoded channel check!
+        TORCH_CHECK(colors.dim() == 3 && colors.size(0) == C && colors.size(1) == N,
+                    "colors must be [C, N, channels], got ", colors.sizes());
         TORCH_CHECK(opacities.dim() == 2 && opacities.size(0) == C && opacities.size(1) == N,
                     "opacities must be [C, N], got ", opacities.sizes());
-        TORCH_CHECK(bg_color.dim() == 2 && bg_color.size(0) == C && bg_color.size(1) == 3,
-                    "bg_color must be [C, 3], got ", bg_color.sizes());
+        TORCH_CHECK(bg_color.dim() == 2 && bg_color.size(0) == C && bg_color.size(1) == channels,
+                    "bg_color must be [C, ", channels, "], got ", bg_color.sizes());
 
         // Device checks
         TORCH_CHECK(means2d.is_cuda(), "means2d must be on CUDA");
@@ -346,12 +348,14 @@ namespace gs {
         auto rendered_alpha = std::get<1>(raster_results).to(torch::kFloat32).contiguous();
         auto last_ids = std::get<2>(raster_results).contiguous();
 
-        // Validate outputs
+        // Validate outputs - use actual channel count
         TORCH_CHECK(rendered_image.dim() == 4 && rendered_image.size(0) == C &&
-                        rendered_image.size(1) == height && rendered_image.size(2) == width && rendered_image.size(3) == 3,
-                    "rendered_image must be [C, H, W, 3], got ", rendered_image.sizes());
+                        rendered_image.size(1) == height && rendered_image.size(2) == width &&
+                        rendered_image.size(3) == channels,
+                    "rendered_image must be [C, H, W, ", channels, "], got ", rendered_image.sizes());
         TORCH_CHECK(rendered_alpha.dim() == 4 && rendered_alpha.size(0) == C &&
-                        rendered_alpha.size(1) == height && rendered_alpha.size(2) == width && rendered_alpha.size(3) == 1,
+                        rendered_alpha.size(1) == height && rendered_alpha.size(2) == width &&
+                        rendered_alpha.size(3) == 1,
                     "rendered_alpha must be [C, H, W, 1], got ", rendered_alpha.sizes());
 
         // Device checks for outputs
@@ -365,7 +369,6 @@ namespace gs {
 
         return {rendered_image, rendered_alpha, last_ids};
     }
-
     torch::autograd::tensor_list RasterizationFunction::backward(
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {

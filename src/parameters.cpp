@@ -85,7 +85,7 @@ namespace gs {
                 // Define all expected parameters and their types
                 struct ParamInfo {
                     std::string name;
-                    std::variant<size_t, float, int64_t> value;
+                    std::variant<size_t, float, int64_t, std::string, bool> value;
                     std::string description; // Added for better documentation
                 };
 
@@ -104,22 +104,33 @@ namespace gs {
                     {"grad_threshold", defaults.grad_threshold, "Gradient threshold for densification"},
                     {"opacity_reg", defaults.opacity_reg, "Opacity L1 regularization weight"},
                     {"scale_reg", defaults.scale_reg, "Scale L1 regularization weight"},
-                    {"sh_degree", defaults.sh_degree, "Gradient threshold for densification"},
-                    {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"}};
+                    {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
+                    {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
+                    {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
+                };
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
                     if (!json.contains(param.name)) {
-                        missing_in_json.push_back(param.name);
-                        all_match = false;
+                        // Skip eval_steps and save_steps as they are handled separately
+                        if (param.name != "eval_steps" && param.name != "save_steps") {
+                            missing_in_json.push_back(param.name);
+                            all_match = false;
+                        }
                         continue;
                     }
 
                     // Compare values based on type
                     std::visit([&](const auto& default_val) {
                         using T = std::decay_t<decltype(default_val)>;
-                        if (json[param.name].get<T>() != default_val) {
-                            mismatched_values.push_back(param.name);
+                        try {
+                            if (json[param.name].get<T>() != default_val) {
+                                mismatched_values.push_back(param.name);
+                                all_match = false;
+                            }
+                        } catch (...) {
+                            // Type mismatch
+                            mismatched_values.push_back(param.name + " (type mismatch)");
                             all_match = false;
                         }
                     },
@@ -134,6 +145,9 @@ namespace gs {
                             found = true;
                             break;
                         }
+                    }
+                    if (key == "eval_steps" || key == "save_steps") {
+                        found = true;
                     }
                     if (!found) {
                         unknown_params.push_back(key);
@@ -220,7 +234,7 @@ namespace gs {
             params.start_densify = json["start_densify"];
             params.stop_densify = json["stop_densify"];
             params.grad_threshold = json["grad_threshold"];
-            params.grad_threshold = json["grad_threshold"];
+            params.sh_degree = json["sh_degree"];
 
             if (json.contains("opacity_reg")) {
                 params.opacity_reg = json["opacity_reg"];
@@ -230,6 +244,19 @@ namespace gs {
             }
             if (json.contains("max_cap")) {
                 params.max_cap = json["max_cap"];
+            }
+
+            // Handle render mode
+            if (json.contains("render_mode")) {
+                std::string mode = json["render_mode"];
+                // Validate render mode
+                if (mode == "RGB" || mode == "D" || mode == "ED" ||
+                    mode == "RGB_D" || mode == "RGB_ED") {
+                    params.render_mode = mode;
+                } else {
+                    std::cerr << "Warning: Invalid render mode '" << mode
+                              << "' in JSON. Using default 'RGB'\n";
+                }
             }
 
             if (json.contains("eval_steps")) {

@@ -42,6 +42,10 @@ namespace gs {
             ::args::ValueFlag<int> test_every(parser, "test_every", "Every N-th image is a test image", {"test-every"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
 
+            // Add render mode arguments
+            ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
+            ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
+
             // Parse arguments
             try {
                 parser.Prog(args.front());
@@ -103,6 +107,19 @@ namespace gs {
 
             if (enable_eval) {
                 params.optimization.enable_eval = true;
+            }
+
+            // Process render mode arguments
+            if (render_mode) {
+                std::string mode = ::args::get(render_mode);
+                // Validate render mode
+                if (mode != "RGB" && mode != "D" && mode != "ED" &&
+                    mode != "RGB_D" && mode != "RGB_ED") {
+                    std::cerr << "ERROR: Invalid render mode '" << mode << "'. ";
+                    std::cerr << "Valid modes are: RGB, D, ED, RGB_D, RGB_ED\n";
+                    return -1;
+                }
+                params.optimization.render_mode = mode;
             }
 
             return 0; // Success

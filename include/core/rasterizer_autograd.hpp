@@ -47,9 +47,9 @@ namespace gs {
             torch::autograd::AutogradContext* ctx,
             torch::Tensor means2d,       // [C, N, 2]
             torch::Tensor conics,        // [C, N, 3]
-            torch::Tensor colors,        // [C, N, 3]
+            torch::Tensor colors,        // [C, N, channels] - may include depth
             torch::Tensor opacities,     // [C, N]
-            torch::Tensor bg_color,      // [C, 3]
+            torch::Tensor bg_color,      // [C, channels] - may include depth
             torch::Tensor isect_offsets, // [C, tile_height, tile_width]
             torch::Tensor flatten_ids,   // [nnz]
             torch::Tensor settings);     // [3] containing width, height, tile_size
