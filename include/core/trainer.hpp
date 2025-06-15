@@ -29,7 +29,7 @@ namespace gs {
         virtual void train();
 
         // Evaluation method
-        metrics::EvalMetrics evaluate(int iteration);
+        metrics::EvalMetrics evaluate(int iteration, bool save_images);
 
         // Get the strategy (for external access if needed)
         IStrategy& get_strategy() { return *strategy_; }

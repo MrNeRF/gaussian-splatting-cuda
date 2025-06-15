@@ -186,7 +186,7 @@ namespace gs {
                             if (iter == static_cast<int>(eval_step)) {
                                 std::cout << std::endl;
                                 std::cout << "[Evaluation at step " << iter << "]" << std::endl;
-                                auto metrics = evaluate(iter);
+                                auto metrics = evaluate(iter, params_.optimization.enable_save_eval_images);
                                 std::cout << metrics.to_string() << std::endl;
                             }
                         }
@@ -223,7 +223,7 @@ namespace gs {
         if (params_.optimization.enable_eval) {
             progress_->complete();
             std::cout << "\n[Final Evaluation]" << std::endl;
-            auto final_metrics = evaluate(iter);
+            auto final_metrics = evaluate(iter, params_.optimization.enable_save_eval_images);
             std::cout << final_metrics.to_string() << std::endl;
             metrics_reporter_->save_report();
         } else {
@@ -274,7 +274,7 @@ namespace gs {
         return colormap;
     }
 
-    metrics::EvalMetrics Trainer::evaluate(int iteration) {
+    metrics::EvalMetrics Trainer::evaluate(int iteration, bool save_images) {
         metrics::EvalMetrics result;
         result.num_gaussians = static_cast<int>(strategy_->get_model().size());
         result.iteration = iteration;
@@ -338,14 +338,16 @@ namespace gs {
                 lpips_values.push_back(lpips);
 
                 // Save side-by-side RGB images
-                save_image(eval_dir / (std::to_string(image_idx) + ".png"),
-                           {gt_image.squeeze(0), r_output.image.squeeze(0)},
-                           true, // horizontal
-                           4);   // separator width
+                if (save_images) {
+                    save_image(eval_dir / (std::to_string(image_idx) + ".png"),
+                               {gt_image.squeeze(0), r_output.image.squeeze(0)},
+                               true, // horizontal
+                               4);   // separator width
+                }
             }
 
             // Only save depth if enabled and render mode includes depth
-            if (has_depth) {
+            if (has_depth && save_images) {
                 if (r_output.depth.defined()) {
                     auto depth_vis = r_output.depth.clone().squeeze(0).to(torch::kCPU); // [H, W]
 
@@ -357,17 +359,17 @@ namespace gs {
                     // Apply colormap
                     auto depth_colormap = apply_depth_colormap(depth_normalized);
 
-                    // Save both grayscale and colormap versions
-                    auto depth_gray_rgb = depth_normalized.unsqueeze(0).repeat({3, 1, 1});
-                    save_image(depth_dir / (std::to_string(image_idx) + "_gray.png"), depth_gray_rgb);
-                    save_image(depth_dir / (std::to_string(image_idx) + "_color.png"), depth_colormap);
-
                     // Optionally save RGB + Depth side by side (only if we have RGB)
                     if (has_rgb) {
                         save_image(depth_dir / (std::to_string(image_idx) + "_rgb_depth.png"),
                                    {r_output.image.squeeze(0), depth_colormap},
                                    true, // horizontal
                                    4);   // separator width
+                    } else {
+                        // Save depth alone if no RGB
+                        auto depth_gray_rgb = depth_normalized.unsqueeze(0).repeat({3, 1, 1});
+                        save_image(depth_dir / (std::to_string(image_idx) + "_gray.png"), depth_gray_rgb);
+                        save_image(depth_dir / (std::to_string(image_idx) + "_color.png"), depth_colormap);
                     }
                 }
             }
