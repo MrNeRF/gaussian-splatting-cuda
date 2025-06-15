@@ -61,7 +61,7 @@ namespace gs {
             loss += opt_params.scale_reg * scale_l1;
         }
         // Total variation loss for bilateral grid
-        if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
+        if (params_.optimization.use_bilateral_grid) {
             loss += params_.optimization.tv_loss_weight * bilateral_grid_->tv_loss();
         }
 
@@ -130,6 +130,10 @@ namespace gs {
             false,
             render_mode);
 
+        // Apply bilateral grid if enabled
+        if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
+            r_output.image = bilateral_grid_->apply(r_output.image,cam->uid());
+        }
         // Compute loss using the factored-out function
         torch::Tensor loss = compute_loss(r_output,
                                           gt_image,
@@ -161,6 +165,10 @@ namespace gs {
 
             strategy_->post_backward(iter, r_output);
             strategy_->step(iter);
+            if (params_.optimization.use_bilateral_grid) {
+                bilateral_grid_optimizer_->step();
+                bilateral_grid_optimizer_->zero_grad(true);
+            }
         }
 
         progress_->update(iter, loss.item<float>(),
