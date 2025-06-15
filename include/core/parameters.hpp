@@ -32,6 +32,14 @@ namespace gs {
             bool enable_eval = false;                       // Only evaluate when explicitly enabled
             bool enable_save_eval_images = false;           // Save during evaluation images
             std::string render_mode = "RGB";                // Render mode: RGB, D, ED, RGB_D, RGB_ED
+
+            // Bilateral grid parameters
+            bool use_bilateral_grid = false;
+            int bilateral_grid_X = 16;
+            int bilateral_grid_Y = 16;
+            int bilateral_grid_W = 8;
+            float bilateral_grid_lr = 2e-3;
+            float tv_loss_weight = 10.0f;
         };
 
         struct DatasetConfig {

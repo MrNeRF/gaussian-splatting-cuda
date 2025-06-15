@@ -25,9 +25,9 @@ protected:
         params.optimization.rotation_lr = 1e-3f;
         params.optimization.max_cap = 10000;
         params.optimization.min_opacity = 0.005f;
-        params.optimization.start_densify = 500;
-        params.optimization.stop_densify = 25000;
-        params.optimization.growth_interval = 100;
+        params.optimization.start_refine = 500;
+        params.optimization.stop_refine = 25000;
+        params.optimization.refine_every = 100;
         params.optimization.sh_degree = 3;
 
         // Set up test camera
@@ -134,9 +134,9 @@ TEST_F(MCMCTest, SHDegreeIncrementWithRenderingTest) {
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
     // Set parameters to avoid refinement at iteration 1000
-    params.optimization.start_densify = 1001; // Start after iteration 1000
-    params.optimization.stop_densify = 2000;  // Stop densification later
-    params.optimization.growth_interval = 100;
+    params.optimization.start_refine = 1001; // Start after iteration 1000
+    params.optimization.stop_refine = 2000;  // Stop densification later
+    params.optimization.refine_every = 100;
     mcmc->initialize(params.optimization);
 
     // Perform initial render to establish optimizer states
@@ -224,9 +224,9 @@ TEST_F(MCMCTest, RefinementWithActualRenderingTest) {
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
     // Set up for refinement
-    params.optimization.start_densify = 500;
-    params.optimization.stop_densify = 1000;
-    params.optimization.growth_interval = 100;
+    params.optimization.start_refine = 500;
+    params.optimization.stop_refine = 1000;
+    params.optimization.refine_every = 100;
     mcmc->initialize(params.optimization);
 
     // Initialize optimizer
@@ -255,8 +255,8 @@ TEST_F(MCMCTest, RelocationMechanicsTest) {
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
     params.optimization.min_opacity = 0.005f;
-    params.optimization.start_densify = 500;
-    params.optimization.stop_densify = 1000;
+    params.optimization.start_refine = 500;
+    params.optimization.stop_refine= 1000;
     mcmc->initialize(params.optimization);
 
     // Initialize optimizer
@@ -338,9 +338,9 @@ TEST_F(MCMCTest, MultipleRefinementCyclesTest) {
     auto mcmc = std::make_unique<MCMC>(std::move(splat_data));
 
     params.optimization.max_cap = 200; // Low cap to test limits
-    params.optimization.start_densify = 100;
-    params.optimization.stop_densify = 1000;
-    params.optimization.growth_interval = 100;
+    params.optimization.start_refine = 100;
+    params.optimization.stop_refine = 1000;
+    params.optimization.refine_every = 100;
     mcmc->initialize(params.optimization);
 
     // Track size changes
