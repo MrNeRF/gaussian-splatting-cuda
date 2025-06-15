@@ -8,14 +8,23 @@
 namespace gs {
 
     struct RenderOutput {
-        torch::Tensor image;   // rendered_image
-        torch::Tensor means2d; // 2D means
-        torch::Tensor depths;  // depths
-        torch::Tensor radii;   // per-Gaussian projected radius
-        torch::Tensor visibility;
-
+        torch::Tensor image;      // [..., C, H, W, channels]
+        torch::Tensor alpha;      // [..., C, H, W, 1]
+        torch::Tensor depth;      // [..., C, H, W, 1] - accumulated or expected depth
+        torch::Tensor means2d;    // [..., N, 2]
+        torch::Tensor depths;     // [..., N] - per-gaussian depths
+        torch::Tensor radii;      // [..., N]
+        torch::Tensor visibility; // [..., N]
         int width;
         int height;
+    };
+
+    enum class RenderMode {
+        RGB,   // Color only
+        D,     // Accumulated depth only
+        ED,    // Expected depth only
+        RGB_D, // Color + accumulated depth
+        RGB_ED // Color + expected depth
     };
 
     // Wrapper function to use gsplat backend for rendering
@@ -25,6 +34,7 @@ namespace gs {
         torch::Tensor& bg_color,
         float scaling_modifier = 1.0,
         bool packed = false,
-        bool antialiased = false);
+        bool antialiased = false,
+        RenderMode render_mode = RenderMode::RGB);
 
 } // namespace gs

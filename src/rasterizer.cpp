@@ -7,6 +7,7 @@ namespace gs {
 
     using torch::indexing::None;
     using torch::indexing::Slice;
+
     inline torch::Tensor spherical_harmonics(
         int sh_degree,
         const torch::Tensor& dirs,
@@ -46,7 +47,8 @@ namespace gs {
         torch::Tensor& bg_color,
         float scaling_modifier,
         bool packed,
-        bool antialiased) {
+        bool antialiased,
+        RenderMode render_mode) {
 
         // Ensure we don't use packed mode (not supported in this implementation)
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
@@ -158,7 +160,31 @@ namespace gs {
         // Expand colors to [C, N, 3] format expected by rasterization
         colors = colors.unsqueeze(0);
 
-        // Step 3: Apply opacity with compensations
+        // Step 3: Handle depth based on render mode
+        torch::Tensor render_colors;
+        torch::Tensor final_bg;
+
+        switch (render_mode) {
+        case RenderMode::RGB:
+            render_colors = colors;
+            final_bg = bg_color;
+            break;
+
+        case RenderMode::D:
+        case RenderMode::ED:
+            render_colors = depths.unsqueeze(-1); // [C, N, 1]
+            final_bg = torch::zeros({1, 1}, bg_color.options());
+            break;
+
+        case RenderMode::RGB_D:
+        case RenderMode::RGB_ED:
+            // Concatenate colors and depths
+            render_colors = torch::cat({colors, depths.unsqueeze(-1)}, -1); // [C, N, 4]
+            final_bg = torch::cat({bg_color, torch::zeros({1, 1}, bg_color.options())}, -1);
+            break;
+        }
+
+        // Step 4: Apply opacity with compensations
         torch::Tensor final_opacities;
         if (calc_compensations && compensations.defined() && compensations.numel() > 0) {
             final_opacities = opacities.unsqueeze(0) * compensations;
@@ -167,7 +193,7 @@ namespace gs {
         }
         TORCH_CHECK(final_opacities.is_cuda(), "final_opacities must be on CUDA");
 
-        // Step 4: Tile intersection
+        // Step 5: Tile intersection
         const int tile_width = (image_width + tile_size - 1) / tile_size;
         const int tile_height = (image_height + tile_size - 1) / tile_size;
 
@@ -189,22 +215,71 @@ namespace gs {
         TORCH_CHECK(flatten_ids.is_cuda(), "flatten_ids must be on CUDA");
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
 
-        // Step 5: Rasterization
+        // Step 6: Rasterization
         auto raster_settings = torch::tensor({(float)image_width,
                                               (float)image_height,
                                               (float)tile_size},
                                              torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
         auto raster_outputs = RasterizationFunction::apply(
-            means2d, conics, colors, final_opacities, bg_color,
+            means2d, conics, render_colors, final_opacities, final_bg,
             isect_offsets, flatten_ids, raster_settings);
 
         auto rendered_image = raster_outputs[0];
         auto rendered_alpha = raster_outputs[1];
 
+        // Step 7: Post-process based on render mode
+        torch::Tensor final_image, final_depth;
+
+        switch (render_mode) {
+        case RenderMode::RGB:
+            final_image = rendered_image;
+            final_depth = torch::Tensor(); // Empty
+            break;
+
+        case RenderMode::D:
+            final_depth = rendered_image;  // It's actually depth
+            final_image = torch::Tensor(); // Empty
+            break;
+
+        case RenderMode::ED:
+            // Normalize accumulated depth by alpha to get expected depth
+            final_depth = rendered_image / rendered_alpha.clamp_min(1e-10);
+            final_image = torch::Tensor(); // Empty
+            break;
+
+        case RenderMode::RGB_D:
+            final_image = rendered_image.index({Slice(), Slice(), Slice(), Slice(None, -1)});
+            final_depth = rendered_image.index({Slice(), Slice(), Slice(), Slice(-1, None)});
+            break;
+
+        case RenderMode::RGB_ED:
+            final_image = rendered_image.index({Slice(), Slice(), Slice(), Slice(None, -1)});
+            auto accum_depth = rendered_image.index({Slice(), Slice(), Slice(), Slice(-1, None)});
+            final_depth = accum_depth / rendered_alpha.clamp_min(1e-10);
+            break;
+        }
+
         // Prepare output
         RenderOutput result;
-        result.image = torch::clamp(rendered_image.squeeze(0).permute({2, 0, 1}), 0.0f, 1.0f);
+
+        // Handle image output
+        if (final_image.defined() && final_image.numel() > 0) {
+            result.image = torch::clamp(final_image.squeeze(0).permute({2, 0, 1}), 0.0f, 1.0f);
+        } else {
+            result.image = torch::Tensor();
+        }
+
+        // Handle alpha output - always present
+        result.alpha = rendered_alpha.squeeze(0).permute({2, 0, 1});
+
+        // Handle depth output
+        if (final_depth.defined() && final_depth.numel() > 0) {
+            result.depth = final_depth.squeeze(0).permute({2, 0, 1});
+        } else {
+            result.depth = torch::Tensor();
+        }
+
         result.means2d = means2d_with_grad;
         result.depths = depths.squeeze(0);
         result.radii = std::get<0>(radii.squeeze(0).max(-1));
@@ -213,7 +288,13 @@ namespace gs {
         result.height = image_height;
 
         // Final device checks for outputs
-        TORCH_CHECK(result.image.is_cuda(), "result.image must be on CUDA");
+        if (result.image.defined() && result.image.numel() > 0) {
+            TORCH_CHECK(result.image.is_cuda(), "result.image must be on CUDA");
+        }
+        TORCH_CHECK(result.alpha.is_cuda(), "result.alpha must be on CUDA");
+        if (result.depth.defined() && result.depth.numel() > 0) {
+            TORCH_CHECK(result.depth.is_cuda(), "result.depth must be on CUDA");
+        }
         TORCH_CHECK(result.means2d.is_cuda(), "result.means2d must be on CUDA");
         TORCH_CHECK(result.depths.is_cuda(), "result.depths must be on CUDA");
         TORCH_CHECK(result.radii.is_cuda(), "result.radii must be on CUDA");

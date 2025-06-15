@@ -56,6 +56,9 @@ namespace gs {
         std::unique_ptr<metrics::SSIM> ssim_metric_;
         std::unique_ptr<metrics::LPIPS> lpips_metric_;
         std::unique_ptr<metrics::MetricsReporter> metrics_reporter_;
+
+        void save_depth_visualization(const torch::Tensor& depth, int iteration, const std::string& prefix);
+        torch::Tensor apply_depth_colormap(const torch::Tensor& depth_normalized);
     };
 
 } // namespace gs
