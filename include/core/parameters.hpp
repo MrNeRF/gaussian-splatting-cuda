@@ -3,6 +3,7 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 #include <vector>
 
 namespace gs {
@@ -27,6 +28,7 @@ namespace gs {
             std::vector<size_t> eval_steps = {7000, 30000}; // Steps to evaluate the model
             std::vector<size_t> save_steps = {7000, 30000}; // Steps to save the model
             bool enable_eval = false;                       // Only evaluate when explicitly enabled
+            std::string render_mode = "RGB";                // Render mode: RGB, D, ED, RGB_D, RGB_ED
         };
 
         struct DatasetConfig {
