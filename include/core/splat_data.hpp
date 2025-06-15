@@ -3,7 +3,9 @@
 
 #include "core/point_cloud.hpp"
 #include <filesystem>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <torch/torch.h>
 #include <vector>
 
@@ -14,6 +16,12 @@ namespace gs::param {
 class SplatData {
 public:
     SplatData() = default;
+    ~SplatData();
+
+    SplatData(const SplatData&) = delete;
+    SplatData& operator=(const SplatData&) = delete;
+    SplatData(SplatData&& other) noexcept;
+    SplatData& operator=(SplatData&& other) noexcept;
 
     // Constructor
     SplatData(int sh_degree,
@@ -71,6 +79,13 @@ private:
     torch::Tensor _opacity;
     torch::Tensor _max_radii2D;
 
+    // Thread management for async saves
+    mutable std::vector<std::thread> _save_threads;
+    mutable std::mutex _threads_mutex;
+
     // Convert to point cloud for export
     PointCloud to_point_cloud() const;
+
+    // Helper to clean up finished threads
+    void cleanup_finished_threads() const;
 };
