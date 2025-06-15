@@ -17,6 +17,7 @@ public:
     // IStrategy interface implementation
     void initialize(const gs::param::OptimizationParameters& optimParams) override;
     void post_backward(int iter, gs::RenderOutput& render_output) override;
+    bool is_densifying(int iter) const override;
     void step(int iter) override;
     SplatData& get_model() override { return _splat_data; }
     const SplatData& get_model() const override { return _splat_data; }

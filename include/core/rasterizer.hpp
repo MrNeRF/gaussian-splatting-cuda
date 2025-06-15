@@ -27,6 +27,33 @@ namespace gs {
         RGB_ED // Color + expected depth
     };
 
+    // Helper function to check if render mode includes depth
+    static inline bool renderModeHasDepth(RenderMode mode) {
+        return mode != RenderMode::RGB;
+    }
+
+    // Helper function to check if render mode includes RGB
+    static inline bool renderModeHasRGB(RenderMode mode) {
+        return mode == RenderMode::RGB ||
+               mode == RenderMode::RGB_D ||
+               mode == RenderMode::RGB_ED;
+    }
+
+    static inline RenderMode stringToRenderMode(const std::string& mode) {
+        if (mode == "RGB")
+            return RenderMode::RGB;
+        else if (mode == "D")
+            return RenderMode::D;
+        else if (mode == "ED")
+            return RenderMode::ED;
+        else if (mode == "RGB_D")
+            return RenderMode::RGB_D;
+        else if (mode == "RGB_ED")
+            return RenderMode::RGB_ED;
+        else
+            throw std::runtime_error("Invalid render mode: " + mode);
+    }
+
     // Wrapper function to use gsplat backend for rendering
     RenderOutput rasterize(
         Camera& viewpoint_camera,
