@@ -94,7 +94,7 @@ int MCMC::relocate_gs() {
         opacities = opacities.squeeze(-1);
     }
 
-    auto dead_mask = opacities <= _min_opacity;
+    auto dead_mask = opacities <= _params->min_opacity;
     auto dead_indices = dead_mask.nonzero().squeeze(-1);
     int n_dead = dead_indices.numel();
 
@@ -138,7 +138,7 @@ int MCMC::relocate_gs() {
     auto new_scales = std::get<1>(relocation_result);
 
     // Clamp new opacities
-    new_opacities = torch::clamp(new_opacities, _min_opacity, 1.0f - 1e-7f);
+    new_opacities = torch::clamp(new_opacities, _params->min_opacity, 1.0f - 1e-7f);
 
     // Update parameters for sampled indices
     // Handle opacity shape properly
@@ -174,9 +174,9 @@ int MCMC::add_new_gs() {
         return 0;
     }
 
-    int current_n = _splat_data.size();
-    int n_target = std::min(_cap_max, static_cast<int>(1.05f * current_n));
-    int n_new = std::max(0, n_target - current_n);
+    const int current_n = _splat_data.size();
+    const int n_target = std::min(_params->max_cap, static_cast<int>(1.05f * current_n));
+    const int n_new = std::max(0, n_target - current_n);
 
     if (n_new == 0)
         return 0;
@@ -216,7 +216,7 @@ int MCMC::add_new_gs() {
     auto new_scales = std::get<1>(relocation_result);
 
     // Clamp new opacities
-    new_opacities = torch::clamp(new_opacities, _min_opacity, 1.0f - 1e-7f);
+    new_opacities = torch::clamp(new_opacities, _params->min_opacity, 1.0f - 1e-7f);
 
     // Update existing Gaussians FIRST (before concatenation)
     if (_splat_data.opacity_raw().dim() == 2) {
@@ -375,19 +375,12 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     }
 
     // Refine Gaussians
-    if (iter < _refine_stop_iter && iter > _refine_start_iter && iter % _refine_every == 0) {
+    if (is_refining(iter)) {
         // Relocate dead Gaussians
-        int n_relocated = relocate_gs();
-        if (_verbose) {
-            std::cout << "Step " << iter << ": Relocated " << n_relocated << " GSs." << std::endl;
-        }
+        relocate_gs();
 
         // Add new Gaussians
-        int n_added = add_new_gs();
-        if (_verbose) {
-            std::cout << "Step " << iter << ": Added " << n_added << " GSs. "
-                      << "Now having " << _splat_data.size() << " GSs." << std::endl;
-        }
+        add_new_gs();
 
         c10::cuda::CUDACachingAllocator::emptyCache();
     }
@@ -406,16 +399,8 @@ void MCMC::step(int iter) {
 
 void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _params = std::make_unique<gs::param::OptimizationParameters>(optimParams);
-    _cap_max = _params->max_cap;
-
-    _refine_start_iter = _params->start_densify;
-    _refine_stop_iter = _params->stop_densify;
-    _refine_every = _params->growth_interval;
-    _min_opacity = _params->min_opacity;
 
     const auto dev = torch::kCUDA;
-
-    // Initialize parameters on CUDA
     _splat_data.means() = _splat_data.means().to(dev).set_requires_grad(true);
     _splat_data.scaling_raw() = _splat_data.scaling_raw().to(dev).set_requires_grad(true);
     _splat_data.rotation_raw() = _splat_data.rotation_raw().to(dev).set_requires_grad(true);
@@ -469,8 +454,8 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma, 0);
 }
 
-bool MCMC::is_densifying(int iter) const {
-    return (iter < _params->stop_densify &&
-            iter > _params->start_densify &&
-            iter % _params->growth_interval == 0);
+bool MCMC::is_refining(int iter) const {
+    return (iter < _params->stop_refine &&
+            iter > _params->start_refine &&
+            iter % _params->refine_every == 0);
 }

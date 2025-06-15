@@ -350,7 +350,7 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
 
     // 2. scaling (log(σ)) - compute nearest neighbor distances
     auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
-    auto scaling = torch::log(torch::sqrt(nn_dist) * 0.1)
+    auto scaling = torch::log(torch::sqrt(nn_dist) * params.optimization.init_scaling)
                        .unsqueeze(-1)
                        .repeat({1, 3})
                        .to(f32_cuda)
@@ -362,7 +362,7 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
     rotation = rotation.set_requires_grad(true);
 
     // 4. opacity (inverse sigmoid of 0.5)
-    auto opacity = torch::logit(0.5f * torch::ones({means.size(0), 1}, f32_cuda))
+    auto opacity = torch::logit(params.optimization.init_opacity * torch::ones({means.size(0), 1}, f32_cuda))
                        .set_requires_grad(true);
 
     // 5. shs (SH coefficients)

@@ -137,7 +137,7 @@ namespace gs {
 
         progress_->update(iter, loss.item<float>(),
                           static_cast<int>(strategy_->get_model().size()),
-                          strategy_->is_densifying(iter));
+                          strategy_->is_refining(iter));
 
         // Return true if we should continue training
         return iter < params_.optimization.iterations;

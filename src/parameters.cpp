@@ -98,12 +98,14 @@ namespace gs {
                     {"rotation_lr", defaults.rotation_lr, "Learning rate for rotation updates"},
                     {"lambda_dssim", defaults.lambda_dssim, "DSSIM loss weight"},
                     {"min_opacity", defaults.min_opacity, "Minimum opacity threshold"},
-                    {"growth_interval", defaults.growth_interval, "Interval between densification steps"},
-                    {"start_densify", defaults.start_densify, "Starting iteration for densification"},
-                    {"stop_densify", defaults.stop_densify, "Ending iteration for densification"},
+                    {"refine_every", defaults.refine_every, "Interval between densification steps"},
+                    {"start_refine", defaults.start_refine, "Starting iteration for densification"},
+                    {"stop_refine", defaults.stop_refine, "Ending iteration for densification"},
                     {"grad_threshold", defaults.grad_threshold, "Gradient threshold for densification"},
                     {"opacity_reg", defaults.opacity_reg, "Opacity L1 regularization weight"},
                     {"scale_reg", defaults.scale_reg, "Scale L1 regularization weight"},
+                    {"init_opacity", defaults.init_opacity, "Initial opacity value for new Gaussians"},
+                    {"init_scaling", defaults.init_scaling, "Initial scaling value for new Gaussians"},
                     {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
                     {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
                     {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
@@ -230,9 +232,9 @@ namespace gs {
             params.rotation_lr = json["rotation_lr"];
             params.lambda_dssim = json["lambda_dssim"];
             params.min_opacity = json["min_opacity"];
-            params.growth_interval = json["growth_interval"];
-            params.start_densify = json["start_densify"];
-            params.stop_densify = json["stop_densify"];
+            params.refine_every = json["refine_every"];
+            params.start_refine = json["start_refine"];
+            params.stop_refine = json["stop_refine"];
             params.grad_threshold = json["grad_threshold"];
             params.sh_degree = json["sh_degree"];
 
@@ -241,6 +243,12 @@ namespace gs {
             }
             if (json.contains("scale_reg")) {
                 params.scale_reg = json["scale_reg"];
+            }
+            if (json.contains("init_opacity")) {
+                params.init_opacity = json["init_opacity"];
+            }
+            if (json.contains("init_scaling")) {
+                params.init_scaling = json["init_scaling"];
             }
             if (json.contains("max_cap")) {
                 params.max_cap = json["max_cap"];
