@@ -29,7 +29,6 @@ namespace gs {
                 .eps(1e-15));
     }
 
-
     torch::Tensor Trainer::compute_loss(const RenderOutput& render_output,
                                         const torch::Tensor& gt_image,
                                         const SplatData& splatData,
@@ -132,7 +131,7 @@ namespace gs {
 
         // Apply bilateral grid if enabled
         if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
-            r_output.image = bilateral_grid_->apply(r_output.image,cam->uid());
+            r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
         }
         // Compute loss using the factored-out function
         torch::Tensor loss = compute_loss(r_output,

@@ -114,8 +114,7 @@ namespace gs {
                     {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
                     {"bilateral_grid_W", defaults.bilateral_grid_W, "Bilateral grid W dimension"},
                     {"bilateral_grid_lr", defaults.bilateral_grid_lr, "Learning rate for bilateral grid"},
-                    {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"}
-                };
+                    {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
