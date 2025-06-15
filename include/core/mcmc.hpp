@@ -17,6 +17,7 @@ public:
     // IStrategy interface implementation
     void initialize(const gs::param::OptimizationParameters& optimParams) override;
     void post_backward(int iter, gs::RenderOutput& render_output) override;
+    bool is_refining(int iter) const override;
     void step(int iter) override;
     SplatData& get_model() override { return _splat_data; }
     const SplatData& get_model() const override { return _splat_data; }
@@ -61,13 +62,7 @@ private:
     std::unique_ptr<gs::param::OptimizationParameters> _params;
 
     // MCMC specific parameters
-    int _cap_max = 1000000;
-    float _noise_lr = 5e5;
-    int _refine_start_iter = 500;
-    int _refine_stop_iter = 25000;
-    int _refine_every = 100;
-    float _min_opacity = 0.005f;
-    bool _verbose = false;
+    const float _noise_lr = 5e5;
 
     // State variables
     torch::Tensor _binoms;

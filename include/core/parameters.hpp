@@ -3,6 +3,8 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
+#include <vector>
 
 namespace gs {
     namespace param {
@@ -15,18 +17,24 @@ namespace gs {
             float rotation_lr = 0.001f;
             float lambda_dssim = 0.2f;
             float min_opacity = 0.005f;
-            size_t growth_interval = 100;
-            size_t reset_opacity = 3'000;
-            size_t start_densify = 500;
-            size_t stop_densify = 15'000;
+            size_t refine_every = 100;
+            size_t start_refine = 500;
+            size_t stop_refine = 25'000;
             float grad_threshold = 0.0002f;
             int sh_degree = 3;
             float opacity_reg = 0.01f;
             float scale_reg = 0.01f;
+            float init_opacity = 0.5f;
+            float init_scaling = 0.1f;
             int max_cap = 1000000;
+            std::vector<size_t> eval_steps = {7000, 30000}; // Steps to evaluate the model
+            std::vector<size_t> save_steps = {7000, 30000}; // Steps to save the model
+            bool enable_eval = false;                       // Only evaluate when explicitly enabled
+            bool enable_save_eval_images = false;           // Save during evaluation images
+            std::string render_mode = "RGB";                // Render mode: RGB, D, ED, RGB_D, RGB_ED
 
             // Bilateral grid parameters
-            bool use_bilateral_grid = true;
+            bool use_bilateral_grid = false;
             int bilateral_grid_X = 16;
             int bilateral_grid_Y = 16;
             int bilateral_grid_W = 8;
@@ -39,6 +47,7 @@ namespace gs {
             std::filesystem::path output_path = "output";
             std::string images = "images";
             int resolution = -1;
+            int test_every = 8;
         };
 
         struct TrainingParameters {

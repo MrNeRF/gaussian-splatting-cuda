@@ -85,8 +85,8 @@ namespace gs {
                 // Define all expected parameters and their types
                 struct ParamInfo {
                     std::string name;
-                    std::variant<size_t, float, int, bool> value; // Updated to include all types
-                    std::string description;
+                    std::variant<size_t, float, int64_t, std::string, bool> value;
+                    std::string description; // Added for better documentation
                 };
 
                 const std::vector<ParamInfo> expected_params = {
@@ -98,35 +98,47 @@ namespace gs {
                     {"rotation_lr", defaults.rotation_lr, "Learning rate for rotation updates"},
                     {"lambda_dssim", defaults.lambda_dssim, "DSSIM loss weight"},
                     {"min_opacity", defaults.min_opacity, "Minimum opacity threshold"},
-                    {"growth_interval", defaults.growth_interval, "Interval between densification steps"},
-                    {"reset_opacity", defaults.reset_opacity, "Interval for opacity resets"},
-                    {"start_densify", defaults.start_densify, "Starting iteration for densification"},
-                    {"stop_densify", defaults.stop_densify, "Ending iteration for densification"},
+                    {"refine_every", defaults.refine_every, "Interval between densification steps"},
+                    {"start_refine", defaults.start_refine, "Starting iteration for densification"},
+                    {"stop_refine", defaults.stop_refine, "Ending iteration for densification"},
                     {"grad_threshold", defaults.grad_threshold, "Gradient threshold for densification"},
                     {"opacity_reg", defaults.opacity_reg, "Opacity L1 regularization weight"},
                     {"scale_reg", defaults.scale_reg, "Scale L1 regularization weight"},
+                    {"init_opacity", defaults.init_opacity, "Initial opacity value for new Gaussians"},
+                    {"init_scaling", defaults.init_scaling, "Initial scaling value for new Gaussians"},
                     {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
                     {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
+                    {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
                     {"use_bilateral_grid", defaults.use_bilateral_grid, "Enable bilateral grid for appearance modeling"},
                     {"bilateral_grid_X", defaults.bilateral_grid_X, "Bilateral grid X dimension"},
                     {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
                     {"bilateral_grid_W", defaults.bilateral_grid_W, "Bilateral grid W dimension"},
                     {"bilateral_grid_lr", defaults.bilateral_grid_lr, "Learning rate for bilateral grid"},
-                    {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"}};
+                    {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"}
+                };
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
                     if (!json.contains(param.name)) {
-                        missing_in_json.push_back(param.name);
-                        all_match = false;
+                        // Skip eval_steps and save_steps as they are handled separately
+                        if (param.name != "eval_steps" && param.name != "save_steps") {
+                            missing_in_json.push_back(param.name);
+                            all_match = false;
+                        }
                         continue;
                     }
 
                     // Compare values based on type
                     std::visit([&](const auto& default_val) {
                         using T = std::decay_t<decltype(default_val)>;
-                        if (json[param.name].get<T>() != default_val) {
-                            mismatched_values.push_back(param.name);
+                        try {
+                            if (json[param.name].get<T>() != default_val) {
+                                mismatched_values.push_back(param.name);
+                                all_match = false;
+                            }
+                        } catch (...) {
+                            // Type mismatch
+                            mismatched_values.push_back(param.name + " (type mismatch)");
                             all_match = false;
                         }
                     },
@@ -141,6 +153,9 @@ namespace gs {
                             found = true;
                             break;
                         }
+                    }
+                    if (key == "eval_steps" || key == "save_steps") {
+                        found = true;
                     }
                     if (!found) {
                         unknown_params.push_back(key);
@@ -223,12 +238,11 @@ namespace gs {
             params.rotation_lr = json["rotation_lr"];
             params.lambda_dssim = json["lambda_dssim"];
             params.min_opacity = json["min_opacity"];
-            params.growth_interval = json["growth_interval"];
-            params.reset_opacity = json["reset_opacity"];
-            params.start_densify = json["start_densify"];
-            params.stop_densify = json["stop_densify"];
+            params.refine_every = json["refine_every"];
+            params.start_refine = json["start_refine"];
+            params.stop_refine = json["stop_refine"];
             params.grad_threshold = json["grad_threshold"];
-            params.grad_threshold = json["grad_threshold"];
+            params.sh_degree = json["sh_degree"];
 
             if (json.contains("opacity_reg")) {
                 params.opacity_reg = json["opacity_reg"];
@@ -236,10 +250,42 @@ namespace gs {
             if (json.contains("scale_reg")) {
                 params.scale_reg = json["scale_reg"];
             }
+            if (json.contains("init_opacity")) {
+                params.init_opacity = json["init_opacity"];
+            }
+            if (json.contains("init_scaling")) {
+                params.init_scaling = json["init_scaling"];
+            }
             if (json.contains("max_cap")) {
                 params.max_cap = json["max_cap"];
             }
 
+            // Handle render mode
+            if (json.contains("render_mode")) {
+                std::string mode = json["render_mode"];
+                // Validate render mode
+                if (mode == "RGB" || mode == "D" || mode == "ED" ||
+                    mode == "RGB_D" || mode == "RGB_ED") {
+                    params.render_mode = mode;
+                } else {
+                    std::cerr << "Warning: Invalid render mode '" << mode
+                              << "' in JSON. Using default 'RGB'\n";
+                }
+            }
+
+            if (json.contains("eval_steps")) {
+                params.eval_steps.clear();
+                for (const auto& step : json["eval_steps"]) {
+                    params.eval_steps.push_back(step.get<size_t>());
+                }
+            }
+
+            if (json.contains("save_steps")) {
+                params.save_steps.clear();
+                for (const auto& step : json["save_steps"]) {
+                    params.save_steps.push_back(step.get<size_t>());
+                }
+            }
             if (json.contains("use_bilateral_grid")) {
                 params.use_bilateral_grid = json["use_bilateral_grid"];
             }
