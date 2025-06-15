@@ -7,6 +7,7 @@
 A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built upon the [gsplat](https://github.com/nerfstudio-project/gsplat) rasterization backend.
 
 ## News
+- **[2025-06-15]**: Different render modes exposed, refactors, added bilateral grid.
 - **[2025-06-13]**: Metrics are getting very close to gsplat-mcmc. LPIPS and time estimates are not comparable as of now.
 - **[2025-06-10]**: Fixed some issues. We are closing the gap to the gsplat metrics. However, there is still a small mismatch.
 - **[2025-06-04]**: Added MCMC strategy with `--max-cap` command line option for controlling maximum Gaussian count.
@@ -37,7 +38,7 @@ The implementation uses `weights/lpips_vgg.pt`, which is exported from `torchmet
 | **mean** | **30000** | **29.329015** | **0.879974** | **0.227821** | **0.372190**   | **1000000**   |
 
 
-For reference, here are the metrics for the official gsplat-mcmc implementation below. However, the 
+For reference, here are the metrics for the official gsplat-mcmc implementation below. However, the
 lpips results are not directly comparable, as the gsplat-mcmc implementation uses a different lpips model.
 
 | Scene    | Iteration | PSNR          | SSIM         | LPIPS        | Time per Image | Num Gaussians |
@@ -117,27 +118,30 @@ Extract it to the `data` folder in the project root.
 
 ## Command-Line Options
 
-### Core Options
-
-- **`-h, --help`**  
-  Display the help menu
+### Required Options
 
 - **`-d, --data-path [PATH]`**  
-  Path to the training data (required)
+  Path to the training data containing COLMAP sparse reconstruction (required)
+
+### Output Options
 
 - **`-o, --output-path [PATH]`**  
   Path to save the trained model (default: `./output`)
+
+- **`-f, --force`**  
+  Force overwrite of existing output folder
+
+### Training Options
 
 - **`-i, --iter [NUM]`**  
   Number of training iterations (default: 30000)
     - Paper suggests 30k, but 6k-7k often yields good preliminary results
     - Outputs are saved every 7k iterations and at completion
 
-- **`-f, --force`**  
-  Force overwrite of existing output folder
-
 - **`-r, --resolution [NUM]`**  
   Set the resolution for training images
+    - -1: Use original resolution (default)
+    - Positive values: Target resolution for image loading
 
 ### MCMC-Specific Options
 
@@ -146,17 +150,96 @@ Extract it to the `data` folder in the project root.
     - Controls the upper limit of Gaussian splats during training
     - Useful for memory-constrained environments
 
+### Dataset Configuration
+
+- **`--images [FOLDER]`**  
+  Images folder name (default: `images`)
+    - Options: `images`, `images_2`, `images_4`, `images_8`
+    - Mip-NeRF 360 dataset uses different resolutions
+
+- **`--test-every [NUM]`**  
+  Every N-th image is used as a test image (default: 8)
+    - Used for train/validation split
+
+### Evaluation Options
+
+- **`--eval`**  
+  Enable evaluation during training
+    - Computes metrics (PSNR, SSIM, LPIPS) at specified steps
+    - Evaluation steps defined in `parameter/optimization_params.json`
+
+- **`--save-eval-images`**  
+  Save evaluation images during training
+    - Requires `--eval` to be enabled
+    - Saves comparison images and depth maps (if applicable)
+
+### Render Mode Options
+
+- **`--render-mode [MODE]`**  
+  Render mode for training and evaluation (default: `RGB`)
+    - `RGB`: Color only
+    - `D`: Accumulated depth only
+    - `ED`: Expected depth only
+    - `RGB_D`: Color + accumulated depth
+    - `RGB_ED`: Color + expected depth
+
+### Advanced Options
+
+- **`--bilateral-grid`**  
+  Enable bilateral grid for appearance modeling
+    - Helps with per-image appearance variations
+    - Adds TV (Total Variation) regularization
+
+- **`-c, --convergence-rate [FLOAT]`**  
+  Set convergence rate (currently not used in implementation)
+
+- **`-h, --help`**  
+  Display the help menu
+
 ### Example Usage
 
 Basic training:
 ```bash
-./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 10000
+./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output
 ```
 
 MCMC training with limited Gaussians:
 ```bash
-./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output -i 10000 --max-cap 500000
+./build/gaussian_splatting_cuda -d /path/to/data -o /path/to/output --max-cap 500000
 ```
+
+Training with evaluation and custom settings:
+```bash
+./build/gaussian_splatting_cuda \
+    -d data/garden \
+    -o output/garden \
+    --images images_4 \
+    --test-every 8 \
+    --eval \
+    --save-eval-images \
+    --render-mode RGB_D \
+    -i 30000
+```
+
+Force overwrite existing output:
+```bash
+./build/gaussian_splatting_cuda -d data/garden -o output/garden -f
+```
+
+## Configuration Files
+
+The implementation uses JSON configuration files located in the `parameter/` directory:
+
+### `optimization_params.json`
+Controls training hyperparameters including:
+- Learning rates for different components
+- Regularization weights
+- Refinement schedules
+- Evaluation and save steps
+- Render mode settings
+- Bilateral grid parameters
+
+Key parameters can be overridden via command-line options.
 
 ## Contribution Guidelines
 
