@@ -1,17 +1,17 @@
 #pragma once
 
+#include "core/dataset.hpp"
+#include "core/parameters.hpp"
+#include "core/rasterizer.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <torch/script.h>
 #include <torch/torch.h>
 #include <vector>
-#include <memory>
-#include "core/parameters.hpp"
-#include "core/dataset.hpp"
-#include "core/rasterizer.hpp"
 
 class splatData;
 namespace gs {
@@ -131,17 +131,15 @@ namespace gs {
                                  torch::Tensor& background);
 
             // Save final report
-            void save_report() { if (reporter_) reporter_->save_report(); }
+            void save_report() {
+                if (reporter_)
+                    reporter_->save_report();
+            }
 
             // Print evaluation header
             void print_evaluation_header(int iteration) const {
                 std::cout << std::endl;
                 std::cout << "[Evaluation at step " << iteration << "]" << std::endl;
-            }
-
-            // Print final evaluation header
-            void print_final_evaluation_header() const {
-                std::cout << "\n[Final Evaluation]" << std::endl;
             }
 
         private:
