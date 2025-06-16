@@ -398,7 +398,7 @@ void MCMC::step(int iter) {
 }
 
 void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
-    _params = std::make_unique<gs::param::OptimizationParameters>(optimParams);
+    _params = std::make_unique<const gs::param::OptimizationParameters>(optimParams);
 
     const auto dev = torch::kCUDA;
     _splat_data.means() = _splat_data.means().to(dev).set_requires_grad(true);
