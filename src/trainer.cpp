@@ -206,6 +206,7 @@ namespace gs {
             }
         }
 
+        strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
         progress_->complete();
         evaluator_->save_report();
         progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
