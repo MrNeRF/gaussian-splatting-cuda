@@ -11,24 +11,34 @@ int main(int argc, char* argv[]) {
         // 1. Parse arguments and load parameters in one step
         //----------------------------------------------------------------------
         auto params = gs::args::parse_args_and_params(argc, argv);
+
         //----------------------------------------------------------------------
-        // 2. Create dataset from COLMAP
+        // 2. Save training configuration to output directory
+        //----------------------------------------------------------------------
+        gs::param::save_training_parameters_to_json(params, params.dataset.output_path);
+
+        //----------------------------------------------------------------------
+        // 3. Create dataset from COLMAP
         //----------------------------------------------------------------------
         auto [dataset, scene_scale] = create_dataset_from_colmap(params.dataset);
+
         //----------------------------------------------------------------------
-        // 3. Model initialisation
+        // 4. Model initialisation
         //----------------------------------------------------------------------
         auto splat_data = SplatData::init_model_from_pointcloud(params, scene_scale);
+
         //----------------------------------------------------------------------
-        // 4. Create strategy
+        // 5. Create strategy
         //----------------------------------------------------------------------
         auto strategy = std::make_unique<MCMC>(std::move(splat_data));
+
         //----------------------------------------------------------------------
-        // 5. Create trainer
+        // 6. Create trainer
         //----------------------------------------------------------------------
         gs::Trainer trainer(dataset, std::move(strategy), params);
+
         //----------------------------------------------------------------------
-        // 6. Start training
+        // 7. Start training
         //----------------------------------------------------------------------
         trainer.train();
 

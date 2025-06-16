@@ -56,5 +56,9 @@ namespace gs {
         };
 
         OptimizationParameters read_optim_params_from_json();
+
+        // Save training parameters to JSON
+        void save_training_parameters_to_json(const TrainingParameters& params,
+                                              const std::filesystem::path& output_path);
     } // namespace param
 } // namespace gs
