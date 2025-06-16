@@ -2,7 +2,10 @@
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 
 #include "core/parameters.hpp"
+#include <chrono>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -324,5 +327,76 @@ namespace gs {
                 params.resolution = json["resolution"];
             return params;
         }
+
+        /**
+         * @brief Save full training parameters (dataset + optimization) to JSON
+         * @param params The full training parameters
+         * @param output_path Path to the output directory
+         */
+        void save_training_parameters_to_json(const TrainingParameters& params,
+                                              const std::filesystem::path& output_path) {
+            nlohmann::json json;
+
+            // Dataset configuration
+            json["dataset"]["data_path"] = params.dataset.data_path.string();
+            json["dataset"]["output_path"] = params.dataset.output_path.string();
+            json["dataset"]["images"] = params.dataset.images;
+            json["dataset"]["resolution"] = params.dataset.resolution;
+            json["dataset"]["test_every"] = params.dataset.test_every;
+
+            // Optimization configuration
+            nlohmann::json opt_json;
+            opt_json["iterations"] = params.optimization.iterations;
+            opt_json["means_lr"] = params.optimization.means_lr;
+            opt_json["shs_lr"] = params.optimization.shs_lr;
+            opt_json["opacity_lr"] = params.optimization.opacity_lr;
+            opt_json["scaling_lr"] = params.optimization.scaling_lr;
+            opt_json["rotation_lr"] = params.optimization.rotation_lr;
+            opt_json["lambda_dssim"] = params.optimization.lambda_dssim;
+            opt_json["min_opacity"] = params.optimization.min_opacity;
+            opt_json["refine_every"] = params.optimization.refine_every;
+            opt_json["start_refine"] = params.optimization.start_refine;
+            opt_json["stop_refine"] = params.optimization.stop_refine;
+            opt_json["grad_threshold"] = params.optimization.grad_threshold;
+            opt_json["sh_degree"] = params.optimization.sh_degree;
+            opt_json["opacity_reg"] = params.optimization.opacity_reg;
+            opt_json["scale_reg"] = params.optimization.scale_reg;
+            opt_json["init_opacity"] = params.optimization.init_opacity;
+            opt_json["init_scaling"] = params.optimization.init_scaling;
+            opt_json["max_cap"] = params.optimization.max_cap;
+            opt_json["render_mode"] = params.optimization.render_mode;
+            opt_json["eval_steps"] = params.optimization.eval_steps;
+            opt_json["save_steps"] = params.optimization.save_steps;
+            opt_json["enable_eval"] = params.optimization.enable_eval;
+            opt_json["enable_save_eval_images"] = params.optimization.enable_save_eval_images;
+            opt_json["use_bilateral_grid"] = params.optimization.use_bilateral_grid;
+            opt_json["bilateral_grid_X"] = params.optimization.bilateral_grid_X;
+            opt_json["bilateral_grid_Y"] = params.optimization.bilateral_grid_Y;
+            opt_json["bilateral_grid_W"] = params.optimization.bilateral_grid_W;
+            opt_json["bilateral_grid_lr"] = params.optimization.bilateral_grid_lr;
+            opt_json["tv_loss_weight"] = params.optimization.tv_loss_weight;
+
+            json["optimization"] = opt_json;
+
+            // Add timestamp
+            auto now = std::chrono::system_clock::now();
+            auto time_t = std::chrono::system_clock::to_time_t(now);
+            std::stringstream ss;
+            ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+            json["timestamp"] = ss.str();
+
+            // Save to file
+            std::filesystem::path filepath = output_path / "training_config.json";
+            std::ofstream file(filepath);
+            if (!file.is_open()) {
+                throw std::runtime_error("Could not open file for writing: " + filepath.string());
+            }
+
+            file << json.dump(4); // Pretty print with 4 spaces
+            file.close();
+
+            std::cout << "Saved training configuration to: " << filepath << std::endl;
+        }
+
     } // namespace param
 } // namespace gs
