@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 1. Parse arguments and load parameters in one step
         //----------------------------------------------------------------------
-        auto params = gs::args::parse_args_and_params(argc, argv);
+        const auto params = gs::args::parse_args_and_params(argc, argv);
 
         //----------------------------------------------------------------------
         // 2. Save training configuration to output directory

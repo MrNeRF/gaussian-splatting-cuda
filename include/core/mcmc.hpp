@@ -59,7 +59,7 @@ private:
     std::unique_ptr<torch::optim::Adam> _optimizer;
     std::unique_ptr<ExponentialLR> _scheduler;
     SplatData _splat_data;
-    std::unique_ptr<gs::param::OptimizationParameters> _params;
+    std::unique_ptr<const gs::param::OptimizationParameters> _params;
 
     // MCMC specific parameters
     const float _noise_lr = 5e5;
