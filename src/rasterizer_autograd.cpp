@@ -97,8 +97,7 @@ namespace gs {
         auto compensations = std::get<4>(proj_results);
 
         if (!compensations.defined()) {
-            compensations = torch::ones({C, N},
-                                        torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+            compensations = at::empty({0});
         }
 
         // Validate outputs
@@ -116,7 +115,6 @@ namespace gs {
         TORCH_CHECK(means2d.is_cuda(), "means2d must be on CUDA");
         TORCH_CHECK(depths.is_cuda(), "depths must be on CUDA");
         TORCH_CHECK(conics.is_cuda(), "conics must be on CUDA");
-        TORCH_CHECK(compensations.is_cuda(), "compensations must be on CUDA");
 
         // Save for backward
         ctx->save_for_backward({means3D, quats, scaled_scales, opacities, viewmat, K, settings,
@@ -133,12 +131,12 @@ namespace gs {
         auto v_means2d = grad_outputs[1].to(torch::kCUDA).contiguous();
         auto v_depths = grad_outputs[2].to(torch::kCUDA).contiguous();
         auto v_conics = grad_outputs[3].to(torch::kCUDA).contiguous();
-        auto v_compensations = grad_outputs[4].to(torch::kCUDA).contiguous();
+        auto v_compensations_tensor = grad_outputs[4];
 
         auto saved = ctx->get_saved_variables();
         const auto& means3D = saved[0];
         const auto& quats = saved[1];
-        const auto& scales = saved[2];
+        const auto& scaled_scales = saved[2]; // Note: this is already scaled!
         const auto& opacities = saved[3];
         const auto& viewmat = saved[4];
         const auto& K = saved[5];
@@ -151,30 +149,78 @@ namespace gs {
         const auto width = settings[0].item<int>();
         const auto height = settings[1].item<int>();
         const auto eps2d = settings[2].item<float>();
+        const auto scaling_modifier = settings[6].item<float>();
 
-        // Call backward
+        // Convert v_compensations to optional
+        c10::optional<at::Tensor> v_compensations;
+        if (v_compensations_tensor.defined() && v_compensations_tensor.numel() > 0) {
+            v_compensations = v_compensations_tensor.to(torch::kCUDA).contiguous();
+        }
+
+        // Convert compensations to optional for backward call
+        c10::optional<at::Tensor> compensations_opt;
+        if (compensations.defined() && compensations.numel() > 0) {
+            compensations_opt = compensations;
+        }
+
+        // Call backward - use scaled_scales here!
         auto proj_grads = gsplat::projection_ewa_3dgs_fused_bwd(
-            means3D, {}, quats, scales,
-            viewmat, K,
-            width, height, eps2d,
+            means3D,
+            {}, // covars
+            quats,
+            scaled_scales,
+            viewmat,
+            K,
+            width,
+            height,
+            eps2d,
             gsplat::CameraModelType::PINHOLE,
-            radii, conics, compensations,
-            v_means2d, v_depths, v_conics, v_compensations,
-            viewmat.requires_grad());
+            radii,
+            conics,
+            compensations_opt,
+            v_means2d,
+            v_depths,
+            v_conics,
+            v_compensations,
+            ctx->needs_input_grad(4));
 
         auto v_means3D = std::get<0>(proj_grads);
         auto v_quats = std::get<2>(proj_grads);
-        auto v_scales = std::get<3>(proj_grads);
+        auto v_scales = std::get<3>(proj_grads); // This is gradient w.r.t. scaled_scales
         auto v_viewmat = std::get<4>(proj_grads);
+
+        // v_scales is gradient w.r.t. scaled_scales, but we need gradient w.r.t. original scales
+        // Since scaled_scales = scales * scaling_modifier, by chain rule:
+        // d/d(scales) = d/d(scaled_scales) * scaling_modifier
+        if (v_scales.defined()) {
+            v_scales = v_scales * scaling_modifier;
+        }
 
         // v_opacities is computed from v_compensations only if opacities was defined
         torch::Tensor v_opacities;
-        if (opacities.defined() && v_compensations.defined() && compensations.defined()) {
-            v_opacities = (v_compensations * compensations / opacities.unsqueeze(0)).sum(0);
-        } else {
-            v_opacities = torch::Tensor(); // Return undefined tensor
+        if (opacities.defined() && v_compensations.has_value() && compensations_opt.has_value()) {
+            v_opacities = (v_compensations.value() * compensations_opt.value() / opacities.unsqueeze(0)).sum(0);
         }
 
+        // Check which inputs need gradients and set to undefined if not needed
+        // Input order: means3D(0), quats(1), scales(2), opacities(3), viewmat(4), K(5), settings(6)
+        if (!ctx->needs_input_grad(0)) { // means3D
+            v_means3D = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(1)) { // quats
+            v_quats = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(2)) { // scales
+            v_scales = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(3)) { // opacities
+            v_opacities = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(4)) { // viewmat
+            v_viewmat = torch::Tensor();
+        }
+
+        // Return undefined tensors for K and settings (they don't have gradients)
         return {v_means3D, v_quats, v_scales, v_opacities, v_viewmat, torch::Tensor(), torch::Tensor()};
     }
 
@@ -258,7 +304,7 @@ namespace gs {
         const int sh_degree = ctx->saved_data["sh_degree"].to<int>();
         const int num_sh_coeffs = ctx->saved_data["num_sh_coeffs"].to<int>();
 
-        // Compute v_dirs based on needs_input_grad[1] (dirs is second input)
+        // Compute v_dirs based on needs_input_grad(1) (dirs is second input)
         bool compute_v_dirs = ctx->needs_input_grad(1);
 
         auto sh_grads = gsplat::spherical_harmonics_bwd(
@@ -269,16 +315,20 @@ namespace gs {
         auto v_coeffs_active = std::get<0>(sh_grads);
         auto v_dirs = std::get<1>(sh_grads);
 
-        // Create full gradient tensor for coeffs
-        torch::Tensor v_coeffs = torch::zeros_like(coeffs);
-        v_coeffs.index_put_({torch::indexing::Slice(),
-                             torch::indexing::Slice(torch::indexing::None, num_sh_coeffs),
-                             torch::indexing::Slice()},
-                            v_coeffs_active);
-
-        if (!compute_v_dirs) {
-            v_dirs = torch::Tensor();
+        // Create full gradient tensor for coeffs only if needed
+        torch::Tensor v_coeffs;
+        if (ctx->needs_input_grad(2)) {
+            v_coeffs = torch::zeros_like(coeffs);
+            v_coeffs.index_put_({torch::indexing::Slice(),
+                                 torch::indexing::Slice(torch::indexing::None, num_sh_coeffs),
+                                 torch::indexing::Slice()},
+                                v_coeffs_active);
+        } else {
+            v_coeffs = torch::Tensor();
         }
+
+        // v_dirs is already undefined if compute_v_dirs was false
+        // No need to check again since we already passed the flag to the kernel
 
         // Return gradients in same order as inputs: sh_degree_tensor, dirs, coeffs, masks
         return {torch::Tensor(), v_dirs, v_coeffs, torch::Tensor()};
@@ -369,6 +419,7 @@ namespace gs {
 
         return {rendered_image, rendered_alpha, last_ids};
     }
+
     torch::autograd::tensor_list RasterizationFunction::backward(
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
@@ -411,9 +462,27 @@ namespace gs {
 
         // Background gradient
         torch::Tensor v_bg_color;
-        if (bg_color.requires_grad()) {
+        if (ctx->needs_input_grad(4)) { // bg_color is input 4
             auto one_minus_alpha = 1.0f - rendered_alpha;
             v_bg_color = (grad_image * one_minus_alpha).sum({1, 2});
+        } else {
+            v_bg_color = torch::Tensor();
+        }
+
+        // Check gradient requirements for other inputs
+        // Input order: means2d(0), conics(1), colors(2), opacities(3), bg_color(4),
+        //              isect_offsets(5), flatten_ids(6), settings(7)
+        if (!ctx->needs_input_grad(0)) {
+            v_means2d = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(1)) {
+            v_conics = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(2)) {
+            v_colors = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(3)) {
+            v_opacities = torch::Tensor();
         }
 
         return {v_means2d, v_conics, v_colors, v_opacities, v_bg_color,
@@ -498,6 +567,15 @@ namespace gs {
         } else {
             v_quats = torch::zeros_like(quats);
             v_scales = torch::zeros_like(scales);
+        }
+
+        // Check gradient requirements
+        // Input order: quats(0), scales(1), settings(2)
+        if (!ctx->needs_input_grad(0)) {
+            v_quats = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(1)) {
+            v_scales = torch::Tensor();
         }
 
         return {v_quats, v_scales, torch::Tensor()};
