@@ -53,6 +53,7 @@ set(HOST_SOURCES
         src/rasterizer_autograd.cpp
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
+        src/selective_adam.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
