@@ -45,7 +45,7 @@ namespace gs {
 
         // Base loss: L1 + SSIM
         auto l1_loss = torch::l1_loss(rendered.squeeze(0), gt.squeeze(0));
-        auto ssim_loss = fused_ssim(rendered, gt, "same", /*train=*/true);
+        auto ssim_loss = fused_ssim(rendered, gt, "valid", /*train=*/true);
         torch::Tensor loss = (1.f - opt_params.lambda_dssim) * l1_loss +
                              opt_params.lambda_dssim * (1.f - ssim_loss);
 
