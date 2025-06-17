@@ -48,7 +48,7 @@ namespace gs {
         std::unique_ptr<IStrategy> strategy_;
         param::TrainingParameters params_;
 
-        torch::Tensor background_;
+        torch::Tensor background_{};
         std::unique_ptr<TrainingProgress> progress_;
         size_t train_dataset_size_;
 

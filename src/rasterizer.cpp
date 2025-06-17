@@ -103,15 +103,17 @@ namespace gs {
         TORCH_CHECK(rotations.is_cuda(), "rotations must be on CUDA");
         TORCH_CHECK(sh_coeffs.is_cuda(), "sh_coeffs must be on CUDA");
 
-        // Ensure background color is properly shaped and on CUDA
+        // Handle background color - can be undefined
+        torch::Tensor prepared_bg_color;
         if (!bg_color.defined() || bg_color.numel() == 0) {
-            bg_color = torch::zeros({1, 3}, means3D.options());
+            // Keep it undefined
+            prepared_bg_color = torch::Tensor();
         } else {
-            bg_color = bg_color.view({1, -1}).to(torch::kCUDA);
-            TORCH_CHECK(bg_color.size(0) == 1 && bg_color.size(1) == 3,
-                        "bg_color must be reshapeable to [1, 3], got ", bg_color.sizes());
+            prepared_bg_color = bg_color.view({1, -1}).to(torch::kCUDA);
+            TORCH_CHECK(prepared_bg_color.size(0) == 1 && prepared_bg_color.size(1) == 3,
+                        "bg_color must be reshapeable to [1, 3], got ", prepared_bg_color.sizes());
+            TORCH_CHECK(prepared_bg_color.is_cuda(), "bg_color must be on CUDA");
         }
-        TORCH_CHECK(bg_color.is_cuda(), "bg_color must be on CUDA");
 
         const float eps2d = 0.3f;
         const float near_plane = 0.01f;
@@ -171,21 +173,34 @@ namespace gs {
         switch (render_mode) {
         case RenderMode::RGB:
             render_colors = colors;
-            final_bg = bg_color;
+            final_bg = prepared_bg_color;
             break;
 
         case RenderMode::D:
         case RenderMode::ED:
             render_colors = depths.unsqueeze(-1); // [C, N, 1]
-            final_bg = torch::zeros({1, 1}, bg_color.options());
+            if (prepared_bg_color.defined()) {
+                final_bg = torch::zeros({1, 1}, prepared_bg_color.options());
+            } else {
+                final_bg = torch::Tensor(); // Keep undefined
+            }
             break;
 
         case RenderMode::RGB_D:
         case RenderMode::RGB_ED:
             // Concatenate colors and depths
             render_colors = torch::cat({colors, depths.unsqueeze(-1)}, -1); // [C, N, 4]
-            final_bg = torch::cat({bg_color, torch::zeros({1, 1}, bg_color.options())}, -1);
+            if (prepared_bg_color.defined()) {
+                final_bg = torch::cat({prepared_bg_color, torch::zeros({1, 1}, prepared_bg_color.options())}, -1);
+            } else {
+                final_bg = torch::Tensor(); // Keep undefined
+            }
             break;
+        }
+
+        if (!final_bg.defined()) {
+            // Create empty tensor on CUDA - same pattern as compensations in projection
+            final_bg = at::empty({0}, colors.options().dtype(torch::kFloat32));
         }
 
         // Step 4: Apply opacity with compensations
