@@ -10,6 +10,7 @@ namespace gs {
     namespace param {
         struct OptimizationParameters {
             size_t iterations = 30'000;
+            size_t sh_degree_interval = 1'000;
             float means_lr = 0.00016f;
             float shs_lr = 0.0025f;
             float opacity_lr = 0.05f;
@@ -27,11 +28,11 @@ namespace gs {
             float init_opacity = 0.5f;
             float init_scaling = 0.1f;
             int max_cap = 1000000;
-            std::vector<size_t> eval_steps = {7000, 30000}; // Steps to evaluate the model
-            std::vector<size_t> save_steps = {7000, 30000}; // Steps to save the model
-            bool enable_eval = false;                       // Only evaluate when explicitly enabled
-            bool enable_save_eval_images = false;           // Save during evaluation images
-            std::string render_mode = "RGB";                // Render mode: RGB, D, ED, RGB_D, RGB_ED
+            std::vector<size_t> eval_steps = {7'000, 30'000}; // Steps to evaluate the model
+            std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
+            bool enable_eval = false;                         // Only evaluate when explicitly enabled
+            bool enable_save_eval_images = false;             // Save during evaluation images
+            std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
 
             // Bilateral grid parameters
             bool use_bilateral_grid = false;
@@ -40,6 +41,8 @@ namespace gs {
             int bilateral_grid_W = 8;
             float bilateral_grid_lr = 2e-3;
             float tv_loss_weight = 10.0f;
+
+            int steps_scaler = 1;
         };
 
         struct DatasetConfig {
