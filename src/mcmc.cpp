@@ -370,7 +370,7 @@ void MCMC::inject_noise() {
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     // Increment SH degree every 1000 iterations
     torch::NoGradGuard no_grad;
-    if (iter % 1000 == 0) {
+    if (iter % _params->sh_degree_interval == 0) {
         _splat_data.increment_sh_degree();
     }
 

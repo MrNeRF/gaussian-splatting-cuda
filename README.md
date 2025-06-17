@@ -140,6 +140,11 @@ Extract it to the `data` folder in the project root.
     - -1: Use original resolution (default)
     - Positive values: Target resolution for image loading
 
+- **`--steps-scaler [NUM]`**  
+  Scale all training steps by this factor (default: 1)
+  - Multiplies iterations, refinement steps, and evaluation/save intervals
+  - Creates multiple scaled checkpoints for each original step
+
 ### MCMC-Specific Options
 
 - **`--max-cap [NUM]`**  
@@ -187,6 +192,10 @@ Extract it to the `data` folder in the project root.
     - Helps with per-image appearance variations
     - Adds TV (Total Variation) regularization
 
+- **`--sh-degree-interval [NUM]`**  
+  Interval for increasing spherical harmonics degree
+  - Controls how often SH degree is incremented during training
+
 - **`-h, --help`**  
   Display the help menu
 
@@ -218,6 +227,15 @@ Training with evaluation and custom settings:
 Force overwrite existing output:
 ```bash
 ./build/gaussian_splatting_cuda -d data/garden -o output/garden -f
+```
+
+Training with step scaling for multiple checkpoints:
+```bash
+./build/gaussian_splatting_cuda \
+    -d data/garden \
+    -o output/garden \
+    --steps-scaler 3 \
+    -i 10000
 ```
 
 ## Configuration Files

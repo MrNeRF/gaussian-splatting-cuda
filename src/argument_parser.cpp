@@ -2,12 +2,21 @@
 
 #include "core/argument_parser.hpp"
 #include "core/parameters.hpp"
-#include <args.hxx>
-#include <filesystem>
+#include <args.hxx> #include <filesystem>
 #include <iostream>
+#include <set>
 
 namespace gs {
     namespace args {
+        static void scale_steps_vector(std::vector<size_t>& steps, size_t scaler) {
+            std::set<size_t> unique_steps(steps.begin(), steps.end());
+            for (const auto& step : steps) {
+                for (size_t i = 1; i <= scaler; ++i) {
+                    unique_steps.insert(step * i);
+                }
+            }
+            steps.assign(unique_steps.begin(), unique_steps.end());
+        }
 
         std::vector<std::string> convert_args(int argc, char* argv[]) {
             return std::vector<std::string>(argv, argv + argc);
@@ -30,16 +39,18 @@ namespace gs {
             ::args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
             ::args::ValueFlag<float> convergence_rate(parser, "convergence_rate", "Set convergence rate", {'c', "convergence_rate"});
             ::args::ValueFlag<int> resolution(parser, "resolution", "Set resolution", {'r', "resolution"});
-            ::args::Flag force_overwrite_output_path(parser, "force", "Forces to overwrite output folder", {'f', "force"});
+            ::args::Flag force_overwrite_output_path(parser, "force", "Force overwrite of output folder", {'f', "force"});
             ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to the training data", {'d', "data-path"});
             ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to the training output", {'o', "output-path"});
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations to train the model", {'i', "iter"});
             ::args::CompletionFlag completion(parser, {"complete"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Maximum number of Gaussians for MCMC", {"max-cap"});
-            ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid", {"bilateral-grid"});
+            ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name (e.g., images, images_2, images_4, images_8)", {"images"});
-            ::args::ValueFlag<int> test_every(parser, "test_every", "Every N-th image is a test image", {"test-every"});
-            ::args::Flag enable_save_eval_images(parser, "save_eval_images", "During evaluation saves imags and depth if specified in render-mode", {"save-eval-images"});
+            ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as a test image", {"test-every"});
+            ::args::ValueFlag<int> steps_scaler(parser, "steps_scaler", "Scale all training steps by this factor", {"steps-scaler"});
+            ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "Interval for increasing spherical harmonics degree", {"sh-degree-interval"});
+            ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save images and depth maps during evaluation (based on render mode)", {"save-eval-images"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
 
             // Add render mode arguments
@@ -66,19 +77,25 @@ namespace gs {
 
             // Data path is required
             if (::args::get(data_path).empty()) {
-                std::cerr << "ERROR: No data path specified. Use --data_path to specify the path to the dataset.\n";
+                std::cerr << "ERROR: No data path specified. Use --data-path to specify the path to the dataset.\n";
                 return -1;
             }
             params.dataset.data_path = ::args::get(data_path);
 
             // Handle output path
             if (::args::get(output_path).empty()) {
-                std::cerr << "ERROR: No output path specified. Use --output_path to specify the path for output files.\n";
+                std::cerr << "ERROR: No output path specified. Use --output-path to specify the path for output files.\n";
                 return -1;
             }
             params.dataset.output_path = ::args::get(output_path);
 
-            // Process other arguments
+            // Create output directory if it doesn't exist
+            std::filesystem::path outputDir = params.dataset.output_path;
+            if (!std::filesystem::exists(outputDir)) {
+                std::filesystem::create_directories(outputDir);
+            }
+
+            // Process optional arguments
             if (iterations) {
                 params.optimization.iterations = ::args::get(iterations);
             }
@@ -95,12 +112,6 @@ namespace gs {
                 params.optimization.use_bilateral_grid = true;
             }
 
-            std::filesystem::path outputDir = params.dataset.output_path;
-            if (!std::filesystem::exists(outputDir)) {
-                std::filesystem::create_directories(outputDir);
-            }
-            params.dataset.output_path = outputDir;
-
             if (images_folder) {
                 params.dataset.images = ::args::get(images_folder);
             }
@@ -109,12 +120,20 @@ namespace gs {
                 params.dataset.test_every = ::args::get(test_every);
             }
 
+            if (steps_scaler) {
+                params.optimization.steps_scaler = ::args::get(steps_scaler);
+            }
+
+            if (sh_degree_interval) {
+                params.optimization.sh_degree_interval = ::args::get(sh_degree_interval);
+            }
+
             if (enable_eval) {
                 params.optimization.enable_eval = true;
             }
 
             if (enable_save_eval_images) {
-                params.optimization.enable_eval = true; // Enable evaluation if saving images
+                params.optimization.enable_save_eval_images = true;
             }
 
             // Process render mode arguments
@@ -138,8 +157,23 @@ namespace gs {
 gs::param::TrainingParameters gs::args::parse_args_and_params(int argc, char* argv[]) {
     gs::param::TrainingParameters params;
     params.optimization = gs::param::read_optim_params_from_json();
+
     if (parse_arguments(convert_args(argc, argv), params) < 0) {
         throw std::runtime_error("Failed to parse arguments");
     }
+
+    // Apply step scaling if specified
+    if (params.optimization.steps_scaler > 1) {
+        std::cout << "Scaling training steps by factor: " << params.optimization.steps_scaler << std::endl;
+        params.optimization.iterations *= params.optimization.steps_scaler;
+        params.optimization.start_refine *= params.optimization.steps_scaler;
+        params.optimization.stop_refine *= params.optimization.steps_scaler;
+        params.optimization.refine_every *= params.optimization.steps_scaler;
+        params.optimization.sh_degree_interval *= params.optimization.steps_scaler;
+
+        scale_steps_vector(params.optimization.eval_steps, params.optimization.steps_scaler);
+        scale_steps_vector(params.optimization.save_steps, params.optimization.steps_scaler);
+    }
+
     return params;
 }

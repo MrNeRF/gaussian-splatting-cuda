@@ -117,7 +117,9 @@ namespace gs {
                     {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
                     {"bilateral_grid_W", defaults.bilateral_grid_W, "Bilateral grid W dimension"},
                     {"bilateral_grid_lr", defaults.bilateral_grid_lr, "Learning rate for bilateral grid"},
-                    {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"}};
+                    {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"},
+                    {"steps_scaler", defaults.steps_scaler, "Scales the training steps and values"},
+                    {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -306,6 +308,12 @@ namespace gs {
             if (json.contains("tv_loss_weight")) {
                 params.tv_loss_weight = json["tv_loss_weight"];
             }
+            if (json.contains("steps_scaler")) {
+                params.steps_scaler = json["steps_scaler"];
+            }
+            if (json.contains("sh_degree_interval")) {
+                params.sh_degree_interval = json["sh_degree_interval"];
+            }
             return params;
         }
 
@@ -375,6 +383,8 @@ namespace gs {
             opt_json["bilateral_grid_W"] = params.optimization.bilateral_grid_W;
             opt_json["bilateral_grid_lr"] = params.optimization.bilateral_grid_lr;
             opt_json["tv_loss_weight"] = params.optimization.tv_loss_weight;
+            opt_json["steps_scaler"] = params.optimization.steps_scaler;
+            opt_json["sh_degree_interval"] = params.optimization.sh_degree_interval;
 
             json["optimization"] = opt_json;
 
