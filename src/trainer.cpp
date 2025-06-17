@@ -44,10 +44,10 @@ namespace gs {
         TORCH_CHECK(rendered.sizes() == gt.sizes(), "ERROR: size mismatch – rendered ", rendered.sizes(), " vs. ground truth ", gt.sizes());
 
         // Base loss: L1 + SSIM
-        auto l1_loss = torch::l1_loss(rendered.squeeze(0), gt.squeeze(0));
-        auto ssim_loss = fused_ssim(rendered, gt, "valid", /*train=*/true);
+        auto l1_loss = torch::l1_loss(rendered, gt);
+        auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
         torch::Tensor loss = (1.f - opt_params.lambda_dssim) * l1_loss +
-                             opt_params.lambda_dssim * (1.f - ssim_loss);
+                             opt_params.lambda_dssim * ssim_loss;
 
         // Regularization terms
         if (opt_params.opacity_reg > 0.0f) {
