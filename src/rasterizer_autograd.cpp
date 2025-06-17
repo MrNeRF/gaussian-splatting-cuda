@@ -354,7 +354,7 @@ namespace gs {
         torch::Tensor conics,        // [C, N, 3]
         torch::Tensor colors,        // [C, N, channels] - may include depth
         torch::Tensor opacities,     // [C, N]
-        torch::Tensor bg_color,      // [C, channels] - may include depth
+        torch::Tensor bg_color,      // [C, channels] - may include depth, can be empty
         torch::Tensor isect_offsets, // [C, tile_height, tile_width]
         torch::Tensor flatten_ids,   // [nnz]
         torch::Tensor settings) {    // [3] containing width, height, tile_size
@@ -373,20 +373,24 @@ namespace gs {
                     "means2d must be [C, N, 2], got ", means2d.sizes());
         TORCH_CHECK(conics.dim() == 3 && conics.size(0) == C && conics.size(1) == N && conics.size(2) == 3,
                     "conics must be [C, N, 3], got ", conics.sizes());
-        // Remove the hardcoded channel check!
         TORCH_CHECK(colors.dim() == 3 && colors.size(0) == C && colors.size(1) == N,
                     "colors must be [C, N, channels], got ", colors.sizes());
         TORCH_CHECK(opacities.dim() == 2 && opacities.size(0) == C && opacities.size(1) == N,
                     "opacities must be [C, N], got ", opacities.sizes());
-        TORCH_CHECK(bg_color.dim() == 2 && bg_color.size(0) == C && bg_color.size(1) == channels,
-                    "bg_color must be [C, ", channels, "], got ", bg_color.sizes());
+
+        // Only validate bg_color if it's not empty
+        if (bg_color.defined() && bg_color.numel() > 0) {
+            TORCH_CHECK(bg_color.dim() == 2 && bg_color.size(0) == C && bg_color.size(1) == channels,
+                        "bg_color must be [C, ", channels, "], got ", bg_color.sizes());
+            TORCH_CHECK(bg_color.is_cuda(), "bg_color must be on CUDA");
+            bg_color = bg_color.contiguous();
+        }
 
         // Device checks
         TORCH_CHECK(means2d.is_cuda(), "means2d must be on CUDA");
         TORCH_CHECK(conics.is_cuda(), "conics must be on CUDA");
         TORCH_CHECK(colors.is_cuda(), "colors must be on CUDA");
         TORCH_CHECK(opacities.is_cuda(), "opacities must be on CUDA");
-        TORCH_CHECK(bg_color.is_cuda(), "bg_color must be on CUDA");
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
         TORCH_CHECK(flatten_ids.is_cuda(), "flatten_ids must be on CUDA");
         TORCH_CHECK(settings.is_cuda(), "settings must be on CUDA");
@@ -396,14 +400,20 @@ namespace gs {
         conics = conics.contiguous();
         colors = colors.contiguous();
         opacities = opacities.contiguous();
-        bg_color = bg_color.contiguous();
         isect_offsets = isect_offsets.contiguous();
         flatten_ids = flatten_ids.contiguous();
 
-        // Call rasterization
+        // Convert empty tensor to optional for CUDA function
+        at::optional<at::Tensor> bg_color_opt;
+        if (bg_color.defined() && bg_color.numel() > 0) {
+            bg_color_opt = bg_color;
+        }
+        // else bg_color_opt remains empty optional
+
+        // Call rasterization with optional background
         auto raster_results = gsplat::rasterize_to_pixels_3dgs_fwd(
             means2d, conics, colors, opacities,
-            bg_color, {}, // masks
+            bg_color_opt, {}, // bg_color_opt might not have value, masks is empty optional
             width, height, tile_size,
             isect_offsets, flatten_ids);
 
@@ -457,10 +467,16 @@ namespace gs {
         const auto height = settings[1].item<int>();
         const auto tile_size = settings[2].item<int>();
 
+        // Convert empty tensor to optional for CUDA function
+        at::optional<at::Tensor> bg_color_opt;
+        if (bg_color.defined() && bg_color.numel() > 0) {
+            bg_color_opt = bg_color;
+        }
+
         // Call backward
         auto raster_grads = gsplat::rasterize_to_pixels_3dgs_bwd(
             means2d, conics, colors, opacities,
-            bg_color, {}, // masks
+            bg_color_opt, {}, // bg_color_opt might not have value, masks is empty optional
             width, height, tile_size,
             isect_offsets, flatten_ids,
             rendered_alpha, last_ids,
@@ -473,9 +489,9 @@ namespace gs {
         auto v_colors = std::get<3>(raster_grads).contiguous();
         auto v_opacities = std::get<4>(raster_grads).contiguous();
 
-        // Background gradient
+        // Background gradient - only compute if bg_color was not empty and needs gradient
         torch::Tensor v_bg_color;
-        if (ctx->needs_input_grad(4)) { // bg_color is input 4
+        if (ctx->needs_input_grad(4) && bg_color.defined() && bg_color.numel() > 0) {
             auto one_minus_alpha = 1.0f - rendered_alpha;
             v_bg_color = (grad_image * one_minus_alpha).sum({1, 2});
         } else {
@@ -483,8 +499,6 @@ namespace gs {
         }
 
         // Check gradient requirements for other inputs
-        // Input order: means2d(0), conics(1), colors(2), opacities(3), bg_color(4),
-        //              isect_offsets(5), flatten_ids(6), settings(7)
         if (!ctx->needs_input_grad(0)) {
             v_means2d = torch::Tensor();
         }
