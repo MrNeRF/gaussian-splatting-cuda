@@ -90,6 +90,12 @@ namespace gs {
         TORCH_CHECK(sh_coeffs.dim() == 3 && sh_coeffs.size(0) == N && sh_coeffs.size(2) == 3,
                     "sh_coeffs must be [N, K, 3], got ", sh_coeffs.sizes());
 
+        // Check if we have enough SH coefficients for the requested degree
+        const int required_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
+        TORCH_CHECK(sh_coeffs.size(1) >= required_sh_coeffs,
+                    "Not enough SH coefficients. Expected at least ", required_sh_coeffs,
+                    " but got ", sh_coeffs.size(1));
+
         // Device checks for Gaussian parameters
         TORCH_CHECK(means3D.is_cuda(), "means3D must be on CUDA");
         TORCH_CHECK(opacities.is_cuda(), "opacities must be on CUDA");
@@ -144,21 +150,19 @@ namespace gs {
         auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3}); // [C, 3]
 
         // Compute directions from camera to each Gaussian
-        // Since C = 1 in our case, we can simplify
-        auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1); // [1, N, 3]
-        dirs = dirs.squeeze(0);                                 // [N, 3]
+        auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1); // [C, N, 3]
 
         // Create masks based on radii
-        auto masks = (radii > 0).all(-1).squeeze(0); // [N]
+        auto masks = (radii > 0).all(-1); // [C, N]
+
+        // The Python code broadcasts colors from [N, K, 3] to [C, N, K, 3] if needed
+        auto shs = sh_coeffs.unsqueeze(0); // [1, N, K, 3]
 
         // Now call spherical harmonics with proper directions
-        auto colors = spherical_harmonics(sh_degree, dirs, sh_coeffs, masks);
+        auto colors = spherical_harmonics(sh_degree, dirs, shs, masks); // [C, N, 3]
 
         // Apply the SH offset and clamping for rendering (shift from [-0.5, 0.5] to [0, 1])
         colors = torch::clamp_min(colors + 0.5f, 0.0f);
-
-        // Expand colors to [C, N, 3] format expected by rasterization
-        colors = colors.unsqueeze(0);
 
         // Step 3: Handle depth based on render mode
         torch::Tensor render_colors;
