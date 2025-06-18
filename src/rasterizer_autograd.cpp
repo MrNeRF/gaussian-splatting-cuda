@@ -128,9 +128,9 @@ namespace gs {
         torch::autograd::tensor_list grad_outputs) {
 
         auto v_radii = grad_outputs[0];
-        auto v_means2d = grad_outputs[1].to(torch::kCUDA).contiguous();
-        auto v_depths = grad_outputs[2].to(torch::kCUDA).contiguous();
-        auto v_conics = grad_outputs[3].to(torch::kCUDA).contiguous();
+        auto v_means2d = grad_outputs[1];
+        auto v_depths = grad_outputs[2];
+        auto v_conics = grad_outputs[3];
         auto v_compensations_tensor = grad_outputs[4];
 
         auto saved = ctx->get_saved_variables();
@@ -300,7 +300,7 @@ namespace gs {
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
 
-        auto v_colors = grad_outputs[0].to(torch::kCUDA).contiguous();
+        auto v_colors = grad_outputs[0];
 
         auto saved = ctx->get_saved_variables();
         const auto& dirs = saved[0];
@@ -447,8 +447,8 @@ namespace gs {
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
 
-        auto grad_image = grad_outputs[0].to(torch::kCUDA).contiguous();
-        auto grad_alpha = grad_outputs[1].to(torch::kCUDA).contiguous();
+        auto grad_image = grad_outputs[0];
+        auto grad_alpha = grad_outputs[1];
 
         auto saved = ctx->get_saved_variables();
         const auto& means2d = saved[0];
