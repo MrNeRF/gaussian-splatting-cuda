@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/istrategy.hpp"
+#include "core/selective_adam.hpp"
 #include <memory>
 #include <torch/torch.h>
 
@@ -31,13 +32,7 @@ private:
               gamma_(gamma),
               param_group_index_(param_group_index) {}
 
-        void step() {
-            // Only update specific parameter group
-            auto& group = optimizer_.param_groups()[param_group_index_];
-            auto& options = static_cast<torch::optim::AdamOptions&>(group.options());
-            double current_lr = options.lr();
-            options.lr(current_lr * gamma_);
-        }
+        void step();
 
     private:
         torch::optim::Optimizer& optimizer_;
@@ -50,13 +45,13 @@ private:
     int relocate_gs();
     int add_new_gs();
     void inject_noise();
-    void update_optimizer_for_relocate(torch::optim::Adam* optimizer,
+    void update_optimizer_for_relocate(torch::optim::Optimizer* optimizer,
                                        const torch::Tensor& sampled_indices,
                                        const torch::Tensor& dead_indices,
                                        int param_position);
 
     // Member variables
-    std::unique_ptr<torch::optim::Adam> _optimizer;
+    std::unique_ptr<torch::optim::Optimizer> _optimizer;
     std::unique_ptr<ExponentialLR> _scheduler;
     SplatData _splat_data;
     std::unique_ptr<const gs::param::OptimizationParameters> _params;
@@ -66,4 +61,7 @@ private:
 
     // State variables
     torch::Tensor _binoms;
+
+    // SelectiveAdam support
+    torch::Tensor _last_visibility_mask;
 };

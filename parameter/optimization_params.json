@@ -28,5 +28,6 @@
   "bilateral_grid_W": 8,
   "bilateral_grid_lr": 0.002,
   "tv_loss_weight": 10.0,
-  "steps_scaler": 1
+  "steps_scaler": 1,
+  "selective_adam": false
 }

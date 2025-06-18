@@ -53,6 +53,7 @@ namespace gs {
             ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "Interval for increasing spherical harmonics degree", {"sh-degree-interval"});
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save images and depth maps during evaluation (based on render mode)", {"save-eval-images"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
+            ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
 
             // Add render mode arguments
             ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
@@ -131,6 +132,10 @@ namespace gs {
 
             if (enable_eval) {
                 params.optimization.enable_eval = true;
+            }
+
+            if (selective_adam) {
+                params.optimization.selective_adam = true;
             }
 
             if (enable_save_eval_images) {
