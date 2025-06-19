@@ -7,10 +7,12 @@
 #include "external/stb_image_resize.h"
 #include "external/stb_image_write.h"
 
+#include <algorithm>
 #include <filesystem>
+#include <iostream>
 #include <vector>
 
-// Synchronous image loading (existing implementation)
+// Existing implementations...
 std::tuple<unsigned char*, int, int, int>
 load_image(std::filesystem::path p, int res_div) {
     int w, h, c;
@@ -56,9 +58,7 @@ void save_image(const std::filesystem::path& path, torch::Tensor image) {
     int channels = image.size(2);
 
     // Debug print
-    std::cout << "Saving image: " << path << " shape: [" << height << ", " << width << ", " << channels << "]"
-              << " min: " << image.min().item<float>()
-              << " max: " << image.max().item<float>() << std::endl;
+    std::cout << "Saving image: " << path << " shape: [" << height << ", " << width << ", " << channels << "]\n";
 
     // Convert to uint8
     auto img_uint8 = (image.clamp(0, 1) * 255).to(torch::kUInt8).contiguous();
@@ -147,3 +147,159 @@ void save_image(const std::filesystem::path& path,
 void free_image(unsigned char* img) {
     stbi_image_free(img);
 }
+
+// Batch image saver implementation
+namespace image_io {
+
+    BatchImageSaver::BatchImageSaver(size_t num_workers)
+        : num_workers_(std::min(num_workers, std::min(size_t(8), size_t(std::thread::hardware_concurrency())))) {
+
+        std::cout << "[BatchImageSaver] Starting with " << num_workers_ << " worker threads" << std::endl;
+
+        for (size_t i = 0; i < num_workers_; ++i) {
+            workers_.emplace_back(&BatchImageSaver::worker_thread, this);
+        }
+    }
+
+    BatchImageSaver::~BatchImageSaver() {
+        shutdown();
+    }
+
+    void BatchImageSaver::shutdown() {
+        // Signal stop
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            if (stop_)
+                return; // Already stopped
+
+            stop_ = true;
+            std::cout << "[BatchImageSaver] Shutting down..." << std::endl;
+        }
+        cv_.notify_all();
+
+        // Wait for all workers to finish
+        for (auto& worker : workers_) {
+            if (worker.joinable()) {
+                worker.join();
+            }
+        }
+
+        // Process any remaining tasks synchronously
+        while (!task_queue_.empty()) {
+            process_task(task_queue_.front());
+            task_queue_.pop();
+        }
+
+        std::cout << "[BatchImageSaver] Shutdown complete" << std::endl;
+    }
+
+    void BatchImageSaver::queue_save(const std::filesystem::path& path, torch::Tensor image) {
+        if (!enabled_) {
+            save_image(path, image);
+            return;
+        }
+
+        SaveTask task;
+        task.path = path;
+        task.image = image.clone(); // Clone to avoid data races
+        task.is_multi = false;
+
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            if (stop_) {
+                // If stopped, save synchronously
+                save_image(path, image);
+                return;
+            }
+            task_queue_.push(std::move(task));
+            active_tasks_++;
+        }
+        cv_.notify_one();
+    }
+
+    void BatchImageSaver::queue_save_multiple(const std::filesystem::path& path,
+                                              const std::vector<torch::Tensor>& images,
+                                              bool horizontal,
+                                              int separator_width) {
+        if (!enabled_) {
+            save_image(path, images, horizontal, separator_width);
+            return;
+        }
+
+        SaveTask task;
+        task.path = path;
+        task.images.reserve(images.size());
+        for (const auto& img : images) {
+            task.images.push_back(img.clone());
+        }
+        task.is_multi = true;
+        task.horizontal = horizontal;
+        task.separator_width = separator_width;
+
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            if (stop_) {
+                // If stopped, save synchronously
+                save_image(path, images, horizontal, separator_width);
+                return;
+            }
+            task_queue_.push(std::move(task));
+            active_tasks_++;
+        }
+        cv_.notify_one();
+    }
+
+    void BatchImageSaver::wait_all() {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        cv_finished_.wait(lock, [this] {
+            return task_queue_.empty() && active_tasks_ == 0;
+        });
+    }
+
+    size_t BatchImageSaver::pending_count() const {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        return task_queue_.size() + active_tasks_;
+    }
+
+    void BatchImageSaver::worker_thread() {
+        while (true) {
+            SaveTask task;
+            {
+                std::unique_lock<std::mutex> lock(queue_mutex_);
+                cv_.wait(lock, [this] { return stop_ || !task_queue_.empty(); });
+
+                if (stop_ && task_queue_.empty()) {
+                    break;
+                }
+
+                if (!task_queue_.empty()) {
+                    task = std::move(task_queue_.front());
+                    task_queue_.pop();
+                } else {
+                    continue;
+                }
+            }
+
+            process_task(task);
+
+            {
+                std::unique_lock<std::mutex> lock(queue_mutex_);
+                active_tasks_--;
+            }
+            cv_finished_.notify_all();
+        }
+    }
+
+    void BatchImageSaver::process_task(const SaveTask& task) {
+        try {
+            if (task.is_multi) {
+                save_image(task.path, task.images, task.horizontal, task.separator_width);
+            } else {
+                save_image(task.path, task.image);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[BatchImageSaver] Error saving " << task.path << ": " << e.what() << std::endl;
+        }
+    }
+
+} // namespace image_io

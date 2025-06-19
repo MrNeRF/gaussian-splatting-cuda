@@ -18,30 +18,30 @@ namespace gs {
     namespace metrics {
 
         // SSIM window creation
-        torch::Tensor gaussian(int window_size, float sigma);
-        torch::Tensor create_window(int window_size, int channel);
+        torch::Tensor gaussian(const int window_size, const float sigma);
+        torch::Tensor create_window(const int window_size, const int channel);
 
         // Peak Signal-to-Noise Ratio
         class PSNR {
         public:
-            PSNR(float data_range = 1.0f) : data_range_(data_range) {}
+            explicit PSNR(const float data_range = 1.0f) : data_range_(data_range) {}
 
-            float compute(const torch::Tensor& pred, const torch::Tensor& target);
+            float compute(const torch::Tensor& pred, const torch::Tensor& target) const;
 
         private:
-            float data_range_;
+            const float data_range_;
         };
 
         // Structural Similarity Index
         class SSIM {
         public:
-            SSIM(int window_size = 11, int channel = 3);
+            SSIM(const int window_size = 11, const int channel = 3);
 
             float compute(const torch::Tensor& pred, const torch::Tensor& target);
 
         private:
-            int window_size_;
-            int channel_;
+            const int window_size_;
+            const int channel_;
             torch::Tensor window_;
             static constexpr float C1 = 0.01f * 0.01f;
             static constexpr float C2 = 0.03f * 0.03f;
@@ -49,7 +49,7 @@ namespace gs {
 
         class LPIPS {
         public:
-            LPIPS(const std::string& model_path = "");
+            explicit LPIPS(const std::string& model_path = "");
 
             float compute(const torch::Tensor& pred, const torch::Tensor& target);
             bool is_loaded() const { return model_loaded_; }
@@ -101,69 +101,64 @@ namespace gs {
         // Metrics reporter class
         class MetricsReporter {
         public:
-            MetricsReporter(const std::filesystem::path& output_dir);
+            explicit MetricsReporter(const std::filesystem::path& output_dir);
 
             void add_metrics(const EvalMetrics& metrics);
-            void save_report();
+            void save_report() const;
 
         private:
-            std::filesystem::path output_dir_;
+            const std::filesystem::path output_dir_;
             std::vector<EvalMetrics> all_metrics_;
-            std::filesystem::path csv_path_;
-            std::filesystem::path txt_path_;
+            const std::filesystem::path csv_path_;
+            const std::filesystem::path txt_path_;
         };
 
         // Main evaluator class that handles all metrics computation and visualization
         class MetricsEvaluator {
         public:
-            MetricsEvaluator(const param::TrainingParameters& params);
+            explicit MetricsEvaluator(const param::TrainingParameters& params);
 
             // Check if evaluation is enabled
-            bool is_enabled() const { return enabled_; }
+            bool is_enabled() const { return _params.optimization.enable_eval; }
 
             // Check if we should evaluate at this iteration
-            bool should_evaluate(int iteration) const;
+            bool should_evaluate(const int iteration) const;
 
             // Main evaluation method
-            EvalMetrics evaluate(int iteration,
+            EvalMetrics evaluate(const int iteration,
                                  const SplatData& splatData,
                                  std::shared_ptr<CameraDataset> val_dataset,
                                  torch::Tensor& background);
 
             // Save final report
-            void save_report() {
-                if (reporter_)
-                    reporter_->save_report();
+            void save_report() const {
+                if (_reporter)
+                    _reporter->save_report();
             }
 
             // Print evaluation header
-            void print_evaluation_header(int iteration) const {
+            void print_evaluation_header(const int iteration) const {
                 std::cout << std::endl;
                 std::cout << "[Evaluation at step " << iteration << "]" << std::endl;
             }
 
         private:
             // Configuration
-            bool enabled_;
-            bool save_images_;
-            std::string render_mode_str_;
-            RenderMode render_mode_;
-            std::filesystem::path output_path_;
-            std::vector<size_t> eval_steps_;
+            const param::TrainingParameters& _params;
 
             // Metrics
-            std::unique_ptr<PSNR> psnr_metric_;
-            std::unique_ptr<SSIM> ssim_metric_;
-            std::unique_ptr<LPIPS> lpips_metric_;
-            std::unique_ptr<MetricsReporter> reporter_;
+            std::unique_ptr<PSNR> _psnr_metric;
+            std::unique_ptr<SSIM> _ssim_metric;
+            std::unique_ptr<LPIPS> _lpips_metric;
+            std::unique_ptr<MetricsReporter> _reporter;
 
             // Helper functions
-            torch::Tensor apply_depth_colormap(const torch::Tensor& depth_normalized);
+            torch::Tensor apply_depth_colormap(const torch::Tensor& depth_normalized) const;
             bool has_rgb() const;
             bool has_depth() const;
 
             // Create dataloader from dataset
-            auto make_dataloader(std::shared_ptr<CameraDataset> dataset, int workers = 1) const;
+            auto make_dataloader(std::shared_ptr<CameraDataset> dataset, const int workers = 1) const;
         };
 
     } // namespace metrics
