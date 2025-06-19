@@ -2,7 +2,7 @@
 
 SCENE_DIR="data"
 RESULT_DIR="results/benchmark"
-SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
+SCENE_LIST="bicycle stump bonsai counter kitchen room" # treehill flowers
 
 for SCENE in $SCENE_LIST;
 do
@@ -23,8 +23,7 @@ do
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
         --test-every 8 \
-        --eval \
-        --iter 30000
+        --eval
 
     echo "Completed $SCENE"
     echo
