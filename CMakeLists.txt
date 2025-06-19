@@ -101,8 +101,6 @@ target_link_libraries(gaussian_host
         glad
         imgui
         dl
-        GL
-        GLU
         Threads::Threads
         args
         Python3::Python

@@ -5,6 +5,7 @@
 #include "core/rasterizer.hpp"
 #include "core/trainer.hpp"
 #include "visualizer/renderer.hpp"
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
@@ -12,7 +13,6 @@
 #include <condition_variable>
 #include <cuda_runtime.h>
 #include <deque>
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <imgui.h>
 #include <iostream>

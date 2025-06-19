@@ -12,4 +12,4 @@ cd ..
 
 # ./build/gaussian_splatting_cuda -d ./data/tandt/train -o ./output -i 10000 -v
 
-./build/gaussian_splatting_cuda -d ./data/mipnerf360/kitchen -o ./output -i 10000 -v
+./build/gaussian_splatting_cuda -d ./data/mipnerf360/kitchen -o ./output -i 10000 
