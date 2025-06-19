@@ -8,6 +8,7 @@ results
 .idea
 data
 *.pt
+*.py
 .venv/
 *.png
 *.sqlite
