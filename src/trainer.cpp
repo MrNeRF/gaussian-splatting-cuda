@@ -69,9 +69,11 @@ namespace gs {
 
     Trainer::Trainer(std::shared_ptr<CameraDataset> dataset,
                      std::unique_ptr<IStrategy> strategy,
-                     const param::TrainingParameters& params)
+                     const param::TrainingParameters& params,
+                     std::shared_ptr<FrequencyScheduler> freq_scheduler)
         : strategy_(std::move(strategy)),
-          params_(params) {
+          params_(params),
+          freq_scheduler_(freq_scheduler) {
 
         if (!torch::cuda::is_available()) {
             throw std::runtime_error("CUDA is not available – aborting.");
@@ -79,11 +81,11 @@ namespace gs {
 
         // Handle dataset split based on evaluation flag
         if (params.optimization.enable_eval) {
-            // Create train/val split
+            // Create train/val split - validation dataset doesn't use frequency scheduling
             train_dataset_ = std::make_shared<CameraDataset>(
-                dataset->get_cameras(), params.dataset, CameraDataset::Split::TRAIN);
+                dataset->get_cameras(), params.dataset, CameraDataset::Split::TRAIN, freq_scheduler_);
             val_dataset_ = std::make_shared<CameraDataset>(
-                dataset->get_cameras(), params.dataset, CameraDataset::Split::VAL);
+                dataset->get_cameras(), params.dataset, CameraDataset::Split::VAL, nullptr);
 
             std::cout << "Created train/val split: "
                       << train_dataset_->size().value() << " train, "
@@ -116,9 +118,32 @@ namespace gs {
 
         // Print render mode configuration
         std::cout << "Render mode: " << params.optimization.render_mode << std::endl;
+
+        // Print frequency scheduling status
+        if (freq_scheduler_ && freq_scheduler_->is_enabled()) {
+            std::cout << "Frequency-based resolution scheduling: ENABLED" << std::endl;
+            // Print the schedule for debugging
+            const auto& schedule = freq_scheduler_->get_schedule();
+            std::cout << "Resolution schedule:" << std::endl;
+            for (const auto& stage : schedule) {
+                std::cout << "  " << stage.factor << "x: " << stage.steps << " steps" << std::endl;
+            }
+        } else {
+            std::cout << "Frequency-based resolution scheduling: DISABLED" << std::endl;
+        }
     }
 
     bool Trainer::train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode) {
+        // Get the appropriate K matrix based on current resolution
+        torch::Tensor K_matrix;
+        float current_resolution_factor = 1.0f;
+        if (freq_scheduler_ && freq_scheduler_->is_enabled()) {
+            current_resolution_factor = freq_scheduler_->get_factor_for_iteration(iter);
+            K_matrix = cam->K_with_factor(current_resolution_factor);
+        } else {
+            K_matrix = cam->K();
+        }
+
         // Use the render mode from parameters
         auto r_output = gs::rasterize(
             *cam,
@@ -172,7 +197,8 @@ namespace gs {
 
         progress_->update(iter, loss.item<float>(),
                           static_cast<int>(strategy_->get_model().size()),
-                          strategy_->is_refining(iter));
+                          strategy_->is_refining(iter),
+                          current_resolution_factor);
 
         // Return true if we should continue training
         return iter < params_.optimization.iterations;
@@ -189,6 +215,11 @@ namespace gs {
         bool should_continue = true;
 
         for (int epoch = 0; epoch < epochs_needed && should_continue; ++epoch) {
+            // Update dataset iteration if frequency scheduling is enabled
+            if (freq_scheduler_ && freq_scheduler_->is_enabled()) {
+                train_dataset_->update_iteration(iter);
+            }
+
             auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
 
             for (auto& batch : *train_dataloader) {
@@ -203,6 +234,11 @@ namespace gs {
                 }
 
                 ++iter;
+
+                // Update dataset iteration for next sample
+                if (freq_scheduler_ && freq_scheduler_->is_enabled()) {
+                    train_dataset_->update_iteration(iter);
+                }
             }
         }
 

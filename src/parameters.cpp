@@ -122,7 +122,8 @@ namespace gs {
                     {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"},
                     {"steps_scaler", defaults.steps_scaler, "Scales the training steps and values"},
                     {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
-                    {"selective_adam", defaults.selective_adam, "Selective Adam optimizer flag"}};
+                    {"selective_adam", defaults.selective_adam, "Selective Adam optimizer flag"},
+                    {"use_frequency_schedule", defaults.use_frequency_schedule, "Enable frequency-based resolution scheduling"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -327,6 +328,9 @@ namespace gs {
             if (json.contains("selective_adam")) {
                 params.selective_adam = json["selective_adam"];
             }
+            if (json.contains("use_frequency_schedule")) {
+                params.use_frequency_schedule = json["use_frequency_schedule"];
+            }
             return params;
         }
 
@@ -399,6 +403,7 @@ namespace gs {
             opt_json["steps_scaler"] = params.optimization.steps_scaler;
             opt_json["sh_degree_interval"] = params.optimization.sh_degree_interval;
             opt_json["selective_adam"] = params.optimization.selective_adam;
+            opt_json["use_frequency_schedule"] = params.optimization.use_frequency_schedule;
 
             json["optimization"] = opt_json;
 

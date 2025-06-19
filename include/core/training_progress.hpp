@@ -45,7 +45,7 @@ public:
         start_time_ = std::chrono::steady_clock::now();
     }
 
-    void update(int current_iteration, float loss, int splat_count, bool is_refining = false) {
+    void update(int current_iteration, float loss, int splat_count, bool is_refining = false, float resolution_factor = 1.0f) {
         if (current_iteration % update_frequency_ != 0)
             return;
 
@@ -56,6 +56,11 @@ public:
         postfix << current_iteration << "/" << total_iterations_
                 << " | Loss: " << std::fixed << std::setprecision(4) << loss
                 << " | Splats: " << splat_count;
+
+        // Add resolution factor if not at full resolution
+        if (resolution_factor < 0.99f) {
+            postfix << " | Res: " << std::fixed << std::setprecision(2) << resolution_factor << "x";
+        }
 
         if (is_refining) {
             postfix << " (+)";
