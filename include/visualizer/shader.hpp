@@ -1,9 +1,9 @@
 #pragma once
 
 #include <Eigen/Eigen>
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <fstream>
-#include <glad/glad.h>
 #include <iostream>
 #include <sstream>
 #include <string>
