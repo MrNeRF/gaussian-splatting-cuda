@@ -30,12 +30,18 @@ public:
     // Load image from disk and return it
     torch::Tensor load_and_get_image(int resolution = -1);
 
+    // Load image with specific downscaling factor (for frequency scheduling)
+    torch::Tensor load_and_get_image_with_factor(float factor);
+
     // Accessors - now return const references to avoid copies
     const torch::Tensor& world_view_transform() const {
         return _world_view_transform;
     }
 
     torch::Tensor K() const;
+
+    // Get K matrix adjusted for a specific downscaling factor
+    torch::Tensor K_with_factor(float factor) const;
 
     int image_height() const noexcept { return _image_height; }
     int image_width() const noexcept { return _image_width; }
@@ -55,6 +61,10 @@ private:
     std::filesystem::path _image_path;
     int _image_width = 0;
     int _image_height = 0;
+
+    // Original dimensions (before any scaling)
+    int _original_width = 0;
+    int _original_height = 0;
 
     // GPU tensors (computed on demand)
     torch::Tensor _world_view_transform;

@@ -43,7 +43,8 @@ namespace gs {
             float tv_loss_weight = 10.0f;
 
             int steps_scaler = 1;
-            bool selective_adam = false; // Use Selective Adam optimizer
+            bool selective_adam = false;         // Use Selective Adam optimizer
+            bool use_frequency_schedule = false; // Enable frequency-based resolution scheduling
         };
 
         struct DatasetConfig {

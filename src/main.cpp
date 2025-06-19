@@ -18,9 +18,10 @@ int main(int argc, char* argv[]) {
         gs::param::save_training_parameters_to_json(params, params.dataset.output_path);
 
         //----------------------------------------------------------------------
-        // 3. Create dataset from COLMAP
+        // 3. Create dataset from COLMAP (with frequency scheduler if enabled)
         //----------------------------------------------------------------------
-        auto [dataset, scene_scale] = create_dataset_from_colmap(params.dataset);
+        auto [dataset, scene_scale, freq_scheduler] = create_dataset_from_colmap(
+            params.dataset, params.optimization);
 
         //----------------------------------------------------------------------
         // 4. Model initialisation
@@ -33,9 +34,9 @@ int main(int argc, char* argv[]) {
         auto strategy = std::make_unique<MCMC>(std::move(splat_data));
 
         //----------------------------------------------------------------------
-        // 6. Create trainer
+        // 6. Create trainer with frequency scheduler
         //----------------------------------------------------------------------
-        gs::Trainer trainer(dataset, std::move(strategy), params);
+        gs::Trainer trainer(dataset, std::move(strategy), params, freq_scheduler);
 
         //----------------------------------------------------------------------
         // 7. Start training

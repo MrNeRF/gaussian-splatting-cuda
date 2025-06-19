@@ -24,7 +24,8 @@ do
         --images images_${DATA_FACTOR} \
         --test-every 8 \
         --eval \
-        --save-eval-images
+        --save-eval-images \
+    	--frequency-schedule
 
     echo "Completed $SCENE"
     echo

@@ -54,6 +54,7 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
+        src/frequency_scheduler.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
@@ -75,7 +76,8 @@ target_link_libraries(gaussian_host
         Threads::Threads
         args
         Python3::Python
-        gsplat_backend  # Link to gsplat
+        gsplat_backend
+        TBB::tbb
 )
 
 # Fast C++ compilation with proper debug symbols

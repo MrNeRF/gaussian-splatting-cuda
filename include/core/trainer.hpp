@@ -2,6 +2,7 @@
 
 #include "core/bilateral_grid.hpp"
 #include "core/dataset.hpp"
+#include "core/frequency_scheduler.hpp"
 #include "core/istrategy.hpp"
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
@@ -16,7 +17,8 @@ namespace gs {
         // Constructor that takes ownership of strategy and shares datasets
         Trainer(std::shared_ptr<CameraDataset> dataset,
                 std::unique_ptr<IStrategy> strategy,
-                const param::TrainingParameters& params);
+                const param::TrainingParameters& params,
+                std::shared_ptr<FrequencyScheduler> freq_scheduler = nullptr);
 
         // Delete copy operations
         Trainer(const Trainer&) = delete;
@@ -58,6 +60,9 @@ namespace gs {
 
         // Metrics evaluator - handles all evaluation logic
         std::unique_ptr<metrics::MetricsEvaluator> evaluator_;
+
+        // Frequency scheduler
+        std::shared_ptr<FrequencyScheduler> freq_scheduler_;
     };
 
 } // namespace gs
