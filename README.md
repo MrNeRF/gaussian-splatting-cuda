@@ -181,6 +181,13 @@ Extract it to the `data` folder in the project root.
     - `RGB_D`: Color + accumulated depth
     - `RGB_ED`: Color + expected depth
 
+### Visualization Options
+
+- **`-v, --viz`**  
+  Enable the Visualization mode
+    - Displays the current state of the Gaussian splatting in a window
+    - Useful for debugging and monitoring training progress
+    
 ### Advanced Options
 
 - **`--bilateral-grid`**  
