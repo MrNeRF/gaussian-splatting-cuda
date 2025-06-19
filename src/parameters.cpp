@@ -112,6 +112,8 @@ namespace gs {
                     {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
                     {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
                     {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
+                    {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
+                    {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
                     {"use_bilateral_grid", defaults.use_bilateral_grid, "Enable bilateral grid for appearance modeling"},
                     {"bilateral_grid_X", defaults.bilateral_grid_X, "Bilateral grid X dimension"},
                     {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
@@ -290,6 +292,13 @@ namespace gs {
                 for (const auto& step : json["save_steps"]) {
                     params.save_steps.push_back(step.get<size_t>());
                 }
+            }
+
+            if (json.contains("enable_eval")) {
+                params.enable_eval = json["enable_eval"];
+            }
+            if (json.contains("enable_save_eval_images")) {
+                params.enable_save_eval_images = json["enable_save_eval_images"];
             }
             if (json.contains("use_bilateral_grid")) {
                 params.use_bilateral_grid = json["use_bilateral_grid"];
