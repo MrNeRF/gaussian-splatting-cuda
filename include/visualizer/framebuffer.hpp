@@ -1,7 +1,10 @@
 #pragma once
 
 #include "visualizer/shader.hpp"
+// clang-format off
+// GLAD is already included by shader.hpp, so we're good here
 #include <glad/glad.h>
+// clang-format on
 #include <iostream>
 
 class FrameBuffer {
