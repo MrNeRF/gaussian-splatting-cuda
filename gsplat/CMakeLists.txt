@@ -33,11 +33,6 @@ set(GSPLAT_SOURCES
         RasterizeToPixelsFromWorld3DGSFwd.cu
         RelocationCUDA.cu
         SphericalHarmonicsCUDA.cu
-        Projection2DGSFused.cu
-        Projection2DGSPacked.cu
-        RasterizeToIndices2DGS.cu
-        RasterizeToPixels2DGSBwd.cu
-        RasterizeToPixels2DGSFwd.cu
 )
 
 # One unified library
