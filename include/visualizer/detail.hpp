@@ -61,8 +61,6 @@ namespace gs {
 
         Viewport viewport_;
 
-        bool isRunning = false;
-
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
 
         std::shared_ptr<Shader> quadShader_;
@@ -142,7 +140,6 @@ namespace gs {
 
         void configuration();
 
-        void drawControlPanel();
 
         void draw() override;
 
@@ -162,6 +159,8 @@ namespace gs {
         bool show_control_panel_ = true;
         bool save_in_progress_ = false;
         std::chrono::steady_clock::time_point save_start_time_;
+        bool manual_start_triggered_ = false;
+        bool training_started_ = false;
     };
 
 } // namespace gs
