@@ -1,4 +1,9 @@
+#include "config.h" // Include generated config
 #include "visualizer/detail.hpp"
+
+#ifdef CUDA_GL_INTEROP_ENABLED
+#include "visualizer/cuda_gl_interop.hpp"
+#endif
 
 namespace gs {
 
@@ -27,9 +32,6 @@ namespace gs {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_FALSE);
         glfwWindowHint(GLFW_DEPTH_BITS, 24);
-#ifdef __APPLE__
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
 
         window_ = glfwCreateWindow(
             detail_->viewport_.windowSize.x,
@@ -78,7 +80,6 @@ namespace gs {
         ImGui_ImplOpenGL3_Init(glsl_version);
 
         // Set Fonts
-        // concat two const char*
         std::string font_path = std::string(PROJECT_ROOT_PATH) +
                                 "/include/visualizer/assets/JetBrainsMono-Regular.ttf";
         io.Fonts->AddFontFromFileTTF(font_path.c_str(), 14.0f);
@@ -177,7 +178,14 @@ namespace gs {
             (shader_path + "/screen_quad.frag").c_str(),
             true);
 
+        // Initialize screen renderer with interop support if available
+#ifdef CUDA_GL_INTEROP_ENABLED
+        screen_renderer_ = std::make_shared<ScreenQuadRendererInterop>(true);
+        std::cout << "CUDA-OpenGL interop enabled for rendering" << std::endl;
+#else
         screen_renderer_ = std::make_shared<ScreenQuadRenderer>();
+        std::cout << "Using CPU copy for rendering (interop not available)" << std::endl;
+#endif
 
         while (!glfwWindowShouldClose(window_)) {
 
@@ -209,9 +217,7 @@ namespace gs {
           trainer_(nullptr) {
 
         config_ = std::make_shared<RenderingConfig>();
-
         info_ = std::make_shared<TrainingInfo>();
-
         notifier_ = std::make_shared<Notifier>();
 
         setFrameRate(30);
@@ -275,9 +281,26 @@ namespace gs {
                 RenderMode::RGB);
         }
 
-        auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
+#ifdef CUDA_GL_INTEROP_ENABLED
+        // Use interop for direct GPU transfer
+        auto interop_renderer = std::dynamic_pointer_cast<ScreenQuadRendererInterop>(screen_renderer_);
 
+        if (interop_renderer && interop_renderer->isInteropEnabled()) {
+            // Keep data on GPU - convert [C, H, W] to [H, W, C] format
+            auto image_hwc = output.image.permute({1, 2, 0}).contiguous();
+
+            // Direct CUDA->OpenGL update (no CPU copy!)
+            interop_renderer->uploadFromCUDA(image_hwc, reso.x, reso.y);
+        } else {
+            // Fallback to CPU copy
+            auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
+            screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
+        }
+#else
+        // Original CPU copy path
+        auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
         screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
+#endif
 
         screen_renderer_->render(quadShader_, viewport_);
     }
@@ -382,6 +405,13 @@ namespace gs {
         ImGui::Text("Status: %s", is_complete ? "Complete" : (is_paused ? "Paused" : (is_training ? "Training" : "Ready")));
         ImGui::Text("Iteration: %d", current_iter);
         ImGui::Text("Loss: %.6f", current_loss);
+
+        // Display render mode
+#ifdef CUDA_GL_INTEROP_ENABLED
+        ImGui::Text("Render Mode: GPU Direct (Interop)");
+#else
+        ImGui::Text("Render Mode: CPU Copy");
+#endif
 
         // Handle the start trigger
         if (notifier_ && manual_start_triggered_) {

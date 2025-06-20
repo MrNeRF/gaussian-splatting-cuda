@@ -140,7 +140,6 @@ namespace gs {
 
         void configuration();
 
-
         void draw() override;
 
     public:
