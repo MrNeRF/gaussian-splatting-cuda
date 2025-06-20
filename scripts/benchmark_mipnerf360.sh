@@ -23,7 +23,8 @@ do
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
         --test-every 8 \
-        --eval
+        --eval \
+        --save-eval-images
 
     echo "Completed $SCENE"
     echo
