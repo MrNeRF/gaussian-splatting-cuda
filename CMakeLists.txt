@@ -41,28 +41,6 @@ add_subdirectory(gsplat)
 # HOST LIBRARY - Compiled with g++ (fast!)
 # =============================================================================
 
-set(GLAD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/glad)
-add_library(glad STATIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/glad/src/glad.c
-)
-target_include_directories(glad PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/glad/include
-)
-
-set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
-add_library(imgui STATIC
-    ${IMGUI_DIR}/imgui.cpp
-    ${IMGUI_DIR}/imgui_draw.cpp
-    ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/imgui_tables.cpp
-    ${IMGUI_DIR}/imgui_demo.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
-)
-target_include_directories(imgui PUBLIC
-    ${IMGUI_DIR}
-)
-
 set(HOST_SOURCES
         src/mcmc.cpp
         src/camera.cpp
