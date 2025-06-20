@@ -3,9 +3,12 @@ build/
 cmake-build-debug/
 cmake-build-release/
 external/libtorch/
+external/glad/
+external/imgui/
 output*
 results
 .idea
+imgui.ini
 data
 *.pt
 *.py
