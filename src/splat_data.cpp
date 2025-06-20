@@ -326,13 +326,12 @@ PointCloud SplatData::to_point_cloud() const {
     return pc;
 }
 
-SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParameters& params, float scene_scale) {
+SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParameters& params, torch::Tensor scene_center) {
     // Helper lambdas
     auto pcd = read_colmap_point_cloud(params.dataset.data_path);
 
-    auto inverse_sigmoid = [](torch::Tensor x) {
-        return torch::log(x / (1 - x));
-    };
+    const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
+    const auto scene_scale = dists.median().item<float>();
 
     auto rgb_to_sh = [](const torch::Tensor& rgb) {
         constexpr float kInvSH = 0.28209479177387814f; // 1 / √(4π)
@@ -393,6 +392,7 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
                    .contiguous()
                    .set_requires_grad(true);
 
+    std::cout << "Scene scale: " << scene_scale << std::endl;
     std::cout << "Initialized SplatData with:" << std::endl;
     std::cout << "  - " << means.size(0) << " points" << std::endl;
     std::cout << "  - Max SH degree: " << params.optimization.sh_degree << std::endl;
