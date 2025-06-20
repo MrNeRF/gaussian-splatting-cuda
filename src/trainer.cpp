@@ -141,27 +141,29 @@ namespace gs {
 
     void Trainer::handle_control_requests(int iter) {
         // Handle pause/resume
-        if (pause_requested_ && !is_paused_) {
+        if (pause_requested_.load() && !is_paused_.load()) {
             is_paused_ = true;
             progress_->pause();
             std::cout << "\nTraining paused at iteration " << iter << std::endl;
-        } else if (!pause_requested_ && is_paused_) {
+            std::cout << "Click 'Resume Training' to continue." << std::endl;
+        } else if (!pause_requested_.load() && is_paused_.load()) {
             is_paused_ = false;
             progress_->resume(iter, current_loss_, static_cast<int>(strategy_->get_model().size()));
             std::cout << "\nTraining resumed at iteration " << iter << std::endl;
         }
 
         // Handle save request
-        if (save_requested_) {
+        if (save_requested_.load()) {
             save_requested_ = false;
-            std::cout << "\nSaving model at iteration " << iter << "..." << std::endl;
-            strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
-            std::cout << "Model saved." << std::endl;
+            std::cout << "\nSaving checkpoint at iteration " << iter << "..." << std::endl;
+            strategy_->get_model().save_ply(params_.dataset.output_path / "checkpoints", iter, /*join=*/true);
+            std::cout << "Checkpoint saved to " << (params_.dataset.output_path / "checkpoints").string() << std::endl;
         }
 
-        // Handle stop request
-        if (stop_requested_) {
-            std::cout << "\nStopping training at iteration " << iter << "..." << std::endl;
+        // Handle stop request - this permanently stops training
+        if (stop_requested_.load()) {
+            std::cout << "\nStopping training permanently at iteration " << iter << "..." << std::endl;
+            std::cout << "Saving final model..." << std::endl;
             strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
             is_running_ = false;
         }
@@ -173,13 +175,18 @@ namespace gs {
         // Check control requests at the beginning
         handle_control_requests(iter);
 
+        // If stop requested, return false to end training
+        if (stop_requested_) {
+            return false;
+        }
+
         // If paused, wait
         while (is_paused_ && !stop_requested_) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             handle_control_requests(iter);
         }
 
-        // If stop requested, return false to end training
+        // Check stop again after potential pause
         if (stop_requested_) {
             return false;
         }
@@ -283,8 +290,17 @@ namespace gs {
     }
 
     void Trainer::train() {
-        is_running_ = true;
+        is_running_ = false; // Don't start running until notified
         training_complete_ = false;
+
+        // Wait for the start signal from GUI if visualization is enabled
+        if (viewer_ && viewer_->notifier_) {
+            auto& notifier = viewer_->notifier_;
+            std::unique_lock<std::mutex> lock(notifier->mtx);
+            notifier->cv.wait(lock, [&notifier] { return notifier->ready; });
+        }
+
+        is_running_ = true; // Now we can start
 
         int iter = 1;
         const int epochs_needed = (params_.optimization.iterations + train_dataset_size_ - 1) / train_dataset_size_;

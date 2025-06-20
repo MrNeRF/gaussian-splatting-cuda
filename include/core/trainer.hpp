@@ -41,11 +41,12 @@ namespace gs {
         void request_pause() { pause_requested_ = true; }
         void request_resume() { pause_requested_ = false; }
         void request_save() { save_requested_ = true; }
-        void request_stop() { stop_requested_ = true; }
+        void request_stop() { stop_requested_ = true; } // This will fully stop training
 
         bool is_paused() const { return is_paused_; }
         bool is_running() const { return is_running_; }
         bool is_training_complete() const { return training_complete_; }
+        bool has_stopped() const { return stop_requested_; } // Check if stop was requested
 
         // Get current training state
         int get_current_iteration() const { return current_iteration_; }
