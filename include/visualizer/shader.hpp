@@ -1,8 +1,9 @@
 #pragma once
 
-#include <Eigen/Eigen>
+// clang-format off
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+// clang-format on
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -189,24 +190,24 @@ public:
         glUniform1f(uni, value);
     }
 
-    void set_uniform(const std::string& name, const Eigen::Vector2f& vector) {
+    void set_uniform(const std::string& name, const glm::vec2& vector) {
         GLint uni = uniform(name);
-        glUniform2fv(uni, 1, vector.data());
+        glUniform2fv(uni, 1, &vector[0]);
     }
 
-    void set_uniform(const std::string& name, const Eigen::Vector3f& vector) {
+    void set_uniform(const std::string& name, const glm::vec3& vector) {
         GLint uni = uniform(name);
-        glUniform3fv(uni, 1, vector.data());
+        glUniform3fv(uni, 1, &vector[0]);
     }
 
-    void set_uniform(const std::string& name, const Eigen::Vector4f& vector) {
+    void set_uniform(const std::string& name, const glm::vec4& vector) {
         GLint uni = uniform(name);
-        glUniform4fv(uni, 1, vector.data());
+        glUniform4fv(uni, 1, &vector[0]);
     }
 
-    void set_uniform(const std::string& name, const Eigen::Matrix4f& matrix) {
+    void set_uniform(const std::string& name, const glm::mat4& matrix) {
         GLint uni = uniform(name);
-        glUniformMatrix4fv(uni, 1, GL_FALSE, matrix.data());
+        glUniformMatrix4fv(uni, 1, GL_FALSE, &matrix[0][0]);
     }
 
     // texture
@@ -217,7 +218,7 @@ public:
 
     template <typename E, int N>
     void set_attribute(const std::string& name,
-                       const std::vector<Eigen::Matrix<E, N, 1>>& data) {
+                       const std::vector<glm::vec<N, E, glm::defaultp>>& data) {
         GLint attrib = attribute(name);
         if (attribute_buffers.count(attrib) == 0) {
             GLuint buffer;
@@ -226,7 +227,7 @@ public:
         }
         GLuint buffer = attribute_buffers.at(attrib);
         glBindBuffer(GL_ARRAY_BUFFER, buffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(E) * N * data.size(), &data[0], GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(E) * N * data.size(), data.data(), GL_DYNAMIC_DRAW);
         glEnableVertexAttribArray(attrib);
         glVertexAttribPointer(attrib, N, get_type_enum<E>(), is_type_integral<E>(), 0, nullptr);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
