@@ -2,9 +2,11 @@
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 
-// Include GLAD before any OpenGL headers
-#include <GLFW/glfw3.h>
+// clang-format off
+// CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
+// clang-format on
 
 // Now include CUDA GL interop (after GLAD)
 #include <cuda_gl_interop.h>
@@ -176,7 +178,7 @@ namespace gs {
     // InteropFrameBuffer implementation
     InteropFrameBuffer::InteropFrameBuffer(bool use_interop)
         : FrameBuffer(),
-          use_interop_(use_interop && INTEROP_AVAILABLE) {
+          use_interop_(use_interop) {
         if (use_interop_) {
             try {
                 interop_texture_.init(width, height);

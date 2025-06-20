@@ -6,6 +6,7 @@
 #include "core/trainer.hpp"
 #include "visualizer/renderer.hpp"
 // clang-format off
+// CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 // clang-format on
