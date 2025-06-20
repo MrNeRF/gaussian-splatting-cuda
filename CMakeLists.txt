@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.24...3.30)
-project(gaussian_splatting_cuda LANGUAGES CUDA CXX)
+project(gaussian_splatting_cuda LANGUAGES CUDA CXX C)
 
 # Setup
 get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
@@ -24,6 +24,8 @@ find_package(Torch REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(glfw3 REQUIRED)
 
 # Python packages - Use modern Python3 finding
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -39,6 +41,28 @@ add_subdirectory(gsplat)
 # HOST LIBRARY - Compiled with g++ (fast!)
 # =============================================================================
 
+set(GLAD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/glad)
+add_library(glad STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/glad/src/glad.c
+)
+target_include_directories(glad PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/glad/include
+)
+
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
+add_library(imgui STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(imgui PUBLIC
+    ${IMGUI_DIR}
+)
+
 set(HOST_SOURCES
         src/mcmc.cpp
         src/camera.cpp
@@ -51,6 +75,7 @@ set(HOST_SOURCES
         src/rasterizer.cpp
         src/metrics.cpp
         src/rasterizer_autograd.cpp
+        src/viewer.cpp
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
@@ -72,6 +97,10 @@ target_link_libraries(gaussian_host
         ${TORCH_LIBRARIES}
         nlohmann_json::nlohmann_json
         glm
+        glfw
+        glad
+        imgui
+        dl
         Threads::Threads
         args
         Python3::Python
@@ -88,6 +117,8 @@ target_compile_options(gaussian_host PRIVATE
 set_target_properties(gaussian_host PROPERTIES
         DEBUG_POSTFIX d
 )
+
+add_definitions(-DPROJECT_ROOT_PATH="${PROJ_ROOT_DIR}")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")

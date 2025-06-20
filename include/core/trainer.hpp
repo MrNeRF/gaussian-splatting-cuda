@@ -11,6 +11,8 @@
 
 namespace gs {
 
+    class GSViewer;
+
     class Trainer {
     public:
         // Constructor that takes ownership of strategy and shares datasets
@@ -26,8 +28,13 @@ namespace gs {
         Trainer(Trainer&&) = default;
         Trainer& operator=(Trainer&&) = default;
 
+        ~Trainer();
+
         // Main training method
         void train();
+
+        // just for viewer to get model
+        const IStrategy& get_strategy() const { return *strategy_; }
 
     private:
         // Protected method for processing a single training step
@@ -47,6 +54,8 @@ namespace gs {
         std::shared_ptr<CameraDataset> val_dataset_;
         std::unique_ptr<IStrategy> strategy_;
         param::TrainingParameters params_;
+
+        std::unique_ptr<GSViewer> viewer_;
 
         torch::Tensor background_{};
         std::unique_ptr<TrainingProgress> progress_;

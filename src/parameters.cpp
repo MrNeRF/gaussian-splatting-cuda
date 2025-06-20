@@ -88,7 +88,7 @@ namespace gs {
                 // Define all expected parameters and their types
                 struct ParamInfo {
                     std::string name;
-                    std::variant<size_t, float, int64_t, std::string, bool> value;
+                    std::variant<int, size_t, float, int64_t, std::string, bool> value;
                     std::string description; // Added for better documentation
                 };
 

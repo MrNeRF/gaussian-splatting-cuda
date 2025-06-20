@@ -1,6 +1,7 @@
 #include "core/trainer.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
+#include "visualizer/detail.hpp"
 #include <chrono>
 #include <iostream>
 #include <numeric>
@@ -116,18 +117,44 @@ namespace gs {
 
         // Print render mode configuration
         std::cout << "Render mode: " << params.optimization.render_mode << std::endl;
+
+        if (params.optimization.enable_viz) {
+            std::cout << "Visualization enabled." << std::endl;
+            viewer_ = std::make_unique<GSViewer>("GS-CUDA", 1280, 720);
+            viewer_->setTrainer(this);
+            viewer_->start();
+        } else {
+            std::cout << "Visualization disabled." << std::endl;
+        }
+    }
+
+    Trainer::~Trainer() {
+        if (viewer_) {
+            viewer_->join();
+        }
     }
 
     bool Trainer::train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode) {
         // Use the render mode from parameters
-        auto r_output = gs::rasterize(
-            *cam,
-            strategy_->get_model(),
-            background_,
-            1.0f,
-            false,
-            false,
-            render_mode);
+        auto render_fn = [this, &cam, render_mode]() {
+            return gs::rasterize(
+                *cam,
+                strategy_->get_model(),
+                background_,
+                1.0f,
+                false,
+                false,
+                render_mode);
+        };
+
+        RenderOutput r_output;
+
+        if (viewer_) {
+            std::lock_guard<std::mutex> lock(viewer_->splat_mtx_);
+            r_output = render_fn();
+        } else {
+            r_output = render_fn();
+        }
 
         // Apply bilateral grid if enabled
         if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
@@ -162,8 +189,18 @@ namespace gs {
                 }
             }
 
-            strategy_->post_backward(iter, r_output);
-            strategy_->step(iter);
+            auto do_strategy = [&]() {
+                strategy_->post_backward(iter, r_output);
+                strategy_->step(iter);
+            };
+
+            if (viewer_) {
+                std::lock_guard<std::mutex> lock(viewer_->splat_mtx_);
+                do_strategy();
+            } else {
+                do_strategy();
+            }
+
             if (params_.optimization.use_bilateral_grid) {
                 bilateral_grid_optimizer_->step();
                 bilateral_grid_optimizer_->zero_grad(true);
@@ -173,6 +210,23 @@ namespace gs {
         progress_->update(iter, loss.item<float>(),
                           static_cast<int>(strategy_->get_model().size()),
                           strategy_->is_refining(iter));
+
+        if (viewer_) {
+
+            if (viewer_->info_) {
+                auto& info = viewer_->info_;
+                std::lock_guard<std::mutex> lock(viewer_->info_->mtx);
+                info->updateProgress(iter, params_.optimization.iterations);
+                info->updateNumSplats(static_cast<size_t>(strategy_->get_model().size()));
+                info->updateLoss(loss.item<float>());
+            }
+
+            if (viewer_->notifier_) {
+                auto& notifier = viewer_->notifier_;
+                std::unique_lock<std::mutex> lock(notifier->mtx);
+                notifier->cv.wait(lock, [&notifier] { return notifier->ready; });
+            }
+        }
 
         // Return true if we should continue training
         return iter < params_.optimization.iterations;

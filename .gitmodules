@@ -7,3 +7,9 @@
 [submodule "external/glm"]
 	path = external/glm
 	url = https://github.com/g-truc/glm
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "external/glad"]
+	path = external/glad
+	url = https://github.com/panxkun/glad-opengl-core43.git
