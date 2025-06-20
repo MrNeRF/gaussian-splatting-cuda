@@ -6,7 +6,10 @@
 
 A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built upon the [gsplat](https://github.com/nerfstudio-project/gsplat) rasterization backend.
 
+<img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="80%"/>
+
 ## News
+- **[2025-06-20]**: Added interactive viewer with real-time visualization during training by @panxkun.
 - **[2025-06-19]**: Metrics are now on par with gsplat-mcmc. Gsplat evals on downscaled png images whereas I used jpgs.
 - **[2025-06-15]**: Different render modes exposed, refactors, added bilateral grid.
 - **[2025-06-13]**: Metrics are getting very close to gsplat-mcmc. LPIPS and time estimates are not comparable as of now.
