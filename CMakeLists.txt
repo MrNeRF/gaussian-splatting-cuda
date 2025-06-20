@@ -34,6 +34,33 @@ if(CUDAToolkit_VERSION VERSION_LESS "11.7")
     message(FATAL_ERROR "Requires CUDA 11.7+")
 endif()
 
+# Check for CUDA-OpenGL interop capability
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_INCLUDES ${CUDAToolkit_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${CUDA_LIBRARIES} ${OPENGL_LIBRARIES})
+check_cxx_source_compiles("
+    #include <cuda_gl_interop.h>
+    int main() {
+        cudaGraphicsResource_t resource;
+        return 0;
+    }
+" CUDA_GL_INTEROP_FOUND)
+
+if(CUDA_GL_INTEROP_FOUND)
+    message(STATUS "CUDA-OpenGL interop support: ENABLED")
+    set(CUDA_GL_INTEROP_ENABLED 1)
+else()
+    message(WARNING "CUDA-OpenGL interop support: DISABLED (will use CPU fallback)")
+    set(CUDA_GL_INTEROP_ENABLED 0)
+endif()
+
+# Create a configuration header BEFORE adding subdirectories
+configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/config.h.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/include/config.h"
+        @ONLY
+)
+
 add_subdirectory(external)
 add_subdirectory(gsplat)
 
@@ -65,9 +92,12 @@ add_library(gaussian_host STATIC ${HOST_SOURCES})
 target_include_directories(gaussian_host
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
+        ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
         PRIVATE
         ${Python3_INCLUDE_DIRS}
+        ${OPENGL_INCLUDE_DIRS}
 )
 
 target_link_libraries(gaussian_host
@@ -83,6 +113,8 @@ target_link_libraries(gaussian_host
         args
         Python3::Python
         gsplat_backend  # Link to gsplat
+        ${OPENGL_LIBRARIES}
+        CUDA::cudart    # Add CUDA runtime for interop
 )
 
 # Fast C++ compilation with proper debug symbols
@@ -114,6 +146,11 @@ set(KERNEL_SOURCES
         kernels/bilateral_grid_tv.cu
 )
 
+# Add CUDA-OpenGL interop kernels if supported
+if(CUDA_GL_INTEROP_FOUND)
+    list(APPEND KERNEL_SOURCES kernels/cuda_gl_interop.cu)
+endif()
+
 add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
 
 set_target_properties(gaussian_kernels PROPERTIES
@@ -126,7 +163,10 @@ set_target_properties(gaussian_kernels PROPERTIES
 target_include_directories(gaussian_kernels
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
+        ${CUDAToolkit_INCLUDE_DIRS}
+        ${OPENGL_INCLUDE_DIRS}
         PRIVATE
         ${Python3_INCLUDE_DIRS}
 )
@@ -138,12 +178,51 @@ target_link_libraries(gaussian_kernels
         CUDA::cublas
         ${TORCH_LIBRARIES}
         glm
+        ${OPENGL_LIBRARIES}
 )
+
+# Enable CUDA-OpenGL interop compilation flags
+if(CUDA_GL_INTEROP_FOUND)
+    # Don't define here - it's already in config.h
+    # target_compile_definitions(gaussian_kernels PUBLIC CUDA_GL_INTEROP_ENABLED)
+endif()
 
 target_compile_options(gaussian_kernels PRIVATE
         $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
         $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
 )
+
+# =============================================================================
+# VISUALIZER LIBRARY (separate for OpenGL/CUDA interop code)
+# =============================================================================
+
+if(CUDA_GL_INTEROP_FOUND)
+    set(VISUALIZER_SOURCES
+            src/visualizer/cuda_gl_interop.cpp
+    )
+
+    add_library(gaussian_visualizer STATIC ${VISUALIZER_SOURCES})
+
+    target_include_directories(gaussian_visualizer
+            PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
+            ${CUDAToolkit_INCLUDE_DIRS}
+            ${OPENGL_INCLUDE_DIRS}
+    )
+
+    target_link_libraries(gaussian_visualizer
+            PUBLIC
+            ${TORCH_LIBRARIES}
+            ${OPENGL_LIBRARIES}
+            CUDA::cudart
+            glad
+            glfw
+    )
+
+    # Don't define here - it's already in config.h
+    # target_compile_definitions(gaussian_visualizer PUBLIC CUDA_GL_INTEROP_ENABLED)
+endif()
 
 # =============================================================================
 # MAIN EXECUTABLE - WITH CUDA DEVICE LINKING
@@ -161,19 +240,30 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 target_include_directories(${PROJECT_NAME}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
         ${Python3_INCLUDE_DIRS}
+        ${CUDAToolkit_INCLUDE_DIRS}
+        ${OPENGL_INCLUDE_DIRS}
 )
 
 # Link directly to all libraries
-target_link_libraries(${PROJECT_NAME}
-        PRIVATE
+set(MAIN_LINK_LIBRARIES
         gaussian_host
         gaussian_kernels
         gsplat_backend
         Python3::Python
+        ${OPENGL_LIBRARIES}
+        CUDA::cudart
 )
 
+if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
+    list(APPEND MAIN_LINK_LIBRARIES gaussian_visualizer)
+endif()
+
+target_link_libraries(${PROJECT_NAME} PRIVATE ${MAIN_LINK_LIBRARIES})
+
+# Platform-specific settings
 if(WIN32)
     file(GLOB TORCH_DLLS "${Torch_DIR}/../../../lib/*.dll")
 
@@ -184,6 +274,39 @@ if(WIN32)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TORCH_DLL}"
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
     endforeach()
+
+    # Copy OpenGL related DLLs if needed
+    if(OPENGL_LIBRARIES)
+        get_filename_component(OPENGL_LIB_DIR ${OPENGL_LIBRARIES} DIRECTORY)
+        file(GLOB OPENGL_DLLS "${OPENGL_LIB_DIR}/*.dll")
+        foreach(DLL ${OPENGL_DLLS})
+            add_custom_command(
+                    TARGET ${PROJECT_NAME}
+                    POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+        endforeach()
+    endif()
+elseif(UNIX)
+    # Linux specific settings
+    target_link_libraries(${PROJECT_NAME} PRIVATE GL GLU)
+
+    # Find Torch library directory
+    find_path(TORCH_LIB_DIR libtorch_cpu.so
+            PATHS "${Torch_DIR}/../../../lib"
+            NO_DEFAULT_PATH)
+
+    if(TORCH_LIB_DIR)
+        # Add RPATH for CUDA and Torch libraries
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+                INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIR}:${TORCH_LIB_DIR}"
+                BUILD_WITH_INSTALL_RPATH TRUE
+                INSTALL_RPATH_USE_LINK_PATH TRUE
+        )
+        message(STATUS "Torch library directory: ${TORCH_LIB_DIR}")
+    else()
+        message(WARNING "Could not find Torch library directory")
+    endif()
 endif()
 
 # Build type configuration - Updated to handle INTERFACE libraries
@@ -211,6 +334,9 @@ endfunction()
 configure_build_type(gaussian_host)
 configure_build_type(gaussian_kernels)
 configure_build_type(gsplat_backend)
+if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
+    configure_build_type(gaussian_visualizer)
+endif()
 configure_build_type(${PROJECT_NAME})
 
 # =============================================================================
@@ -258,19 +384,30 @@ if(BUILD_TESTS)
 
     target_include_directories(gaussian_tests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
             ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
             ${Python3_INCLUDE_DIRS}
+            ${CUDAToolkit_INCLUDE_DIRS}
+            ${OPENGL_INCLUDE_DIRS}
     )
 
-    target_link_libraries(gaussian_tests PRIVATE
+    set(TEST_LINK_LIBRARIES
             gaussian_host
             gaussian_kernels
             gsplat_backend
             GTest::gtest
             GTest::gtest_main
             Python3::Python
+            ${OPENGL_LIBRARIES}
+            CUDA::cudart
     )
+
+    if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
+        list(APPEND TEST_LINK_LIBRARIES gaussian_visualizer)
+    endif()
+
+    target_link_libraries(gaussian_tests PRIVATE ${TEST_LINK_LIBRARIES})
 
     target_compile_options(gaussian_tests PRIVATE
             $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G -lineinfo -Xcudafe --device-debug>
@@ -312,15 +449,24 @@ endif()
 # BUILD INFO & OPTIMIZATIONS
 # =============================================================================
 
-message(STATUS "CUDA Version: ${CUDAToolkit_VERSION}")
-message(STATUS "Torch Version: ${Torch_VERSION}")
-message(STATUS "Python Version: ${Python3_VERSION}")
-message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "Tests: ${BUILD_TESTS}")
+message(STATUS "===========================================")
+message(STATUS "Build Configuration:")
+message(STATUS "  CUDA Version: ${CUDAToolkit_VERSION}")
+message(STATUS "  Torch Version: ${Torch_VERSION}")
+message(STATUS "  Python Version: ${Python3_VERSION}")
+message(STATUS "  OpenGL Found: ${OPENGL_FOUND}")
+message(STATUS "  CUDA-GL Interop: ${CUDA_GL_INTEROP_FOUND}")
+message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "  Tests: ${BUILD_TESTS}")
+message(STATUS "")
 message(STATUS "Include paths:")
 message(STATUS "  - Main: ${CMAKE_CURRENT_SOURCE_DIR}/include")
+message(STATUS "  - Generated: ${CMAKE_CURRENT_BINARY_DIR}/include")
 message(STATUS "  - Kernels: ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels")
 message(STATUS "  - Python: ${Python3_INCLUDE_DIRS}")
+message(STATUS "  - CUDA: ${CUDAToolkit_INCLUDE_DIRS}")
+message(STATUS "  - OpenGL: ${OPENGL_INCLUDE_DIRS}")
+message(STATUS "===========================================")
 
 # Enable ccache if available
 find_program(CCACHE_PROGRAM ccache)
