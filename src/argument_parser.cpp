@@ -53,6 +53,7 @@ namespace {
         // Optional flag arguments
         ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
         ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
+        ::args::Flag enable_viz(parser, "viz", "Enable visualization during training", {'v', "viz"});
         ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
         ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
         ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
@@ -126,6 +127,7 @@ namespace {
         // Flag arguments
         setFlag(use_bilateral_grid, opt.use_bilateral_grid);
         setFlag(enable_eval, opt.enable_eval);
+        setFlag(enable_viz, opt.enable_viz);
         setFlag(selective_adam, opt.selective_adam);
         setFlag(enable_save_eval_images, opt.enable_save_eval_images);
 
