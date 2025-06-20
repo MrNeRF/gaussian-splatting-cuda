@@ -134,6 +134,7 @@ namespace gs {
 
     public:
         GSViewer(std::string title, int width, int height);
+        ~GSViewer();
 
         void setTrainer(Trainer* trainer);
 

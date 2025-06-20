@@ -49,15 +49,27 @@ int main(int argc, char* argv[]) {
             if (viewer) {
                 // Start training in a separate thread
                 std::thread training_thread([&trainer]() {
-                    trainer->train();
+                    try {
+                        trainer->train();
+                    } catch (const std::exception& e) {
+                        std::cerr << "Training thread error: " << e.what() << std::endl;
+                    }
                 });
 
                 // Run GUI in main thread (blocking)
                 viewer->run();
 
+                // After viewer closes, ensure training is stopped
+                if (trainer->is_running()) {
+                    std::cout << "Main: Requesting training stop..." << std::endl;
+                    trainer->request_stop();
+                }
+
                 // Wait for training thread to complete
                 if (training_thread.joinable()) {
+                    std::cout << "Main: Waiting for training thread to finish..." << std::endl;
                     training_thread.join();
+                    std::cout << "Main: Training thread finished." << std::endl;
                 }
             } else {
                 std::cerr << "Failed to create viewer" << std::endl;
