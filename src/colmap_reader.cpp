@@ -265,7 +265,7 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
 // -----------------------------------------------------------------------------
 //  Assemble per-image camera information
 // -----------------------------------------------------------------------------
-std::tuple<std::vector<CameraData>, float>
+std::tuple<std::vector<CameraData>, torch::Tensor>
 read_colmap_cameras(const std::filesystem::path base_path,
                     const std::unordered_map<uint32_t, CameraData>& cams,
                     const std::vector<Image>& images,
@@ -320,16 +320,9 @@ read_colmap_cameras(const std::filesystem::path base_path,
         out[i]._img_w = out[i]._img_h = out[i]._channels = 0;
         out[i]._img_data = nullptr;
     }
-    float scene_scale = 1.0f;
-    if (!images.empty()) {
-        torch::Tensor scene_center = camera_locations.mean(0);                    // [3]
-        torch::Tensor dists = torch::norm(camera_locations - scene_center, 2, 1); // [N]
-        scene_scale = dists.max().item<float>() * 1.1f;
-    }
 
     std::cout << "Training with " << out.size() << " images \n";
-    std::cout << "Scene scale: " << scene_scale << "\n";
-    return {std::move(out), scene_scale}; // +10% for safety
+    return {std::move(out), camera_locations.mean(0)};
 }
 
 // -----------------------------------------------------------------------------
@@ -339,7 +332,7 @@ PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
     return read_point3D_binary(filepath / "sparse/0/points3D.bin");
 }
 
-std::tuple<std::vector<CameraData>, float> read_colmap_cameras_and_images(
+std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images(
     const std::filesystem::path& base,
     const std::string& images_folder) {
 

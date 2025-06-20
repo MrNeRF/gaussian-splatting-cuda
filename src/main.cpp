@@ -20,12 +20,12 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 3. Create dataset from COLMAP
         //----------------------------------------------------------------------
-        auto [dataset, scene_scale] = create_dataset_from_colmap(params.dataset);
+        auto [dataset, scene_center] = create_dataset_from_colmap(params.dataset);
 
         //----------------------------------------------------------------------
         // 4. Model initialisation
         //----------------------------------------------------------------------
-        auto splat_data = SplatData::init_model_from_pointcloud(params, scene_scale);
+        auto splat_data = SplatData::init_model_from_pointcloud(params, scene_center);
 
         //----------------------------------------------------------------------
         // 5. Create strategy

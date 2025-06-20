@@ -34,7 +34,7 @@ public:
               float scene_scale);
 
     // Static factory method to create from PointCloud
-    static SplatData init_model_from_pointcloud(const gs::param::TrainingParameters& params, float scene_scale);
+    static SplatData init_model_from_pointcloud(const gs::param::TrainingParameters& params, torch::Tensor scene_center);
 
     // Computed getters (implemented in cpp)
     torch::Tensor get_means() const;
