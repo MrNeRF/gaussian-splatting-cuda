@@ -192,21 +192,18 @@ namespace gs {
             glfwSwapBuffers(window_);
             glfwPollEvents();
         }
-    }
 
-    void ViewerDetail::start() {
-        viewer_thread_ = std::thread(&ViewerDetail::run, this);
-    }
+        // Cleanup
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
 
-    void ViewerDetail::join() {
-        if (viewer_thread_.joinable()) {
-            viewer_thread_.join();
-        }
+        glfwDestroyWindow(window_);
+        glfwTerminate();
     }
 
     GSViewer::GSViewer(std::string title, int width, int height)
-        : ViewerDetail(title, width, height),
-          isStarted(false) {
+        : ViewerDetail(title, width, height) {
 
         config_ = std::make_shared<RenderingConfig>();
 
@@ -278,6 +275,99 @@ namespace gs {
         screen_renderer_->render(quadShader_, viewport_);
     }
 
+    void GSViewer::drawControlPanel() {
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.3f, 0.3f, 0.3f, 0.9f));
+        ImGui::Begin("Training Control", &show_control_panel_, window_flags);
+        ImGui::SetWindowSize(ImVec2(250, 0));
+        ImGui::SetWindowPos(ImVec2(10, viewport_.windowSize.y - 200), ImGuiCond_FirstUseEver);
+
+        bool is_training = trainer_->is_running();
+        bool is_paused = trainer_->is_paused();
+        bool is_complete = trainer_->is_training_complete();
+
+        // Stop/Resume button
+        if (!is_complete) {
+            if (is_paused) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+                if (ImGui::Button("Resume Training", ImVec2(-1, 30))) {
+                    trainer_->request_resume();
+                }
+                ImGui::PopStyleColor(2);
+            } else if (is_training) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
+                if (ImGui::Button("Pause Training", ImVec2(-1, 30))) {
+                    trainer_->request_pause();
+                }
+                ImGui::PopStyleColor(2);
+            } else {
+                ImGui::BeginDisabled();
+                ImGui::Button("Waiting...", ImVec2(-1, 30));
+                ImGui::EndDisabled();
+            }
+
+            ImGui::Spacing();
+
+            // Save button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+            if (ImGui::Button("Save Model", ImVec2(-1, 30))) {
+                trainer_->request_save();
+                save_in_progress_ = true;
+                save_start_time_ = std::chrono::steady_clock::now();
+            }
+            ImGui::PopStyleColor(2);
+
+            // Show save progress feedback
+            if (save_in_progress_) {
+                auto now = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - save_start_time_).count();
+                if (elapsed < 2000) {
+                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Model saved!");
+                } else {
+                    save_in_progress_ = false;
+                }
+            }
+
+            ImGui::Spacing();
+
+            // Exit button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
+            if (ImGui::Button("Stop & Exit", ImVec2(-1, 30))) {
+                trainer_->request_stop();
+            }
+            ImGui::PopStyleColor(2);
+        } else {
+            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
+
+            ImGui::Spacing();
+
+            // Exit button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+            if (ImGui::Button("Exit", ImVec2(-1, 30))) {
+                glfwSetWindowShouldClose(glfwGetCurrentContext(), GLFW_TRUE);
+            }
+            ImGui::PopStyleColor(2);
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Status display
+        int current_iter = trainer_->get_current_iteration();
+        float current_loss = trainer_->get_current_loss();
+
+        ImGui::Text("Status: %s", is_complete ? "Complete" : (is_paused ? "Paused" : (is_training ? "Training" : "Idle")));
+        ImGui::Text("Iteration: %d", current_iter);
+        ImGui::Text("Loss: %.6f", current_loss);
+
+        ImGui::End();
+        ImGui::PopStyleColor();
+    }
+
     void GSViewer::configuration() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -290,14 +380,13 @@ namespace gs {
         ImGui::SetWindowSize(ImVec2(300, 0));
 
         if (notifier_) {
-            std::lock_guard<std::mutex> lock(notifier_->mtx);
-            const char* buttonText = isRunning ? "Training..." : (isStarted ? "Paused" : "Start Training");
-            if (ImGui::Button(buttonText, ImVec2(-1, 0))) {
-                isRunning = !isRunning;
-                isStarted = true;
-                notifier_->ready = isRunning;
+            // Signal that we're ready to start training
+            if (!isRunning) {
+                std::lock_guard<std::mutex> lock(notifier_->mtx);
+                notifier_->ready = true;
+                notifier_->cv.notify_one();
+                isRunning = true;
             }
-            notifier_->cv.notify_one();
         }
 
         ImGui::SetNextItemWidth(200);
@@ -376,6 +465,9 @@ namespace gs {
         drawFrame();
 
         configuration();
+
+        // Draw control panel
+        drawControlPanel();
     }
 
 } // namespace gs

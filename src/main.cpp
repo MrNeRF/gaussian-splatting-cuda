@@ -3,7 +3,10 @@
 #include "core/mcmc.hpp"
 #include "core/parameters.hpp"
 #include "core/trainer.hpp"
+#include "visualizer/detail.hpp"
 #include <iostream>
+#include <memory>
+#include <thread>
 
 int main(int argc, char* argv[]) {
     try {
@@ -35,12 +38,35 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 6. Create trainer
         //----------------------------------------------------------------------
-        gs::Trainer trainer(dataset, std::move(strategy), params);
+        auto trainer = std::make_unique<gs::Trainer>(dataset, std::move(strategy), params);
 
         //----------------------------------------------------------------------
-        // 7. Start training
+        // 7. Start training based on visualization mode
         //----------------------------------------------------------------------
-        trainer.train();
+        if (params.optimization.enable_viz) {
+            // GUI Mode: Create viewer and run it in main thread
+            auto viewer = trainer->create_and_get_viewer();
+            if (viewer) {
+                // Start training in a separate thread
+                std::thread training_thread([&trainer]() {
+                    trainer->train();
+                });
+
+                // Run GUI in main thread (blocking)
+                viewer->run();
+
+                // Wait for training thread to complete
+                if (training_thread.joinable()) {
+                    training_thread.join();
+                }
+            } else {
+                std::cerr << "Failed to create viewer" << std::endl;
+                return -1;
+            }
+        } else {
+            // Headless Mode: Run training in main thread
+            trainer->train();
+        }
 
         return 0;
 

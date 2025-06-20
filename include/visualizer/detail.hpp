@@ -52,10 +52,6 @@ namespace gs {
 
         void run();
 
-        void start();
-
-        void join();
-
         virtual void draw() = 0;
 
     protected:
@@ -77,8 +73,6 @@ namespace gs {
         GLFWwindow* window_;
 
         static ViewerDetail* detail_;
-
-        std::thread viewer_thread_;
 
         int targetFPS = 30;
 
@@ -148,6 +142,8 @@ namespace gs {
 
         void configuration();
 
+        void drawControlPanel();
+
         void draw() override;
 
     public:
@@ -160,9 +156,12 @@ namespace gs {
     private:
         std::shared_ptr<RenderingConfig> config_;
 
-        bool isStarted;
-
         Trainer* trainer_;
+
+        // Control button states
+        bool show_control_panel_ = true;
+        bool save_in_progress_ = false;
+        std::chrono::steady_clock::time_point save_start_time_;
     };
 
 } // namespace gs
