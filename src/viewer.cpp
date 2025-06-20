@@ -1,5 +1,7 @@
 #include "config.h" // Include generated config
 #include "visualizer/detail.hpp"
+#include <chrono>
+#include <thread>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "visualizer/cuda_gl_interop.hpp"
@@ -221,6 +223,19 @@ namespace gs {
         notifier_ = std::make_shared<Notifier>();
 
         setFrameRate(30);
+    }
+
+    GSViewer::~GSViewer() {
+        // If trainer is still running, request it to stop
+        if (trainer_ && trainer_->is_running()) {
+            std::cout << "Viewer closing - stopping training..." << std::endl;
+            trainer_->request_stop();
+
+            // Give the training thread a moment to acknowledge the stop request
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        std::cout << "GSViewer destroyed." << std::endl;
     }
 
     void GSViewer::setTrainer(Trainer* trainer) {
