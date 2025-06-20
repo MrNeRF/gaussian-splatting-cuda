@@ -5,9 +5,13 @@
 #include <GLFW/glfw3.h>
 // clang-format on
 #include <fstream>
+#include <glm/glm.hpp>          // Add this include
+#include <glm/gtc/type_ptr.hpp> // For glm::value_ptr
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
+#include <vector>
 
 template <typename E>
 inline GLenum is_type_integral() {

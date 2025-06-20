@@ -10,6 +10,8 @@ private:
     GLuint fbo;
     GLuint texture;      // color texture
     GLuint depthTexture; // depth texture
+
+protected: // Changed from private to protected so derived classes can access
     int width = 1;
     int height = 1;
 
@@ -18,7 +20,7 @@ public:
         init(width, height);
     }
 
-    ~FrameBuffer() {
+    virtual ~FrameBuffer() { // Made virtual for proper inheritance
         glDeleteFramebuffers(1, &fbo);
         glDeleteTextures(1, &texture);
         glDeleteTextures(1, &depthTexture);
@@ -61,7 +63,7 @@ public:
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    void resize(int newWidth, int newHeight) {
+    virtual void resize(int newWidth, int newHeight) { // Made virtual
         width = newWidth;
         height = newHeight;
 
