@@ -25,7 +25,6 @@ find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
 find_package(OpenGL REQUIRED)
-find_package(glfw3 REQUIRED)
 
 # Python packages - Use modern Python3 finding
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -218,6 +217,7 @@ if(CUDA_GL_INTEROP_FOUND)
             CUDA::cudart
             glad
             glfw
+            glm
     )
 
     # Don't define here - it's already in config.h
