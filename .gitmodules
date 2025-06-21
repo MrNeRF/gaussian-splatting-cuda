@@ -13,3 +13,6 @@
 [submodule "external/glad"]
 	path = external/glad
 	url = https://github.com/panxkun/glad-opengl-core43.git
+[submodule "external/glfw"]
+	path = external/glfw
+	url = https://github.com/glfw/glfw.git
