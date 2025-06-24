@@ -75,7 +75,12 @@ Join our growing community for discussions, support, and updates:
 6. **C++ Compiler**:
     - **Linux**: GCC or Clang with C++17 support.
     - **Windows**: Visual Studio 2022 (Desktop development with C++ workload).
-7. Other dependencies (GLFW, GLM, TBB, etc.) are handled automatically by CMake via submodules or `find_package`. For TBB on Windows, installing Intel oneAPI Base Toolkit can provide it.
+7. **Git** (for cloning and submodule management).
+8. Other dependencies (GLFW, GLM, TBB, etc.) are handled automatically by CMake.
+    - **Submodules**: External libraries like `json`, `args`, `glfw`, `glm`, `glad`, `imgui` are included as git submodules. Ensure these are initialized correctly (see build instructions).
+    - **TBB (Threading Building Blocks)**:
+        - On Linux, CMake will try to find TBB via `find_package`. Ensure it's installed (e.g., `sudo apt-get install libtbb-dev`).
+        - On Windows, TBB might need to be installed separately, for example, via the Intel oneAPI Base Toolkit. If CMake cannot find TBB, you may need to set the `TBB_DIR` CMake variable to point to your TBB installation's CMake configuration directory (e.g., `C:/Program Files (x86)/Intel/oneAPI/tbb/latest/lib/cmake/TBB`).
 
 ### Hardware Prerequisites
 1. **NVIDIA GPU** with CUDA support
@@ -87,12 +92,25 @@ Join our growing community for discussions, support, and updates:
 
 ### Build Instructions
 
+**Important First Step (All Platforms):**
+
+This project uses git submodules for some external dependencies. After cloning, or if you pulled changes that might affect submodules, ensure they are initialized and updated:
+```bash
+# If you just cloned:
+git clone https://github.com/MrNeRF/gaussian-splatting-cuda
+cd gaussian-splatting-cuda
+git submodule update --init --recursive
+
+# If you already cloned and just need to update submodules:
+# cd gaussian-splatting-cuda
+# git submodule update --recursive
+```
+
 #### For Linux
 
 ```bash
-# Clone the repository with submodules
-git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
-cd gaussian-splatting-cuda
+# Assumes you are in the gaussian-splatting-cuda directory
+# and submodules are initialized (see "Important First Step" above)
 
 # Download and setup LibTorch (for CUDA 11.8)
 wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu118.zip
@@ -110,12 +128,8 @@ make -j$(nproc) # or cmake --build . --config Release -- -j$(nproc)
 
 #### For Windows (Visual Studio 2022)
 
-1.  **Clone the repository with submodules:**
-    ```bash
-    git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
-    cd gaussian-splatting-cuda
-    git submodule update --init --recursive
-    ```
+1.  **Clone the repository and initialize submodules:**
+    Follow the "Important First Step (All Platforms)" instructions above. Make sure you are in the `gaussian-splatting-cuda` directory.
 
 2.  **Download and setup LibTorch (for CUDA 11.8, Release version):**
     *   Go to the [PyTorch website](https://pytorch.org/get-started/locally/) and select the appropriate options for your setup:
