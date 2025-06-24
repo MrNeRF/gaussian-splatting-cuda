@@ -114,6 +114,7 @@ make -j$(nproc) # or cmake --build . --config Release -- -j$(nproc)
     ```bash
     git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
     cd gaussian-splatting-cuda
+    git submodule update --init --recursive
     ```
 
 2.  **Download and setup LibTorch (for CUDA 11.8, Release version):**
