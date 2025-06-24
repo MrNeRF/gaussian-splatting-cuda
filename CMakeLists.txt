@@ -107,7 +107,6 @@ target_link_libraries(gaussian_host
         glfw
         glad
         imgui
-        dl
         Threads::Threads
         args
         Python3::Python
@@ -115,24 +114,48 @@ target_link_libraries(gaussian_host
         ${OPENGL_LIBRARIES}
         CUDA::cudart    # Add CUDA runtime for interop
 )
+if(UNIX)
+    target_link_libraries(gaussian_host PUBLIC dl)
+endif()
 
-# Fast C++ compilation with proper debug symbols
-target_compile_options(gaussian_host PRIVATE
-        $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer -DDEBUG>
-        $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
-)
+# Compilation flags
+if(MSVC)
+    target_compile_options(gaussian_host PRIVATE
+            $<$<CONFIG:Debug>:/Od /Zi /DDEBUG /EHsc>
+            $<$<CONFIG:Release>:/O2 /DNDEBUG /EHsc>
+    )
+    # Add definitions for Windows specific macros, e.g. suppress warnings
+    target_compile_definitions(gaussian_host PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    # Fast C++ compilation with proper debug symbols for GCC/Clang
+    target_compile_options(gaussian_host PRIVATE
+            $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer -DDEBUG>
+            $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
+    )
+endif()
 
 # Ensure debug symbols in debug builds
 set_target_properties(gaussian_host PROPERTIES
         DEBUG_POSTFIX d
 )
 
-add_definitions(-DPROJECT_ROOT_PATH="${PROJ_ROOT_DIR}")
+add_definitions(-DPROJECT_ROOT_PATH="${PROJ_ROOT_DIR}") # This is generally okay
 
+# Global flags (less preferred than target_compile_options but sometimes used)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
-    set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G -O0")
+    if(MSVC)
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /Zi /Ob0 /Od /RTC1")
+        set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -G -O0") # Keep -G for CUDA debug
+    else()
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+        set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G -O0")
+    endif()
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(MSVC)
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD /O2 /Ob2 /DNDEBUG")
+    endif()
 endif()
+
 
 # =============================================================================
 # KERNEL LIBRARY - Keep minimal for backwards compatibility
@@ -153,7 +176,7 @@ endif()
 add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
 
 set_target_properties(gaussian_kernels PROPERTIES
-        CUDA_ARCHITECTURES native
+        CUDA_ARCHITECTURES native # Should be fine, can be specified e.g. 75;80;86;89;90 if needed
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -186,10 +209,18 @@ if(CUDA_GL_INTEROP_FOUND)
     # target_compile_definitions(gaussian_kernels PUBLIC CUDA_GL_INTEROP_ENABLED)
 endif()
 
-target_compile_options(gaussian_kernels PRIVATE
-        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
-)
+# CUDA Compilation flags
+if(MSVC)
+    target_compile_options(gaussian_kernels PRIVATE
+        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G -lineinfo -O0> # Basic debug for CUDA on MSVC
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v> # Keep release flags
+    )
+else()
+    target_compile_options(gaussian_kernels PRIVATE
+            $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
+            $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
+    )
+endif()
 
 # =============================================================================
 # VISUALIZER LIBRARY (separate for OpenGL/CUDA interop code)
@@ -232,7 +263,7 @@ endif()
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-        CUDA_ARCHITECTURES native
+        CUDA_ARCHITECTURES native # Should be fine
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
@@ -265,8 +296,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${MAIN_LINK_LIBRARIES})
 
 # Platform-specific settings
 if(WIN32)
+    # Copy Torch DLLs
     file(GLOB TORCH_DLLS "${Torch_DIR}/../../../lib/*.dll")
-
     foreach(TORCH_DLL ${TORCH_DLLS})
         add_custom_command(
                 TARGET ${PROJECT_NAME}
@@ -275,18 +306,53 @@ if(WIN32)
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
     endforeach()
 
-    # Copy OpenGL related DLLs if needed
-    if(OPENGL_LIBRARIES)
-        get_filename_component(OPENGL_LIB_DIR ${OPENGL_LIBRARIES} DIRECTORY)
-        file(GLOB OPENGL_DLLS "${OPENGL_LIB_DIR}/*.dll")
-        foreach(DLL ${OPENGL_DLLS})
+    # Copy TBB DLLs if TBB is found and linkage is dynamic (common on Windows)
+    if(TBB_FOUND AND TBB_tbb_LIBRARY_RELEASE) # Check if TBB was found and Release lib is set
+        get_filename_component(TBB_LIB_DIR "${TBB_tbb_LIBRARY_RELEASE}" DIRECTORY)
+        file(GLOB TBB_DLLS "${TBB_LIB_DIR}/tbb*.dll") # Adjust pattern as needed
+         foreach(TBB_DLL ${TBB_DLLS})
             add_custom_command(
                     TARGET ${PROJECT_NAME}
                     POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}"
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TBB_DLL}"
                     "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
         endforeach()
     endif()
+    if(TBB_FOUND AND TBB_tbbmalloc_LIBRARY_RELEASE) # Check for tbbmalloc
+        get_filename_component(TBB_MALLOC_LIB_DIR "${TBB_tbbmalloc_LIBRARY_RELEASE}" DIRECTORY)
+        file(GLOB TBB_MALLOC_DLLS "${TBB_MALLOC_LIB_DIR}/tbbmalloc*.dll")
+         foreach(TBB_MALLOC_DLL ${TBB_MALLOC_DLLS})
+            add_custom_command(
+                    TARGET ${PROJECT_NAME}
+                    POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TBB_MALLOC_DLL}"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+        endforeach()
+    endif()
+
+
+    # Copy OpenGL related DLLs if needed (GLFW might be one)
+    # This part seems okay, but depends on how GLFW/glad are built/found
+    if(OPENGL_LIBRARIES AND EXISTS "${OPENGL_LIBRARIES}") # Check if var is set and file exists
+       get_filename_component(OPENGL_LIB_PATH ${OPENGL_LIBRARIES} DIRECTORY)
+       # Attempt to copy DLLs from the same directory as the .lib file.
+       # This is a heuristic and might need adjustment based on how GLFW is packaged.
+       file(GLOB OPENGL_POSSIBLE_DLLS "${OPENGL_LIB_PATH}/*.dll")
+       if(OPENGL_POSSIBLE_DLLS)
+            foreach(DLL ${OPENGL_POSSIBLE_DLLS})
+                add_custom_command(
+                        TARGET ${PROJECT_NAME}
+                        POST_BUILD
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}"
+                        "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+            endforeach()
+       endif()
+    endif()
+    # For GLFW, if it's a shared library, its DLL also needs to be available.
+    # If glfw is built as a static lib as part of this project (e.g. via external), this isn't an issue.
+    # If it's a shared system library, its DLL needs to be in PATH or copied.
+    # The existing OPENGL_LIBRARIES check might cover GLFW if it's found as a .lib from a dir with .dlls
+
 elseif(UNIX)
     # Linux specific settings
     target_link_libraries(${PROJECT_NAME} PRIVATE GL GLU)

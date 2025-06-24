@@ -64,15 +64,34 @@ target_link_libraries(gsplat_backend
 )
 
 # Compile options for both CUDA and C++
-target_compile_options(gsplat_backend PRIVATE
+if(MSVC)
+    target_compile_options(gsplat_backend PRIVATE
+        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G -lineinfo -O0> # Basic debug for CUDA on MSVC
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 --use_fast_math> # Removed GCC-specific flags
+        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:/Od /Zi /EHsc /D_DEBUG /DEBUG_BUILD>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:/O2 /EHsc /DNDEBUG /RELEASE_BUILD>
+    )
+    # Add definitions for Windows specific macros, e.g. suppress warnings for CXX
+    target_compile_definitions(gsplat_backend PRIVATE $<$<COMPILE_LANGUAGE:CXX>:_CRT_SECURE_NO_WARNINGS>)
+else()
+    target_compile_options(gsplat_backend PRIVATE
         $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
         $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 --use_fast_math --expt-relaxed-constexpr -diag-suppress=20012,186>
-        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0 -g>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:-O3>
-)
+        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0 -g -DDEBUG_BUILD>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:-O3 -DNDEBUG -DRELEASE_BUILD>
+    )
+endif()
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(gsplat_backend PRIVATE _DEBUG DEBUG_BUILD)
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(gsplat_backend PRIVATE RELEASE_BUILD)
+# The DEBUG_BUILD/RELEASE_BUILD definitions are now handled within the target_compile_options for MSVC
+# and for GCC/Clang. The _DEBUG definition for MSVC Debug is also handled there.
+# The original if(CMAKE_BUILD_TYPE STREQUAL "Debug") block can be removed or commented out
+# if all definitions are handled by the generator expressions above.
+# For clarity, I'll keep the original logic for non-MSVC cases and ensure MSVC specific ones are in its block.
+
+if(NOT MSVC)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_definitions(gsplat_backend PRIVATE DEBUG_BUILD) # _DEBUG is often MSVC specific
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_definitions(gsplat_backend PRIVATE RELEASE_BUILD)
+    endif()
 endif()

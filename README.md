@@ -62,41 +62,99 @@ Join our growing community for discussions, support, and updates:
 ## Build and Execution Instructions
 
 ### Software Prerequisites
-1. **Linux** (tested with Ubuntu 22.04) - Windows is currently not supported
-2. **CMake** 3.24 or higher
-3. **CUDA** 11.8 or higher (may work with lower versions with manual configuration)
-4. **Python** with development headers
-5. **LibTorch 2.7.0** - Setup instructions below
-6. Other dependencies are handled automatically by CMake
+1. **Operating System**:
+    - **Linux** (tested with Ubuntu 22.04)
+    - **Windows 10/11** (tested with Visual Studio 2022)
+2. **CMake** 3.24 or higher (add to PATH)
+3. **CUDA Toolkit**:
+    - Version 11.8 or higher. For Windows, ensure it integrates with Visual Studio 2022.
+4. **Python**:
+    - Version 3.x with development headers (ensure Python is in PATH and `python-config` or `python3-config` is available for CMake to find it on Linux). On Windows, CMake should find a valid Python installation.
+5. **LibTorch 2.7.0 (C++ API of PyTorch)**:
+    - Setup instructions specific to your OS are below. Ensure you download the version compatible with your CUDA Toolkit version (e.g., cu118 for CUDA 11.8).
+6. **C++ Compiler**:
+    - **Linux**: GCC or Clang with C++17 support.
+    - **Windows**: Visual Studio 2022 (Desktop development with C++ workload).
+7. Other dependencies (GLFW, GLM, TBB, etc.) are handled automatically by CMake via submodules or `find_package`. For TBB on Windows, installing Intel oneAPI Base Toolkit can provide it.
 
 ### Hardware Prerequisites
 1. **NVIDIA GPU** with CUDA support
     - Successfully tested: RTX 4090, RTX A5000, RTX 3090Ti, A100
     - Known issue with RTX 3080Ti on larger datasets (see #21)
-2. Minimum compute capability: 8.0
+2. Minimum recommended compute capability: 7.0 (Volta), 8.0+ (Ampere or newer) preferred for full performance.
 
 > If you successfully run on other hardware, please share your experience in the Discussions section!
 
 ### Build Instructions
+
+#### For Linux
 
 ```bash
 # Clone the repository with submodules
 git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
 cd gaussian-splatting-cuda
 
-# Download and setup LibTorch
-wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu118.zip  
+# Download and setup LibTorch (for CUDA 11.8)
+wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu118.zip
 unzip libtorch-cxx11-abi-shared-with-deps-2.7.0+cu118.zip -d external/
+# It's recommended to move the unzipped 'libtorch' folder to 'external/libtorch' directly
+# e.g., mv external/libtorch-shared-with-deps external/libtorch
 rm libtorch-cxx11-abi-shared-with-deps-2.7.0+cu118.zip
 
 # Build the project
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -- -j
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc) # or cmake --build . --config Release -- -j$(nproc)
 ```
+
+#### For Windows (Visual Studio 2022)
+
+1.  **Clone the repository with submodules:**
+    ```bash
+    git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
+    cd gaussian-splatting-cuda
+    ```
+
+2.  **Download and setup LibTorch (for CUDA 11.8, Release version):**
+    *   Go to the [PyTorch website](https://pytorch.org/get-started/locally/) and select the appropriate options for your setup:
+        *   PyTorch Build: Stable
+        *   Your OS: Windows
+        *   Package: LibTorch
+        *   Language: C++/Java
+        *   Compute Platform: CUDA 11.8 (or your installed CUDA version, e.g., CUDA 12.1)
+    *   Download the "Release" version zip file. For example, for CUDA 11.8, it might be `libtorch-win-shared-with-deps-2.7.0%2Bcu118.zip`.
+    *   Extract the zip file into the `external/` directory in the project root.
+    *   Rename the extracted folder (e.g., `libtorch-shared-with-deps`) to `libtorch`. So, the path should be `external/libtorch`.
+
+3.  **Configure with CMake:**
+    *   Open CMake GUI or use the command line.
+    *   Set the source code directory to the project root.
+    *   Set the build directory (e.g., `build` inside the project root).
+    *   Click "Configure".
+    *   Specify the generator: "Visual Studio 17 2022".
+    *   Ensure CMake correctly finds CUDA, Python, and Torch.
+        *   If Torch is not found, you might need to set `Torch_DIR` manually in CMake to `external/libtorch/share/cmake/Torch`.
+    *   Set `CMAKE_BUILD_TYPE` to `Release`.
+    *   Click "Generate".
+
+4.  **Build with Visual Studio:**
+    *   Open the generated `.sln` file in the build directory with Visual Studio 2022.
+    *   Select the "Release" configuration.
+    *   Build the `gaussian_splatting_cuda` target (or "Build All").
+    *   The executable will be in the `build/Release` directory.
+
+    Alternatively, from the command line after CMake generation:
+    ```bash
+    cd build
+    cmake --build . --config Release -- -j%NUMBER_OF_PROCESSORS%
+    ```
+    (Replace `%NUMBER_OF_PROCESSORS%` with the number of cores you want to use, e.g., `cmake --build . --config Release -- -j8`)
+
 
 ## LibTorch 2.7.0
 
-This project uses **LibTorch 2.7.0** for optimal performance and compatibility:
+This project uses **LibTorch 2.7.0** for optimal performance and compatibility. Please ensure you download the correct version for your operating system and CUDA setup as described in the build instructions.
 
 - **Enhanced Performance**: Improved optimization and memory management
 - **API Stability**: Latest stable PyTorch C++ API
