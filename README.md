@@ -167,6 +167,11 @@ make -j$(nproc) # or cmake --build . --config Release -- -j$(nproc)
     ```
     (Replace `%NUMBER_OF_PROCESSORS%` with the number of cores you want to use, e.g., `cmake --build . --config Release -- -j8`)
 
+### Windows Build Troubleshooting
+
+*   **LNK1104: cannot open file 'CUDA::nvToolsExt.lib'**:
+    This linker error indicates that the NVIDIA Tools Extension library (`nvToolsExt.lib`) could not be found. This library is typically part of the CUDA Toolkit but might sometimes cause issues if LibTorch expects a version different from your main CUDA Toolkit (e.g., if LibTorch was built against CUDA 11.8 and you have CUDA 12.x installed).
+    *   **Solution provided by users:** Run the installer for an older CUDA Toolkit version (e.g., CUDA 11.8) alongside your existing newer CUDA installation. During the CUDA 11.8 installation, choose "Custom Installation" and select *only* the "Nsight NVTX" component (or similar NVTX related component). Leave all other components unchecked to avoid interfering with your main CUDA Toolkit. This should install the required `.lib` file that LibTorch's CMake configuration is looking for. Ensure your main CUDA toolkit (e.g., 12.x) remains the one primarily configured in your system PATH and for CMake's `find_package(CUDAToolkit)`.
 
 ## LibTorch 2.7.0
 
