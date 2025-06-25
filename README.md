@@ -78,6 +78,7 @@ Join our growing community for discussions, support, and updates:
 7. **Git** (for cloning and submodule management).
 8. Other dependencies (GLFW, GLM, TBB, etc.) are handled automatically by CMake.
     - **Submodules**: External libraries like `json`, `args`, `glfw`, `glm`, `glad`, `imgui` are included as git submodules. Ensure these are initialized correctly (see build instructions).
+        - *Note on `json` (nlohmann/json submodule)*: If you encounter CMake policy errors related to this submodule during configuration (especially with older CMake versions or projects), you might need to set `CMAKE_POLICY_VERSION_MINIMUM` to `3.5` or a similar compatible version. In CMake GUI, you can do this by clicking "Add Entry", setting Name: `CMAKE_POLICY_VERSION_MINIMUM`, Type: `STRING`, Value: `3.5`. For command-line CMake, you can add `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`.
     - **TBB (Threading Building Blocks)**:
         - On Linux, CMake will try to find TBB via `find_package`. Ensure it's installed (e.g., `sudo apt-get install libtbb-dev`).
         - On Windows, TBB might need to be installed separately, for example, via the Intel oneAPI Base Toolkit. If CMake cannot find TBB, you may need to set the `TBB_DIR` CMake variable to point to your TBB installation's CMake configuration directory (e.g., `C:/Program Files (x86)/Intel/oneAPI/tbb/latest/lib/cmake/TBB`).
