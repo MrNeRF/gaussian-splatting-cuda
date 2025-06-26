@@ -9,14 +9,16 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 <img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="80%"/>
 
 ## 🏆 Competition  
-Reduce training time by half and win **$900 prize**!  
+Reduce training time by half and win **$1300 prize**!  
 Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135)  
 
-This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself - each contributing **$300**.
+This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself - each contributing **$300**. [toshas](https://github.com/toshas) and [@ChrisAtKIRI
+  ](https://x.com/ChrisAtKIRI) each contributing **$200**.
 
 ---
 
 ## 📰 News
+- **[2025-06-26]**: We have new sponsors adding each $200 for a total **$1300 prize pool**!
 - **[2025-06-24]**: The competition is live with a **$900 prize pool**!
 - **[2025-06-20]**: Added interactive viewer with real-time visualization during training by @panxkun.
 - **[2025-06-19]**: Metrics are now on par with gsplat-mcmc. Gsplat evals on downscaled png images whereas I used jpgs.
