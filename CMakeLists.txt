@@ -107,7 +107,6 @@ target_link_libraries(gaussian_host
         glfw
         glad
         imgui
-        dl
         Threads::Threads
         args
         Python3::Python
@@ -115,6 +114,9 @@ target_link_libraries(gaussian_host
         ${OPENGL_LIBRARIES}
         CUDA::cudart    # Add CUDA runtime for interop
 )
+if(UNIX)
+    target_link_libraries(gaussian_host PUBLIC dl)
+endif()
 
 # Fast C++ compilation with proper debug symbols
 target_compile_options(gaussian_host PRIVATE
@@ -274,19 +276,6 @@ if(WIN32)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TORCH_DLL}"
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
     endforeach()
-
-    # Copy OpenGL related DLLs if needed
-    if(OPENGL_LIBRARIES)
-        get_filename_component(OPENGL_LIB_DIR ${OPENGL_LIBRARIES} DIRECTORY)
-        file(GLOB OPENGL_DLLS "${OPENGL_LIB_DIR}/*.dll")
-        foreach(DLL ${OPENGL_DLLS})
-            add_custom_command(
-                    TARGET ${PROJECT_NAME}
-                    POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}"
-                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
-        endforeach()
-    endif()
 elseif(UNIX)
     # Linux specific settings
     target_link_libraries(${PROJECT_NAME} PRIVATE GL GLU)
