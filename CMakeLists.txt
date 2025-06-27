@@ -1,4 +1,6 @@
-﻿cmake_minimum_required(VERSION 3.24...3.30)
+﻿set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+
+cmake_minimum_required(VERSION 3.24...3.30)
 project(gaussian_splatting_cuda LANGUAGES CUDA CXX C)
 
 # Setup
@@ -25,6 +27,12 @@ find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(glad REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(glm REQUIRED)
+find_package(imgui REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(args REQUIRED)
 
 # Python packages - Use modern Python3 finding
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -102,12 +110,12 @@ target_link_libraries(gaussian_host
         PUBLIC
         ${TORCH_LIBRARIES}
         nlohmann_json::nlohmann_json
-        glm
+        glm::glm
         glfw
-        glad
-        imgui
+        glad::glad
+        imgui::imgui
         Threads::Threads
-        args
+        taywee::args
         Python3::Python
         gsplat_backend  # Link to gsplat
         ${OPENGL_LIBRARIES}
@@ -177,7 +185,7 @@ target_link_libraries(gaussian_kernels
         CUDA::curand
         CUDA::cublas
         ${TORCH_LIBRARIES}
-        glm
+	glm::glm
         ${OPENGL_LIBRARIES}
 )
 
@@ -216,9 +224,10 @@ if(CUDA_GL_INTEROP_FOUND)
             ${TORCH_LIBRARIES}
             ${OPENGL_LIBRARIES}
             CUDA::cudart
-            glad
+            glad::glad
             glfw
-            glm
+	    glm::glm
+	    imgui::imgui
     )
 
     # Don't define here - it's already in config.h
@@ -336,17 +345,7 @@ if(BUILD_TESTS)
     enable_testing()
 
     # Find or fetch GoogleTest
-    find_package(GTest CONFIG)
-    if(NOT GTest_FOUND)
-        message(STATUS "GoogleTest not found, fetching from GitHub...")
-        include(FetchContent)
-        FetchContent_Declare(
-                googletest
-                GIT_REPOSITORY https://github.com/google/googletest.git
-                GIT_TAG        v1.14.0
-        )
-        FetchContent_MakeAvailable(googletest)
-    endif()
+    find_package(GTest CONFIG REQUIRED)
 
     # Test sources
     set(TEST_SOURCES
