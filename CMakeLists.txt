@@ -226,8 +226,8 @@ if(CUDA_GL_INTEROP_FOUND)
             CUDA::cudart
             glad::glad
             glfw
-	    glm::glm
-	    imgui::imgui
+	        glm::glm
+	        imgui::imgui
     )
 
     # Don't define here - it's already in config.h

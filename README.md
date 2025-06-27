@@ -18,6 +18,7 @@ This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [
 ---
 
 ## 📰 News
+- **[2025-06-27]**: Removed submodules. Dependencies are now managed via vcpkg. This simplifies the build process and reduces complexity.  
 - **[2025-06-26]**: We have new sponsors adding each $200 for a total **$1300 prize pool**!
 - **[2025-06-24]**: The competition is live with a **$900 prize pool**!
 - **[2025-06-20]**: Added interactive viewer with real-time visualization during training by @panxkun.
@@ -93,7 +94,7 @@ Join our growing community for discussions, support, and updates:
 ```bash
 # Set up vcpkg once
 git clone https://github.com/microsoft/vcpkg.git
-cd vcpkg && ./bootstrap-vcpkg.sh && cd ..
+cd vcpkg && ./bootstrap-vcpkg.sh -disableMetrics && cd ..
 export VCPKG_ROOT=/path/to/vcpkg # ideally should put this in ~/.bashrc to make it permanent
 
 # Clone the repository
