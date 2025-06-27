@@ -8,7 +8,19 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 
 <img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="80%"/>
 
-## News
+## 🏆 Competition  
+Reduce training time by half and win **$1300 prize**!  
+Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135)  
+
+This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself - each contributing **$300**. [toshas](https://github.com/toshas) and [@ChrisAtKIRI
+  ](https://x.com/ChrisAtKIRI) each contributing **$200**.
+
+---
+
+## 📰 News
+- **[2025-06-27]**: Removed submodules. Dependencies are now managed via vcpkg. This simplifies the build process and reduces complexity.  
+- **[2025-06-26]**: We have new sponsors adding each $200 for a total **$1300 prize pool**!
+- **[2025-06-24]**: The competition is live with a **$900 prize pool**!
 - **[2025-06-20]**: Added interactive viewer with real-time visualization during training by @panxkun.
 - **[2025-06-19]**: Metrics are now on par with gsplat-mcmc. Gsplat evals on downscaled png images whereas I used jpgs.
 - **[2025-06-15]**: Different render modes exposed, refactors, added bilateral grid.
@@ -80,8 +92,13 @@ Join our growing community for discussions, support, and updates:
 ### Build Instructions
 
 ```bash
-# Clone the repository with submodules
-git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
+# Set up vcpkg once
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg && ./bootstrap-vcpkg.sh -disableMetrics && cd ..
+export VCPKG_ROOT=/path/to/vcpkg # ideally should put this in ~/.bashrc to make it permanent
+
+# Clone the repository
+git clone https://github.com/MrNeRF/gaussian-splatting-cuda
 cd gaussian-splatting-cuda
 
 # Download and setup LibTorch

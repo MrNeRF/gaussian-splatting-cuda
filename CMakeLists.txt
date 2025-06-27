@@ -1,4 +1,6 @@
-﻿cmake_minimum_required(VERSION 3.24...3.30)
+﻿set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+
+cmake_minimum_required(VERSION 3.24...3.30)
 project(gaussian_splatting_cuda LANGUAGES CUDA CXX C)
 
 # Setup
@@ -25,6 +27,12 @@ find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(glad REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(glm REQUIRED)
+find_package(imgui REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(args REQUIRED)
 
 # Python packages - Use modern Python3 finding
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -60,7 +68,6 @@ configure_file(
         @ONLY
 )
 
-add_subdirectory(external)
 add_subdirectory(gsplat)
 
 # =============================================================================
@@ -103,18 +110,20 @@ target_link_libraries(gaussian_host
         PUBLIC
         ${TORCH_LIBRARIES}
         nlohmann_json::nlohmann_json
-        glm
+        glm::glm
         glfw
-        glad
-        imgui
-        dl
+        glad::glad
+        imgui::imgui
         Threads::Threads
-        args
+        taywee::args
         Python3::Python
         gsplat_backend  # Link to gsplat
         ${OPENGL_LIBRARIES}
         CUDA::cudart    # Add CUDA runtime for interop
 )
+if(UNIX)
+    target_link_libraries(gaussian_host PUBLIC dl)
+endif()
 
 # Fast C++ compilation with proper debug symbols
 target_compile_options(gaussian_host PRIVATE
@@ -176,7 +185,7 @@ target_link_libraries(gaussian_kernels
         CUDA::curand
         CUDA::cublas
         ${TORCH_LIBRARIES}
-        glm
+	glm::glm
         ${OPENGL_LIBRARIES}
 )
 
@@ -215,9 +224,10 @@ if(CUDA_GL_INTEROP_FOUND)
             ${TORCH_LIBRARIES}
             ${OPENGL_LIBRARIES}
             CUDA::cudart
-            glad
+            glad::glad
             glfw
-            glm
+	        glm::glm
+	        imgui::imgui
     )
 
     # Don't define here - it's already in config.h
@@ -274,19 +284,6 @@ if(WIN32)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TORCH_DLL}"
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
     endforeach()
-
-    # Copy OpenGL related DLLs if needed
-    if(OPENGL_LIBRARIES)
-        get_filename_component(OPENGL_LIB_DIR ${OPENGL_LIBRARIES} DIRECTORY)
-        file(GLOB OPENGL_DLLS "${OPENGL_LIB_DIR}/*.dll")
-        foreach(DLL ${OPENGL_DLLS})
-            add_custom_command(
-                    TARGET ${PROJECT_NAME}
-                    POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}"
-                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
-        endforeach()
-    endif()
 elseif(UNIX)
     # Linux specific settings
     target_link_libraries(${PROJECT_NAME} PRIVATE GL GLU)
@@ -348,17 +345,7 @@ if(BUILD_TESTS)
     enable_testing()
 
     # Find or fetch GoogleTest
-    find_package(GTest CONFIG)
-    if(NOT GTest_FOUND)
-        message(STATUS "GoogleTest not found, fetching from GitHub...")
-        include(FetchContent)
-        FetchContent_Declare(
-                googletest
-                GIT_REPOSITORY https://github.com/google/googletest.git
-                GIT_TAG        v1.14.0
-        )
-        FetchContent_MakeAvailable(googletest)
-    endif()
+    find_package(GTest CONFIG REQUIRED)
 
     # Test sources
     set(TEST_SOURCES

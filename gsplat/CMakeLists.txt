@@ -60,7 +60,7 @@ target_link_libraries(gsplat_backend
         CUDA::cudart
         CUDA::curand
         CUDA::cublas
-        glm
+        glm::glm
 )
 
 # Compile options for both CUDA and C++
