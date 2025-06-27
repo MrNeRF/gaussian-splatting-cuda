@@ -60,7 +60,6 @@ configure_file(
         @ONLY
 )
 
-add_subdirectory(external)
 add_subdirectory(gsplat)
 
 # =============================================================================
