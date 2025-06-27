@@ -91,8 +91,13 @@ Join our growing community for discussions, support, and updates:
 ### Build Instructions
 
 ```bash
-# Clone the repository with submodules
-git clone --recursive https://github.com/MrNeRF/gaussian-splatting-cuda
+# Set up vcpkg once
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg && ./bootstrap-vcpkg.sh && cd ..
+export VCPKG_ROOT=/path/to/vcpkg # ideally should put this in ~/.bashrc to make it permanent
+
+# Clone the repository
+git clone https://github.com/MrNeRF/gaussian-splatting-cuda
 cd gaussian-splatting-cuda
 
 # Download and setup LibTorch
