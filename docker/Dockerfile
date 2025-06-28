@@ -93,7 +93,7 @@ RUN echo 'export Torch_DIR=$HOME/libtorch/share/cmake/Torch' >> $HOME/.bashrc &&
     echo 'export CMAKE_PREFIX_PATH=$Torch_DIR:$CMAKE_PREFIX_PATH' >> $HOME/.bashrc
 
 
-
+# Modified from https://github.com/jmhardison/dockercolorlogo
 RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
     echo 'colorred="\033[31m"' >> ${HOME}/.docker_whale && \
     echo 'colorpowder_blue="\033[1;36m"' >> ${HOME}/.docker_whale && \
