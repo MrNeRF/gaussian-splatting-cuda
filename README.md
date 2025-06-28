@@ -1,4 +1,4 @@
-# 3D Gaussian Splatting for Real-Time Radiance Field Rendering - C++ and CUDA Implementation
+- # 3D Gaussian Splatting for Real-Time Radiance Field Rendering - C++ and CUDA Implementation
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?logo=discord&logoColor=white)](https://discord.gg/TbxJST2BbC)
 [![Website](https://img.shields.io/badge/Website-mrnerf.com-blue)](https://mrnerf.com)
@@ -8,27 +8,28 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 
 <img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="80%"/>
 
-## 🏆 Competition  
-Reduce training time by half and win **$1300 prize**!  
-Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135)  
+## 🏆 Competition
+Reduce training time by half and win **the $1300 prize**!  
+Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135)
 
-This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself - each contributing **$300**. [toshas](https://github.com/toshas) and [@ChrisAtKIRI
-  ](https://x.com/ChrisAtKIRI) each contributing **$200**.
+This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself - each contributing **$300**. [@toshas](https://github.com/toshas) and [@ChrisAtKIRI](https://x.com/ChrisAtKIRI) are each contributing **$200**.
+
+## Agenda (this summer)
+1. Improve the viewer, i.e., better camera controls, more interactive features.
+2. Migrate UI from Dear ImGui to [RmlUi](https://github.com/mikke89/RmlUi).
+3. Support SuperSplat-like editing features, just more interactive.
+
+Contributions are very welcome!
 
 ---
-
 ## 📰 News
+Please open pull requests towards the dev branch. On dev, changes will be licensed as GPLv3. Once we have reached a new stable state on dev (the viewer will be improved as the next priority), we will merge back to master. The repo will then be licensed as GPLv3.
+
 - **[2025-06-27]**: Removed submodules. Dependencies are now managed via vcpkg. This simplifies the build process and reduces complexity.  
 - **[2025-06-26]**: We have new sponsors adding each $200 for a total **$1300 prize pool**!
 - **[2025-06-24]**: The competition is live with a **$900 prize pool**!
 - **[2025-06-20]**: Added interactive viewer with real-time visualization during training by @panxkun.
 - **[2025-06-19]**: Metrics are now on par with gsplat-mcmc. Gsplat evals on downscaled png images whereas I used jpgs.
-- **[2025-06-15]**: Different render modes exposed, refactors, added bilateral grid.
-- **[2025-06-13]**: Metrics are getting very close to gsplat-mcmc. LPIPS and time estimates are not comparable as of now.
-- **[2025-06-10]**: Fixed some issues. We are closing the gap to the gsplat metrics. However, there is still a small mismatch.
-- **[2025-06-04]**: Added MCMC strategy with `--max-cap` command line option for controlling maximum Gaussian count.
-- **[2025-06-03]**: Switched to Gsplat backend and updated license to Apache 2.0.
-- **[2024-05-27]**: Updated to LibTorch 2.7.0 for better compatibility and performance. Breaking changes in optimizer state management have been addressed.
 
 ### LPIPS Model
 The implementation uses `weights/lpips_vgg.pt`, which is exported from `torchmetrics.image.lpip.LearnedPerceptualImagePatchSimilarity` with:
@@ -119,6 +120,42 @@ This project uses **LibTorch 2.7.0** for optimal performance and compatibility:
 - **API Stability**: Latest stable PyTorch C++ API
 - **CUDA Compatibility**: Better integration with CUDA 11.8+
 - **Bug Fixes**: Resolved optimizer state management issues
+
+## Docker Build
+
+This project also supports a Docker-based environment for simplified setup and reproducible builds.
+
+### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/)
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)  
+  (Required for GPU support)
+
+### Basic Usage
+
+To build and run the container, use the provided helper script:
+
+```bash
+
+# Build the Docker image (with cache)
+./docker/run_docker.sh -b
+
+# OR build without cache
+./docker/run_docker.sh -n
+
+# Start the container and enter it
+./docker/run_docker.sh -u
+
+# Stop and remove containers
+./docker/run_docker.sh -c
+
+# Build and start the Docker image with a specific CUDA version CUDA (e.g., 11.8.0)
+./docker/run_docker.sh -bu 11.8.0
+```
+
+This will mount your current project directory into the container, enabling live development.  
+GPU acceleration and GUI support (e.g., OpenGL viewers) are enabled if supported by your system.
+
 
 ### Upgrading from Previous Versions
 1. Download the new LibTorch version using the build instructions

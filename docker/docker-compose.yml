@@ -1,0 +1,46 @@
+services:
+  gs-cuda:
+    container_name: gs-cuda
+    build:
+      context: ../
+      dockerfile: ./docker/Dockerfile
+      args:
+        USER_UID: ${USER_UID}
+        USER_GID: ${USER_GID}
+        USERNAME: ${USERNAME}
+        HOSTNAME: ${HOSTNAME}
+        USER_PASSWORD: ${USER_PASSWORD}
+        CUDA_VERSION: ${CUDA_VERSION}
+    image: gs-cuda
+    network_mode: "host"
+    working_dir: /home/${USERNAME}
+    cpus: 8
+    mem_limit: 16g
+    ipc: host
+    pid: host
+    privileged: true
+    user: "${USERNAME}:${USER_GID}"
+    hostname: ${HOSTNAME}
+    stdin_open: true
+    tty: true
+    environment:
+      - USER_UID=${USER_UID}
+      - USER_GID=${USER_GID}
+      - USERNAME=${USERNAME}
+      - DISPLAY=unix${DISPLAY}
+      - XAUTHORITY=${XAUTHORITY}
+      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ../:/home/${USERNAME}/projects/gaussian-splatting-cuda
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${HOME}/.Xauthority:/home/${USERNAME}/.Xauthority:rw
+      - ${HOME}/.ssh:/home/${USERNAME}/.ssh:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
