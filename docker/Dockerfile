@@ -29,6 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxcursor-dev \
     xorg-dev \
     libglu1-mesa-dev \
+    vim \
+    nano \
+    htop \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
     
 # --- User Setup
@@ -88,4 +91,26 @@ RUN wget https://github.com/Kitware/CMake/releases/download/v3.29.3/cmake-3.29.3
 
 RUN echo 'export Torch_DIR=$HOME/libtorch/share/cmake/Torch' >> $HOME/.bashrc && \
     echo 'export CMAKE_PREFIX_PATH=$Torch_DIR:$CMAKE_PREFIX_PATH' >> $HOME/.bashrc
+
+
+
+RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
+    echo 'colorred="\033[31m"' >> ${HOME}/.docker_whale && \
+    echo 'colorpowder_blue="\033[1;36m"' >> ${HOME}/.docker_whale && \
+    echo 'colorblue="\033[34m"' >> ${HOME}/.docker_whale && \
+    echo 'colornormal="\033[0m"' >> ${HOME}/.docker_whale && \
+    echo 'colorwhite="\033[97m"' >> ${HOME}/.docker_whale && \
+    echo 'colorlightgrey="\033[90m"' >> ${HOME}/.docker_whale && \
+    echo '' >> ${HOME}/.docker_whale && \
+    echo 'printf "                   ${colorred} ##       ${colorlightgrey} .         \n"' >> ${HOME}/.docker_whale && \
+    echo 'printf "             ${colorred} ## ## ##      ${colorlightgrey} ==         \n"' >> ${HOME}/.docker_whale && \
+    echo 'printf "           ${colorred}## ## ## ##      ${colorlightgrey}===         \n"' >> ${HOME}/.docker_whale && \
+    echo 'printf "       /\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\"\\\___/ ===       \n"' >> ${HOME}/.docker_whale && \
+    echo 'printf "  ${colorblue}~~~ ${colorlightgrey}{${colorblue}~~ ~~~~ ~~~ ~~~~ ~~ ~ ${colorlightgrey}/  ===- ${colorblue}~~~${colorlightgrey}\n"' >> ${HOME}/.docker_whale && \
+    echo 'printf "       \\\______${colorwhite} o ${colorlightgrey}         __/           \n"' >> ${HOME}/.docker_whale && \
+    echo 'printf "         \\\    \\\        __/            \n"' >> ${HOME}/.docker_whale && \
+    echo 'printf "          \\\____\\\______/               \n"' >> ${HOME}/.docker_whale && \
+    echo 'printf "\n${colorwhite}Welcome to gaussian-splatting-cuda dev container!${colornormal}\n"' >> ${HOME}/.docker_whale && \
+    echo "bash \$HOME/.docker_whale" >> ${HOME}/.bashrc
+
 

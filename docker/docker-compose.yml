@@ -24,7 +24,6 @@ services:
     hostname: ${HOSTNAME}
     stdin_open: true
     tty: true
-    runtime: nvidia
     environment:
       - USER_UID=${USER_UID}
       - USER_GID=${USER_GID}

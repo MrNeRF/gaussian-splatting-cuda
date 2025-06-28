@@ -148,6 +148,9 @@ To build and run the container, use the provided helper script:
 
 # Stop and remove containers
 ./docker/run_docker.sh -c
+
+# Build and start the Docker image with a specific CUDA version CUDA (e.g., 12.8.0)
+./docker/run_docker.sh -bu 12.8.0
 ```
 
 This will mount your current project directory into the container, enabling live development.  
