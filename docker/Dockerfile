@@ -92,10 +92,6 @@ RUN wget https://github.com/Kitware/CMake/releases/download/v4.0.3/cmake-4.0.3-l
     sudo ./cmake-4.0.3-linux-x86_64.sh --skip-license --prefix=/usr/local && \
     rm cmake-4.0.3-linux-x86_64.sh
 
-# RUN echo 'export Torch_DIR=$HOME/libtorch/share/cmake/Torch' >> $HOME/.bashrc && \
-#     echo 'export CMAKE_PREFIX_PATH=$Torch_DIR:$CMAKE_PREFIX_PATH' >> $HOME/.bashrc
-
-
 # Modified from https://github.com/jmhardison/dockercolorlogo
 RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
     echo 'colorred="\033[31m"' >> ${HOME}/.docker_whale && \
