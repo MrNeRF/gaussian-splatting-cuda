@@ -4,13 +4,14 @@ services:
     entrypoint: /bin/bash
     build:
       context: ../
-      dockerfile: ${DOCKERFILE}
+      dockerfile: ./docker/Dockerfile
       args:
         USER_UID: ${USER_UID}
         USER_GID: ${USER_GID}
         USERNAME: ${USERNAME}
         HOSTNAME: ${HOSTNAME}
         USER_PASSWORD: ${USER_PASSWORD}
+        CUDA_VERSION: ${CUDA_VERSION}
     image: gs-cuda
     network_mode: "host"
     working_dir: /home/${USERNAME}

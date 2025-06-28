@@ -1,6 +1,8 @@
-FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
+ARG CUDA_VERSION
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+
 
 # --- Base packages
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -1,35 +1,52 @@
 #!/bin/bash
 
 usage() {
-    echo "Usage: $0 [-h] [-b] [-n] [-u] [-c]"
-    echo " -h    Show this help message"
-    echo " -b    Build with cache"
-    echo " -n    Build without cache"
-    echo " -u    Start docker-compose and enter container"
-    echo " -c    Stop and clean up"
+    echo "Usage: $0 [-bnu] [CUDA_VERSION]"
+    echo "  -b       Build with cache"
+    echo "  -n       Build without cache"
+    echo "  -u       Start docker-compose and enter container"
+    echo "  -c       Stop and clean up"
+    echo "  -h       Show this help message"
+    echo
+    echo "If a CUDA version is passed as a final positional argument (e.g. 12.4.0), it overrides auto-detection."
 }
 
-if [ "$#" -lt 1 ]; then
-    usage
-    exit 1
+# --- Default: auto-detect CUDA version
+detected_cuda=$(nvcc --version 2>/dev/null | grep -oP 'release \K[0-9]+\.[0-9]+' | head -1)
+if [[ -n "$detected_cuda" ]]; then
+    CUDA_VERSION="${detected_cuda}.0" # Needed because nvcc returns version without patch
+else
+    CUDA_VERSION="11.8.0"
 fi
 
-DOCKERFILE="docker/Dockerfile"
+# --- Flags
+COMPOSE_FILE="docker/docker-compose.yml"
 BUILD=false
 BUILD_ARGS=""
 COMPOSEUP=false
 
-while getopts "hbnuc" opt; do
+# --- Parse short options
+while getopts "bnuch" opt; do
     case ${opt} in
-        h ) usage; exit 0 ;;
         b ) BUILD=true ;;
         n ) BUILD=true; BUILD_ARGS="--no-cache" ;;
         u ) COMPOSEUP=true ;;
-        c ) docker compose down --remove-orphans; exit 0 ;;
+        c ) docker compose -f $COMPOSE_FILE down --remove-orphans; exit 0 ;;
+        h ) usage; exit 0 ;;
         * ) usage; exit 1 ;;
     esac
 done
 
+shift $((OPTIND - 1))
+
+# --- CUDA override (no validation)
+if [[ $# -gt 0 ]]; then
+    CUDA_VERSION="$1"
+fi
+
+echo "Using CUDA version: $CUDA_VERSION"
+
+# --- Export env vars for docker-compose
 export USER_UID=$(id -u)
 export USER_GID=$(id -g)
 export USERNAME=$(id -un)
@@ -39,23 +56,25 @@ export HOME=$HOME
 export DISPLAY=$DISPLAY
 export XAUTHORITY=$XAUTHORITY
 export SSH_AUTH_SOCK=$SSH_AUTH_SOCK
-export DOCKERFILE  # Needed by docker-compose
+export CUDA_VERSION  
 
+# --- Build step
 if [ "$BUILD" = true ]; then
-    echo -e "Building docker image with \033[0;31m$DOCKERFILE\033[0m..."
-    DOCKER_BUILDKIT=1 docker compose build $BUILD_ARGS
+    echo "Building docker image with CUDA $CUDA_VERSION..."
+    DOCKER_BUILDKIT=1 docker compose -f $COMPOSE_FILE build $BUILD_ARGS
     if [ "$?" -ne 0 ]; then
         echo "Docker build failed!"
         exit 1
     fi
 fi
 
+# --- Run container
 if [ "$COMPOSEUP" = true ]; then
     echo "Starting docker container..."
-    docker compose up -d
+    docker compose -f $COMPOSE_FILE up -d
     if [ "$?" -ne 0 ]; then
         echo "Docker compose up failed!"
         exit 1
     fi
-    docker compose exec gs-cuda bash
+    docker compose -f $COMPOSE_FILE exec gs-cuda bash
 fi
