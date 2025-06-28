@@ -33,7 +33,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nano \
     htop \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
-    
+
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 # --- User Setup
 ARG USER_UID
 ARG USER_GID
@@ -84,13 +87,13 @@ RUN wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-w
     unzip libtorch-cxx11-abi-shared-with-deps-2.7.1+cu128.zip -d ${HOME} && \
     rm libtorch-cxx11-abi-shared-with-deps-2.7.1+cu128.zip
 
-RUN wget https://github.com/Kitware/CMake/releases/download/v3.29.3/cmake-3.29.3-linux-x86_64.sh && \
-    chmod +x cmake-3.29.3-linux-x86_64.sh && \
-    sudo ./cmake-3.29.3-linux-x86_64.sh --skip-license --prefix=/usr/local && \
-    rm cmake-3.29.3-linux-x86_64.sh
+RUN wget https://github.com/Kitware/CMake/releases/download/v4.0.3/cmake-4.0.3-linux-x86_64.sh && \
+    chmod +x cmake-4.0.3-linux-x86_64.sh && \
+    sudo ./cmake-4.0.3-linux-x86_64.sh --skip-license --prefix=/usr/local && \
+    rm cmake-4.0.3-linux-x86_64.sh
 
-RUN echo 'export Torch_DIR=$HOME/libtorch/share/cmake/Torch' >> $HOME/.bashrc && \
-    echo 'export CMAKE_PREFIX_PATH=$Torch_DIR:$CMAKE_PREFIX_PATH' >> $HOME/.bashrc
+# RUN echo 'export Torch_DIR=$HOME/libtorch/share/cmake/Torch' >> $HOME/.bashrc && \
+#     echo 'export CMAKE_PREFIX_PATH=$Torch_DIR:$CMAKE_PREFIX_PATH' >> $HOME/.bashrc
 
 
 # Modified from https://github.com/jmhardison/dockercolorlogo
@@ -114,3 +117,4 @@ RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
     echo "bash \$HOME/.docker_whale" >> ${HOME}/.bashrc
 
 
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
