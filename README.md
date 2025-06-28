@@ -136,6 +136,7 @@ This project also supports a Docker-based environment for simplified setup and r
 To build and run the container, use the provided helper script:
 
 ```bash
+
 # Build the Docker image (with cache)
 ./docker/run_docker.sh -b
 
