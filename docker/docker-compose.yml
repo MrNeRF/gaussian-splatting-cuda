@@ -1,7 +1,6 @@
 services:
   gs-cuda:
     container_name: gs-cuda
-    entrypoint: /bin/bash
     build:
       context: ../
       dockerfile: ./docker/Dockerfile

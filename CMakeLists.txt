@@ -6,7 +6,6 @@ project(gaussian_splatting_cuda LANGUAGES CUDA CXX C)
 # Setup
 get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 set(Torch_DIR "${PROJ_ROOT_DIR}/external/libtorch/share/cmake/Torch")
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
