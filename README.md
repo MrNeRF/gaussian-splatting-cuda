@@ -25,11 +25,9 @@ Contributions are very welcome!
 ## 📰 News
 Please open pull requests towards the dev branch. On dev, changes will be licensed as GPLv3. Once we have reached a new stable state on dev (the viewer will be improved as the next priority), we will merge back to master. The repo will then be licensed as GPLv3.
 
+- **[2025-06-28]**: A docker dev container has arrived.
 - **[2025-06-27]**: Removed submodules. Dependencies are now managed via vcpkg. This simplifies the build process and reduces complexity.  
 - **[2025-06-26]**: We have new sponsors adding each $200 for a total **$1300 prize pool**!
-- **[2025-06-24]**: The competition is live with a **$900 prize pool**!
-- **[2025-06-20]**: Added interactive viewer with real-time visualization during training by @panxkun.
-- **[2025-06-19]**: Metrics are now on par with gsplat-mcmc. Gsplat evals on downscaled png images whereas I used jpgs.
 
 ### LPIPS Model
 The implementation uses `weights/lpips_vgg.pt`, which is exported from `torchmetrics.image.lpip.LearnedPerceptualImagePatchSimilarity` with:
