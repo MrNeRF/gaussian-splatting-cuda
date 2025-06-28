@@ -121,6 +121,42 @@ This project uses **LibTorch 2.7.0** for optimal performance and compatibility:
 - **CUDA Compatibility**: Better integration with CUDA 11.8+
 - **Bug Fixes**: Resolved optimizer state management issues
 
+## Docker Build
+
+This project also supports a Docker-based environment for simplified setup and reproducible builds.
+
+### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/)
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)  
+  (Required for GPU support)
+
+### Basic Usage
+
+To build and run the container, use the provided helper script:
+
+```bash
+
+# Build the Docker image (with cache)
+./docker/run_docker.sh -b
+
+# OR build without cache
+./docker/run_docker.sh -n
+
+# Start the container and enter it
+./docker/run_docker.sh -u
+
+# Stop and remove containers
+./docker/run_docker.sh -c
+
+# Build and start the Docker image with a specific CUDA version CUDA (e.g., 11.8.0)
+./docker/run_docker.sh -bu 11.8.0
+```
+
+This will mount your current project directory into the container, enabling live development.  
+GPU acceleration and GUI support (e.g., OpenGL viewers) are enabled if supported by your system.
+
+
 ### Upgrading from Previous Versions
 1. Download the new LibTorch version using the build instructions
 2. Clean your build directory: `rm -rf build/`
