@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage() {
-    echo "Usage: $0 [-h] [-b] [-n] [-u] [-c] [-j | -f]"
+    echo "Usage: $0 [-h] [-b] [-n] [-u] [-c]"
     echo " -h    Show this help message"
     echo " -b    Build with cache"
     echo " -n    Build without cache"
