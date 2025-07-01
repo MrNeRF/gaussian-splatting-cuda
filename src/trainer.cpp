@@ -52,12 +52,12 @@ namespace gs {
 
         // Regularization terms
         if (opt_params.opacity_reg > 0.0f) {
-            auto opacity_l1 = torch::abs(splatData.get_opacity()).mean();
+            auto opacity_l1 = splatData.get_opacity().mean();
             loss += opt_params.opacity_reg * opacity_l1;
         }
 
         if (opt_params.scale_reg > 0.0f) {
-            auto scale_l1 = torch::abs(splatData.get_scaling()).mean();
+            auto scale_l1 = splatData.get_scaling().mean();
             loss += opt_params.scale_reg * scale_l1;
         }
         // Total variation loss for bilateral grid
