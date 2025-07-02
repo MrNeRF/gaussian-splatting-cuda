@@ -197,7 +197,7 @@ void NewtonStrategy::initialize_knn_data_if_needed() {
     all_train_cameras_cache_.clear();
     projected_camera_positions_on_sphere_.clear();
 
-    const auto& cameras_from_dataset = train_dataset_ref_->get_cameras_const();
+    const auto& cameras_from_dataset = train_dataset_ref_->get_cameras(); // Corrected method name
     if (cameras_from_dataset.empty()) {
          std::cerr << "Warning: KNN data initialization skipped: training dataset has no cameras." << std::endl;
         return;
@@ -331,7 +331,7 @@ void NewtonStrategy::find_knn_for_current_primary(const Camera* primary_cam_in) 
                 if (new_H > 0 && new_W > 0) {
                     secondary_gt_cpu = torch::nn::functional::interpolate(
                         input_for_interpolate,
-                        torch::nn::functional::InterpolateFuncOptions().size(std::vector<long>{new_H, new_W}).mode(torch::kArea)
+                        torch::nn::functional::InterpolateFuncOptions().size(c10::IntArrayRef({new_H, new_W})).mode(torch::kArea) // Corrected size argument
                     ).squeeze(0).permute({1,2,0}); // 1CHW -> CHW -> HWC
                 } else {
                     std::cerr << "Warning: KNN downsampled GT image for cam " << secondary_cam->uid()
@@ -341,7 +341,7 @@ void NewtonStrategy::find_knn_for_current_primary(const Camera* primary_cam_in) 
                     continue; // Skip this problematic one
                 }
             }
-            current_knn_targets_gpu_.emplace_back(secondary_cam, secondary_gt_cpu.to(model_.get_means().device()));
+            current_knn_targets_gpu_.emplace_back(secondary_cam, secondary_gt_cpu.to(splat_data_->get_means().device())); // Corrected model_ to splat_data_
         } else {
             std::cerr << "Warning: Could not load GT image for secondary KNN camera UID " << secondary_cam->uid() << std::endl;
         }
