@@ -3,6 +3,7 @@
 #include "core/mcmc.hpp"
 #include "core/parameters.hpp"
 #include "core/trainer.hpp"
+#include "core/newton_strategy.hpp" // Added for NewtonStrategy
 #include "core/setup_utils.hpp"
 #include "core/newton_strategy.hpp"
 #include "visualizer/detail.hpp"
@@ -40,7 +41,10 @@ int main(int argc, char* argv[]) {
         std::unique_ptr<IStrategy> strategy;
 
         if (params.optimization.use_newton_optimizer) {
-            strategy = std::make_unique<NewtonStrategy>(std::move(splat_data),dataset);
+            std::cout << "INFO: Using NewtonStrategy." << std::endl;
+            // NewtonStrategy constructor: std::unique_ptr<SplatData> splat_data_owner, std::shared_ptr<CameraDataset> train_dataset_for_knn
+            // Using direct construction instead of std::make_unique to potentially resolve C2665
+            strategy = std::unique_ptr<NewtonStrategy>(new NewtonStrategy(std::move(splat_data_owner), dataset));
         }
         else {
             strategy = std::make_unique<MCMC>(std::move(splat_data));

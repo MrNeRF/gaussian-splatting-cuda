@@ -236,7 +236,7 @@ void NewtonStrategy::find_knn_for_current_primary(const Camera* primary_cam_in) 
                 if (new_H > 0 && new_W > 0) {
                     secondary_gt_cpu = torch::nn::functional::interpolate(
                         input_for_interpolate,
-                        torch::nn::functional::InterpolateFuncOptions().size(c10::IntArrayRef({static_cast<int64_t>(new_H), static_cast<int64_t>(new_W)})).mode(torch::kArea)
+                        torch::nn::functional::InterpolateFuncOptions().size(std::vector<int64_t>{static_cast<int64_t>(new_H), static_cast<int64_t>(new_W)}).mode(torch::kArea)
                     ).squeeze(0).permute({1,2,0}); // 1CHW -> CHW -> HWC
                 } else {
                     std::cerr << "Warning: KNN downsampled GT image for cam " << secondary_cam->uid()
