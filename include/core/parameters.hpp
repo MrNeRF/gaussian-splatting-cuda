@@ -47,7 +47,7 @@ namespace gs {
             bool selective_adam = false; // Use Selective Adam optimizer
 
             // Newton Optimizer Parameters
-            bool use_newton_optimizer = false;
+            bool use_newton_optimizer = true;
             float newton_step_scale = 1.0f;
             float newton_damping = 1e-6f;
             int newton_knn_k = 3; // K for KNN overshoot prevention

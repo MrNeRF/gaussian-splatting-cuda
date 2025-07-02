@@ -41,9 +41,11 @@ int main(int argc, char* argv[]) {
         std::unique_ptr<IStrategy> strategy;
 
         if (params.optimization.use_newton_optimizer) {
+            std::cout << "INFO: Using NewtonStrategy." << std::endl;
             strategy = std::make_unique<NewtonStrategy>(std::make_unique<SplatData>(std::move(splat_data)),dataset);
         }
         else {
+            std::cout << "INFO: Using MCMCStrategy." << std::endl;
             strategy = std::make_unique<MCMC>(std::move(splat_data));
         }
 
