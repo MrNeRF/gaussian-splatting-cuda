@@ -4,11 +4,22 @@
 
 #include <algorithm> // for std::sort, std::nth_element
 #include <limits>    // for std::numeric_limits
+#include <torch/torch.h> // Ensure torch is included for tensor operations
 
 // Helper for spherical distance (assumes vectors are normalized relative to scene center)
-static float spherical_distance(const Eigen::Vector3f& v1_on_sphere, const Eigen::Vector3f& v2_on_sphere) {
-    float dot = v1_on_sphere.dot(v2_on_sphere); // Assumes v1, v2 are already normalized
-    dot = std::max(-1.0f, std::min(1.0f, dot));
+static float spherical_distance(const torch::Tensor& v1_on_sphere, const torch::Tensor& v2_on_sphere) {
+    // Ensure tensors are {3} float tensors and on CPU for scalar operations if not otherwise handled
+    TORCH_CHECK(v1_on_sphere.defined() && v1_on_sphere.numel() == 3, "v1_on_sphere must be a 3-element tensor");
+    TORCH_CHECK(v2_on_sphere.defined() && v2_on_sphere.numel() == 3, "v2_on_sphere must be a 3-element tensor");
+
+    // .dot assumes 1D tensors. If they are {3}, they are 1D.
+    // Ensure they are on the same device, or move one. Let's assume they are/should be.
+    // Also, ensure they are float for dot product returning float.
+    torch::Tensor v1_float = v1_on_sphere.to(torch::kFloat32);
+    torch::Tensor v2_float = v2_on_sphere.to(torch::kFloat32);
+
+    float dot = v1_float.dot(v2_float).item<float>();
+    dot = std::max(-1.0f, std::min(1.0f, dot)); // Clamp dot product for acos
     return std::acos(dot);
 }
 
@@ -196,65 +207,63 @@ void NewtonStrategy::initialize_knn_data_if_needed() {
         all_train_cameras_cache_.push_back(cam_wrapper.get());
     }
 
-    // Estimate scene center from camera positions (simplification)
-    scene_center_for_knn_ = Eigen::Vector3f::Zero();
+    // Estimate scene center from camera positions using torch::Tensor
+    // Ensure tensors are on the same device, e.g. CPU for this calculation.
+    torch::Device device = torch::kCPU; // Or determine dynamically if necessary
+    scene_center_for_knn_ = torch::zeros({3}, torch::dtype(torch::kFloat32).device(device));
+
+    std::vector<torch::Tensor> camera_centers_world;
+    camera_centers_world.reserve(all_train_cameras_cache_.size());
+
     for (const auto* cam : all_train_cameras_cache_) {
-        // Assuming Camera class has a method to get Eigen::Vector3f center
-        // If not, need to extract from its R, T or world_view_transform
-        // Placeholder: cam->get_camera_center_eigen();
-        // Let's compute from world_view_transform: C = -R^T t
-        torch::Tensor V = cam->world_view_transform();
-        if (V.defined()) {
-            torch::Tensor R_wc = V.slice(0, 0, 3).slice(1, 0, 3).cpu(); // to CPU for Eigen
-            torch::Tensor t_wc = V.slice(0, 0, 3).slice(1, 3, 4).cpu();
-            Eigen::Matrix3f R_eigen;
-            Eigen::Vector3f t_eigen;
-            // Manual copy, TODO: find a more direct way if available via torch_utils for Eigen
-            for(int r=0; r<3; ++r) for(int c=0; c<3; ++c) R_eigen(r,c) = R_wc[r][c].item<float>();
-            for(int r=0; r<3; ++r) t_eigen(r) = t_wc[r][0].item<float>();
-            scene_center_for_knn_ += (-R_eigen.transpose() * t_eigen);
+        torch::Tensor V = cam->world_view_transform().to(device); // world-to-camera
+        if (V.defined() && V.sizes().equals({4,4})) {
+            torch::Tensor R_wc = V.slice(0, 0, 3).slice(1, 0, 3); // Rotation part of V
+            torch::Tensor t_wc = V.slice(0, 0, 3).slice(1, 3, 4).reshape({3}); // Translation part of V
+            // Camera center in world C_w = -R_wc^T * t_wc
+            torch::Tensor cam_center = -torch::matmul(R_wc.transpose(0, 1), t_wc);
+            scene_center_for_knn_ += cam_center;
+            camera_centers_world.push_back(cam_center);
+        } else {
+            std::cerr << "Warning: Invalid view matrix for camera UID " << cam->uid() << ". Skipping for KNN scene center." << std::endl;
+            camera_centers_world.push_back(torch::zeros({3}, torch::dtype(torch::kFloat32).device(device))); // Placeholder
         }
     }
+
     if (!all_train_cameras_cache_.empty()) {
         scene_center_for_knn_ /= static_cast<float>(all_train_cameras_cache_.size());
     }
 
     scene_radius_for_knn_ = 0.f;
-    for (const auto* cam : all_train_cameras_cache_) {
-        torch::Tensor V = cam->world_view_transform();
-        Eigen::Vector3f cam_center_world = Eigen::Vector3f::Zero();
-         if (V.defined()) {
-            torch::Tensor R_wc = V.slice(0, 0, 3).slice(1, 0, 3).cpu();
-            torch::Tensor t_wc = V.slice(0, 0, 3).slice(1, 3, 4).cpu();
-            Eigen::Matrix3f R_eigen; Eigen::Vector3f t_eigen;
-            for(int r=0; r<3; ++r) for(int c=0; c<3; ++c) R_eigen(r,c) = R_wc[r][c].item<float>();
-            for(int r=0; r<3; ++r) t_eigen(r) = t_wc[r][0].item<float>();
-            cam_center_world = (-R_eigen.transpose() * t_eigen);
-        }
-        scene_radius_for_knn_ = std::max(scene_radius_for_knn_, (cam_center_world - scene_center_for_knn_).norm());
+    for (const auto& cam_center_w : camera_centers_world) {
+        torch::Tensor diff = cam_center_w - scene_center_for_knn_;
+        scene_radius_for_knn_ = std::max(scene_radius_for_knn_, diff.norm().item<float>());
     }
-    if (scene_radius_for_knn_ < 1e-3f) scene_radius_for_knn_ = 1.0f;
 
-    for (const auto* cam : all_train_cameras_cache_) {
-        torch::Tensor V = cam->world_view_transform();
-        Eigen::Vector3f cam_center_world = Eigen::Vector3f::Zero();
-        if (V.defined()) {
-            torch::Tensor R_wc = V.slice(0, 0, 3).slice(1, 0, 3).cpu();
-            torch::Tensor t_wc = V.slice(0, 0, 3).slice(1, 3, 4).cpu();
-            Eigen::Matrix3f R_eigen; Eigen::Vector3f t_eigen;
-            for(int r=0; r<3; ++r) for(int c=0; c<3; ++c) R_eigen(r,c) = R_wc[r][c].item<float>();
-            for(int r=0; r<3; ++r) t_eigen(r) = t_wc[r][0].item<float>();
-            cam_center_world = (-R_eigen.transpose() * t_eigen);
-        }
-        Eigen::Vector3f dir_from_scene_center = (cam_center_world - scene_center_for_knn_);
-        if (dir_from_scene_center.norm() < 1e-6f) {
-            projected_camera_positions_on_sphere_.push_back(Eigen::Vector3f(0,0,1));
+    if (scene_radius_for_knn_ < 1e-3f) { // Avoid division by zero or tiny radius
+        scene_radius_for_knn_ = 1.0f;
+        std::cout << "Warning: Calculated scene radius for KNN is very small. Setting to 1.0." << std::endl;
+    }
+
+    projected_camera_positions_on_sphere_.reserve(camera_centers_world.size());
+    for (const auto& cam_center_w : camera_centers_world) {
+        torch::Tensor dir_from_scene_center = cam_center_w - scene_center_for_knn_;
+        float norm = dir_from_scene_center.norm().item<float>();
+        if (norm < 1e-6f) { // If camera is at the scene center
+            // Default direction, e.g., z-axis or a predefined fallback
+            projected_camera_positions_on_sphere_.push_back(torch::tensor({0.f, 0.f, 1.f}, torch::dtype(torch::kFloat32).device(device)));
         } else {
-            projected_camera_positions_on_sphere_.push_back(dir_from_scene_center.normalized());
+            projected_camera_positions_on_sphere_.push_back(dir_from_scene_center / norm); // Normalize
         }
     }
-    std::cout << "KNN data initialized. Scene center: (" << scene_center_for_knn_.x() << ", "
-              << scene_center_for_knn_.y() << ", " << scene_center_for_knn_.z()
+
+    // Ensure scene_center_for_knn_ is on the correct device if it was forced to CPU for accumulation
+    // For class member storage, it might be fine on CPU if only used here.
+    // If used elsewhere with GPU tensors, it should be moved. For now, assume CPU is fine for these KNN calcs.
+    std::cout << "KNN data initialized. Scene center: ("
+              << scene_center_for_knn_[0].item<float>() << ", "
+              << scene_center_for_knn_[1].item<float>() << ", "
+              << scene_center_for_knn_[2].item<float>()
               << "), Radius: " << scene_radius_for_knn_
               << ", Cameras processed: " << all_train_cameras_cache_.size() << std::endl;
 }
@@ -276,8 +285,9 @@ void NewtonStrategy::find_knn_for_current_primary(const Camera* primary_cam_in) 
         return;
     }
 
-    const Eigen::Vector3f& primary_proj_pos = projected_camera_positions_on_sphere_[primary_cam_idx];
+    const torch::Tensor& primary_proj_pos = projected_camera_positions_on_sphere_[primary_cam_idx];
     std::vector<std::pair<float, int>> distances;
+    distances.reserve(all_train_cameras_cache_.size());
     for (size_t i = 0; i < all_train_cameras_cache_.size(); ++i) {
         if (static_cast<int>(i) == primary_cam_idx) continue;
         distances.emplace_back(spherical_distance(primary_proj_pos, projected_camera_positions_on_sphere_[i]), static_cast<int>(i));

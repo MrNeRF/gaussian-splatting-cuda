@@ -7,7 +7,7 @@
 #include "core/dataset.hpp" // For CameraDataset, Camera
 #include "core/rasterizer.hpp"   // For gs::RenderOutput
 
-#include <Eigen/Dense>
+#include <torch/torch.h> // For torch::Tensor
 #include <vector>
 #include <string>
 #include <memory> // For std::unique_ptr
@@ -69,9 +69,9 @@ private:
     std::shared_ptr<CameraDataset> train_dataset_ref_; // For accessing all camera poses and loading GTs
     std::vector<const Camera*> all_train_cameras_cache_; // Cache of camera pointers from train_dataset_ref_
 
-    Eigen::Vector3f scene_center_for_knn_;
+    torch::Tensor scene_center_for_knn_; // Expected to be a {3} float tensor
     float scene_radius_for_knn_;
-    std::vector<Eigen::Vector3f> projected_camera_positions_on_sphere_;
+    std::vector<torch::Tensor> projected_camera_positions_on_sphere_; // Each element a {3} float tensor
     std::vector<std::pair<const Camera*, torch::Tensor>> current_knn_targets_gpu_; // GT images on GPU
 
     void initialize_knn_data_if_needed();
