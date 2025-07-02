@@ -62,8 +62,9 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
     // V is typically [4,4] or [3,4]. Assuming [4,4] world-to-camera.
     torch::Tensor R_wc = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3); // Top-left 3x3
     torch::Tensor t_wc = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4); // Top-right 3x1
-    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc.transpose(0, 1), t_wc).squeeze(); // Ensure it's [3]
-    if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze();
+    // Transpose the inner two dimensions for matrix transpose, robust to batches.
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc.transpose(-2, -1), t_wc).squeeze();
+    if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze(); // Ensure it's [3] or [B,3]
 
 
     // The kernel needs to map RenderOutput's culled set of Gaussians (means2d, depths, radii)
@@ -128,7 +129,8 @@ torch::Tensor NewtonOptimizer::compute_projected_position_hessian_and_gradient(
     // Compute camera center C_w = -R_wc^T * t_wc
     torch::Tensor R_wc_proj = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3);
     torch::Tensor t_wc_proj = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4);
-    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_proj.transpose(0, 1), t_wc_proj).squeeze();
+    // Transpose the inner two dimensions for matrix transpose, robust to batches.
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_proj.transpose(-2, -1), t_wc_proj).squeeze();
     if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze();
     cam_pos_tensor = cam_pos_tensor.to(tensor_opts.device());
 
@@ -172,7 +174,8 @@ torch::Tensor NewtonOptimizer::solve_and_project_position_updates(
     // Compute camera center C_w = -R_wc^T * t_wc
     torch::Tensor R_wc_solve = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3);
     torch::Tensor t_wc_solve = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4);
-    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_solve.transpose(0, 1), t_wc_solve).squeeze();
+    // Transpose the inner two dimensions for matrix transpose, robust to batches.
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_solve.transpose(-2, -1), t_wc_solve).squeeze();
     if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze();
     cam_pos_tensor = cam_pos_tensor.to(tensor_opts.device());
 
