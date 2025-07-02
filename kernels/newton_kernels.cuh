@@ -42,8 +42,8 @@ void compute_position_hessian_components_kernel_launcher(
     const float* means_2d_render,  // [P_render, 2]
     const float* depths_render,   // [P_render]
     const float* radii_render,    // [P_render]
-    const int* visibility_indices_in_render_output, // [P_render] maps P_render index to P_total index. If nullptr, means_2d_render is for P_total.
-    int P_render, // Number of Gaussians in means_2d_render etc.
+    // visibility_indices_in_render_output (ranks) removed, P_render is the size of above arrays.
+    int P_render,
     // Visibility mask for *all* Gaussians in the model [P_total]. True if Gaussian k is visible on screen.
     const bool* visibility_mask_for_model,
     // Loss derivatives (pixel-wise)

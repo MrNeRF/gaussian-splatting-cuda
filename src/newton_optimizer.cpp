@@ -44,8 +44,10 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
     const LossDerivatives& loss_derivs,
     int num_visible_gaussians_in_total_model // Number of Gaussians to produce output for
 ) {
-    auto dev = model_snapshot.means().device();
-    auto dtype = model_snapshot.means().dtype();
+    // Use const getter for SplatData when model_snapshot is const
+    torch::Tensor means_tensor = model_snapshot.get_means();
+    auto dev = means_tensor.device();
+    auto dtype = means_tensor.dtype();
     auto tensor_opts = torch::TensorOptions().device(dev).dtype(dtype);
 
     // Output tensors for the *num_visible_gaussians_in_total_model*
@@ -53,9 +55,16 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
     torch::Tensor grad_p_output = torch::zeros({num_visible_gaussians_in_total_model, 3}, tensor_opts);
 
     // Prepare camera parameters
-    torch::Tensor view_mat_tensor = camera.view_matrix().to(dev).to(dtype);
-    torch::Tensor projection_matrix_for_jacobian = camera.projection_matrix_for_jacobian().to(dev).to(dtype); // K matrix or similar
-    torch::Tensor cam_pos_tensor = camera.camera_center().to(dev).to(dtype);
+    torch::Tensor view_mat_tensor = camera.world_view_transform().to(dev).to(dtype); // Corrected method
+    torch::Tensor K_matrix = camera.K().to(dev).to(dtype); // Corrected method
+
+    // Compute camera center C_w = -R_wc^T * t_wc from world_view_transform V = [R_wc | t_wc]
+    // V is typically [4,4] or [3,4]. Assuming [4,4] world-to-camera.
+    torch::Tensor R_wc = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3); // Top-left 3x3
+    torch::Tensor t_wc = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4); // Top-right 3x1
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc.transpose(0, 1), t_wc).squeeze(); // Ensure it's [3]
+    if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze();
+
 
     // The kernel needs to map RenderOutput's culled set of Gaussians (means2d, depths, radii)
     // back to the original model's Gaussians, or use the visibility_mask_for_model.
@@ -73,17 +82,18 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
         gs::torch_utils::get_const_data_ptr<float>(model_snapshot.get_opacity()),
         gs::torch_utils::get_const_data_ptr<float>(model_snapshot.get_shs()),
         model_snapshot.get_active_sh_degree(),
+        static_cast<int>(model_snapshot.get_shs().size(1)), // sh_coeffs_dim
         gs::torch_utils::get_const_data_ptr<float>(view_mat_tensor),
-        gs::torch_utils::get_const_data_ptr<float>(projection_matrix_for_jacobian),
+        gs::torch_utils::get_const_data_ptr<float>(K_matrix), // Was projection_matrix_for_jacobian
         gs::torch_utils::get_const_data_ptr<float>(cam_pos_tensor),
         // Data from RenderOutput (already for a culled set of Gaussians)
         gs::torch_utils::get_const_data_ptr<float>(render_output.means2d),
         gs::torch_utils::get_const_data_ptr<float>(render_output.depths),
         gs::torch_utils::get_const_data_ptr<float>(render_output.radii),
         // How to map render_output's Gaussians to original model indices or use visibility_mask_for_model
-        // is critical for the kernel. Let's assume render_output.visibility_indices maps render_output arrays to original indices.
-        (render_output.visibility_indices.defined() ? gs::torch_utils::get_const_data_ptr<int>(render_output.visibility_indices) : nullptr),
-        static_cast<int>(render_output.means2d.size(0)), // Number of Gaussians in render_output arrays
+        // is critical for the kernel. The ranks tensor (mapping render_output indices to original model indices) is needed here.
+        // Parameter for visibility_indices_in_render_output removed from kernel launcher.
+        static_cast<int>(render_output.means2d.size(0)), // P_render: Number of Gaussians in render_output arrays
         gs::torch_utils::get_const_data_ptr<bool>(visibility_mask_for_model), // Mask on *all* model Gaussians
         gs::torch_utils::get_const_data_ptr<float>(loss_derivs.dL_dc),
         gs::torch_utils::get_const_data_ptr<float>(loss_derivs.d2L_dc2_diag),
@@ -114,8 +124,14 @@ torch::Tensor NewtonOptimizer::compute_projected_position_hessian_and_gradient(
     auto tensor_opts = H_p_packed.options();
     torch::Tensor H_v_packed = torch::zeros({num_visible_gaussians, 3}, tensor_opts); // 3 for symmetric 2x2
 
-    torch::Tensor view_mat_tensor = camera.view_matrix().to(tensor_opts.device());
-    torch::Tensor cam_pos_tensor = camera.camera_center().to(tensor_opts.device());
+    torch::Tensor view_mat_tensor = camera.world_view_transform().to(tensor_opts.device()); // Corrected
+    // Compute camera center C_w = -R_wc^T * t_wc
+    torch::Tensor R_wc_proj = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3);
+    torch::Tensor t_wc_proj = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4);
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_proj.transpose(0, 1), t_wc_proj).squeeze();
+    if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze();
+    cam_pos_tensor = cam_pos_tensor.to(tensor_opts.device());
+
 
     NewtonKernels::project_position_hessian_gradient_kernel_launcher(
         num_visible_gaussians,
@@ -152,8 +168,13 @@ torch::Tensor NewtonOptimizer::solve_and_project_position_updates(
     );
 
     torch::Tensor delta_p = torch::zeros({num_visible_gaussians, 3}, tensor_opts);
-    torch::Tensor view_mat_tensor = camera.view_matrix().to(tensor_opts.device());
-    torch::Tensor cam_pos_tensor = camera.camera_center().to(tensor_opts.device());
+    torch::Tensor view_mat_tensor = camera.world_view_transform().to(tensor_opts.device()); // Corrected
+    // Compute camera center C_w = -R_wc^T * t_wc
+    torch::Tensor R_wc_solve = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3);
+    torch::Tensor t_wc_solve = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4);
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_solve.transpose(0, 1), t_wc_solve).squeeze();
+    if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze();
+    cam_pos_tensor = cam_pos_tensor.to(tensor_opts.device());
 
     NewtonKernels::project_update_to_3d_kernel_launcher(
         num_visible_gaussians,

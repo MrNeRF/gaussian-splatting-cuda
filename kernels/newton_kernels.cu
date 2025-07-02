@@ -73,7 +73,8 @@ __global__ void compute_position_hessian_components_kernel(
     const float* opacities_all, const float* shs_all, int sh_degree, int sh_coeffs_dim,
     const float* view_matrix, const float* projection_matrix_for_jacobian, const float* cam_pos_world,
     const float* means_2d_render, const float* depths_render, const float* radii_render,
-    const int* visibility_indices_in_render_output, int P_render,
+    // visibility_indices_in_render_output (ranks) removed
+    int P_render,
     const bool* visibility_mask_for_model,
     const float* dL_dc_pixelwise, const float* d2L_dc2_diag_pixelwise,
     int num_output_gaussians,
@@ -293,7 +294,7 @@ void NewtonKernels::compute_position_hessian_components_kernel_launcher(
     const float* opacities_all, const float* shs_all, int sh_degree, int sh_coeffs_dim,
     const float* view_matrix, const float* projection_matrix_for_jacobian, const float* cam_pos_world,
     const float* means_2d_render, const float* depths_render, const float* radii_render,
-    const int* visibility_indices_in_render_output, int P_render,
+    /* const int* visibility_indices_in_render_output, REMOVED */ int P_render,
     const bool* visibility_mask_for_model,
     const float* dL_dc_pixelwise, const float* d2L_dc2_diag_pixelwise,
     int num_output_gaussians,
@@ -325,7 +326,7 @@ void NewtonKernels::compute_position_hessian_components_kernel_launcher(
     compute_position_hessian_components_kernel<<<GET_BLOCKS(P_total), CUDA_NUM_THREADS>>>(
         H_img, W_img, C_img, P_total, means_3d_all, scales_all, rotations_all, opacities_all,
         shs_all, sh_degree, sh_coeffs_dim, view_matrix, projection_matrix_for_jacobian, cam_pos_world,
-        means_2d_render, depths_render, radii_render, visibility_indices_in_render_output, P_render,
+        means_2d_render, depths_render, radii_render, /* visibility_indices_in_render_output REMOVED */ P_render,
         visibility_mask_for_model, dL_dc_pixelwise, d2L_dc2_diag_pixelwise,
         num_output_gaussians, H_p_output_packed, grad_p_output,
         output_index_map_gpu // Pass the map
