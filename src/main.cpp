@@ -3,6 +3,7 @@
 #include "core/mcmc.hpp"
 #include "core/parameters.hpp"
 #include "core/trainer.hpp"
+#include "core/newton_strategy.hpp" // Added for NewtonStrategy
 #include "core/setup_utils.hpp"
 #include "visualizer/detail.hpp"
 #include <iostream>
