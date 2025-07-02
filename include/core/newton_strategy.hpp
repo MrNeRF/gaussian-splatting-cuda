@@ -18,13 +18,10 @@ namespace gs { // Forward declare RenderOutput if not fully included via rasteri
 
 class NewtonStrategy : public IStrategy {
 public:
+    // Constructor takes ownership of SplatData and a reference to the CameraDataset for KNN GT image loading
     NewtonStrategy(
-        const gs::param::TrainingParameters& training_params,
-        SplatData& initial_splat_data, // Takes ownership or reference? Let's assume reference for now.
-                                       // Or, strategy creates its own SplatData.
-                                       // For consistency with how Trainer likely works, it might receive it.
-                                       // However, typical strategies own their model. Let's make it own.
-        std::shared_ptr<CameraDataset> train_dataset_for_knn // Used for KNN search
+        std::unique_ptr<SplatData> splat_data_owner,
+        std::shared_ptr<CameraDataset> train_dataset_for_knn
     );
 
     ~NewtonStrategy() override = default;
@@ -66,15 +63,13 @@ private:
     torch::Tensor current_visibility_mask_for_model_; // Mask for all P_total Gaussians
 
     // For KNN logic:
-    std::shared_ptr<CameraDataset> train_dataset_ref_; // For accessing all camera poses and loading GTs
-    std::vector<const Camera*> all_train_cameras_cache_; // Cache of camera pointers from train_dataset_ref_
+    std::shared_ptr<CameraDataset> train_dataset_ref_; // For accessing all camera poses and loading GTs for KNN
+    // Caches Camera pointers from train_dataset_ref_ for quick lookup by UID to get GT images.
+    // Using a map for potentially sparse UIDs or easier lookup.
+    std::unordered_map<int, const Camera*> uid_to_camera_cache_;
+    std::vector<std::pair<const Camera*, torch::Tensor>> current_knn_targets_gpu_; // GT images on GPU for current primary cam's KNNs
 
-    torch::Tensor scene_center_for_knn_; // Expected to be a {3} float tensor
-    float scene_radius_for_knn_;
-    std::vector<torch::Tensor> projected_camera_positions_on_sphere_; // Each element a {3} float tensor
-    std::vector<std::pair<const Camera*, torch::Tensor>> current_knn_targets_gpu_; // GT images on GPU
-
-    void initialize_knn_data_if_needed();
+    void cache_camera_references(); // Renamed from initialize_knn_data_if_needed
     void find_knn_for_current_primary(const Camera* primary_cam_in);
 
     // Helper to calculate the visibility mask for all P_total gaussians
