@@ -1,4 +1,4 @@
-// include/core/newton_optimizer.hpp
+// include/newton_optimizer.hpp
 #pragma once
 
 #include "core/splat_data.hpp"

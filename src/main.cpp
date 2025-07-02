@@ -1,7 +1,5 @@
 #include "core/argument_parser.hpp"
 #include "core/dataset.hpp"
-// #include "core/knn_utils.hpp" // Now included via setup_utils.hpp if needed there
-#include "core/setup_utils.hpp" // Added for KNN setup utility
 #include "core/mcmc.hpp"
 #include "core/parameters.hpp"
 #include "core/trainer.hpp"
@@ -25,18 +23,12 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 3. Create dataset from COLMAP
         //----------------------------------------------------------------------
-        // Now also returns camera_world_positions
-        auto [dataset, scene_center, camera_world_positions] = create_dataset_from_colmap(params.dataset);
+        auto [dataset, scene_center] = create_dataset_from_colmap(params.dataset);
 
         //----------------------------------------------------------------------
         // 4. Model initialisation
         //----------------------------------------------------------------------
         auto splat_data = SplatData::init_model_from_pointcloud(params, scene_center);
-
-        //----------------------------------------------------------------------
-        // 4.1 Setup Camera KNN data using the utility function
-        //----------------------------------------------------------------------
-        gs::utils::setup_camera_knn_for_splat_data(splat_data,dataset,camera_world_positions,scene_center,params.optimization);
 
         //----------------------------------------------------------------------
         // 5. Create strategy

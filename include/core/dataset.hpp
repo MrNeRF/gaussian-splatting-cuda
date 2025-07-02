@@ -83,8 +83,7 @@ private:
     std::vector<size_t> _indices;
 };
 
-// Returns: {dataset, scene_center, camera_world_positions}
-inline std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor, torch::Tensor> create_dataset_from_colmap(
+inline std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor> create_dataset_from_colmap(
     const gs::param::DatasetConfig& datasetConfig) {
 
     if (!std::filesystem::exists(datasetConfig.data_path)) {
@@ -93,8 +92,7 @@ inline std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor, torch::Tensor> 
     }
 
     // Read COLMAP data with specified images folder
-    // This now returns {camera_infos, scene_center, camera_world_positions_tensor}
-    auto [camera_infos, scene_center, camera_world_positions] = read_colmap_cameras_and_images(
+    auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
         datasetConfig.data_path, datasetConfig.images);
 
     std::vector<std::shared_ptr<Camera>> cameras;
@@ -121,7 +119,7 @@ inline std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor, torch::Tensor> 
     auto dataset = std::make_shared<CameraDataset>(
         std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
 
-    return {dataset, scene_center, camera_world_positions};
+    return {dataset, scene_center};
 }
 
 inline auto create_dataloader_from_dataset(

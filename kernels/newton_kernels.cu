@@ -1,5 +1,5 @@
-// src/kernels/newton_kernels.cu
-#include "kernels/newton_kernels.cuh"
+// kernels/newton_kernels.cu
+#include "newton_kernels.cuh" // Now in the same directory
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <torch/torch.h> // For AT_ASSERTM

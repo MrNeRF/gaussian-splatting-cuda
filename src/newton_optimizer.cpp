@@ -1,7 +1,7 @@
-// src/core/newton_optimizer.cpp
-#include "core/newton_optimizer.hpp"
-#include "kernels/newton_kernels.cuh"
-#include "core/torch_utils.hpp" // For accessing tensor data ptrs
+// src/newton_optimizer.cpp
+#include "newton_optimizer.hpp" // Moved from core/
+#include "kernels/newton_kernels.cuh" // Path relative to include paths, or needs adjustment
+#include "core/torch_utils.hpp" // Assuming torch_utils is still in core/
 
 // Constructor
 NewtonOptimizer::NewtonOptimizer(SplatData& splat_data,
