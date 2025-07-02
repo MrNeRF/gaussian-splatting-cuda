@@ -1,6 +1,7 @@
-// src/kernels/newton_kernels.cuh
+// kernels/newton_kernels.cuh
 #pragma once
 #include <torch/torch.h>
+#include "core/torch_utils.hpp" // For gs::torch_utils like get_data_ptr
 
 namespace NewtonKernels {
 
