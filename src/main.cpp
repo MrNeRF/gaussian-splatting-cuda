@@ -36,13 +36,7 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 4.1 Setup Camera KNN data using the utility function
         //----------------------------------------------------------------------
-        gs::utils::setup_camera_knn_for_splat_data(
-            splat_data,
-            dataset,
-            camera_world_positions,
-            scene_center,
-            params.optimization
-        );
+        gs::utils::setup_camera_knn_for_splat_data(splat_data,dataset,camera_world_positions,scene_center,params.optimization);
 
         //----------------------------------------------------------------------
         // 5. Create strategy
