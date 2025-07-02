@@ -6,6 +6,7 @@
 #include <torch/torch.h>
 #include <vector>
 #include <iostream> // For std::cout, std::cerr
+#include <chrono>   // For time tracking
 
 namespace gs {
 namespace utils {
@@ -17,7 +18,8 @@ void setup_camera_knn_for_splat_data(
     const torch::Tensor& scene_center,
     const gs::param::OptimizationParameters& opt_params
 ) {
-    std::cout << "Setting up camera KNN data..." << std::endl;
+    auto start_time = std::chrono::high_resolution_clock::now();
+    std::cout << "INFO: Setting up camera KNN data..." << std::endl;
 
     // 1. Get K_neighbors from optimization parameters
     const int K_neighbors = opt_params.k_nearest_neighbors_for_cameras;
@@ -93,7 +95,10 @@ void setup_camera_knn_for_splat_data(
 
     // 5. Call splat_data.set_camera_knns()
     splat_data.set_camera_knns(std::move(knns));
-    std::cout << "Camera KNN data setup complete." << std::endl;
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    std::cout << "INFO: Camera KNN data setup complete. Took " << duration.count() << " ms." << std::endl;
 }
 
 } // namespace utils
