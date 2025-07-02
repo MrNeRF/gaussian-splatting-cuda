@@ -45,7 +45,8 @@ int main(int argc, char* argv[]) {
         if (params.optimization.use_newton_optimizer) {
             std::cout << "INFO: Using NewtonStrategy." << std::endl;
             // NewtonStrategy constructor: std::unique_ptr<SplatData> splat_data_owner, std::shared_ptr<CameraDataset> train_dataset_for_knn
-            strategy = std::make_unique<NewtonStrategy>(std::move(splat_data_owner), dataset);
+            // Using direct construction instead of std::make_unique to potentially resolve C2665
+            strategy = std::unique_ptr<NewtonStrategy>(new NewtonStrategy(std::move(splat_data_owner), dataset));
         }
         // else if (params.optimization.use_mcmc_strategy) { // Example if there was an explicit MCMC flag
         //     std::cout << "INFO: Using MCMCStrategy." << std::endl;
