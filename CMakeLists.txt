@@ -84,6 +84,7 @@ set(HOST_SOURCES
         src/bilateral_grid.cpp
         src/selective_adam.cpp
         src/newton_optimizer.cpp # Added Newton optimizer
+        src/core/newton_strategy.cpp # Added Newton strategy
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
