@@ -83,6 +83,7 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
+        src/newton_optimizer.cpp # Added Newton optimizer
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
@@ -94,6 +95,7 @@ target_include_directories(gaussian_host
         ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
         ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
+        ${CMAKE_CURRENT_SOURCE_DIR}         # For accessing kernels/newton_kernels.cuh
         PRIVATE
         ${Python3_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
@@ -166,6 +168,7 @@ set(KERNEL_SOURCES
         kernels/bilateral_grid_forward.cu
         kernels/bilateral_grid_backward.cu
         kernels/bilateral_grid_tv.cu
+        kernels/newton_kernels.cu # Added Newton optimizer kernels
 )
 
 # Add CUDA-OpenGL interop kernels if supported
@@ -186,7 +189,7 @@ target_include_directories(gaussian_kernels
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
+        ${CMAKE_CURRENT_SOURCE_DIR}/kernels # Changed from include/kernels to find newton_kernels.cuh
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
         PRIVATE
