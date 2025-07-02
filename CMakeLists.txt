@@ -25,7 +25,6 @@ find_package(CUDAToolkit REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
 find_package(OpenGL REQUIRED)
-find_package(Eigen3 REQUIRED)
 
 # Python packages - Use modern Python3 finding
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -100,7 +99,6 @@ target_include_directories(gaussian_host
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
         ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
         ${CMAKE_CURRENT_SOURCE_DIR}         # For accessing kernels/newton_kernels.cuh
-        ${EIGEN3_INCLUDE_DIRS}              # Add Eigen includes
         PRIVATE
         ${Python3_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
@@ -118,7 +116,6 @@ target_link_libraries(gaussian_host
         args
         Python3::Python
         gsplat_backend  # Link to gsplat
-        Eigen3::Eigen   # Link to Eigen
         ${OPENGL_LIBRARIES}
         CUDA::cudart    # Add CUDA runtime for interop
 )
