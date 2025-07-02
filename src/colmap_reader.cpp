@@ -264,8 +264,9 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
 
 // -----------------------------------------------------------------------------
 //  Assemble per-image camera information
+//  Returns: {camera_data_list, scene_center, all_camera_world_positions}
 // -----------------------------------------------------------------------------
-std::tuple<std::vector<CameraData>, torch::Tensor>
+std::tuple<std::vector<CameraData>, torch::Tensor, torch::Tensor>
 read_colmap_cameras(const std::filesystem::path base_path,
                     const std::unordered_map<uint32_t, CameraData>& cams,
                     const std::vector<Image>& images,
@@ -322,7 +323,8 @@ read_colmap_cameras(const std::filesystem::path base_path,
     }
 
     std::cout << "Training with " << out.size() << " images \n";
-    return {std::move(out), camera_locations.mean(0)};
+    // Return all camera locations and their mean (scene_center)
+    return {std::move(out), camera_locations.mean(0), camera_locations};
 }
 
 // -----------------------------------------------------------------------------
@@ -332,12 +334,14 @@ PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
     return read_point3D_binary(filepath / "sparse/0/points3D.bin");
 }
 
-std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images(
+// Returns: {camera_data_list, scene_center, all_camera_world_positions}
+std::tuple<std::vector<CameraData>, torch::Tensor, torch::Tensor> read_colmap_cameras_and_images(
     const std::filesystem::path& base,
     const std::string& images_folder) {
 
     auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");
     auto images = read_images_binary(base / "sparse/0/images.bin");
 
+    // This now returns three items, which are propagated.
     return read_colmap_cameras(base, cams, images, images_folder);
 }

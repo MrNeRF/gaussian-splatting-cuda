@@ -88,4 +88,12 @@ private:
 
     // Helper to clean up finished threads
     void cleanup_finished_threads() const;
+
+private: // Ensuring KNN data is private
+    std::vector<std::vector<int>> _camera_knn_uids;
+
+public:
+    // KNN methods
+    void set_camera_knns(std::vector<std::vector<int>> knns);
+    const std::vector<int>& get_knns_for_camera_uid(int camera_uid) const;
 };
