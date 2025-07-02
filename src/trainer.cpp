@@ -1,5 +1,6 @@
 #include "core/trainer.hpp"
 #include "core/rasterizer.hpp"
+#include "core/newton_strategy.hpp" // Added for dynamic_cast and set_current_view_data
 #include "kernels/fused_ssim.cuh"
 #include "visualizer/detail.hpp"
 #include <chrono>
@@ -248,6 +249,17 @@ namespace gs {
             }
 
             auto do_strategy = [&]() {
+                // If NewtonStrategy, provide it with necessary per-frame data
+                if (auto* newton_strat = dynamic_cast<NewtonStrategy*>(strategy_.get())) {
+                    newton_strat->set_current_view_data(
+                        cam,
+                        gt_image, // gt_image is already on device if loaded by dataloader correctly
+                        r_output,
+                        params_.optimization, // Pass current opt params
+                        iter
+                    );
+                }
+                // post_backward might still be useful for other strategies, or NewtonStrategy can use it too
                 strategy_->post_backward(iter, r_output);
                 strategy_->step(iter);
             };

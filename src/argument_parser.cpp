@@ -55,6 +55,7 @@ namespace {
         ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
         ::args::Flag enable_viz(parser, "viz", "Enable visualization during training", {'v', "viz"});
         ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
+        ::args::Flag use_newton_optimizer_flag(parser, "use_newton", "Enable Newton optimizer instead of Adam", {"use-newton-optimizer"}); // Added
         ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
         ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
 
@@ -129,6 +130,7 @@ namespace {
         setFlag(enable_eval, opt.enable_eval);
         setFlag(enable_viz, opt.enable_viz);
         setFlag(selective_adam, opt.selective_adam);
+        setFlag(use_newton_optimizer_flag, opt.use_newton_optimizer); // Added
         setFlag(enable_save_eval_images, opt.enable_save_eval_images);
 
         // Special case: validate render mode

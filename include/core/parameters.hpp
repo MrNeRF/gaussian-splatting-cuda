@@ -45,6 +45,15 @@ namespace gs {
 
             int steps_scaler = 1;
             bool selective_adam = false; // Use Selective Adam optimizer
+
+            // Newton Optimizer Parameters
+            bool use_newton_optimizer = false;
+            float newton_step_scale = 1.0f;
+            float newton_damping = 1e-6f;
+            int newton_knn_k = 3; // K for KNN overshoot prevention
+            float newton_secondary_target_downsample_factor = 0.5f; // Downsample factor for KNN GT images
+            float newton_lambda_dssim_for_hessian = 0.2f; // DSSIM weight in Hessian calculation
+            bool newton_use_l2_for_hessian_L_term = true; // Whether to use L2 or L1 for the non-SSIM part of loss in Hessian
         };
 
         struct DatasetConfig {
