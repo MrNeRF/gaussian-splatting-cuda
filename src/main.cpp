@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
         std::unique_ptr<IStrategy> strategy;
 
         if (params.optimization.use_newton_optimizer) {
-            strategy = std::make_unique<NewtonStrategy>(std::move(splat_data),dataset);
+            strategy = std::make_unique<NewtonStrategy>(std::make_unique<SplatData>(std::move(splat_data)),dataset);
         }
         else {
             strategy = std::make_unique<MCMC>(std::move(splat_data));
