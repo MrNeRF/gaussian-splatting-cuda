@@ -31,13 +31,13 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 4. Model initialisation
         //----------------------------------------------------------------------
-        auto splat_data_obj = SplatData::init_model_from_pointcloud(params, scene_center);
+        auto splat_data = SplatData::init_model_from_pointcloud(params, scene_center);
 
         //----------------------------------------------------------------------
         // 4.1 Setup Camera KNN data using the utility function
         //----------------------------------------------------------------------
         gs::utils::setup_camera_knn_for_splat_data(
-            splat_data_obj,
+            splat_data,
             dataset,
             camera_world_positions,
             scene_center,
@@ -47,8 +47,7 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 5. Create strategy
         //----------------------------------------------------------------------
-        // splat_data_obj is moved into MCMC strategy here
-        auto strategy = std::make_unique<MCMC>(std::move(splat_data_obj));
+        auto strategy = std::make_unique<MCMC>(std::move(splat_data));
 
         //----------------------------------------------------------------------
         // 6. Create trainer
