@@ -212,9 +212,25 @@ void NewtonOptimizer::step(int iteration,
     torch::Tensor means_visible_from_model = model_.means().detach().index_select(0, visible_indices);
 
     // I. Compute Loss Derivatives for primary target
+    torch::Tensor rendered_image_squeezed = current_render_output.image.squeeze(0);
+    torch::Tensor gt_image_prepared = primary_gt_image;
+
+    // Ensure rendered_image is HWC
+    if (rendered_image_squeezed.dim() == 3 && rendered_image_squeezed.size(0) == 3) {
+        // Input is CHW [3, H, W], permute to HWC [H, W, 3]
+        rendered_image_squeezed = rendered_image_squeezed.permute({1, 2, 0}).contiguous();
+    }
+
+    // Ensure gt_image is HWC to match rendered_image for the checks inside compute_loss_derivatives_cuda
+    // and for consistency if the kernel itself expects HWC for both.
+    if (gt_image_prepared.dim() == 3 && gt_image_prepared.size(0) == 3) {
+        // Input is CHW [3, H, W], permute to HWC [H, W, 3]
+        gt_image_prepared = gt_image_prepared.permute({1, 2, 0}).contiguous();
+    }
+
     LossDerivatives primary_loss_derivs = compute_loss_derivatives_cuda(
-        current_render_output.image.squeeze(0),
-        primary_gt_image,
+        rendered_image_squeezed,
+        gt_image_prepared,
         options_.lambda_dssim_for_hessian,
         options_.use_l2_for_hessian_L_term
     );
