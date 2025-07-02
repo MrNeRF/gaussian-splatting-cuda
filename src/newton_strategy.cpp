@@ -5,76 +5,44 @@
 #include <algorithm> // for std::sort, std::nth_element
 #include <limits>    // for std::numeric_limits
 #include <torch/torch.h> // Ensure torch is included for tensor operations
+#include <unordered_map> // For uid_to_camera_cache_
 
-// Helper for spherical distance (assumes vectors are normalized relative to scene center)
-static float spherical_distance(const torch::Tensor& v1_on_sphere, const torch::Tensor& v2_on_sphere) {
-    // Ensure tensors are {3} float tensors and on CPU for scalar operations if not otherwise handled
-    TORCH_CHECK(v1_on_sphere.defined() && v1_on_sphere.numel() == 3, "v1_on_sphere must be a 3-element tensor");
-    TORCH_CHECK(v2_on_sphere.defined() && v2_on_sphere.numel() == 3, "v2_on_sphere must be a 3-element tensor");
-
-    // .dot assumes 1D tensors. If they are {3}, they are 1D.
-    // Ensure they are on the same device, or move one. Let's assume they are/should be.
-    // Also, ensure they are float for dot product returning float.
-    torch::Tensor v1_float = v1_on_sphere.to(torch::kFloat32);
-    torch::Tensor v2_float = v2_on_sphere.to(torch::kFloat32);
-
-    float dot = v1_float.dot(v2_float).item<float>();
-    dot = std::max(-1.0f, std::min(1.0f, dot)); // Clamp dot product for acos
-    return std::acos(dot);
-}
+// Note: spherical_distance helper function is removed as KNNs are now precomputed.
 
 NewtonStrategy::NewtonStrategy(
-    const gs::param::TrainingParameters& training_params,
-    SplatData& initial_splat_data, // TODO: Decide on ownership. For now, assuming it creates its own.
+    std::unique_ptr<SplatData> splat_data_owner,
     std::shared_ptr<CameraDataset> train_dataset_for_knn)
-: train_dataset_ref_(train_dataset_for_knn) {
-    // The strategy should typically own its model.
-    // It could be initialized from points, or by copying initial_splat_data if provided differently.
-    // For now, let's assume it's initialized from TrainingParameters like in vanilla 3DGS.
-    // This part needs to align with how Trainer sets up strategies.
-    // If Trainer creates SplatData and passes it, then NewtonStrategy might take a reference or copy.
-    // Let's assume for now the strategy creates its own SplatData based on training_params.
-    // This often involves Colmap loading etc. which is complex.
-    // A simpler start: clone initial_splat_data if it were passed as a const ref or by value.
-    // For now, placeholder for proper SplatData initialization.
-    // splat_data_ = std::make_unique<SplatData>(... copy from initial_splat_data or load ...);
-    // This is a critical part that depends on the existing Trainer's design.
-    // Let's assume SplatData is created and passed in, and we make a unique_ptr copy.
-    // This constructor signature is likely to change based on Trainer's needs.
+: splat_data_(std::move(splat_data_owner)),
+  train_dataset_ref_(train_dataset_for_knn) {
+    TORCH_CHECK(splat_data_, "NewtonStrategy: SplatData owner cannot be null.");
+    TORCH_CHECK(train_dataset_ref_, "NewtonStrategy: CameraDataset reference cannot be null.");
 
-    // A more plausible scenario: Trainer creates the SplatData (model)
-    // and passes it to the strategy constructor. The strategy then holds a reference or ptr.
-    // For now, let's assume the strategy will create its own model based on parameters,
-    // similar to how a typical training pipeline might start.
-    // This will need to be adjusted. For the moment, let's make splat_data_ from scratch.
-    // This is a temporary simplification.
-    torch::Tensor scene_center_tensor = torch::zeros({3}, torch::kFloat32); // Placeholder
-    splat_data_ = std::make_unique<SplatData>(SplatData::init_model_from_pointcloud(training_params, scene_center_tensor));
-
-    // KNN data initialization
-    if (train_dataset_ref_ && optim_params_cache_.use_newton_optimizer && optim_params_cache_.newton_knn_k > 0) {
-        initialize_knn_data_if_needed();
-    }
+    // optim_params_cache_ will be set in initialize() by the Trainer.
+    // Caching camera references can be done here or in initialize,
+    // but it depends on train_dataset_ref_ which is available now.
+    cache_camera_references();
 }
 
 void NewtonStrategy::initialize(const gs::param::OptimizationParameters& optimParams) {
-    optim_params_cache_ = optimParams; // Cache params
+    optim_params_cache_ = optimParams;
 
     if (optim_params_cache_.use_newton_optimizer) {
         NewtonOptimizer::Options newton_opts;
         newton_opts.step_scale = optim_params_cache_.newton_step_scale;
         newton_opts.damping = optim_params_cache_.newton_damping;
-        newton_opts.knn_k = optim_params_cache_.newton_knn_k;
+        newton_opts.knn_k = optim_params_cache_.newton_knn_k; // This K is for overshoot prevention in Newton step
+                                                       // The K for finding secondary targets comes from SplatData's KNNs
         newton_opts.secondary_target_downsample = optim_params_cache_.newton_secondary_target_downsample_factor;
         newton_opts.lambda_dssim_for_hessian = optim_params_cache_.newton_lambda_dssim_for_hessian;
         newton_opts.use_l2_for_hessian_L_term = optim_params_cache_.newton_use_l2_for_hessian_L_term;
-        // Copy other relevant flags from optim_params_cache_ if NewtonOptimizer::Options has them
 
         optimizer_ = std::make_unique<NewtonOptimizer>(*splat_data_, optim_params_cache_, newton_opts);
 
-        if (train_dataset_ref_ && newton_opts.knn_k > 0) {
-            initialize_knn_data_if_needed();
-        }
+        // No need to call cache_camera_references() again if called in constructor,
+        // unless dataset could change, which is not typical after strategy construction.
+        // If optim_params_cache_ was needed for caching, then it should be here.
+        // Since it's just caching Camera*, constructor is fine.
+
     } else {
         // Fallback or error if this strategy is used when use_newton_optimizer is false
         // Or, this strategy should only be created if use_newton_optimizer is true.
@@ -185,124 +153,61 @@ void NewtonStrategy::set_current_view_data(
 }
 
 
-void NewtonStrategy::initialize_knn_data_if_needed() {
+void NewtonStrategy::cache_camera_references() {
     if (!train_dataset_ref_ || train_dataset_ref_->size().value_or(0) == 0) {
-        std::cerr << "Warning: KNN data initialization skipped: no training dataset provided." << std::endl;
+        std::cerr << "Warning: NewtonStrategy::cache_camera_references skipped: no training dataset provided." << std::endl;
         return;
     }
-    if (!all_train_cameras_cache_.empty() && !projected_camera_positions_on_sphere_.empty()) {
+    if (!uid_to_camera_cache_.empty()){
         return; // Already initialized
     }
 
-    all_train_cameras_cache_.clear();
-    projected_camera_positions_on_sphere_.clear();
-
-    const auto& cameras_from_dataset = train_dataset_ref_->get_cameras(); // Corrected method name
+    uid_to_camera_cache_.clear();
+    const auto& cameras_from_dataset = train_dataset_ref_->get_cameras();
     if (cameras_from_dataset.empty()) {
-         std::cerr << "Warning: KNN data initialization skipped: training dataset has no cameras." << std::endl;
+         std::cerr << "Warning: NewtonStrategy::cache_camera_references skipped: training dataset has no cameras." << std::endl;
         return;
     }
 
-    for (const auto& cam_wrapper : cameras_from_dataset) {
-        all_train_cameras_cache_.push_back(cam_wrapper.get());
-    }
-
-    // Estimate scene center from camera positions using torch::Tensor
-    // Ensure tensors are on the same device, e.g. CPU for this calculation.
-    torch::Device device = torch::kCPU; // Or determine dynamically if necessary
-    scene_center_for_knn_ = torch::zeros({3}, torch::dtype(torch::kFloat32).device(device));
-
-    std::vector<torch::Tensor> camera_centers_world;
-    camera_centers_world.reserve(all_train_cameras_cache_.size());
-
-    for (const auto* cam : all_train_cameras_cache_) {
-        torch::Tensor V = cam->world_view_transform().to(device); // world-to-camera
-        if (V.defined() && V.sizes().equals({4,4})) {
-            torch::Tensor R_wc = V.slice(0, 0, 3).slice(1, 0, 3); // Rotation part of V
-            torch::Tensor t_wc = V.slice(0, 0, 3).slice(1, 3, 4).reshape({3}); // Translation part of V
-            // Camera center in world C_w = -R_wc^T * t_wc
-            torch::Tensor cam_center = -torch::matmul(R_wc.transpose(0, 1), t_wc);
-            scene_center_for_knn_ += cam_center;
-            camera_centers_world.push_back(cam_center);
-        } else {
-            std::cerr << "Warning: Invalid view matrix for camera UID " << cam->uid() << ". Skipping for KNN scene center." << std::endl;
-            camera_centers_world.push_back(torch::zeros({3}, torch::dtype(torch::kFloat32).device(device))); // Placeholder
+    for (const auto& cam_shared_ptr : cameras_from_dataset) {
+        if (cam_shared_ptr) {
+            uid_to_camera_cache_[cam_shared_ptr->uid()] = cam_shared_ptr.get();
         }
     }
-
-    if (!all_train_cameras_cache_.empty()) {
-        scene_center_for_knn_ /= static_cast<float>(all_train_cameras_cache_.size());
-    }
-
-    scene_radius_for_knn_ = 0.f;
-    for (const auto& cam_center_w : camera_centers_world) {
-        torch::Tensor diff = cam_center_w - scene_center_for_knn_;
-        scene_radius_for_knn_ = std::max(scene_radius_for_knn_, diff.norm().item<float>());
-    }
-
-    if (scene_radius_for_knn_ < 1e-3f) { // Avoid division by zero or tiny radius
-        scene_radius_for_knn_ = 1.0f;
-        std::cout << "Warning: Calculated scene radius for KNN is very small. Setting to 1.0." << std::endl;
-    }
-
-    projected_camera_positions_on_sphere_.reserve(camera_centers_world.size());
-    for (const auto& cam_center_w : camera_centers_world) {
-        torch::Tensor dir_from_scene_center = cam_center_w - scene_center_for_knn_;
-        float norm = dir_from_scene_center.norm().item<float>();
-        if (norm < 1e-6f) { // If camera is at the scene center
-            // Default direction, e.g., z-axis or a predefined fallback
-            projected_camera_positions_on_sphere_.push_back(torch::tensor({0.f, 0.f, 1.f}, torch::dtype(torch::kFloat32).device(device)));
-        } else {
-            projected_camera_positions_on_sphere_.push_back(dir_from_scene_center / norm); // Normalize
-        }
-    }
-
-    // Ensure scene_center_for_knn_ is on the correct device if it was forced to CPU for accumulation
-    // For class member storage, it might be fine on CPU if only used here.
-    // If used elsewhere with GPU tensors, it should be moved. For now, assume CPU is fine for these KNN calcs.
-    std::cout << "KNN data initialized. Scene center: ("
-              << scene_center_for_knn_[0].item<float>() << ", "
-              << scene_center_for_knn_[1].item<float>() << ", "
-              << scene_center_for_knn_[2].item<float>()
-              << "), Radius: " << scene_radius_for_knn_
-              << ", Cameras processed: " << all_train_cameras_cache_.size() << std::endl;
+    std::cout << "NewtonStrategy: Cached " << uid_to_camera_cache_.size() << " camera references." << std::endl;
 }
 
 void NewtonStrategy::find_knn_for_current_primary(const Camera* primary_cam_in) {
     current_knn_targets_gpu_.clear();
-    if (optim_params_cache_.newton_knn_k == 0 || all_train_cameras_cache_.empty() || projected_camera_positions_on_sphere_.empty()) return;
-
-    int primary_cam_idx = -1;
-    for (size_t i = 0; i < all_train_cameras_cache_.size(); ++i) {
-        if (all_train_cameras_cache_[i]->uid() == primary_cam_in->uid()) {
-            primary_cam_idx = static_cast<int>(i);
-            break;
-        }
+    if (!splat_data_ || !primary_cam_in) {
+        TORCH_CHECK(false, "NewtonStrategy::find_knn_for_current_primary: SplatData or primary_cam_in is null.");
+        return;
     }
+    // K for KNN (number of secondary views) is determined by the precomputed KNNs in SplatData.
+    // optim_params_cache_.newton_knn_k is for NewtonOptimizer's internal use (e.g. Hessian neighborhood), not for this.
 
-    if (primary_cam_idx == -1) {
-         std::cerr << "Warning: Primary camera for KNN not found in cached dataset." << std::endl;
+    const std::vector<int>& neighbor_uids = splat_data_->get_knns_for_camera_uid(primary_cam_in->uid());
+
+    if (neighbor_uids.empty()) {
+        // No precomputed KNNs for this camera, or K was 0 during precomputation.
         return;
     }
 
-    const torch::Tensor& primary_proj_pos = projected_camera_positions_on_sphere_[primary_cam_idx];
-    std::vector<std::pair<float, int>> distances;
-    distances.reserve(all_train_cameras_cache_.size());
-    for (size_t i = 0; i < all_train_cameras_cache_.size(); ++i) {
-        if (static_cast<int>(i) == primary_cam_idx) continue;
-        distances.emplace_back(spherical_distance(primary_proj_pos, projected_camera_positions_on_sphere_[i]), static_cast<int>(i));
-    }
+    current_knn_targets_gpu_.reserve(neighbor_uids.size());
 
-    if (distances.empty()) return;
+    for (int neighbor_uid : neighbor_uids) {
+        if (neighbor_uid == primary_cam_in->uid()) continue; // Skip self
 
-    int actual_k = std::min(optim_params_cache_.newton_knn_k, static_cast<int>(distances.size()));
-    std::nth_element(distances.begin(), distances.begin() + actual_k, distances.end());
-    std::sort(distances.begin(), distances.begin() + actual_k);
+        auto it = uid_to_camera_cache_.find(neighbor_uid);
+        if (it == uid_to_camera_cache_.end()) {
+            std::cerr << "Warning: NewtonStrategy: KNN UID " << neighbor_uid
+                      << " not found in cached camera references. Skipping." << std::endl;
+            continue;
+        }
+        const Camera* secondary_cam = it->second;
 
-    for (int i = 0; i < actual_k; ++i) {
-        const Camera* secondary_cam = all_train_cameras_cache_[distances[i].second];
-        // This assumes Camera has a method to load its image, potentially with resolution scaling.
-        // The Camera class shown previously had `load_and_get_image(int resolution = -1)`.
+        // Load GT image for this secondary_cam
+        // This assumes Camera has a method to load its image.
         // We need to determine the target resolution for secondary GT images.
         int target_height = static_cast<int>(secondary_cam->image_height() * optim_params_cache_.newton_secondary_target_downsample_factor);
         int target_width = static_cast<int>(secondary_cam->image_width() * optim_params_cache_.newton_secondary_target_downsample_factor);

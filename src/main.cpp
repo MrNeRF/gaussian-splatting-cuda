@@ -36,7 +36,28 @@ int main(int argc, char* argv[]) {
         //----------------------------------------------------------------------
         // 5. Create strategy
         //----------------------------------------------------------------------
-        auto strategy = std::make_unique<MCMC>(std::move(splat_data));
+        std::unique_ptr<IStrategy> strategy;
+        // splat_data was initialized earlier and KNNs were set up in it.
+        // Now, create a unique_ptr for it to pass to the strategy.
+        auto splat_data_owner = std::make_unique<SplatData>(std::move(splat_data));
+
+        if (params.optimization.use_newton_optimizer) {
+            std::cout << "INFO: Using NewtonStrategy." << std::endl;
+            // NewtonStrategy constructor: std::unique_ptr<SplatData> splat_data_owner, std::shared_ptr<CameraDataset> train_dataset_for_knn
+            strategy = std::make_unique<NewtonStrategy>(std::move(splat_data_owner), dataset);
+        }
+        // else if (params.optimization.use_mcmc_strategy) { // Example if there was an explicit MCMC flag
+        //     std::cout << "INFO: Using MCMCStrategy." << std::endl;
+        //     strategy = std::make_unique<MCMC>(std::move(splat_data_owner));
+        // }
+        else {
+            // Default strategy: MCMC as it was the previous default.
+            // Or, could be an error, or a BasicAdamStrategy if one existed.
+            std::cout << "INFO: use_newton_optimizer is false. Defaulting to MCMCStrategy." << std::endl;
+            strategy = std::make_unique<MCMC>(std::move(splat_data_owner));
+        }
+
+        TORCH_CHECK(strategy, "Strategy could not be initialized!");
 
         //----------------------------------------------------------------------
         // 6. Create trainer
