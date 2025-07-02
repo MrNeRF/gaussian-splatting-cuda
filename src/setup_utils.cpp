@@ -22,9 +22,9 @@ void setup_camera_knn_for_splat_data(
     std::cout << "INFO: Setting up camera KNN data..." << std::endl;
 
     // 1. Get K_neighbors from optimization parameters
-    const int K_neighbors = opt_params.k_nearest_neighbors_for_cameras;
+    const int K_neighbors = opt_params.newton_knn_k;
     if (K_neighbors <= 0) {
-        std::cout << "K_neighbors is " << K_neighbors << ". Skipping camera KNN calculation." << std::endl;
+        std::cout << "K_neighbors (opt_params.newton_knn_k) is " << K_neighbors << ". Skipping camera KNN calculation." << std::endl;
         // Ensure KNN list is empty or appropriately sized if K=0
         splat_data.set_camera_knns({}); // Set to empty KNNs
         return;
