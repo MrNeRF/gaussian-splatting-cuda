@@ -40,7 +40,8 @@ struct CameraData {
 };
 
 // Read COLMAP cameras, images, and compute nerf norm
-std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images(
+// Returns: {camera_data_list, scene_center, all_camera_world_positions}
+std::tuple<std::vector<CameraData>, torch::Tensor, torch::Tensor> read_colmap_cameras_and_images(
     const std::filesystem::path& base,
     const std::string& images_folder = "images");
 

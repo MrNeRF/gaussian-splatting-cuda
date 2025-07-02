@@ -45,6 +45,7 @@ namespace gs {
 
             int steps_scaler = 1;
             bool selective_adam = false; // Use Selective Adam optimizer
+            int k_nearest_neighbors_for_cameras = 3; // For custom optimizer, spherical KNN for cameras
         };
 
         struct DatasetConfig {

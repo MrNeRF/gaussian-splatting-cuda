@@ -83,6 +83,8 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
+        src/knn_utils.cpp    # Added for KNN calculation
+        src/setup_utils.cpp  # Added for KNN setup utility
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
