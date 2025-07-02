@@ -4,7 +4,7 @@
 #include "core/splat_data.hpp"
 #include "core/newton_optimizer.hpp"
 #include "core/parameters.hpp"
-#include "core/camera_dataset.hpp" // For CameraDataset, Camera
+#include "core/dataset.hpp" // For CameraDataset, Camera
 #include "core/rasterizer.hpp"   // For gs::RenderOutput
 
 #include <Eigen/Dense>

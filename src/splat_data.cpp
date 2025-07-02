@@ -402,3 +402,21 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
 
     return SplatData(params.optimization.sh_degree, means, sh0, shN, scaling, rotation, opacity, scene_scale);
 }
+
+// KNN methods
+void SplatData::set_camera_knns(std::vector<std::vector<int>> knns) {
+    _camera_knn_uids = std::move(knns);
+}
+
+const std::vector<int>& SplatData::get_knns_for_camera_uid(int camera_uid) const {
+    if (camera_uid < 0 || static_cast<size_t>(camera_uid) >= _camera_knn_uids.size()) {
+        // Return a static empty vector for invalid UIDs to avoid crashes.
+        // A warning could be logged here if this is an unexpected scenario.
+        static const std::vector<int> empty_knns;
+        // It's good practice to log this, but for now, let's keep it concise.
+        // std::cerr << "Warning: Requested KNNs for out-of-bounds camera_uid: " << camera_uid
+        //           << " (KNNs size: " << _camera_knn_uids.size() << ")" << std::endl;
+        return empty_knns;
+    }
+    return _camera_knn_uids[camera_uid];
+}
