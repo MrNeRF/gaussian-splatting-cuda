@@ -339,5 +339,146 @@ void NewtonOptimizer::step(int iteration,
     );
 
     // VII. Update model means
-    model_.means().index_add_(0, visible_indices, delta_p);
+    if (delta_p.defined() && delta_p.numel() > 0) { // Check if delta_p is valid
+        model_.means().index_add_(0, visible_indices, delta_p);
+    }
+
+    // === 2. SCALING OPTIMIZATION ===
+    if (options_.optimize_scales) {
+        AttributeUpdateOutput scale_update = compute_scale_updates_newton(
+            /* model_, */ visible_indices, primary_loss_derivs, primary_camera,
+            current_render_output
+        );
+        if (scale_update.success && scale_update.delta.defined() && scale_update.delta.numel() > 0) {
+            model_.get_scaling().index_add_(0, visible_indices, scale_update.delta);
+        }
+    }
+
+    // === 3. ROTATION OPTIMIZATION ===
+    if (options_.optimize_rotations) {
+         AttributeUpdateOutput rot_update = compute_rotation_updates_newton(
+            visible_indices, primary_loss_derivs, primary_camera,
+            current_render_output
+        );
+        if (rot_update.success && rot_update.delta.defined() && rot_update.delta.numel() > 0) {
+            // Placeholder: actual rotation update is q_new = delta_q * q_old
+            // model_.get_rotation().index_add_(0, visible_indices, rot_update.delta); // Not for quaternions
+        }
+    }
+
+    // === 4. OPACITY OPTIMIZATION ===
+    if (options_.optimize_opacities) {
+        AttributeUpdateOutput opacity_update = compute_opacity_updates_newton(
+            visible_indices, primary_loss_derivs, primary_camera,
+            current_render_output
+        );
+        if (opacity_update.success && opacity_update.delta.defined() && opacity_update.delta.numel() > 0) {
+            // Placeholder: actual update might be in logit space + sigmoid, or handle barriers
+            model_.get_opacity().index_add_(0, visible_indices, opacity_update.delta);
+        }
+    }
+
+    // === 5. SH COEFFICIENTS (COLOR) OPTIMIZATION ===
+    if (options_.optimize_shs) {
+        AttributeUpdateOutput sh_update = compute_sh_updates_newton(
+            visible_indices, primary_loss_derivs, primary_camera,
+            current_render_output
+        );
+        if (sh_update.success && sh_update.delta.defined() && sh_update.delta.numel() > 0) {
+            model_.get_shs().index_add_(0, visible_indices, sh_update.delta);
+        }
+    }
+}
+
+// --- Definitions for Attribute Optimization Stubs ---
+
+NewtonOptimizer::AttributeUpdateOutput NewtonOptimizer::compute_scale_updates_newton(
+    /* const SplatData& model_snapshot, */ // model_ is a member
+    const torch::Tensor& visible_indices,
+    const LossDerivatives& loss_derivs,
+    const Camera& camera,
+    const gs::RenderOutput& render_output) {
+
+    std::cout << "[NewtonOpt] Placeholder: compute_scale_updates_newton called." << std::endl;
+    // TODO: Implement paper's "Scaling solve"
+    // 1. Get current scales: model_.get_scaling().index_select(0, visible_indices)
+    // 2. Compute ∂c/∂s_k, ∂²c/∂s_k² (VERY COMPLEX - requires new CUDA kernels & use of supplement)
+    //    - ∂c/∂s_k = (∂c/∂G_k) * (∂G_k/∂Σ_k) : (∂Σ_k/∂λ_k) * (∂λ_k/∂s_k)
+    //    - Uses opt_params_ref_ for loss parameters, options_ for Newton parameters
+    // 3. Assemble Hessian H_s_k and gradient g_s_k for scales
+    // 4. Project to T_k subspace (optional, from paper)
+    // 5. Solve Δs_k = -H_s_k⁻¹ g_s_k (or for Δλ_k)
+    if (visible_indices.numel() == 0) return AttributeUpdateOutput(torch::empty({0}), false);
+    torch::Tensor current_scales = model_.get_scaling().index_select(0, visible_indices);
+    if (current_scales.numel() > 0) {
+        return AttributeUpdateOutput(torch::zeros_like(current_scales)); // Return zero delta
+    }
+    return AttributeUpdateOutput(torch::empty({0}, model_.get_scaling().options()));
+}
+
+NewtonOptimizer::AttributeUpdateOutput NewtonOptimizer::compute_rotation_updates_newton(
+    const torch::Tensor& visible_indices,
+    const LossDerivatives& loss_derivs,
+    const Camera& camera,
+    const gs::RenderOutput& render_output) {
+
+    std::cout << "[NewtonOpt] Placeholder: compute_rotation_updates_newton called." << std::endl;
+    // TODO: Implement paper's "Rotation solve" (update as Δθ_k around r_k)
+    // 1. Get current rotations: model_.get_rotation().index_select(0, visible_indices)
+    // 2. Compute ∂c/∂θ_k, ∂²c/∂θ_k²
+    // 3. Assemble H_θ_k, g_θ_k
+    // 4. Solve Δθ_k = -H_θ_k⁻¹ g_θ_k
+    if (visible_indices.numel() == 0) return AttributeUpdateOutput(torch::empty({0}), false);
+    // Placeholder delta for θ_k might be [N_vis, 1]
+    torch::Tensor current_rotations = model_.get_rotation().index_select(0, visible_indices);
+     if (current_rotations.numel() > 0) {
+        return AttributeUpdateOutput(torch::zeros({visible_indices.size(0), 1}, current_rotations.options()));
+    }
+    return AttributeUpdateOutput(torch::empty({0}, model_.get_rotation().options()));
+}
+
+NewtonOptimizer::AttributeUpdateOutput NewtonOptimizer::compute_opacity_updates_newton(
+    const torch::Tensor& visible_indices,
+    const LossDerivatives& loss_derivs,
+    const Camera& camera,
+    const gs::RenderOutput& render_output) {
+
+    std::cout << "[NewtonOpt] Placeholder: compute_opacity_updates_newton called." << std::endl;
+    // TODO: Implement paper's "Opacity solve" (with log barriers)
+    // 1. Get current opacities: model_.get_opacity().index_select(0, visible_indices)
+    // 2. Compute ∂c/∂σ_k (paper says ∂²c/∂σ_k² = 0)
+    // 3. Assemble H_σ_k, g_σ_k including barrier terms.
+    //    Barrier loss: -alpha_sigma * ( log(σ_k) + log(1-σ_k) ) based on common form, paper has typo?
+    //    Paper: L_local <- L_local - alpha_sigma * (sigma_k + ln(1-sigma_k)) -> this barrier form is unusual.
+    //    Typically: -alpha * (log(x) + log(1-x)). Gradient: -alpha * (1/x - 1/(1-x)). Hessian: -alpha * (-1/x^2 - 1/(1-x)^2)
+    //    Paper's barrier derivatives: -1/σ_k - 1/(1-σ_k) (for grad) and 1/(1-σ_k)^2 - 1/σ_k^2 (for hessian part) - these match -alpha*(log+log) if alpha=1.
+    //    float alpha_sigma = opt_params_ref_.log_barrier_alpha_opacity; // Get from params
+    // 4. Solve Δσ_k = -H_σ_k⁻¹ g_σ_k
+    if (visible_indices.numel() == 0) return AttributeUpdateOutput(torch::empty({0}), false);
+    torch::Tensor current_opacities = model_.get_opacity().index_select(0, visible_indices);
+    if (current_opacities.numel() > 0) {
+        return AttributeUpdateOutput(torch::zeros_like(current_opacities));
+    }
+    return AttributeUpdateOutput(torch::empty({0}, model_.get_opacity().options()));
+}
+
+NewtonOptimizer::AttributeUpdateOutput NewtonOptimizer::compute_sh_updates_newton(
+    const torch::Tensor& visible_indices,
+    const LossDerivatives& loss_derivs,
+    const Camera& camera, // Needed for view direction r_k for SH basis B_k
+    const gs::RenderOutput& render_output) {
+
+    std::cout << "[NewtonOpt] Placeholder: compute_sh_updates_newton called." << std::endl;
+    // TODO: Implement paper's "Color solve"
+    // 1. Get current SHs: model_.get_shs().index_select(0, visible_indices)
+    // 2. Compute ∂c_R/∂c_{k,R} (paper says ∂²c_R/∂c_{k,R}² = 0), per channel.
+    //    Involves SH basis B_k(r_k).
+    // 3. Assemble H_ck_R, g_ck_R for each channel.
+    // 4. Solve Δc_{k,R} = -H_ck_R⁻¹ g_ck_R for each channel.
+    if (visible_indices.numel() == 0) return AttributeUpdateOutput(torch::empty({0}), false);
+    torch::Tensor current_shs = model_.get_shs().index_select(0, visible_indices);
+    if (current_shs.numel() > 0) {
+        return AttributeUpdateOutput(torch::zeros_like(current_shs));
+    }
+    return AttributeUpdateOutput(torch::empty({0}, model_.get_shs().options()));
 }

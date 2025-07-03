@@ -102,8 +102,37 @@ private:
     ); // Returns delta_p [N_vis, 3]
 
     // Placeholder for other parameter groups
-    // void optimize_scales(...);
-    // void optimize_rotations(...);
-    // void optimize_opacities(...);
-    // void optimize_shs(...);
+    // These will be the actual Newton update computation functions for each attribute
+    struct AttributeUpdateOutput {
+        torch::Tensor delta;
+        bool success = true;
+        // Default constructor for placeholder returns
+        AttributeUpdateOutput(torch::Tensor d = torch::empty({0}), bool s = true) : delta(d), success(s) {}
+    };
+
+    AttributeUpdateOutput compute_scale_updates_newton(
+        /* const SplatData& model_snapshot, // Or use member model_ directly */
+        const torch::Tensor& visible_indices,
+        const LossDerivatives& loss_derivs,
+        const Camera& camera,
+        const gs::RenderOutput& render_output);
+        // opt_params_ref_ and options_ are member variables
+
+    AttributeUpdateOutput compute_rotation_updates_newton(
+        const torch::Tensor& visible_indices,
+        const LossDerivatives& loss_derivs,
+        const Camera& camera,
+        const gs::RenderOutput& render_output);
+
+    AttributeUpdateOutput compute_opacity_updates_newton(
+        const torch::Tensor& visible_indices,
+        const LossDerivatives& loss_derivs,
+        const Camera& camera,
+        const gs::RenderOutput& render_output);
+
+    AttributeUpdateOutput compute_sh_updates_newton(
+        const torch::Tensor& visible_indices,
+        const LossDerivatives& loss_derivs,
+        const Camera& camera,
+        const gs::RenderOutput& render_output);
 };
