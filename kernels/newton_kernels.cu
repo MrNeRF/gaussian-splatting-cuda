@@ -20,6 +20,7 @@ __global__ void compute_l1l2_loss_derivatives_kernel(
     const float* rendered_image, // [H, W, C]
     const float* gt_image,       // [H, W, C]
     bool use_l2_loss_term,
+    float inv_N_pixels, // Inverse of number of pixels (1.0f / (H*W))
     float* out_dL_dc_l1l2,      // [H, W, C]
     float* out_d2L_dc2_diag_l1l2, // [H, W, C]
     int H, int W, int C) {
@@ -31,10 +32,11 @@ __global__ void compute_l1l2_loss_derivatives_kernel(
 
     float diff = rendered_image[idx] - gt_image[idx];
     if (use_l2_loss_term) { // L2 part
-        out_dL_dc_l1l2[idx] = 2.f * diff; // Assuming normalization is handled elsewhere or absorbed
-        out_d2L_dc2_diag_l1l2[idx] = 2.f;  // Assuming normalization is handled elsewhere or absorbed
+        out_dL_dc_l1l2[idx] = inv_N_pixels * 2.f * diff;
+        out_d2L_dc2_diag_l1l2[idx] = inv_N_pixels * 2.f;
     } else { // L1 part
-        out_dL_dc_l1l2[idx] = (diff > 1e-6f) ? 1.f : ((diff < -1e-6f) ? -1.f : 0.f);
+        // For L1, derivative is sign(diff). Normalization by N_pixels is also reasonable.
+        out_dL_dc_l1l2[idx] = inv_N_pixels * ((diff > 1e-6f) ? 1.f : ((diff < -1e-6f) ? -1.f : 0.f));
         out_d2L_dc2_diag_l1l2[idx] = 0.f; // For L1, 2nd derivative is zero (or undefined, treated as 0)
     }
 }
@@ -261,9 +263,13 @@ void NewtonKernels::compute_loss_derivatives_kernel_launcher(
     torch::Tensor dL_dc_l1l2 = torch::empty_like(rendered_image_tensor, tensor_opts);
     torch::Tensor d2L_dc2_diag_l1l2 = torch::empty_like(rendered_image_tensor, tensor_opts);
 
+    // Calculate normalization factor
+    const float N_pixels = static_cast<float>(H * W);
+    const float inv_N_pixels = (N_pixels > 0) ? (1.0f / N_pixels) : 1.0f; // Avoid div by zero if H*W=0
+
     // Call kernel for L1/L2 derivatives
     compute_l1l2_loss_derivatives_kernel<<<GET_BLOCKS(total_elements), CUDA_NUM_THREADS>>>(
-        rendered_image_ptr, gt_image_ptr, use_l2_loss_term,
+        rendered_image_ptr, gt_image_ptr, use_l2_loss_term, inv_N_pixels,
         gs::torch_utils::get_data_ptr<float>(dL_dc_l1l2),
         gs::torch_utils::get_data_ptr<float>(d2L_dc2_diag_l1l2),
         H, W, C
@@ -304,12 +310,15 @@ void NewtonKernels::compute_loss_derivatives_kernel_launcher(
     );
 
     // Permute dL_dc_ssim back to [H,W,C]
-    torch::Tensor dL_dc_ssim_hwc = dL_dc_ssim_bchw.permute({0, 2, 3, 1}).squeeze(0).contiguous();
+    torch::Tensor dL_dc_ssim_hwc_unnormalized = dL_dc_ssim_bchw.permute({0, 2, 3, 1}).squeeze(0).contiguous();
+    torch::Tensor dL_dc_ssim_hwc_normalized = dL_dc_ssim_hwc_unnormalized * inv_N_pixels;
 
-    // Combine derivatives: out_dL_dc = dL_dc_l1l2 + lambda_dssim * dL_dc_ssim_hwc
-    out_dL_dc_tensor.copy_(dL_dc_l1l2 + lambda_dssim * dL_dc_ssim_hwc);
+    // Combine derivatives: out_dL_dc = dL_dc_l1l2 + lambda_dssim * dL_dc_ssim_hwc_normalized
+    // dL_dc_l1l2 is already normalized by inv_N_pixels inside its kernel
+    out_dL_dc_tensor.copy_(dL_dc_l1l2 + lambda_dssim * dL_dc_ssim_hwc_normalized);
 
     // Set out_d2L_dc2_diag_tensor:
+    // d2L_dc2_diag_l1l2 is already normalized by inv_N_pixels inside its kernel
     // As discussed, SSIM's second derivative d2L_s/dc2 is not computed by ssim.cu.
     // We assume it's effectively zero or handled by use_l2_for_hessian_L_term logic,
     // meaning only the L1/L2 part contributes to the d2L/dc2 term in Hessian assembly.
