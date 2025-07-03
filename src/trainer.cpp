@@ -30,10 +30,10 @@ namespace gs {
                 .eps(1e-15));
     }
 
-    torch::Tensor Trainer::compute_loss(const RenderOutput& render_output,
-                                        const torch::Tensor& gt_image,
-                                        const SplatData& splatData,
-                                        const param::OptimizationParameters& opt_params) {
+    torch::Tensor Trainer::compute_photometric_loss(const RenderOutput& render_output,
+                                                    const torch::Tensor& gt_image,
+                                                    const SplatData& splatData,
+                                                    const param::OptimizationParameters& opt_params) {
         // Ensure images have same dimensions
         torch::Tensor rendered = render_output.image;
         torch::Tensor gt = gt_image;
@@ -49,23 +49,33 @@ namespace gs {
         auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
         torch::Tensor loss = (1.f - opt_params.lambda_dssim) * l1_loss +
                              opt_params.lambda_dssim * ssim_loss;
+        return loss;
+    }
 
-        // Regularization terms
-        if (opt_params.opacity_reg > 0.0f) {
-            auto opacity_l1 = splatData.get_opacity().mean();
-            loss += opt_params.opacity_reg * opacity_l1;
-        }
-
+    torch::Tensor Trainer::compute_scale_reg_loss(const SplatData& splatData,
+                                                  const param::OptimizationParameters& opt_params) {
         if (opt_params.scale_reg > 0.0f) {
             auto scale_l1 = splatData.get_scaling().mean();
-            loss += opt_params.scale_reg * scale_l1;
+            return opt_params.scale_reg * scale_l1;
         }
-        // Total variation loss for bilateral grid
-        if (params_.optimization.use_bilateral_grid) {
-            loss += params_.optimization.tv_loss_weight * bilateral_grid_->tv_loss();
-        }
+        return torch::zeros({1}, torch::kFloat32).requires_grad_();
+    }
 
-        return loss;
+    torch::Tensor Trainer::compute_opacity_reg_loss(const SplatData& splatData,
+                                                    const param::OptimizationParameters& opt_params) {
+        if (opt_params.opacity_reg > 0.0f) {
+            auto opacity_l1 = splatData.get_opacity().mean();
+            return opt_params.opacity_reg * opacity_l1;
+        }
+        return torch::zeros({1}, torch::kFloat32).requires_grad_();
+    }
+
+    torch::Tensor Trainer::compute_bilateral_grid_tv_loss(const std::unique_ptr<gs::BilateralGrid>& bilateral_grid,
+                                                          const param::OptimizationParameters& opt_params) {
+        if (opt_params.use_bilateral_grid) {
+            return opt_params.tv_loss_weight * bilateral_grid->tv_loss();
+        }
+        return torch::zeros({1}, torch::kFloat32).requires_grad_();
     }
 
     Trainer::Trainer(std::shared_ptr<CameraDataset> dataset,
@@ -216,15 +226,29 @@ namespace gs {
         if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
             r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
         }
-        // Compute loss using the factored-out function
-        torch::Tensor loss = compute_loss(r_output,
-                                          gt_image,
-                                          strategy_->get_model(),
-                                          params_.optimization);
 
-        current_loss_ = loss.item<float>();
+        // Compute loss using the factored-out function
+        torch::Tensor loss = compute_photometric_loss(r_output,
+                                                      gt_image,
+                                                      strategy_->get_model(),
+                                                      params_.optimization);
 
         loss.backward();
+        float loss_value = loss.item<float>();
+
+        loss = compute_scale_reg_loss(strategy_->get_model(), params_.optimization);
+        loss.backward();
+        loss_value += loss.item<float>();
+
+        loss = compute_opacity_reg_loss(strategy_->get_model(), params_.optimization);
+        loss.backward();
+        loss_value += loss.item<float>();
+
+        loss = compute_bilateral_grid_tv_loss(bilateral_grid_, params_.optimization);
+        loss.backward();
+        loss_value += loss.item<float>();
+
+        current_loss_ = loss_value;
 
         {
             torch::NoGradGuard no_grad;
@@ -265,7 +289,7 @@ namespace gs {
             }
         }
 
-        progress_->update(iter, loss.item<float>(),
+        progress_->update(iter, current_loss_,
                           static_cast<int>(strategy_->get_model().size()),
                           strategy_->is_refining(iter));
 
@@ -275,7 +299,7 @@ namespace gs {
                 std::lock_guard<std::mutex> lock(viewer_->info_->mtx);
                 info->updateProgress(iter, params_.optimization.iterations);
                 info->updateNumSplats(static_cast<size_t>(strategy_->get_model().size()));
-                info->updateLoss(loss.item<float>());
+                info->updateLoss(current_loss_);
             }
 
             if (viewer_->notifier_) {

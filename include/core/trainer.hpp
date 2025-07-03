@@ -60,11 +60,17 @@ namespace gs {
         // Returns true if training should continue
         bool train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode);
 
-        // Protected method for computing loss
-        torch::Tensor compute_loss(const RenderOutput& render_output,
-                                   const torch::Tensor& gt_image,
-                                   const SplatData& splatData,
-                                   const param::OptimizationParameters& opt_params);
+        // Protected methods for computing loss
+        torch::Tensor compute_photometric_loss(const RenderOutput& render_output,
+                                               const torch::Tensor& gt_image,
+                                               const SplatData& splatData,
+                                               const param::OptimizationParameters& opt_params);
+        torch::Tensor compute_scale_reg_loss(const SplatData& splatData,
+                                             const param::OptimizationParameters& opt_params);
+        torch::Tensor compute_opacity_reg_loss(const SplatData& splatData,
+                                               const param::OptimizationParameters& opt_params);
+        torch::Tensor compute_bilateral_grid_tv_loss(const std::unique_ptr<gs::BilateralGrid>& bilateral_grid,
+                                                     const param::OptimizationParameters& opt_params);
 
         void initialize_bilateral_grid();
 
