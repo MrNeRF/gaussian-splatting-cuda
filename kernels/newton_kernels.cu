@@ -1,5 +1,6 @@
 // kernels/newton_kernels.cu
 #include "newton_kernels.cuh" // Now in the same directory
+#include "kernels/ssim.cuh"   // For fusedssim, fusedssim_backward C++ functions
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <torch/torch.h> // For AT_ASSERTM
@@ -14,14 +15,13 @@ inline int GET_BLOCKS(const int N) {
 
 // --- KERNEL IMPLEMENTATIONS ---
 
-// Kernel for dL/dc and d2L/dc2
-__global__ void compute_loss_derivatives_kernel(
+// Kernel for L1/L2 dL/dc and d2L/dc2
+__global__ void compute_l1l2_loss_derivatives_kernel(
     const float* rendered_image, // [H, W, C]
     const float* gt_image,       // [H, W, C]
-    float lambda_dssim,
     bool use_l2_loss_term,
-    float* out_dL_dc,      // [H, W, C]
-    float* out_d2L_dc2_diag, // [H, W, C]
+    float* out_dL_dc_l1l2,      // [H, W, C]
+    float* out_d2L_dc2_diag_l1l2, // [H, W, C]
     int H, int W, int C) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -29,37 +29,14 @@ __global__ void compute_loss_derivatives_kernel(
 
     if (idx >= total_elements) return;
 
-    // TODO: Implement actual L1/L2 and SSIM derivative calculations here.
-    // This is a placeholder. A full SSIM derivative is complex.
-    // For L1:
-    // float diff = rendered_image[idx] - gt_image[idx];
-    // out_dL_dc[idx] = (diff > 0) ? 1.f : -1.f; // sign(diff)
-    // if (abs(diff) < 1e-5) out_dL_dc[idx] = 0; // handle zero case
-    // out_d2L_dc2_diag[idx] = 0.f; // d2(L1)/dc2 is 0 (problematic for paper's Hessian form)
-
-    // For L2 (as in paper for the L2 term):
     float diff = rendered_image[idx] - gt_image[idx];
-    if (use_l2_loss_term) {
-        out_dL_dc[idx] = 2.f * diff;
-        out_d2L_dc2_diag[idx] = 2.f;
-    } else { // L1
-        out_dL_dc[idx] = (diff > 1e-6f) ? 1.f : ((diff < -1e-6f) ? -1.f : 0.f);
-        out_d2L_dc2_diag[idx] = 0.f; // For L1, 2nd derivative is zero
+    if (use_l2_loss_term) { // L2 part
+        out_dL_dc_l1l2[idx] = 2.f * diff; // Assuming normalization is handled elsewhere or absorbed
+        out_d2L_dc2_diag_l1l2[idx] = 2.f;  // Assuming normalization is handled elsewhere or absorbed
+    } else { // L1 part
+        out_dL_dc_l1l2[idx] = (diff > 1e-6f) ? 1.f : ((diff < -1e-6f) ? -1.f : 0.f);
+        out_d2L_dc2_diag_l1l2[idx] = 0.f; // For L1, 2nd derivative is zero (or undefined, treated as 0)
     }
-
-
-    // The paper's SSIM derivatives (Eq 6-13) are per-pixel but depend on a window.
-    // This kernel would need to access pixel neighborhoods for SSIM.
-    // For simplicity in this step, we are only implementing the L1/L2 part.
-    // A full SSIM derivative implementation is a separate, significant task.
-    // The lambda_dssim would be used to weigh the SSIM components if they were calculated.
-    // For example:
-    // float l_term_dl_dc = out_dL_dc[idx];
-    // float l_term_d2l_dc2 = out_d2L_dc2_diag[idx];
-    // float ssim_term_dl_dc = ... calculate ...
-    // float ssim_term_d2l_dc2 = ... calculate ...
-    // out_dL_dc[idx] = (1.f - lambda_dssim) * l_term_dl_dc + lambda_dssim * ssim_term_dl_dc;
-    // out_d2L_dc2_diag[idx] = (1.f - lambda_dssim) * l_term_d2l_dc2 + lambda_dssim * ssim_term_d2l_dc2;
 }
 
 
@@ -279,11 +256,66 @@ void NewtonKernels::compute_loss_derivatives_kernel_launcher(
     float* out_dL_dc_ptr = gs::torch_utils::get_data_ptr<float>(out_dL_dc_tensor);
     float* out_d2L_dc2_diag_ptr = gs::torch_utils::get_data_ptr<float>(out_d2L_dc2_diag_tensor);
 
-    compute_loss_derivatives_kernel<<<GET_BLOCKS(total_elements), CUDA_NUM_THREADS>>>(
-        rendered_image_ptr, gt_image_ptr, lambda_dssim, use_l2_loss_term,
-        out_dL_dc_ptr, out_d2L_dc2_diag_ptr, H, W, C
+    // Create temporary tensors for L1/L2 parts
+    auto tensor_opts = rendered_image_tensor.options();
+    torch::Tensor dL_dc_l1l2 = torch::empty_like(rendered_image_tensor, tensor_opts);
+    torch::Tensor d2L_dc2_diag_l1l2 = torch::empty_like(rendered_image_tensor, tensor_opts);
+
+    // Call kernel for L1/L2 derivatives
+    compute_l1l2_loss_derivatives_kernel<<<GET_BLOCKS(total_elements), CUDA_NUM_THREADS>>>(
+        rendered_image_ptr, gt_image_ptr, use_l2_loss_term,
+        gs::torch_utils::get_data_ptr<float>(dL_dc_l1l2),
+        gs::torch_utils::get_data_ptr<float>(d2L_dc2_diag_l1l2),
+        H, W, C
     );
     CUDA_CHECK(cudaGetLastError());
+
+    // --- SSIM Part ---
+    // Constants for SSIM
+    const float C1 = 0.01f * 0.01f;
+    const float C2 = 0.03f * 0.03f;
+
+    // Reshape and permute images for SSIM functions: [H,W,C] -> [1,C,H,W]
+    torch::Tensor img1_bchw = rendered_image_tensor.unsqueeze(0).permute({0, 3, 1, 2}).contiguous();
+    torch::Tensor img2_bchw = gt_image_tensor.unsqueeze(0).permute({0, 3, 1, 2}).contiguous();
+
+    // Call fusedssim to get ssim_map and intermediate derivatives for backward pass
+    // Need to include "kernels/ssim.cuh" for these C++ functions
+    auto ssim_outputs = fusedssim(C1, C2, img1_bchw, img2_bchw, true /* train=true */);
+    torch::Tensor ssim_map_bchw = std::get<0>(ssim_outputs);
+    torch::Tensor dm_dmu1 = std::get<1>(ssim_outputs);
+    torch::Tensor dm_dsigma1_sq = std::get<2>(ssim_outputs);
+    torch::Tensor dm_dsigma12 = std::get<3>(ssim_outputs);
+
+    // Define dL_s/d(ssim_map). Assuming L_s = DSSIM = (1 - SSIM)/2, so dL_s/d(ssim_map) = -0.5
+    // The lambda_dssim is applied to the result of dL_s/dc.
+    // If L_s is the loss term itself, then dL_s/d(map) is the derivative of that loss.
+    // If the loss is L = (1-lambda)*L2 + lambda*DSSIM, then dL/d(DSSIM) = lambda.
+    // And d(DSSIM)/d(SSIM_map) = -0.5. So dL/d(SSIM_map) = -0.5 * lambda.
+    // However, the formulation L = L2 + lambda*L_S suggests lambda is a weight for L_S.
+    // Let's assume L_S is DSSIM. Then the dL_s/dc we compute will be d(DSSIM)/dc.
+    // The final dL/dc will be dL2/dc + lambda_dssim * d(DSSIM)/dc.
+    // So, for d(DSSIM)/dc, we need d(DSSIM)/d(SSIM_map) = -0.5.
+    torch::Tensor dL_dmap_tensor = torch::full_like(ssim_map_bchw, -0.5f);
+
+    // Call fusedssim_backward to get d(SSIM_loss)/dc (which is d(DSSIM)/dc if dL_dmap is for DSSIM)
+    torch::Tensor dL_dc_ssim_bchw = fusedssim_backward(
+        C1, C2, img1_bchw, img2_bchw, dL_dmap_tensor, dm_dmu1, dm_dsigma1_sq, dm_dsigma12
+    );
+
+    // Permute dL_dc_ssim back to [H,W,C]
+    torch::Tensor dL_dc_ssim_hwc = dL_dc_ssim_bchw.permute({0, 2, 3, 1}).squeeze(0).contiguous();
+
+    // Combine derivatives: out_dL_dc = dL_dc_l1l2 + lambda_dssim * dL_dc_ssim_hwc
+    out_dL_dc_tensor.copy_(dL_dc_l1l2 + lambda_dssim * dL_dc_ssim_hwc);
+
+    // Set out_d2L_dc2_diag_tensor:
+    // As discussed, SSIM's second derivative d2L_s/dc2 is not computed by ssim.cu.
+    // We assume it's effectively zero or handled by use_l2_for_hessian_L_term logic,
+    // meaning only the L1/L2 part contributes to the d2L/dc2 term in Hessian assembly.
+    out_d2L_dc2_diag_tensor.copy_(d2L_dc2_diag_l1l2);
+
+    CUDA_CHECK(cudaGetLastError()); // Check for errors from SSIM calls too
 }
 
 
