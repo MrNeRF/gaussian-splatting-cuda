@@ -115,6 +115,21 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
         std::cout << "[DEBUG] DTYPE_CHECK cam_pos_tensor: " << cam_pos_tensor.scalar_type() << std::endl;
     }
 
+    // Handle render_output.radii dtype
+    torch::Tensor radii_for_kernel_tensor;
+    if (render_output.radii.defined()) {
+        if (render_output.radii.scalar_type() != torch::kFloat) {
+            if(options_.debug_print_shapes) { // Also print if we are recasting
+                 std::cout << "[DEBUG] Recasting render_output.radii from " << render_output.radii.scalar_type() << " to Float." << std::endl;
+            }
+            radii_for_kernel_tensor = render_output.radii.to(torch::kFloat);
+        } else {
+            radii_for_kernel_tensor = render_output.radii;
+        }
+    }
+    // If render_output.radii was undefined, radii_for_kernel_tensor remains undefined.
+    // get_const_data_ptr will handle undefined tensor by returning nullptr.
+
     NewtonKernels::compute_position_hessian_components_kernel_launcher(
         render_output.height, render_output.width, render_output.image.size(-1), // Image: H, W, C
         static_cast<int>(model_snapshot.size()), // Total P Gaussians in model
@@ -129,13 +144,13 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
         gs::torch_utils::get_const_data_ptr<float>(K_matrix), // Was projection_matrix_for_jacobian
         gs::torch_utils::get_const_data_ptr<float>(cam_pos_tensor),
         // Data from RenderOutput (already for a culled set of Gaussians)
-        gs::torch_utils::get_const_data_ptr<float>(render_output.means2d),
+        gs::torch_utils::get_const_data_ptr<float>(render_output.means2d), // Assuming means2d and depths are float
         gs::torch_utils::get_const_data_ptr<float>(render_output.depths),
-        gs::torch_utils::get_const_data_ptr<float>(render_output.radii),
+        gs::torch_utils::get_const_data_ptr<float>(radii_for_kernel_tensor), // Use the potentially casted tensor
         // How to map render_output's Gaussians to original model indices or use visibility_mask_for_model
         // is critical for the kernel. The ranks tensor (mapping render_output indices to original model indices) is needed here.
         // Parameter for visibility_indices_in_render_output removed from kernel launcher.
-        static_cast<int>(render_output.means2d.size(0)), // P_render: Number of Gaussians in render_output arrays
+        static_cast<int>(render_output.means2d.defined() ? render_output.means2d.size(0) : 0), // P_render
         gs::torch_utils::get_const_data_ptr<bool>(visibility_mask_for_model), // Mask on *all* model Gaussians
         gs::torch_utils::get_const_data_ptr<float>(loss_derivs.dL_dc),
         gs::torch_utils::get_const_data_ptr<float>(loss_derivs.d2L_dc2_diag),
