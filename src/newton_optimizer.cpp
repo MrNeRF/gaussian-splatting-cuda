@@ -2,6 +2,7 @@
 #include "newton_optimizer.hpp" // Moved from core/
 #include "kernels/newton_kernels.cuh" // Path relative to include paths, or needs adjustment
 #include "core/torch_utils.hpp" // Assuming torch_utils is still in core/
+#include <iostream> // For std::cout debug prints
 
 // Constructor
 NewtonOptimizer::NewtonOptimizer(SplatData& splat_data,
@@ -62,8 +63,19 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
     // V is typically [4,4] or [3,4]. Assuming [4,4] world-to-camera.
     torch::Tensor R_wc = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3); // Top-left 3x3
     torch::Tensor t_wc = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4); // Top-right 3x1
+
+    // Debug prints for shapes and strides
+    if (options_.debug_print_shapes) { // Assuming an option to enable/disable prints
+        std::cout << "[DEBUG] compute_pos_hess: R_wc_T shape: " << R_wc.transpose(-2,-1).sizes()
+                  << " strides: " << R_wc.transpose(-2,-1).strides()
+                  << " contiguous: " << R_wc.transpose(-2,-1).is_contiguous() << std::endl;
+        std::cout << "[DEBUG] compute_pos_hess: t_wc shape: " << t_wc.sizes()
+                  << " strides: " << t_wc.strides()
+                  << " contiguous: " << t_wc.is_contiguous() << std::endl;
+    }
+
     // Transpose the inner two dimensions for matrix transpose, robust to batches.
-    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc.transpose(-2, -1), t_wc).squeeze();
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc.transpose(-2, -1), t_wc.contiguous()).squeeze();
     if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze(); // Ensure it's [3] or [B,3]
 
 
@@ -129,8 +141,19 @@ torch::Tensor NewtonOptimizer::compute_projected_position_hessian_and_gradient(
     // Compute camera center C_w = -R_wc^T * t_wc
     torch::Tensor R_wc_proj = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3);
     torch::Tensor t_wc_proj = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4);
+
+    // Debug prints for shapes and strides
+    if (options_.debug_print_shapes) {
+        std::cout << "[DEBUG] compute_proj_hess_grad: R_wc_proj_T shape: " << R_wc_proj.transpose(-2,-1).sizes()
+                  << " strides: " << R_wc_proj.transpose(-2,-1).strides()
+                  << " contiguous: " << R_wc_proj.transpose(-2,-1).is_contiguous() << std::endl;
+        std::cout << "[DEBUG] compute_proj_hess_grad: t_wc_proj shape: " << t_wc_proj.sizes()
+                  << " strides: " << t_wc_proj.strides()
+                  << " contiguous: " << t_wc_proj.is_contiguous() << std::endl;
+    }
+
     // Transpose the inner two dimensions for matrix transpose, robust to batches.
-    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_proj.transpose(-2, -1), t_wc_proj).squeeze();
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_proj.transpose(-2, -1), t_wc_proj.contiguous()).squeeze();
     if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze();
     cam_pos_tensor = cam_pos_tensor.to(tensor_opts.device());
 
@@ -174,8 +197,19 @@ torch::Tensor NewtonOptimizer::solve_and_project_position_updates(
     // Compute camera center C_w = -R_wc^T * t_wc
     torch::Tensor R_wc_solve = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3);
     torch::Tensor t_wc_solve = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4);
+
+    // Debug prints for shapes and strides
+    if (options_.debug_print_shapes) {
+        std::cout << "[DEBUG] solve_and_proj: R_wc_solve_T shape: " << R_wc_solve.transpose(-2,-1).sizes()
+                  << " strides: " << R_wc_solve.transpose(-2,-1).strides()
+                  << " contiguous: " << R_wc_solve.transpose(-2,-1).is_contiguous() << std::endl;
+        std::cout << "[DEBUG] solve_and_proj: t_wc_solve shape: " << t_wc_solve.sizes()
+                  << " strides: " << t_wc_solve.strides()
+                  << " contiguous: " << t_wc_solve.is_contiguous() << std::endl;
+    }
+
     // Transpose the inner two dimensions for matrix transpose, robust to batches.
-    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_solve.transpose(-2, -1), t_wc_solve).squeeze();
+    torch::Tensor cam_pos_tensor = -torch::matmul(R_wc_solve.transpose(-2, -1), t_wc_solve.contiguous()).squeeze();
     if (cam_pos_tensor.dim() > 1) cam_pos_tensor = cam_pos_tensor.squeeze();
     cam_pos_tensor = cam_pos_tensor.to(tensor_opts.device());
 
