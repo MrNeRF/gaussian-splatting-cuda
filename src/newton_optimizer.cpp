@@ -61,8 +61,12 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
 
     // Compute camera center C_w = -R_wc^T * t_wc from world_view_transform V = [R_wc | t_wc]
     // V is typically [4,4] or [3,4]. Assuming [4,4] world-to-camera.
-    torch::Tensor R_wc = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3); // Top-left 3x3
-    torch::Tensor t_wc = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4); // Top-right 3x1
+    // Corrected slicing:
+    torch::Tensor view_mat_2d = view_mat_tensor.select(0, 0); // Get [4,4] matrix assuming batch size is 1
+    torch::Tensor R_wc_2d = view_mat_2d.slice(0, 0, 3).slice(1, 0, 3); // Slice to [3,3]
+    torch::Tensor t_wc_2d = view_mat_2d.slice(0, 0, 3).slice(1, 3, 4); // Slice to [3,1]
+    torch::Tensor R_wc = R_wc_2d.unsqueeze(0); // Add batch dim -> [1,3,3]
+    torch::Tensor t_wc = t_wc_2d.unsqueeze(0); // Add batch dim -> [1,3,1]
 
     // Debug prints for shapes and strides
     if (options_.debug_print_shapes) { // Assuming an option to enable/disable prints
@@ -72,6 +76,9 @@ NewtonOptimizer::PositionHessianOutput NewtonOptimizer::compute_position_hessian
         std::cout << "[DEBUG] compute_pos_hess: t_wc shape: " << t_wc.sizes()
                   << " strides: " << t_wc.strides()
                   << " contiguous: " << t_wc.is_contiguous() << std::endl;
+        std::cout << "[DEBUG] compute_pos_hess: t_wc.contiguous() shape: " << t_wc.contiguous().sizes()
+                  << " strides: " << t_wc.contiguous().strides()
+                  << " contiguous: " << t_wc.contiguous().is_contiguous() << std::endl;
     }
 
     // Transpose the inner two dimensions for matrix transpose, robust to batches.
@@ -139,8 +146,12 @@ torch::Tensor NewtonOptimizer::compute_projected_position_hessian_and_gradient(
 
     torch::Tensor view_mat_tensor = camera.world_view_transform().to(tensor_opts.device()); // Corrected
     // Compute camera center C_w = -R_wc^T * t_wc
-    torch::Tensor R_wc_proj = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3);
-    torch::Tensor t_wc_proj = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4);
+    // Corrected slicing:
+    torch::Tensor view_mat_2d_proj = view_mat_tensor.select(0, 0); // Get [4,4] matrix assuming batch size is 1
+    torch::Tensor R_wc_2d_proj = view_mat_2d_proj.slice(0, 0, 3).slice(1, 0, 3); // Slice to [3,3]
+    torch::Tensor t_wc_2d_proj = view_mat_2d_proj.slice(0, 0, 3).slice(1, 3, 4); // Slice to [3,1]
+    torch::Tensor R_wc_proj = R_wc_2d_proj.unsqueeze(0); // Add batch dim -> [1,3,3]
+    torch::Tensor t_wc_proj = t_wc_2d_proj.unsqueeze(0); // Add batch dim -> [1,3,1]
 
     // Debug prints for shapes and strides
     if (options_.debug_print_shapes) {
@@ -150,6 +161,9 @@ torch::Tensor NewtonOptimizer::compute_projected_position_hessian_and_gradient(
         std::cout << "[DEBUG] compute_proj_hess_grad: t_wc_proj shape: " << t_wc_proj.sizes()
                   << " strides: " << t_wc_proj.strides()
                   << " contiguous: " << t_wc_proj.is_contiguous() << std::endl;
+        std::cout << "[DEBUG] compute_proj_hess_grad: t_wc_proj.contiguous() shape: " << t_wc_proj.contiguous().sizes()
+                  << " strides: " << t_wc_proj.contiguous().strides()
+                  << " contiguous: " << t_wc_proj.contiguous().is_contiguous() << std::endl;
     }
 
     // Transpose the inner two dimensions for matrix transpose, robust to batches.
@@ -195,8 +209,12 @@ torch::Tensor NewtonOptimizer::solve_and_project_position_updates(
     torch::Tensor delta_p = torch::zeros({num_visible_gaussians, 3}, tensor_opts);
     torch::Tensor view_mat_tensor = camera.world_view_transform().to(tensor_opts.device()); // Corrected
     // Compute camera center C_w = -R_wc^T * t_wc
-    torch::Tensor R_wc_solve = view_mat_tensor.slice(0, 0, 3).slice(1, 0, 3);
-    torch::Tensor t_wc_solve = view_mat_tensor.slice(0, 0, 3).slice(1, 3, 4);
+    // Corrected slicing:
+    torch::Tensor view_mat_2d_solve = view_mat_tensor.select(0, 0); // Get [4,4] matrix assuming batch size is 1
+    torch::Tensor R_wc_2d_solve = view_mat_2d_solve.slice(0, 0, 3).slice(1, 0, 3); // Slice to [3,3]
+    torch::Tensor t_wc_2d_solve = view_mat_2d_solve.slice(0, 0, 3).slice(1, 3, 4); // Slice to [3,1]
+    torch::Tensor R_wc_solve = R_wc_2d_solve.unsqueeze(0); // Add batch dim -> [1,3,3]
+    torch::Tensor t_wc_solve = t_wc_2d_solve.unsqueeze(0); // Add batch dim -> [1,3,1]
 
     // Debug prints for shapes and strides
     if (options_.debug_print_shapes) {
@@ -206,6 +224,9 @@ torch::Tensor NewtonOptimizer::solve_and_project_position_updates(
         std::cout << "[DEBUG] solve_and_proj: t_wc_solve shape: " << t_wc_solve.sizes()
                   << " strides: " << t_wc_solve.strides()
                   << " contiguous: " << t_wc_solve.is_contiguous() << std::endl;
+        std::cout << "[DEBUG] solve_and_proj: t_wc_solve.contiguous() shape: " << t_wc_solve.contiguous().sizes()
+                  << " strides: " << t_wc_solve.contiguous().strides()
+                  << " contiguous: " << t_wc_solve.contiguous().is_contiguous() << std::endl;
     }
 
     // Transpose the inner two dimensions for matrix transpose, robust to batches.
