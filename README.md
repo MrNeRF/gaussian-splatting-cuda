@@ -9,10 +9,10 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 <img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="80%"/>
 
 ## 🏆 Competition
-Reduce training time by half and win **the $1300 prize**!  
+Reduce training time by half and win **the $1400 prize**!  
 Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135)
 
-This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself - each contributing **$300**. [@toshas](https://github.com/toshas) and [@ChrisAtKIRI](https://x.com/ChrisAtKIRI) are each contributing **$200**.
+This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself - each contributing **$300**. [@toshas](https://github.com/toshas) and [@ChrisAtKIRI](https://x.com/ChrisAtKIRI) are each contributing **$200**. Finally, [@JulienBlanchon](https://x.com/JulienBlanchon) is contributing **$100**.
 
 ## Agenda (this summer)
 1. Improve the viewer, i.e., better camera controls, more interactive features.
