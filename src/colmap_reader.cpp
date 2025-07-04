@@ -300,17 +300,69 @@ read_colmap_cameras(const std::filesystem::path base_path,
         camera_locations[i] = -torch::matmul(out[i]._R.t(), out[i]._T);
 
         switch (out[i]._camera_model) {
+        // f, cx, cy
         case CAMERA_MODEL::SIMPLE_PINHOLE: {
             float fx = out[i]._params[0].item<float>();
             out[i]._fov_x = focal2fov(fx, out[i]._width);
             out[i]._fov_y = focal2fov(fx, out[i]._height);
             break;
         }
+        // fx, fy, cx, cy
         case CAMERA_MODEL::PINHOLE: {
             float fx = out[i]._params[0].item<float>();
             float fy = out[i]._params[1].item<float>();
             out[i]._fov_x = focal2fov(fx, out[i]._width);
             out[i]._fov_y = focal2fov(fy, out[i]._height);
+            break;
+        }
+        // fx, fy, cx, cy, k1, k2, p1, p2
+        case CAMERA_MODEL::OPENCV: {
+            float fx = out[i]._params[0].item<float>();
+            out[i]._fov_x = focal2fov(fx, out[i]._width);
+            out[i]._fov_y = focal2fov(fx, out[i]._height);
+
+            float k1 = out[i]._params[4].item<float>();
+            float k2 = out[i]._params[5].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1, k2}, torch::kFloat32);
+
+            float p1 = out[i]._params[6].item<float>();
+            float p2 = out[i]._params[7].item<float>();
+            out[i]._tangential_distortion = torch::tensor({p1, p2}, torch::kFloat32);
+
+            break;
+        }
+        // fx, fy, cx, cy, k1, k2, p1, p2, k3, k4
+        case CAMERA_MODEL::FULL_OPENCV: {
+            float fx = out[i]._params[0].item<float>();
+            float fy = out[i]._params[1].item<float>();
+            out[i]._fov_x = focal2fov(fx, out[i]._width);
+            out[i]._fov_y = focal2fov(fy, out[i]._height);
+
+            float k1 = out[i]._params[4].item<float>();
+            float k2 = out[i]._params[5].item<float>();
+            float k3 = out[i]._params[8].item<float>();
+            float k4 = out[i]._params[9].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1, k2, k3, k4}, torch::kFloat32);
+
+            float p1 = out[i]._params[6].item<float>();
+            float p2 = out[i]._params[7].item<float>();
+            out[i]._tangential_distortion = torch::tensor({p1, p2}, torch::kFloat32);
+
+            break;
+        }
+        // fx, fy, cx, cy, k1, k2, k3, k4
+        case CAMERA_MODEL::OPENCV_FISHEYE: {
+            float fx = out[i]._params[0].item<float>();
+            float fy = out[i]._params[1].item<float>();
+            out[i]._fov_x = focal2fov(fx, out[i]._width);
+            out[i]._fov_y = focal2fov(fy, out[i]._height);
+
+            float k1 = out[i]._params[4].item<float>();
+            float k2 = out[i]._params[5].item<float>();
+            float k3 = out[i]._params[6].item<float>();
+            float k4 = out[i]._params[7].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1, k2, k3, k4}, torch::kFloat32);            
+            
             break;
         }
         default:
