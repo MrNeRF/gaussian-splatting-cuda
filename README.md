@@ -82,9 +82,9 @@ Join our growing community for discussions, support, and updates:
 
 ### Hardware Prerequisites
 1. **NVIDIA GPU** with CUDA support
-    - Successfully tested: RTX 4090, RTX A5000, RTX 3090Ti, A100
+    - Successfully tested: RTX 4090, RTX A5000, RTX 3090Ti, A100, RTX 2060 SUPER
     - Known issue with RTX 3080Ti on larger datasets (see #21)
-2. Minimum compute capability: 8.0
+2. Minimum compute capability: 7.5
 
 > If you successfully run on other hardware, please share your experience in the Discussions section!
 
