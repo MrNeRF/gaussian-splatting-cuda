@@ -272,8 +272,10 @@ namespace gs {
         Camera cam = Camera(
             R_tensor,
             t_tensor,
-            fov.x,
-            fov.y,
+            fov2focal(fov.x, reso.x),
+            fov2focal(fov.y, reso.y),
+            reso.x / 2.0f,
+            reso.y / 2.0f,
             "online",
             "none image",
             reso.x,
