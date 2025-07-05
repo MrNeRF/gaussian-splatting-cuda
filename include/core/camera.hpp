@@ -12,7 +12,8 @@ public:
 
     Camera(const torch::Tensor& R,
            const torch::Tensor& T,
-           float FoVx, float FoVy,
+           float focal_x, float focal_y,
+           float center_x, float center_y,
            const std::string& image_name,
            const std::filesystem::path& image_path,
            int width, int height,
@@ -39,16 +40,19 @@ public:
 
     int image_height() const noexcept { return _image_height; }
     int image_width() const noexcept { return _image_width; }
-    float FoVx() const noexcept { return _FoVx; }
-    float FoVy() const noexcept { return _FoVy; }
+    float focal_x() const noexcept { return _focal_x; }
+    float focal_y() const noexcept { return _focal_y; }
     const std::string& image_name() const noexcept { return _image_name; }
     int uid() const noexcept { return _uid; }
 
 private:
     // IDs
     int _uid = -1;
-    float _FoVx = 0.f;
-    float _FoVy = 0.f;
+    float _focal_x = 0.f;
+    float _focal_y = 0.f;
+    float _center_x = 0.f;
+    float _center_y = 0.f;
+    float _scale_factor = 1.0f;
 
     // Image info
     std::string _image_name;
@@ -59,3 +63,12 @@ private:
     // GPU tensors (computed on demand)
     torch::Tensor _world_view_transform;
 };
+
+inline float focal2fov(float focal, int pixels) {
+    return 2.0f * std::atan(pixels / (2.0f * focal));
+}
+
+inline float fov2focal(float fov, int pixels) {
+    float tan_fov = std::tan(fov * 0.5f);
+    return pixels / (2.0f * tan_fov);
+}

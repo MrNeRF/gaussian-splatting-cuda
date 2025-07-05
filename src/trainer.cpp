@@ -329,7 +329,7 @@ namespace gs {
         int iter = 1;
         const int epochs_needed = (params_.optimization.iterations + train_dataset_size_ - 1) / train_dataset_size_;
 
-        const int num_workers = 4;
+        const int num_workers = 48;
 
         const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
