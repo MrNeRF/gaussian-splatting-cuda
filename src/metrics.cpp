@@ -11,10 +11,18 @@ namespace gs {
 
         // 1D Gaussian kernel
         torch::Tensor gaussian(const int window_size, const float sigma) {
-            torch::Tensor gauss = torch::empty(window_size);
-            for (int x = 0; x < window_size; ++x) {
-                gauss[x] = std::exp(-(std::pow(std::floor(static_cast<float>(x - (window_size - 1) / 2.f)), 2)) / (2.f * sigma * sigma));
+            TORCH_CHECK(window_size % 2 == 1, "Window size must be odd.");
+            torch::Tensor gauss = torch::empty({window_size}, torch::kFloat32);
+
+            const int centre = window_size / 2;
+            const float inv_denom = 1.0f / 2.0f * sigma * sigma;
+
+            for (int x = 0; x < window_size; x++) {
+                const int dist_i = x - centre;
+                const float dist_sq = static_cast<float>(dist_i * dist_i);
+                gauss[x] = std::exp(-dist_sq * inv_denom);
             }
+
             return gauss / gauss.sum();
         }
 
