@@ -13,7 +13,7 @@ namespace gs {
         torch::Tensor gaussian(const int window_size, const float sigma) {
             torch::Tensor gauss = torch::empty(window_size);
             for (int x = 0; x < window_size; ++x) {
-                gauss[x] = std::exp(-(std::pow(std::floor(static_cast<float>(x - window_size) / 2.f), 2)) / (2.f * sigma * sigma));
+                gauss[x] = std::exp(-(std::pow(std::floor(static_cast<float>(x - (window_size - 1) / 2.f)), 2)) / (2.f * sigma * sigma));
             }
             return gauss / gauss.sum();
         }
