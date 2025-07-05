@@ -1,6 +1,7 @@
 #pragma once
 #include "core/camera.hpp"
 #include "core/point_cloud.hpp"
+#include "Common.h"
 #include <filesystem>
 #include <vector>
 
@@ -24,14 +25,19 @@ struct CameraData {
     uint32_t _camera_ID = 0;
     torch::Tensor _R = torch::eye(3, torch::kFloat32);
     torch::Tensor _T = torch::zeros({3}, torch::kFloat32);
-    float _fov_x = 0.f;
-    float _fov_y = 0.f;
+    float _focal_x = 0.f;
+    float _focal_y = 0.f;
+    float _center_x = 0.f;
+    float _center_y = 0.f;
     std::string _image_name;
     std::filesystem::path _image_path;
     CAMERA_MODEL _camera_model = CAMERA_MODEL::UNDEFINED;
+    gsplat::CameraModelType _camera_model_type = gsplat::CameraModelType::PINHOLE;
     int _width = 0;
     int _height = 0;
     torch::Tensor _params;
+    torch::Tensor _radial_distortion = torch::empty({0}, torch::kFloat32);
+    torch::Tensor _tangential_distortion = torch::empty({0}, torch::kFloat32);
 
     int _img_w = 0;
     int _img_h = 0;
