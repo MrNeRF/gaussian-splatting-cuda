@@ -1,6 +1,7 @@
 #pragma once
 #include "core/camera.hpp"
 #include "core/point_cloud.hpp"
+#include "Common.h"
 #include <filesystem>
 #include <vector>
 
@@ -31,6 +32,7 @@ struct CameraData {
     std::string _image_name;
     std::filesystem::path _image_path;
     CAMERA_MODEL _camera_model = CAMERA_MODEL::UNDEFINED;
+    gsplat::CameraModelType _camera_model_type = gsplat::CameraModelType::PINHOLE;
     int _width = 0;
     int _height = 0;
     torch::Tensor _params;
