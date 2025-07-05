@@ -26,7 +26,7 @@ Camera::Camera(const torch::Tensor& R,
                gsplat::CameraModelType camera_model_type,
                const std::string& image_name,
                const std::filesystem::path& image_path,
-               int width, int height,
+               int camera_width, int camera_height,
                int uid)
     : _uid(uid),
       _focal_x(focal_x),
@@ -38,17 +38,21 @@ Camera::Camera(const torch::Tensor& R,
       _camera_model_type(camera_model_type),
       _image_name(image_name),
       _image_path(image_path),
-      _image_width(width),
-      _image_height(height),
+      _camera_width(camera_width),
+      _camera_height(camera_height),
+      _image_width(camera_width),
+      _image_height(camera_height),
       _world_view_transform{world_to_view(R, T)} {
 }
 
 torch::Tensor Camera::K() const {
     const auto K = torch::zeros({1, 3, 3}, _world_view_transform.options());
-    K[0][0][0] = _focal_x * _scale_factor;
-    K[0][1][1] = _focal_y * _scale_factor;
-    K[0][0][2] = _center_x * _scale_factor;
-    K[0][1][2] = _center_y * _scale_factor;
+    float x_scale_factor = float(_image_width) / float(_camera_width);
+    float y_scale_factor = float(_image_height) / float(_camera_height);
+    K[0][0][0] = _focal_x * x_scale_factor;
+    K[0][1][1] = _focal_y * y_scale_factor;
+    K[0][0][2] = _center_x * x_scale_factor;
+    K[0][1][2] = _center_y * y_scale_factor;
     K[0][2][2] = 1.0f;
     return K;
 }
@@ -63,8 +67,6 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
     w = std::get<1>(result);
     h = std::get<2>(result);
     c = std::get<3>(result);
-
-    _scale_factor = 1.0f / resolution;
 
     _image_width = w;
     _image_height = h;

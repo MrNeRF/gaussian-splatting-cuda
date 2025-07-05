@@ -20,7 +20,7 @@ public:
            gsplat::CameraModelType camera_model_type,
            const std::string& image_name,
            const std::filesystem::path& image_path,
-           int width, int height,
+           int camera_width, int camera_height,
            int uid);
 
     // Delete copy, allow move
@@ -59,7 +59,7 @@ private:
     float _focal_y = 0.f;
     float _center_x = 0.f;
     float _center_y = 0.f;
-    float _scale_factor = 1.0f;
+
     torch::Tensor _radial_distortion = torch::empty({0}, torch::kFloat32);
     torch::Tensor _tangential_distortion = torch::empty({0}, torch::kFloat32);
     gsplat::CameraModelType _camera_model_type = gsplat::CameraModelType::PINHOLE;
@@ -67,6 +67,8 @@ private:
     // Image info
     std::string _image_name;
     std::filesystem::path _image_path;
+    int _camera_width = 0;
+    int _camera_height = 0;
     int _image_width = 0;
     int _image_height = 0;
 
