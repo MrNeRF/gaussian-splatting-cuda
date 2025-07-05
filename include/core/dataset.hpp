@@ -108,6 +108,8 @@ inline std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor> create_dataset_
             info._focal_y,
             info._center_x,
             info._center_y,
+            info._radial_distortion,
+            info._tangential_distortion,
             info._image_name,
             info._image_path,
             info._width,

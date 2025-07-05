@@ -180,6 +180,10 @@ namespace gs {
     }
 
     bool Trainer::train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode) {
+        if (cam->radial_distortion().numel() != 0 ||
+            cam->tangential_distortion().numel() != 0) {
+            throw std::runtime_error("Training on cameras with distortion is not supported yet.");
+        }
         current_iteration_ = iter;
 
         // Check control requests at the beginning
