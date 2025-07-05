@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/torch_shapes.hpp"
+#include "Common.h"
 #include <filesystem>
 #include <future>
 #include <string>
@@ -16,6 +17,7 @@ public:
            float center_x, float center_y,
            torch::Tensor radial_distortion,
            torch::Tensor tangential_distortion,
+           gsplat::CameraModelType camera_model_type,
            const std::string& image_name,
            const std::filesystem::path& image_path,
            int width, int height,
@@ -46,6 +48,7 @@ public:
     float focal_y() const noexcept { return _focal_y; }
     torch::Tensor radial_distortion() const noexcept { return _radial_distortion; }
     torch::Tensor tangential_distortion() const noexcept { return _tangential_distortion; }
+    gsplat::CameraModelType camera_model_type() const noexcept { return _camera_model_type; }
     const std::string& image_name() const noexcept { return _image_name; }
     int uid() const noexcept { return _uid; }
 
@@ -59,6 +62,7 @@ private:
     float _scale_factor = 1.0f;
     torch::Tensor _radial_distortion = torch::empty({0}, torch::kFloat32);
     torch::Tensor _tangential_distortion = torch::empty({0}, torch::kFloat32);
+    gsplat::CameraModelType _camera_model_type = gsplat::CameraModelType::PINHOLE;
 
     // Image info
     std::string _image_name;
