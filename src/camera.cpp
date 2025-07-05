@@ -42,7 +42,7 @@ torch::Tensor Camera::K() const {
     K[0][0][0] = _focal_x * _scale_factor;
     K[0][1][1] = _focal_y * _scale_factor;
     K[0][0][2] = _center_x * _scale_factor;
-    K[0][1][2] = _center_x * _scale_factor;
+    K[0][1][2] = _center_y * _scale_factor;
     K[0][2][2] = 1.0f;
     return K;
 }
