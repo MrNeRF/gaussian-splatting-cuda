@@ -40,9 +40,6 @@ inline torch::Tensor qvec2rotmat(const torch::Tensor& qraw) {
     return R;
 }
 
-inline float focal2fov(float focal, int pixels) {
-    return 2.0f * std::atan(pixels / (2.0f * focal));
-}
 
 class Image {
 public:
@@ -300,17 +297,113 @@ read_colmap_cameras(const std::filesystem::path base_path,
         camera_locations[i] = -torch::matmul(out[i]._R.t(), out[i]._T);
 
         switch (out[i]._camera_model) {
+        // f, cx, cy
         case CAMERA_MODEL::SIMPLE_PINHOLE: {
             float fx = out[i]._params[0].item<float>();
-            out[i]._fov_x = focal2fov(fx, out[i]._width);
-            out[i]._fov_y = focal2fov(fx, out[i]._height);
+            out[i]._focal_x = fx;
+            out[i]._focal_y = fx;
+            out[i]._center_x = out[i]._params[1].item<float>();
+            out[i]._center_y = out[i]._params[2].item<float>();
+            out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
             break;
         }
+        // fx, fy, cx, cy
         case CAMERA_MODEL::PINHOLE: {
+            out[i]._focal_x = out[i]._params[0].item<float>();
+            out[i]._focal_y = out[i]._params[1].item<float>();
+            out[i]._center_x = out[i]._params[2].item<float>();
+            out[i]._center_y = out[i]._params[3].item<float>();
+            out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
+            break;
+        }
+        // f, cx, cy, k1
+        case CAMERA_MODEL::SIMPLE_RADIAL: {
             float fx = out[i]._params[0].item<float>();
-            float fy = out[i]._params[1].item<float>();
-            out[i]._fov_x = focal2fov(fx, out[i]._width);
-            out[i]._fov_y = focal2fov(fy, out[i]._height);
+            out[i]._focal_x = fx;
+            out[i]._focal_y = fx;
+            out[i]._center_x = out[i]._params[1].item<float>();
+            out[i]._center_y = out[i]._params[2].item<float>();
+            float k1 = out[i]._params[3].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1}, torch::kFloat32);
+            out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
+            break;
+        }
+        // f, cx, cy, k1, k2
+        case CAMERA_MODEL::RADIAL: {
+            float fx = out[i]._params[0].item<float>();
+            out[i]._focal_x = fx;
+            out[i]._focal_y = fx;
+            out[i]._center_x = out[i]._params[1].item<float>();
+            out[i]._center_y = out[i]._params[2].item<float>();
+            float k1 = out[i]._params[3].item<float>();
+            float k2 = out[i]._params[4].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1, k2}, torch::kFloat32);
+            out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
+            break;
+        }
+        // fx, fy, cx, cy, k1, k2, p1, p2
+        case CAMERA_MODEL::OPENCV: {
+            out[i]._focal_x = out[i]._params[0].item<float>();
+            out[i]._focal_y = out[i]._params[1].item<float>();
+            out[i]._center_x = out[i]._params[2].item<float>();
+            out[i]._center_y = out[i]._params[3].item<float>();
+
+            float k1 = out[i]._params[4].item<float>();
+            float k2 = out[i]._params[5].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1, k2}, torch::kFloat32);
+
+            float p1 = out[i]._params[6].item<float>();
+            float p2 = out[i]._params[7].item<float>();
+            out[i]._tangential_distortion = torch::tensor({p1, p2}, torch::kFloat32);
+
+            out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
+            break;
+        }
+        // fx, fy, cx, cy, k1, k2, p1, p2, k3, k4
+        case CAMERA_MODEL::FULL_OPENCV: {
+            out[i]._focal_x = out[i]._params[0].item<float>();
+            out[i]._focal_y = out[i]._params[1].item<float>();
+            out[i]._center_x = out[i]._params[2].item<float>();
+            out[i]._center_y = out[i]._params[3].item<float>();
+
+            float k1 = out[i]._params[4].item<float>();
+            float k2 = out[i]._params[5].item<float>();
+            float k3 = out[i]._params[8].item<float>();
+            float k4 = out[i]._params[9].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1, k2, k3, k4}, torch::kFloat32);
+
+            float p1 = out[i]._params[6].item<float>();
+            float p2 = out[i]._params[7].item<float>();
+            out[i]._tangential_distortion = torch::tensor({p1, p2}, torch::kFloat32);
+            out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
+            break;
+        }
+        // fx, fy, cx, cy, k1, k2, k3, k4
+        case CAMERA_MODEL::OPENCV_FISHEYE: {
+            out[i]._focal_x = out[i]._params[0].item<float>();
+            out[i]._focal_y = out[i]._params[1].item<float>();
+            out[i]._center_x = out[i]._params[2].item<float>();
+            out[i]._center_y = out[i]._params[3].item<float>();
+
+            float k1 = out[i]._params[4].item<float>();
+            float k2 = out[i]._params[5].item<float>();
+            float k3 = out[i]._params[6].item<float>();
+            float k4 = out[i]._params[7].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1, k2, k3, k4}, torch::kFloat32);            
+            out[i]._camera_model_type = gsplat::CameraModelType::FISHEYE;
+            break;
+        }
+        // f, cx, cy, k1, k2
+        case CAMERA_MODEL::RADIAL_FISHEYE: {
+            float fx = out[i]._params[0].item<float>();
+            out[i]._focal_x = fx;
+            out[i]._focal_y = fx;
+            out[i]._center_x = out[i]._params[1].item<float>();
+            out[i]._center_y = out[i]._params[2].item<float>();
+            float k1 = out[i]._params[3].item<float>();
+            float k2 = out[i]._params[4].item<float>();
+            out[i]._radial_distortion = torch::tensor({k1, k2}, torch::kFloat32);
+            out[i]._camera_model_type = gsplat::CameraModelType::FISHEYE;
             break;
         }
         default:
