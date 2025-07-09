@@ -21,7 +21,7 @@
 #include "Cameras.h"
 
 template <typename T, std::size_t N>
-__device__ std::array<T, N> make_array(const T *ptr) {
+__device__ std::array<T, N> make_array(const T* ptr) {
     std::array<T, N> arr;
 #pragma unroll
     for (std::size_t i = 0; i < N; ++i) {
@@ -37,7 +37,7 @@ struct RollingShutterParameters {
     glm::fquat q_end;
 
     __device__
-    RollingShutterParameters(const float *se3_start, const float *se3_end) {
+    RollingShutterParameters(const float* se3_start, const float* se3_end) {
         // input is row-major, but glm is column-major
         q_start = glm::quat_cast(glm::mat3(
             se3_start[0],
@@ -48,8 +48,7 @@ struct RollingShutterParameters {
             se3_start[9],
             se3_start[2],
             se3_start[6],
-            se3_start[10]
-        ));
+            se3_start[10]));
         t_start = glm::fvec3(se3_start[3], se3_start[7], se3_start[11]);
 
         if (se3_end == nullptr) {
@@ -65,8 +64,7 @@ struct RollingShutterParameters {
                 se3_end[9],
                 se3_end[2],
                 se3_end[6],
-                se3_end[10]
-            ));
+                se3_end[10]));
             t_end = glm::fvec3(se3_end[3], se3_end[7], se3_end[11]);
         }
     }
@@ -92,7 +90,7 @@ inline __device__ float numerically_stable_norm2(float x, float y) {
 
 template <size_t N_COEFFS>
 inline __host__ __device__ float
-eval_poly_horner(std::array<float, N_COEFFS> const &poly, float x) {
+eval_poly_horner(std::array<float, N_COEFFS> const& poly, float x) {
     // Evaluates a polynomial y=f(x) with
     //
     // f(x) = c_0*x^0 + c_1*x^1 + c_2*x^2 + c_3*x^3 + c_4*x^4 ...
@@ -110,7 +108,7 @@ eval_poly_horner(std::array<float, N_COEFFS> const &poly, float x) {
 
 template <size_t N_COEFFS>
 inline __host__ __device__ float
-eval_poly_odd_horner(std::array<float, N_COEFFS> const &poly_odd, float x) {
+eval_poly_odd_horner(std::array<float, N_COEFFS> const& poly_odd, float x) {
     // Evaluates an odd-only polynomial y=f(x) with
     //
     // f(x) = c_0*x^1 + c_1*x^3 + c_2*x^5 + c_3*x^7 + c_4*x^9 ...
@@ -121,14 +119,13 @@ eval_poly_odd_horner(std::array<float, N_COEFFS> const &poly_odd, float x) {
     // The degree of the polynomial is 2*N_COEFFS - 1
 
     return x * eval_poly_horner(
-                   poly_odd, x * x
-               ); // evaluate x^2-based "regular" polynomial after facting out
-                  // one x term
+                   poly_odd, x * x); // evaluate x^2-based "regular" polynomial after facting out
+                                     // one x term
 }
 
 template <size_t N_COEFFS>
 inline __host__ __device__ float
-eval_poly_even_horner(std::array<float, N_COEFFS> const &poly_even, float x) {
+eval_poly_even_horner(std::array<float, N_COEFFS> const& poly_even, float x) {
     // Evaluates an even-only polynomial y=f(x) with
     //
     // f(x) = c_0 + c_1*x^2 + c_2*x^4 + c_3*x^6 + c_4*x^8 ...
@@ -139,8 +136,7 @@ eval_poly_even_horner(std::array<float, N_COEFFS> const &poly_even, float x) {
     // The degree of the polynomial is 2*(N_COEFFS - 1)
 
     return eval_poly_horner(
-        poly_even, x * x
-    ); // evaluate x^2-substituted "regular" polynomial
+        poly_even, x * x); // evaluate x^2-substituted "regular" polynomial
 }
 
 // Enum to represent the type of polynomial
@@ -152,7 +148,7 @@ enum class PolynomialType {
 
 template <PolynomialType POLYNOMIAL_TYPE, size_t N_COEFFS>
 struct PolynomialProxy {
-    std::array<float, N_COEFFS> const &coeffs;
+    std::array<float, N_COEFFS> const& coeffs;
 
     // Evaluate the polynomial using Horner's method based on the polynomial
     // type
@@ -176,12 +172,11 @@ template <
     class DPolyProxy,
     class TInvPolyApproxProxy>
 inline __host__ __device__ float eval_poly_inverse_horner_newton(
-    PolyProxy const &poly,
-    DPolyProxy const &dpoly,
-    TInvPolyApproxProxy const &inv_poly_approx,
+    PolyProxy const& poly,
+    DPolyProxy const& dpoly,
+    TInvPolyApproxProxy const& inv_poly_approx,
     float y,
-    bool &converged
-) {
+    bool& converged) {
     // Evaluates the inverse x = f^{-1}(y) of a reference polynomial y=f(x)
     // (given by poly_coefficients) at points y using numerically stable Horner
     // scheme and Newton iterations starting from an approximate solution
@@ -189,8 +184,7 @@ inline __host__ __device__ float eval_poly_inverse_horner_newton(
     // polynomials derivative df/dx (given by poly_derivative_coefficients)
 
     static_assert(
-        N_NEWTON_ITERATIONS >= 0, "Require at least a single Newton iteration"
-    );
+        N_NEWTON_ITERATIONS >= 0, "Require at least a single Newton iteration");
 
     // approximation / starting points - also returned for zero iterations
     auto x = inv_poly_approx.eval_horner(y);
@@ -232,10 +226,9 @@ inline __host__ __device__ float eval_poly_inverse_horner_newton(
  * margin, false otherwise.
  */
 __forceinline__ __device__ bool image_point_in_image_bounds_margin(
-    glm::vec2 const &image_point,
-    std::array<uint32_t, 2> const &resolution,
-    float margin_factor
-) {
+    glm::vec2 const& image_point,
+    std::array<uint32_t, 2> const& resolution,
+    float margin_factor) {
     const float MARGIN_X = resolution[0] * margin_factor;
     const float MARGIN_Y = resolution[1] * margin_factor;
     bool valid = true;
@@ -265,8 +258,7 @@ struct ShutterPose {
         return glm::rotate(glm::inverse(q), -t);
     }
 
-    inline __device__ auto camera_ray_to_world_ray(glm::fvec3 const &camera_ray
-    ) const -> WorldRay {
+    inline __device__ auto camera_ray_to_world_ray(glm::fvec3 const& camera_ray) const -> WorldRay {
         auto const R_inv = glm::mat3_cast(glm::inverse(q));
 
         return {-R_inv * t, R_inv * camera_ray, true};
@@ -275,8 +267,7 @@ struct ShutterPose {
 
 inline __device__ auto interpolate_shutter_pose(
     float relative_frame_time,
-    RollingShutterParameters const &rolling_shutter_parameters
-) -> ShutterPose {
+    RollingShutterParameters const& rolling_shutter_parameters) -> ShutterPose {
     auto const t_start = rolling_shutter_parameters.t_start;
     auto const q_start = rolling_shutter_parameters.q_start;
     auto const t_end = rolling_shutter_parameters.t_end;
@@ -288,7 +279,8 @@ inline __device__ auto interpolate_shutter_pose(
     return ShutterPose{t_rs, q_rs};
 }
 
-template <class DerivedCameraModel> struct BaseCameraModel {
+template <class DerivedCameraModel>
+struct BaseCameraModel {
     // CRTP base class for all camera model types
 
     struct Parameters {
@@ -299,11 +291,11 @@ template <class DerivedCameraModel> struct BaseCameraModel {
     // Function to compute the relative frame time for a given image point based
     // on the shutter type
     inline __device__ auto
-    shutter_relative_frame_time(glm::fvec2 const &image_point) const -> float {
-        auto derived = static_cast<DerivedCameraModel const *>(this);
+    shutter_relative_frame_time(glm::fvec2 const& image_point) const -> float {
+        auto derived = static_cast<DerivedCameraModel const*>(this);
 
         auto t = 0.f;
-        auto const &resolution = derived->parameters.resolution;
+        auto const& resolution = derived->parameters.resolution;
         switch (derived->parameters.shutter_type) {
         case ShutterType::ROLLING_TOP_TO_BOTTOM:
             t = std::floor(image_point.y) / (resolution[1] - 1);
@@ -328,12 +320,11 @@ template <class DerivedCameraModel> struct BaseCameraModel {
     };
 
     inline __device__ auto image_point_to_world_ray_shutter_pose(
-        glm::fvec2 const &image_point,
-        RollingShutterParameters const &rolling_shutter_parameters
-    ) const -> WorldRay {
+        glm::fvec2 const& image_point,
+        RollingShutterParameters const& rolling_shutter_parameters) const -> WorldRay {
         // Unproject ray and transform to world using shutter pose
 
-        auto derived = static_cast<DerivedCameraModel const *>(this);
+        auto derived = static_cast<DerivedCameraModel const*>(this);
 
         auto const camera_ray = derived->image_point_to_camera_ray(image_point);
         // If the camera ray is invalid, return an invalid world ray
@@ -343,8 +334,7 @@ template <class DerivedCameraModel> struct BaseCameraModel {
 
         return interpolate_shutter_pose(
                    shutter_relative_frame_time(image_point),
-                   rolling_shutter_parameters
-        )
+                   rolling_shutter_parameters)
             .camera_ray_to_world_ray(camera_ray.ray_dir);
     };
 
@@ -355,14 +345,13 @@ template <class DerivedCameraModel> struct BaseCameraModel {
 
     template <size_t N_ROLLING_SHUTTER_ITERATIONS = 10>
     inline __device__ auto world_point_to_image_point_shutter_pose(
-        glm::fvec3 const &world_point,
-        RollingShutterParameters const &rolling_shutter_parameters,
-        float margin_factor
-    ) const -> ImagePointReturn {
+        glm::fvec3 const& world_point,
+        RollingShutterParameters const& rolling_shutter_parameters,
+        float margin_factor) const -> ImagePointReturn {
         // Perform rolling-shutter-based world point to image point projection /
         // optimization
 
-        auto derived = static_cast<DerivedCameraModel const *>(this);
+        auto derived = static_cast<DerivedCameraModel const*>(this);
 
         auto const t_start = rolling_shutter_parameters.t_start;
         auto const q_start = rolling_shutter_parameters.q_start;
@@ -372,8 +361,7 @@ template <class DerivedCameraModel> struct BaseCameraModel {
         // Always perform transformation using start pose
         auto const [image_point_start, valid_start] =
             derived->camera_ray_to_image_point(
-                glm::rotate(q_start, world_point) + t_start, margin_factor
-            );
+                glm::rotate(q_start, world_point) + t_start, margin_factor);
 
         if (derived->parameters.shutter_type == ShutterType::GLOBAL) {
             // Exit early if we have a global shutter sensor
@@ -385,8 +373,7 @@ template <class DerivedCameraModel> struct BaseCameraModel {
         // iteration starting points
         auto const [image_point_end, valid_end] =
             derived->camera_ray_to_image_point(
-                glm::rotate(q_end, world_point) + t_end, margin_factor
-            );
+                glm::rotate(q_end, world_point) + t_end, margin_factor);
 
         // This selection prefers points at the start-of-frame pose over
         // end-of-frame points
@@ -417,8 +404,7 @@ template <class DerivedCameraModel> struct BaseCameraModel {
 
             auto const [image_point_rs, valid_rs] =
                 derived->camera_ray_to_image_point(
-                    glm::rotate(q_rs, world_point) + t_rs, margin_factor
-                );
+                    glm::rotate(q_rs, world_point) + t_rs, margin_factor);
 
             image_points_rs_prev = image_point_rs;
         }
@@ -437,14 +423,13 @@ struct PerfectPinholeCameraModel : BaseCameraModel<PerfectPinholeCameraModel> {
         std::array<float, 2> focal_length;
     };
 
-    __device__ PerfectPinholeCameraModel(Parameters const &parameters)
+    __device__ PerfectPinholeCameraModel(Parameters const& parameters)
         : parameters(parameters) {}
 
     Parameters parameters;
 
     inline __device__ auto camera_ray_to_image_point(
-        glm::fvec3 const &cam_ray, float margin_factor
-    ) const -> typename Base::ImagePointReturn {
+        glm::fvec3 const& cam_ray, float margin_factor) const -> typename Base::ImagePointReturn {
         auto image_point = glm::fvec2{0.f, 0.f};
 
         // Treat all the points behind the camera plane to invalid / projecting
@@ -456,30 +441,25 @@ struct PerfectPinholeCameraModel : BaseCameraModel<PerfectPinholeCameraModel> {
         image_point =
             (glm::fvec2(cam_ray.x, cam_ray.y) / cam_ray.z) *
                 glm::fvec2(
-                    parameters.focal_length[0], parameters.focal_length[1]
-                ) +
+                    parameters.focal_length[0], parameters.focal_length[1]) +
             glm::fvec2(
-                parameters.principal_point[0], parameters.principal_point[1]
-            );
+                parameters.principal_point[0], parameters.principal_point[1]);
 
         // Check if the image points fall within the image, set points that have
         // too large distortion or fall outside the image sensor to invalid
         auto valid = true;
         valid &= image_point_in_image_bounds_margin(
-            image_point, parameters.resolution, margin_factor
-        );
+            image_point, parameters.resolution, margin_factor);
 
         return {image_point, valid};
     }
 
-    inline __device__ CameraRay image_point_to_camera_ray(glm::fvec2 image_point
-    ) const {
+    inline __device__ CameraRay image_point_to_camera_ray(glm::fvec2 image_point) const {
         // Transform the image point to uv coordinate
         auto const uv =
             (image_point -
              glm::fvec2{
-                 parameters.principal_point[0], parameters.principal_point[1]
-             }) /
+                 parameters.principal_point[0], parameters.principal_point[1]}) /
             glm::fvec2{parameters.focal_length[0], parameters.focal_length[1]};
 
         // Unproject the image point to camera ray
@@ -507,12 +487,10 @@ struct OpenCVPinholeCameraModel
     };
 
     __device__ OpenCVPinholeCameraModel(
-        Parameters const &parameters,
-        float stop_undistortion_square_error_px2 = 1e-12
-    )
+        Parameters const& parameters,
+        float stop_undistortion_square_error_px2 = 1e-12)
         : parameters(parameters),
-          undistortion_stop_square_error_px2(stop_undistortion_square_error_px2
-          ) {}
+          undistortion_stop_square_error_px2(stop_undistortion_square_error_px2) {}
 
     Parameters parameters;
     float undistortion_stop_square_error_px2;
@@ -523,8 +501,7 @@ struct OpenCVPinholeCameraModel
         float r2;
     };
 
-    inline __device__ auto compute_distortion(glm::fvec2 const &uv
-    ) const -> DistortionReturn {
+    inline __device__ auto compute_distortion(glm::fvec2 const& uv) const -> DistortionReturn {
         // Computes the radial, tangential, and thin-prism distortion given the
         // camera ray
         auto const uv_squared = glm::fvec2(uv[0] * uv[0], uv[1] * uv[1]);
@@ -556,8 +533,7 @@ struct OpenCVPinholeCameraModel
     }
 
     inline __device__ auto camera_ray_to_image_point(
-        glm::fvec3 const &cam_ray, float margin_factor
-    ) const -> typename Base::ImagePointReturn {
+        glm::fvec3 const& cam_ray, float margin_factor) const -> typename Base::ImagePointReturn {
         auto image_point = glm::fvec2{0.f, 0.f};
 
         // Treat all the points behind the camera plane to invalid / projecting
@@ -587,11 +563,9 @@ struct OpenCVPinholeCameraModel
         // if (valid_radial) {
         image_point =
             uvND * glm::fvec2(
-                       parameters.focal_length[0], parameters.focal_length[1]
-                   ) +
+                       parameters.focal_length[0], parameters.focal_length[1]) +
             glm::fvec2(
-                parameters.principal_point[0], parameters.principal_point[1]
-            );
+                parameters.principal_point[0], parameters.principal_point[1]);
         // } else {
         //     // If the radial distortion is out-of-limits, the computed
         //     // coordinates will be unreasonable (might even flip signs) -
@@ -617,14 +591,13 @@ struct OpenCVPinholeCameraModel
         // too large distortion or fall outside the image sensor to invalid
         auto valid = valid_radial;
         valid &= image_point_in_image_bounds_margin(
-            image_point, parameters.resolution, margin_factor
-        );
+            image_point, parameters.resolution, margin_factor);
 
         return {image_point, valid};
     }
 
     inline __device__ glm::fvec2
-    compute_undistortion_iterative(glm::fvec2 const &image_point) const {
+    compute_undistortion_iterative(glm::fvec2 const& image_point) const {
         // Iteratively undistorts the image point using the inverse distortion
         // model
 
@@ -632,8 +605,7 @@ struct OpenCVPinholeCameraModel
         auto const uv_0 =
             (image_point -
              glm::fvec2{
-                 parameters.principal_point[0], parameters.principal_point[1]
-             }) /
+                 parameters.principal_point[0], parameters.principal_point[1]}) /
             glm::fvec2{parameters.focal_length[0], parameters.focal_length[1]};
 
         auto uv = uv_0;
@@ -661,11 +633,10 @@ struct OpenCVPinholeCameraModel
     };
 
     inline __device__ auto compute_residual_and_jacobian(
-        float x, float y, float xd, float yd
-    ) const -> JacobianReturn {
-        auto const &[k1, k2, k3, k4, k5, k6] = parameters.radial_coeffs;
-        auto const &[p1, p2] = parameters.tangential_coeffs;
-        auto const &[s1, s2, s3, s4] = parameters.thin_prism_coeffs;
+        float x, float y, float xd, float yd) const -> JacobianReturn {
+        auto const& [k1, k2, k3, k4, k5, k6] = parameters.radial_coeffs;
+        auto const& [p1, p2] = parameters.tangential_coeffs;
+        auto const& [s1, s2, s3, s4] = parameters.thin_prism_coeffs;
 
         // let r(x, y) = x^2 + y^2;
         //     alpha(x, y) = 1 + k1 * r(x, y) + k2 * r(x, y) ^2 + k3 * r(x,
@@ -725,16 +696,14 @@ struct OpenCVPinholeCameraModel
     }
 
     inline __device__ glm::fvec2 compute_undistortion_newton(
-        glm::fvec2 const &image_point, bool &converged
-    ) const {
+        glm::fvec2 const& image_point, bool& converged) const {
         // Iteratively undistorts the image point using the newton method
 
         // Initial guess for the undistorted point
         auto const uv_0 =
             (image_point -
              glm::fvec2{
-                 parameters.principal_point[0], parameters.principal_point[1]
-             }) /
+                 parameters.principal_point[0], parameters.principal_point[1]}) /
             glm::fvec2{parameters.focal_length[0], parameters.focal_length[1]};
 
         auto xd = uv_0.x, yd = uv_0.y;
@@ -770,8 +739,7 @@ struct OpenCVPinholeCameraModel
         return {x, y};
     }
 
-    inline __device__ CameraRay image_point_to_camera_ray(glm::fvec2 image_point
-    ) const {
+    inline __device__ CameraRay image_point_to_camera_ray(glm::fvec2 image_point) const {
         // Undistort the image point to uv coordinate. Newton method is more
         // accurate than iterative method, but slower.
         // auto uv = compute_undistortion_iterative(image_point);
@@ -860,17 +828,16 @@ struct OpenCVFisheyeCameraModel
     };
 
     __host__ __device__ OpenCVFisheyeCameraModel(
-        Parameters const &parameters, float min_2d_norm = 1e-6f
-    )
+        Parameters const& parameters, float min_2d_norm = 1e-6f)
         : parameters(parameters), min_2d_norm(min_2d_norm) {
         // initialize ninth-degree odd-only forward polynomial (mapping angles
         // to normalized distances) theta + k1*theta^3 + k2*theta^5 + k3*theta^7
         // + k4*theta^9
-        auto const &[k1, k2, k3, k4] = parameters.radial_coeffs;
+        auto const& [k1, k2, k3, k4] = parameters.radial_coeffs;
         forward_poly_odd = {1.f, k1, k2, k3, k4};
 
         // eighth-degree differential of forward polynomial 1 + 3*k1*theta^2 +
-        // 5*k2*theta^4 + 7*k3*theta^8 + 9*k4*theta^8
+        // 5*k2*theta^4 + 7*k3*theta^6 + 9*k4*theta^8
         dforward_poly_even = {1, 3 * k1, 5 * k2, 7 * k3, 9 * k4};
 
         auto const max_diag_x =
@@ -884,12 +851,10 @@ struct OpenCVFisheyeCameraModel
 
         if (k4 == 0) {
             max_angle = std::sqrt(
-                compute_opencv_fisheye_max_angle(3.f * k1, 5.f * k2, 7.f * k3)
-            );
+                compute_opencv_fisheye_max_angle(3.f * k1, 5.f * k2, 7.f * k3));
         } else {
             std::array<float, 4> ddforward_poly_odd = {
-                6 * k1, 20 * k2, 56 * k3, 72 * k4
-            };
+                6 * k1, 20 * k2, 42 * k3, 72 * k4};
             std::array<float, 1> approx = {1.57f};
 
             bool converged = false;
@@ -898,8 +863,7 @@ struct OpenCVFisheyeCameraModel
                 PolynomialProxy<PolynomialType::ODD, 4>{ddforward_poly_odd},
                 PolynomialProxy<PolynomialType::EVEN, 1>{approx},
                 0.f,
-                converged
-            );
+                converged);
             if (!converged || max_angle <= 0.f) {
                 max_angle = std::numeric_limits<float>::max();
             }
@@ -915,8 +879,7 @@ struct OpenCVFisheyeCameraModel
         // (also assuming image-centered principal point)
         auto const max_normalized_dist = std::max(
             parameters.resolution[0] / 2.f / parameters.focal_length[0],
-            parameters.resolution[1] / 2.f / parameters.focal_length[1]
-        );
+            parameters.resolution[1] / 2.f / parameters.focal_length[1]);
         approx_backward_poly = {0.f, max_angle / max_normalized_dist};
     }
 
@@ -928,8 +891,7 @@ struct OpenCVFisheyeCameraModel
     float max_angle;
 
     inline __device__ auto camera_ray_to_image_point(
-        glm::fvec3 const &cam_ray, float margin_factor
-    ) const -> typename Base::ImagePointReturn {
+        glm::fvec3 const& cam_ray, float margin_factor) const -> typename Base::ImagePointReturn {
         if (cam_ray.z <= 0.f)
             return {{0.f, 0.f}, false};
 
@@ -967,8 +929,7 @@ struct OpenCVFisheyeCameraModel
             parameters.focal_length[0] * delta * cam_ray.x +
                 parameters.principal_point[0],
             parameters.focal_length[1] * delta * cam_ray.y +
-                parameters.principal_point[1]
-        };
+                parameters.principal_point[1]};
 
         // auto point = glm::fvec2{
         //     cam_ray.x / cam_ray.z, // * parameters.focal_length[0] +
@@ -988,8 +949,7 @@ struct OpenCVFisheyeCameraModel
 
         auto valid = true;
         valid &= image_point_in_image_bounds_margin(
-            image_point, parameters.resolution, margin_factor
-        );
+            image_point, parameters.resolution, margin_factor);
         valid &=
             theta <= max_angle; // explicitly check for strictly smaller angles
                                 // to classify FOV-clamped points as invalid
@@ -997,14 +957,12 @@ struct OpenCVFisheyeCameraModel
         return {image_point, valid};
     }
 
-    inline __device__ CameraRay image_point_to_camera_ray(glm::fvec2 image_point
-    ) const {
+    inline __device__ CameraRay image_point_to_camera_ray(glm::fvec2 image_point) const {
         // Normalize the image point coordinates
         auto const uv =
             (image_point -
              glm::fvec2{
-                 parameters.principal_point[0], parameters.principal_point[1]
-             }) /
+                 parameters.principal_point[0], parameters.principal_point[1]}) /
             glm::fvec2{parameters.focal_length[0], parameters.focal_length[1]};
 
         // Compute the radial distance from the principal point
@@ -1017,8 +975,7 @@ struct OpenCVFisheyeCameraModel
             PolynomialProxy<PolynomialType::EVEN, 5>{dforward_poly_even},
             PolynomialProxy<PolynomialType::FULL, 2>{approx_backward_poly},
             delta,
-            converged
-        );
+            converged);
 
         // Flipped points is not physically meaningful.
         if (theta < 0.f || theta >= max_angle || !converged) {
@@ -1032,10 +989,8 @@ struct OpenCVFisheyeCameraModel
             auto const scale_factor = std::sin(theta) / delta;
             return {
                 glm::fvec3{
-                    scale_factor * uv.x, scale_factor * uv.y, std::cos(theta)
-                },
-                true
-            };
+                    scale_factor * uv.x, scale_factor * uv.y, std::cos(theta)},
+                true};
         } else {
             // For points at the image center, return a ray pointing straight
             // ahead
@@ -1076,15 +1031,14 @@ struct SigmaPoints {
 };
 
 inline __device__ auto world_gaussian_sigma_points(
-    UnscentedTransformParameters const &unscented_transform_parameters,
-    glm::fvec3 const &gaussian_world_mean,
-    glm::fvec3 const &gaussian_world_scale,
-    glm::fquat const &gaussian_world_rot
-) -> SigmaPoints {
+    UnscentedTransformParameters const& unscented_transform_parameters,
+    glm::fvec3 const& gaussian_world_mean,
+    glm::fvec3 const& gaussian_world_scale,
+    glm::fquat const& gaussian_world_rot) -> SigmaPoints {
     size_t constexpr static D = 3;
-    auto const &alpha = unscented_transform_parameters.alpha;
-    auto const &beta = unscented_transform_parameters.beta;
-    auto const &kappa = unscented_transform_parameters.kappa;
+    auto const& alpha = unscented_transform_parameters.alpha;
+    auto const& beta = unscented_transform_parameters.beta;
+    auto const& kappa = unscented_transform_parameters.kappa;
     auto const lambda = alpha * alpha * (D + kappa) - D;
 
     // Compute rotation matrix R from quaternion (scaling matrix S is diag(s_i))
@@ -1136,20 +1090,18 @@ struct ImageGaussianReturn {
 template <class CameraModel>
 inline __device__ auto
 world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
-    CameraModel const &camera_model,
-    RollingShutterParameters const &rolling_shutter_parameters,
-    UnscentedTransformParameters const &unscented_transform_parameters,
-    glm::fvec3 const &gaussian_world_mean,
-    glm::fvec3 const &gaussian_world_scale,
-    glm::fquat const &gaussian_world_rot
-) -> ImageGaussianReturn {
+    CameraModel const& camera_model,
+    RollingShutterParameters const& rolling_shutter_parameters,
+    UnscentedTransformParameters const& unscented_transform_parameters,
+    glm::fvec3 const& gaussian_world_mean,
+    glm::fvec3 const& gaussian_world_scale,
+    glm::fquat const& gaussian_world_rot) -> ImageGaussianReturn {
     // Compute sigma points for input distribution
     auto const sigma_points = world_gaussian_sigma_points(
         unscented_transform_parameters,
         gaussian_world_mean,
         gaussian_world_scale,
-        gaussian_world_rot
-    );
+        gaussian_world_rot);
 
     // Transform sigma points / compute approximation of output distribution via
     // sample mean / covariance
@@ -1165,8 +1117,7 @@ world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
             camera_model.template world_point_to_image_point_shutter_pose<>(
                 sigma_points.points[i],
                 rolling_shutter_parameters,
-                unscented_transform_parameters.in_image_margin_factor
-            );
+                unscented_transform_parameters.in_image_margin_factor);
 
         if (unscented_transform_parameters.require_all_sigma_points_valid) {
             valid &= point_valid; // all have to be valid
