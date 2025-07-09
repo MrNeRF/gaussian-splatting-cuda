@@ -123,14 +123,13 @@ namespace gs {
         const bool calc_compensations = antialiased;
 
         // Step 1: Projection
-        auto proj_settings = torch::tensor({(float)image_width,
-                                            (float)image_height,
+        auto proj_settings = ProjectionSettings {image_width,
+                                            image_height,
                                             eps2d,
                                             near_plane,
                                             far_plane,
                                             radius_clip,
-                                            scaling_modifier},
-                                           torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+                                            scaling_modifier};
 
         auto proj_outputs = ProjectionFunction::apply(
             means3D, rotations, scales, opacities, viewmat, K, proj_settings);
@@ -235,10 +234,9 @@ namespace gs {
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
 
         // Step 6: Rasterization
-        auto raster_settings = torch::tensor({(float)image_width,
-                                              (float)image_height,
-                                              (float)tile_size},
-                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+        auto raster_settings = RasterizationSettings { image_width,
+                                              image_height,
+                                              tile_size };
 
         auto raster_outputs = RasterizationFunction::apply(
             means2d, conics, render_colors, final_opacities, final_bg,

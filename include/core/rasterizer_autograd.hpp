@@ -6,6 +6,15 @@
 #include <torch/torch.h>
 
 namespace gs {
+    struct ProjectionSettings {
+        int width;
+        int height;
+        float eps2d;
+        float near_plane;
+        float far_plane;
+        float radius_clip;
+        float scaling_modifier;
+    };
 
     // Autograd function for projection
     class ProjectionFunction : public torch::autograd::Function<ProjectionFunction> {
@@ -18,7 +27,7 @@ namespace gs {
             torch::Tensor opacities, // [N]
             torch::Tensor viewmat,   // [C, 4, 4]
             torch::Tensor K,         // [C, 3, 3]
-            torch::Tensor settings); // [7] tensor containing projection settings
+            ProjectionSettings settings);
 
         static torch::autograd::tensor_list backward(
             torch::autograd::AutogradContext* ctx,
@@ -40,6 +49,12 @@ namespace gs {
             torch::autograd::tensor_list grad_outputs);
     };
 
+    struct RasterizationSettings {
+        int width;
+        int height;
+        int tile_size;
+    };
+
     // Autograd function for rasterization
     class RasterizationFunction : public torch::autograd::Function<RasterizationFunction> {
     public:
@@ -52,11 +67,17 @@ namespace gs {
             torch::Tensor bg_color,      // [C, channels] - may include depth
             torch::Tensor isect_offsets, // [C, tile_height, tile_width]
             torch::Tensor flatten_ids,   // [nnz]
-            torch::Tensor settings);     // [3] containing width, height, tile_size
+            RasterizationSettings settings);
 
         static torch::autograd::tensor_list backward(
             torch::autograd::AutogradContext* ctx,
             torch::autograd::tensor_list grad_outputs);
+    };
+
+    struct QuatScaleToCovarPreciSettings {
+        bool compute_covar;
+        bool compute_preci;
+        bool triu;
     };
 
     // Autograd function for quat_scale_to_covar_preci - shared between rasterizer and tests
@@ -66,7 +87,7 @@ namespace gs {
             torch::autograd::AutogradContext* ctx,
             torch::Tensor quats,
             torch::Tensor scales,
-            torch::Tensor settings); // [3] tensor containing [compute_covar, compute_preci, triu]
+            QuatScaleToCovarPreciSettings settings);
 
         static torch::autograd::tensor_list backward(
             torch::autograd::AutogradContext* ctx,

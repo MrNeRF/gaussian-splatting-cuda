@@ -13,7 +13,7 @@ namespace gs {
         torch::Tensor opacities,  // [N] or undefined (optional)
         torch::Tensor viewmat,    // [C, 4, 4]
         torch::Tensor K,          // [C, 3, 3]
-        torch::Tensor settings) { // [7] tensor containing projection settings
+        ProjectionSettings settings) {
 
         // Input validation
         const int N = static_cast<int>(means3D.size(0));
@@ -36,8 +36,6 @@ namespace gs {
                     "viewmat must be [C, 4, 4], got ", viewmat.sizes());
         TORCH_CHECK(K.dim() == 3 && K.size(0) == C && K.size(1) == 3 && K.size(2) == 3,
                     "K must be [C, 3, 3], got ", K.sizes());
-        TORCH_CHECK(settings.dim() == 1 && settings.size(0) == 7,
-                    "settings must be [7], got ", settings.sizes());
 
         // Device checks
         TORCH_CHECK(means3D.is_cuda(), "means3D must be on CUDA");
@@ -48,16 +46,15 @@ namespace gs {
         }
         TORCH_CHECK(viewmat.is_cuda(), "viewmat must be on CUDA");
         TORCH_CHECK(K.is_cuda(), "K must be on CUDA");
-        TORCH_CHECK(settings.is_cuda(), "settings must be on CUDA");
 
         // Extract settings - keep on same device as input
-        const auto width = settings[0].item<int>();
-        const auto height = settings[1].item<int>();
-        const auto eps2d = settings[2].item<float>();
-        const auto near_plane = settings[3].item<float>();
-        const auto far_plane = settings[4].item<float>();
-        const auto radius_clip = settings[5].item<float>();
-        const auto scaling_modifier = settings[6].item<float>();
+        ctx->saved_data["width"] = settings.width;
+        ctx->saved_data["height"] = settings.height;
+        ctx->saved_data["eps2d"] = settings.eps2d;
+        ctx->saved_data["near_plane"] = settings.near_plane;
+        ctx->saved_data["far_plane"] = settings.far_plane;
+        ctx->saved_data["radius_clip"] = settings.radius_clip;
+        ctx->saved_data["scaling_modifier"] = settings.scaling_modifier;
 
         // Ensure all tensors are contiguous
         means3D = means3D.contiguous();
@@ -70,7 +67,7 @@ namespace gs {
         K = K.contiguous();
 
         // Apply scaling modifier
-        auto scaled_scales = scales * scaling_modifier;
+        auto scaled_scales = scales * settings.scaling_modifier;
 
         // Call projection - pass undefined tensor if opacities not provided
         auto proj_results = gsplat::projection_ewa_3dgs_fused_fwd(
@@ -81,12 +78,12 @@ namespace gs {
             opacities, // Pass as-is (might be undefined)
             viewmat,
             K,
-            width,
-            height,
-            eps2d,
-            near_plane,
-            far_plane,
-            radius_clip,
+            settings.width,
+            settings.height,
+            settings.eps2d,
+            settings.near_plane,
+            settings.far_plane,
+            settings.radius_clip,
             false, // calc_compensations
             gsplat::CameraModelType::PINHOLE);
 
@@ -117,7 +114,7 @@ namespace gs {
         TORCH_CHECK(conics.is_cuda(), "conics must be on CUDA");
 
         // Save for backward
-        ctx->save_for_backward({means3D, quats, scaled_scales, opacities, viewmat, K, settings,
+        ctx->save_for_backward({means3D, quats, scaled_scales, opacities, viewmat, K,
                                 radii, conics, compensations});
 
         return {radii, means2d, depths, conics, compensations};
@@ -140,16 +137,15 @@ namespace gs {
         const auto& opacities = saved[3];
         const auto& viewmat = saved[4];
         const auto& K = saved[5];
-        const auto& settings = saved[6];
-        const auto& radii = saved[7];
-        const auto& conics = saved[8];
-        const auto& compensations = saved[9];
+        const auto& radii = saved[6];
+        const auto& conics = saved[7];
+        const auto& compensations = saved[8];
 
         // Extract settings
-        const auto width = settings[0].item<int>();
-        const auto height = settings[1].item<int>();
-        const auto eps2d = settings[2].item<float>();
-        const auto scaling_modifier = settings[6].item<float>();
+        const auto width = ctx->saved_data["width"].toInt();
+        const auto height = ctx->saved_data["height"].toInt();
+        const auto eps2d = ctx->saved_data["eps2d"].toDouble();
+        const auto scaling_modifier = ctx->saved_data["scaling_modifier"].toDouble();
 
         // Convert v_compensations to optional
         c10::optional<at::Tensor> v_compensations;
@@ -357,12 +353,11 @@ namespace gs {
         torch::Tensor bg_color,      // [C, channels] - may include depth, can be empty
         torch::Tensor isect_offsets, // [C, tile_height, tile_width]
         torch::Tensor flatten_ids,   // [nnz]
-        torch::Tensor settings) {    // [3] containing width, height, tile_size
+        RasterizationSettings settings) {
 
-        // Extract settings
-        const auto width = settings[0].item<int>();
-        const auto height = settings[1].item<int>();
-        const auto tile_size = settings[2].item<int>();
+        ctx->saved_data["width"] = settings.width;
+        ctx->saved_data["height"] = settings.height;
+        ctx->saved_data["tile_size"] = settings.tile_size;
 
         const int C = static_cast<int>(means2d.size(0));
         const int N = static_cast<int>(means2d.size(1));
@@ -393,7 +388,6 @@ namespace gs {
         TORCH_CHECK(opacities.is_cuda(), "opacities must be on CUDA");
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
         TORCH_CHECK(flatten_ids.is_cuda(), "flatten_ids must be on CUDA");
-        TORCH_CHECK(settings.is_cuda(), "settings must be on CUDA");
 
         // Ensure tensors are contiguous
         means2d = means2d.contiguous();
@@ -414,7 +408,7 @@ namespace gs {
         auto raster_results = gsplat::rasterize_to_pixels_3dgs_fwd(
             means2d, conics, colors, opacities,
             bg_color_opt, {}, // bg_color_opt might not have value, masks is empty optional
-            width, height, tile_size,
+            settings.width, settings.height, settings.tile_size,
             isect_offsets, flatten_ids);
 
         auto rendered_image = std::get<0>(raster_results).contiguous();
@@ -423,11 +417,11 @@ namespace gs {
 
         // Validate outputs - use actual channel count
         TORCH_CHECK(rendered_image.dim() == 4 && rendered_image.size(0) == C &&
-                        rendered_image.size(1) == height && rendered_image.size(2) == width &&
+                        rendered_image.size(1) == settings.height && rendered_image.size(2) == settings.width &&
                         rendered_image.size(3) == channels,
                     "rendered_image must be [C, H, W, ", channels, "], got ", rendered_image.sizes());
         TORCH_CHECK(rendered_alpha.dim() == 4 && rendered_alpha.size(0) == C &&
-                        rendered_alpha.size(1) == height && rendered_alpha.size(2) == width &&
+                        rendered_alpha.size(1) == settings.height && rendered_alpha.size(2) == settings.width &&
                         rendered_alpha.size(3) == 1,
                     "rendered_alpha must be [C, H, W, 1], got ", rendered_alpha.sizes());
 
@@ -438,7 +432,7 @@ namespace gs {
 
         // Save for backward
         ctx->save_for_backward({means2d, conics, colors, opacities, bg_color,
-                                isect_offsets, flatten_ids, rendered_alpha, last_ids, settings});
+                                isect_offsets, flatten_ids, rendered_alpha, last_ids});
 
         return {rendered_image, rendered_alpha, last_ids};
     }
@@ -460,12 +454,11 @@ namespace gs {
         const auto& flatten_ids = saved[6];
         const auto& rendered_alpha = saved[7];
         const auto& last_ids = saved[8];
-        const auto& settings = saved[9];
 
         // Extract settings
-        const auto width = settings[0].item<int>();
-        const auto height = settings[1].item<int>();
-        const auto tile_size = settings[2].item<int>();
+        const auto width = ctx->saved_data["width"].toInt();
+        const auto height = ctx->saved_data["height"].toInt();
+        const auto tile_size = ctx->saved_data["tile_size"].toInt();
 
         // Convert empty tensor to optional for CUDA function
         at::optional<at::Tensor> bg_color_opt;
@@ -521,7 +514,7 @@ namespace gs {
         torch::autograd::AutogradContext* ctx,
         torch::Tensor quats,
         torch::Tensor scales,
-        torch::Tensor settings) { // [3] tensor containing [compute_covar, compute_preci, triu]
+        QuatScaleToCovarPreciSettings settings) {
 
         // Ensure inputs are contiguous and on CUDA
         quats = quats.contiguous();
@@ -529,26 +522,24 @@ namespace gs {
 
         TORCH_CHECK(quats.is_cuda(), "quats must be on CUDA");
         TORCH_CHECK(scales.is_cuda(), "scales must be on CUDA");
-        TORCH_CHECK(settings.is_cuda(), "settings must be on CUDA");
 
-        // Extract settings
-        bool compute_covar = settings[0].item<bool>();
-        bool compute_preci = settings[1].item<bool>();
-        bool triu = settings[2].item<bool>();
+        ctx->saved_data["compute_covar"] = settings.compute_covar;
+        ctx->saved_data["compute_preci"] = settings.compute_preci;
+        ctx->saved_data["triu"] = settings.triu;
 
         auto [covars, precis] = gsplat::quat_scale_to_covar_preci_fwd(
-            quats, scales, compute_covar, compute_preci, triu);
+            quats, scales, settings.compute_covar, settings.compute_preci, settings.triu);
 
         // Ensure outputs are defined
         if (!covars.defined()) {
-            if (triu) {
+            if (settings.triu) {
                 covars = torch::zeros({quats.size(0), 6}, quats.options());
             } else {
                 covars = torch::zeros({quats.size(0), 3, 3}, quats.options());
             }
         }
         if (!precis.defined()) {
-            if (triu) {
+            if (settings.triu) {
                 precis = torch::zeros({quats.size(0), 6}, quats.options());
             } else {
                 precis = torch::zeros({quats.size(0), 3, 3}, quats.options());
@@ -556,7 +547,7 @@ namespace gs {
         }
 
         // Save for backward
-        ctx->save_for_backward({quats, scales, settings, covars, precis});
+        ctx->save_for_backward({quats, scales, covars, precis});
 
         return {covars, precis};
     }
@@ -568,9 +559,8 @@ namespace gs {
         auto saved = ctx->get_saved_variables();
         auto quats = saved[0];
         auto scales = saved[1];
-        auto settings = saved[2];
 
-        bool triu = settings[2].item<bool>();
+        bool triu = ctx->saved_data["triu"].toBool();
 
         auto v_covars = grad_outputs[0];
         auto v_precis = grad_outputs[1];
