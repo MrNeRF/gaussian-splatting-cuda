@@ -39,7 +39,7 @@ struct UnscentedTransformParameters {
         0.1f; // 10% out of bounds margin is acceptable for "valid" projection
               // state
     bool require_all_sigma_points_valid =
-        false; // true: all sigma points must be valid to mark a projection as
+        true; // true: all sigma points must be valid to mark a projection as
                // "valid" false: a single valid sigma point is sufficient to
                // mark a projection as "valid"
 

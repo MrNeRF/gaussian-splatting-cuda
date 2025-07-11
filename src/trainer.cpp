@@ -217,7 +217,7 @@ namespace gs {
                 1.0f,
                 false,
                 false,
-                render_mode);
+                render_mode, true);
         };
 
         RenderOutput r_output;

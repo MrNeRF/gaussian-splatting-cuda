@@ -298,7 +298,7 @@ namespace gs {
                 config_->scaling_modifier,
                 false,
                 false,
-                RenderMode::RGB);
+                RenderMode::RGB, true);
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED

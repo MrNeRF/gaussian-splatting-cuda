@@ -108,7 +108,6 @@ namespace gs {
 
     // Autograd function for projection
     torch::autograd::tensor_list fully_fused_projection_with_ut(
-            torch::autograd::AutogradContext* ctx,
             torch::Tensor means3D,   // [N, 3]
             torch::Tensor quats,     // [N, 4]
             torch::Tensor scales,    // [N, 3]
@@ -125,6 +124,7 @@ namespace gs {
         int width;
         int height;
         int tile_size;
+        float scaling_modifier;
         gsplat::CameraModelType camera_model;
     };
 
@@ -139,12 +139,12 @@ namespace gs {
              torch::Tensor colors,        // [N, C]
              torch::Tensor opacities, // [N]
              torch::Tensor bg_color,      // [N, C]
-             torch::Tensor masks, // [N, C, tile_height, tile_width]
+             std::optional<torch::Tensor> masks, // [N, C, tile_height, tile_width]
              torch::Tensor viewmat,   // [C, 4, 4]
              torch::Tensor K,         // [C, 3, 3]
-             torch::Tensor radial_coeffs, // [..., C, 6] or [..., C, 4]
-             torch::Tensor tangential_coeffs, // [..., C, 2]
-             torch::Tensor thin_prism_coeffs, // [..., C, 4]
+             std::optional<torch::Tensor> radial_coeffs, // [..., C, 6] or [..., C, 4]
+             std::optional<torch::Tensor> tangential_coeffs, // [..., C, 2]
+             std::optional<torch::Tensor> thin_prism_coeffs, // [..., C, 4]
              torch::Tensor isect_offsets, // [C, tile_height, tile_width]
                 torch::Tensor flatten_ids,   // [nnz]
             GUTRasterizationSettings settings,

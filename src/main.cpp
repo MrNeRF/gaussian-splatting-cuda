@@ -53,6 +53,7 @@ int main(int argc, char* argv[]) {
                         trainer->train();
                     } catch (const std::exception& e) {
                         std::cerr << "Training thread error: " << e.what() << std::endl;
+                        throw;
                     }
                 });
 
