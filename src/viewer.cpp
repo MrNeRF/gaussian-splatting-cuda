@@ -138,7 +138,7 @@ namespace gs {
         if (detail_->any_window_active)
             return;
 
-        if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_PRESS) {
+        if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT || button == GLFW_MOUSE_BUTTON_MIDDLE) && action == GLFW_PRESS) {
             double xpos, ypos;
             glfwGetCursorPos(window, &xpos, &ypos);
             detail_->viewport_.camera.initScreenPos(glm::vec2(xpos, ypos));
@@ -154,6 +154,9 @@ namespace gs {
         } else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
             detail_->viewport_.camera.rotate(glm::vec2(x, y));
         }
+        else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
+            detail_->viewport_.camera.rotate_around_center(glm::vec2(x, y));
+        }
     }
 
     void ViewerDetail::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
@@ -164,7 +167,13 @@ namespace gs {
         if (std::abs(delta) < 1.0e-2f)
             return;
 
-        detail_->viewport_.camera.zoom(delta);
+        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+            // 'R' key is currently pressed
+            detail_->viewport_.camera.rotate_roll(delta);
+        }
+        else {
+            detail_->viewport_.camera.zoom(delta);
+        }
     }
 
     void ViewerDetail::run() {
