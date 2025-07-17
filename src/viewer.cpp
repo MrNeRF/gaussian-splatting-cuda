@@ -355,13 +355,13 @@ namespace gs {
                 ImGui::TableNextColumn();
                 ImGui::Text("Local Translate Camera");
                 ImGui::TableNextColumn();
-                ImGui::Text("Right Mouse + Drag");
+                ImGui::Text("Left Mouse + Drag");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("Local Rotate Camera (Pitch/Yaw)");
                 ImGui::TableNextColumn();
-                ImGui::Text("Left Mouse + Drag");
+                ImGui::Text("Right Mouse + Drag");
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
