@@ -57,6 +57,7 @@ namespace {
         ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
         ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
         ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
+        ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
 
         // Parse arguments
         try {
@@ -130,6 +131,7 @@ namespace {
         setFlag(enable_viz, opt.enable_viz);
         setFlag(selective_adam, opt.selective_adam);
         setFlag(enable_save_eval_images, opt.enable_save_eval_images);
+        setFlag(skip_intermediate_saving, opt.skip_intermediate_saving);
 
         // Special case: validate render mode
         if (render_mode) {
