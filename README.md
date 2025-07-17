@@ -73,7 +73,7 @@ Join our growing community for discussions, support, and updates:
 ## Build and Execution Instructions
 
 ### Software Prerequisites
-1. **Linux** (tested with Ubuntu 22.04) - Windows is currently not supported
+1. **Linux** (tested with Ubuntu 22.04) or Windows
 2. **CMake** 3.24 or higher
 3. **CUDA** 11.8 or higher (may work with lower versions with manual configuration)
 4. **Python** with development headers
