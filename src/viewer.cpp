@@ -340,13 +340,14 @@ namespace gs {
         ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
 
+
         if (ImGui::Begin("Camera Controls", &show_shortcuts_window_, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("Camera Controls:");
             ImGui::Separator();
 
             // Table for better formatting
             if (ImGui::BeginTable("shortcuts_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 300.0f);
                 ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
@@ -384,7 +385,6 @@ namespace gs {
             }
 
             ImGui::Separator();
-            ImGui::Text("Tip: Hold the specified mouse button and drag to perform the action.");
         }
         ImGui::End();
         ImGui::PopStyleColor(4);
