@@ -171,7 +171,7 @@ namespace gs {
             // 'R' key is currently pressed
             detail_->viewport_.camera.rotate_roll(delta);
         }
-        else{
+        else {
             detail_->viewport_.camera.zoom(delta);
         }
 
