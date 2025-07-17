@@ -301,8 +301,8 @@ namespace gs {
             if (json.contains("enable_save_eval_images")) {
                 params.enable_save_eval_images = json["enable_save_eval_images"];
             }
-            if (json.contains("skip_intermediate_saving")) {
-                params.skip_intermediate_saving = json["skip_intermediate_saving"];
+            if (json.contains("skip_intermediate")) {
+                params.skip_intermediate_saving = json["skip_intermediate"];
             }
             if (json.contains("use_bilateral_grid")) {
                 params.use_bilateral_grid = json["use_bilateral_grid"];
