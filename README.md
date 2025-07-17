@@ -12,7 +12,7 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built u
 Reduce training time by half and win **the $1400 prize**!  
 Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135)
 
-This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself - each contributing **$300**. [@toshas](https://github.com/toshas) and [@ChrisAtKIRI](https://x.com/ChrisAtKIRI) are each contributing **$200**. Finally, [@JulienBlanchon](https://x.com/JulienBlanchon) is contributing **$100**.
+This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself – each contributing **$300**. [@toshas](https://github.com/toshas) and [@ChrisAtKIRI](https://x.com/ChrisAtKIRI) are each contributing **$200**. Finally, [@JulienBlanchon](https://x.com/JulienBlanchon) and [Drew Moffitt](https://www.linkedin.com/in/drew-moffitt-gisp-0a4522157?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app) are each contributing **$100**.
 
 ## Agenda (this summer)
 1. Improve the viewer, i.e., better camera controls, more interactive features.
