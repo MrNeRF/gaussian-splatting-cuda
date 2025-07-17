@@ -434,7 +434,8 @@ static fs::path get_sparse_file_path(const fs::path& base, const std::string& fi
 
     throw std::runtime_error(
         "Cannot find \"" + filename +
-        "\" in \"" + candidate0.string() + "\" or \"" + candidate.string() + "\"");
+        "\" in \"" + candidate0.string() + "\" or \"" + candidate.string() + "\". "
+        "Expected directory structure: 'sparse/0/' or 'sparse/'.");
 }
 
 PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
