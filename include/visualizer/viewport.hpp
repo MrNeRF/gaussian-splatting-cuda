@@ -43,7 +43,7 @@ class Viewport {
             glm::mat3 Rp = glm::mat3(glm::rotate(glm::mat4(1.0f), p, R[0]));
             auto U = Rp * Ry;
             t = U*t;
-            R = U*R ;
+            R = U*R;
             prePos = pos;
         }
 
