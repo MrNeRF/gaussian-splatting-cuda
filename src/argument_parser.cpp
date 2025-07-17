@@ -127,6 +127,7 @@ namespace {
         setVal(steps_scaler, opt.steps_scaler);
         setVal(sh_degree_interval, opt.sh_degree_interval);
         setVal(sh_degree, opt.sh_degree);
+        setVal(min_opacity, opt.min_opacity);
 
         // Flag arguments
         setFlag(use_bilateral_grid, opt.use_bilateral_grid);
