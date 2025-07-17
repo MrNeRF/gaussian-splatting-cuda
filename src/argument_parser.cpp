@@ -46,7 +46,7 @@ namespace {
         ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
         ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
         ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
-        ::args::ValueFlag<int> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
+        ::args::ValueFlag<float> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
         ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "SH degree interval", {"sh-degree-interval"});
         ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
 
@@ -147,9 +147,9 @@ namespace {
 
     void apply_step_scaling(gs::param::TrainingParameters& params) {
         auto& opt = params.optimization;
-        const size_t scaler = opt.steps_scaler;
+        const float scaler = opt.steps_scaler;
 
-        if (scaler > 1) {
+        if (scaler > 0) {
             std::cout << "Scaling training steps by factor: " << scaler << std::endl;
 
             opt.iterations *= scaler;

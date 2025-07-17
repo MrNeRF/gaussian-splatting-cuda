@@ -43,7 +43,7 @@ namespace gs {
             float bilateral_grid_lr = 2e-3;
             float tv_loss_weight = 10.0f;
 
-            int steps_scaler = 1;
+            float steps_scaler = -1;
             bool selective_adam = false; // Use Selective Adam optimizer
         };
 
