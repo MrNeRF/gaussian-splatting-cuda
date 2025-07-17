@@ -174,7 +174,6 @@ namespace gs {
         else {
             detail_->viewport_.camera.zoom(delta);
         }
-
     }
 
     void ViewerDetail::run() {
