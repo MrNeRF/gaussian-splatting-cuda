@@ -55,7 +55,7 @@ class Viewport {
                 0.0f,               0.0f,              1.0f
             );
 
-            R = R*rot_z ;
+            R = R*rot_z;
 
         }
 
