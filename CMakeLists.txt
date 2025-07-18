@@ -288,7 +288,7 @@ endif()
 add_executable(downloader src/downloader.cpp)
 
 set_target_properties(downloader PROPERTIES
-    CXX_STANDARD 17
+    CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )
 
