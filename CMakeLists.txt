@@ -64,8 +64,38 @@ find_package(imgui REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(args REQUIRED)
 
-# Python packages
-find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+# Python packages - Try vcpkg first, fallback to system Python
+find_package(Python3 COMPONENTS Interpreter Development)
+
+if(Python3_FOUND)
+    message(STATUS "Python3 found via vcpkg:")
+    message(STATUS "  Version: ${Python3_VERSION}")
+    message(STATUS "  Executable: ${Python3_EXECUTABLE}")
+    if(Python3_INCLUDE_DIRS)
+        message(STATUS "  Include dirs: ${Python3_INCLUDE_DIRS}")
+    endif()
+    if(Python3_LIBRARIES)
+        message(STATUS "  Libraries: ${Python3_LIBRARIES}")
+    endif()
+    set(PYTHON_AVAILABLE TRUE)
+else()
+    # Fallback to system Python
+    message(STATUS "vcpkg Python3 not found, searching for system Python...")
+    find_program(Python3_EXECUTABLE NAMES python3 python)
+    if(Python3_EXECUTABLE)
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE} --version
+            OUTPUT_VARIABLE PYTHON_VERSION_OUTPUT
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        message(STATUS "Found system Python: ${Python3_EXECUTABLE}")
+        message(STATUS "Version: ${PYTHON_VERSION_OUTPUT}")
+        set(PYTHON_AVAILABLE TRUE)
+    else()
+        message(WARNING "No Python installation found")
+        set(PYTHON_AVAILABLE FALSE)
+    endif()
+endif()
 
 # Check for CUDA-OpenGL interop capability
 include(CheckCXXSourceCompiles)
@@ -252,6 +282,41 @@ if(CUDA_GL_INTEROP_FOUND)
 endif()
 
 # =============================================================================
+# DATASET DOWNLOADER EXECUTABLE WITH VCPKG PYTHON
+# =============================================================================
+
+add_executable(downloader src/downloader.cpp)
+
+set_target_properties(downloader PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
+)
+
+# Include Python headers and link Python libraries
+target_include_directories(downloader PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${Python3_INCLUDE_DIRS}
+)
+
+target_link_libraries(downloader PRIVATE
+    ${Python3_LIBRARIES}
+)
+
+# Define the vcpkg Python executable path for the downloader
+target_compile_definitions(downloader PRIVATE
+    PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
+    VCPKG_PYTHON_AVAILABLE
+)
+
+# Copy scripts to build directory
+add_custom_command(TARGET downloader POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
+    "$<TARGET_FILE_DIR:downloader>/scripts"
+    COMMENT "Copying Python scripts to build directory"
+)
+
+# =============================================================================
 # MAIN EXECUTABLE
 # =============================================================================
 
@@ -268,7 +333,6 @@ target_include_directories(${PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
-        ${Python3_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
@@ -277,7 +341,6 @@ set(MAIN_LINK_LIBRARIES
         gaussian_host
         gaussian_kernels
         gsplat_backend
-        Python3::Python
         ${OPENGL_LIBRARIES}
         CUDA::cudart
 )
@@ -287,6 +350,11 @@ if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
 endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${MAIN_LINK_LIBRARIES})
+
+# Add Python availability flag to main executable (if available)
+if(PYTHON_AVAILABLE)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE PYTHON_AVAILABLE)
+endif()
 
 # Platform-specific settings
 if(WIN32)
@@ -346,6 +414,7 @@ if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
     configure_build_type(gaussian_visualizer)
 endif()
 configure_build_type(${PROJECT_NAME})
+configure_build_type(downloader)
 
 # =============================================================================
 # TESTING (Optional)
@@ -446,6 +515,7 @@ message(STATUS "Build Configuration:")
 message(STATUS "  CUDA Version: ${CUDAToolkit_VERSION}")
 message(STATUS "  Torch Version: ${Torch_VERSION}")
 message(STATUS "  Python Version: ${Python3_VERSION}")
+message(STATUS "  Python Executable: ${Python3_EXECUTABLE}")
 message(STATUS "  OpenGL Found: ${OPENGL_FOUND}")
 message(STATUS "  CUDA-GL Interop: ${CUDA_GL_INTEROP_FOUND}")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
