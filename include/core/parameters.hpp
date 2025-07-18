@@ -2,6 +2,7 @@
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
 
+#include <expected>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -30,6 +31,7 @@ namespace gs {
             int max_cap = 1000000;
             std::vector<size_t> eval_steps = {7'000, 30'000}; // Steps to evaluate the model
             std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
+            bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
             bool enable_save_eval_images = false;             // Save during evaluation images
             bool enable_viz = false;                          // Enable visualization during training
@@ -43,7 +45,7 @@ namespace gs {
             float bilateral_grid_lr = 2e-3;
             float tv_loss_weight = 10.0f;
 
-            int steps_scaler = 1;
+            float steps_scaler = -1;     // If < 0, step size scaling is disabled
             bool selective_adam = false; // Use Selective Adam optimizer
         };
 
@@ -60,10 +62,12 @@ namespace gs {
             OptimizationParameters optimization;
         };
 
-        OptimizationParameters read_optim_params_from_json();
+        // Modern C++23 functions returning expected values
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_json();
 
         // Save training parameters to JSON
-        void save_training_parameters_to_json(const TrainingParameters& params,
-                                              const std::filesystem::path& output_path);
+        std::expected<void, std::string> save_training_parameters_to_json(
+            const TrainingParameters& params,
+            const std::filesystem::path& output_path);
     } // namespace param
 } // namespace gs

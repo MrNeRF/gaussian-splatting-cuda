@@ -10,14 +10,14 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 // clang-format on
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
 #include <chrono>
 #include <condition_variable>
 #include <cuda_runtime.h>
 #include <deque>
 #include <glm/glm.hpp>
 #include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -162,6 +162,10 @@ namespace gs {
         std::chrono::steady_clock::time_point save_start_time_;
         bool manual_start_triggered_ = false;
         bool training_started_ = false;
+
+        // camera controls
+        void renderCameraControlsWindow();
+        bool show_camera_controls_window_ = false;
     };
 
 } // namespace gs

@@ -6,14 +6,29 @@
 #include "external/tinyply.hpp"
 #include <algorithm>
 #include <cmath>
+#include <expected>
 #include <filesystem>
+#include <format>
 #include <fstream>
+#include <print>
 #include <string>
 #include <thread>
 #include <torch/torch.h>
 #include <vector>
 
 namespace {
+    std::string tensor_sizes_to_string(const c10::ArrayRef<int64_t>& sizes) {
+        std::ostringstream oss;
+        oss << "[";
+        for (size_t i = 0; i < sizes.size(); ++i) {
+            if (i > 0)
+                oss << ", ";
+            oss << sizes[i];
+        }
+        oss << "]";
+        return oss.str();
+    }
+
     // Point cloud adaptor for nanoflann
     struct PointCloudAdaptor {
         const float* points;
@@ -326,79 +341,87 @@ PointCloud SplatData::to_point_cloud() const {
     return pc;
 }
 
-SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParameters& params, torch::Tensor scene_center) {
-    // Helper lambdas
-    auto pcd = read_colmap_point_cloud(params.dataset.data_path);
+std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
+    const gs::param::TrainingParameters& params,
+    torch::Tensor scene_center) {
 
-    const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
-    const auto scene_scale = dists.median().item<float>();
+    try {
+        // Helper lambdas
+        auto pcd = read_colmap_point_cloud(params.dataset.data_path);
 
-    auto rgb_to_sh = [](const torch::Tensor& rgb) {
-        constexpr float kInvSH = 0.28209479177387814f; // 1 / √(4π)
-        return (rgb - 0.5f) / kInvSH;
-    };
+        const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
+        const auto scene_scale = dists.median().item<float>();
 
-    const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
-    const auto f32_cuda = f32.device(torch::kCUDA);
+        auto rgb_to_sh = [](const torch::Tensor& rgb) {
+            constexpr float kInvSH = 0.28209479177387814f; // 1 / √(4π)
+            return (rgb - 0.5f) / kInvSH;
+        };
 
-    // Ensure colors are normalized floats
-    pcd.normalize_colors();
+        const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
+        const auto f32_cuda = f32.device(torch::kCUDA);
 
-    // 1. means - already a tensor, just move to CUDA and set requires_grad
-    auto means = pcd.means.to(torch::kCUDA).set_requires_grad(true);
+        // Ensure colors are normalized floats
+        pcd.normalize_colors();
 
-    // 2. scaling (log(σ)) - compute nearest neighbor distances
-    auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
-    auto scaling = torch::log(torch::sqrt(nn_dist) * params.optimization.init_scaling)
-                       .unsqueeze(-1)
-                       .repeat({1, 3})
-                       .to(f32_cuda)
+        // 1. means - already a tensor, just move to CUDA and set requires_grad
+        auto means = pcd.means.to(torch::kCUDA).set_requires_grad(true);
+
+        // 2. scaling (log(σ)) - compute nearest neighbor distances
+        auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
+        auto scaling = torch::log(torch::sqrt(nn_dist) * params.optimization.init_scaling)
+                           .unsqueeze(-1)
+                           .repeat({1, 3})
+                           .to(f32_cuda)
+                           .set_requires_grad(true);
+
+        // 3. rotation (quaternion, identity) - split into multiple lines to avoid compilation error
+        auto rotation = torch::zeros({means.size(0), 4}, f32_cuda);
+        rotation.index_put_({torch::indexing::Slice(), 0}, 1);
+        rotation = rotation.set_requires_grad(true);
+
+        // 4. opacity (inverse sigmoid of 0.5)
+        auto opacity = torch::logit(params.optimization.init_opacity * torch::ones({means.size(0), 1}, f32_cuda))
+                           .set_requires_grad(true);
+
+        // 5. shs (SH coefficients)
+        // Colors are already normalized to float by pcd.normalize_colors()
+        auto colors_float = pcd.colors.to(torch::kCUDA);
+        auto fused_color = rgb_to_sh(colors_float);
+
+        const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));
+        auto shs = torch::zeros({fused_color.size(0), 3, feature_shape}, f32_cuda);
+
+        // Set DC coefficients
+        shs.index_put_({torch::indexing::Slice(),
+                        torch::indexing::Slice(),
+                        0},
+                       fused_color);
+
+        auto sh0 = shs.index({torch::indexing::Slice(),
+                              torch::indexing::Slice(),
+                              torch::indexing::Slice(0, 1)})
+                       .transpose(1, 2)
+                       .contiguous()
                        .set_requires_grad(true);
 
-    // 3. rotation (quaternion, identity) - split into multiple lines to avoid compilation error
-    auto rotation = torch::zeros({means.size(0), 4}, f32_cuda);
-    rotation.index_put_({torch::indexing::Slice(), 0}, 1);
-    rotation = rotation.set_requires_grad(true);
-
-    // 4. opacity (inverse sigmoid of 0.5)
-    auto opacity = torch::logit(params.optimization.init_opacity * torch::ones({means.size(0), 1}, f32_cuda))
+        auto shN = shs.index({torch::indexing::Slice(),
+                              torch::indexing::Slice(),
+                              torch::indexing::Slice(1, torch::indexing::None)})
+                       .transpose(1, 2)
+                       .contiguous()
                        .set_requires_grad(true);
 
-    // 5. shs (SH coefficients)
-    // Colors are already normalized to float by pcd.normalize_colors()
-    auto colors_float = pcd.colors.to(torch::kCUDA);
-    auto fused_color = rgb_to_sh(colors_float);
+        std::println("Scene scale: {}", scene_scale);
+        std::println("Initialized SplatData with:");
+        std::println("  - {} points", means.size(0));
+        std::println("  - Max SH degree: {}", params.optimization.sh_degree);
+        std::println("  - Total SH coefficients: {}", feature_shape);
+        std::cout << std::format("  - sh0 shape: {}\n", tensor_sizes_to_string(sh0.sizes()));
+        std::cout << std::format("  - shN shape: {}\n", tensor_sizes_to_string(shN.sizes()));
 
-    const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));
-    auto shs = torch::zeros({fused_color.size(0), 3, feature_shape}, f32_cuda);
+        return SplatData(params.optimization.sh_degree, means, sh0, shN, scaling, rotation, opacity, scene_scale);
 
-    // Set DC coefficients
-    shs.index_put_({torch::indexing::Slice(),
-                    torch::indexing::Slice(),
-                    0},
-                   fused_color);
-
-    auto sh0 = shs.index({torch::indexing::Slice(),
-                          torch::indexing::Slice(),
-                          torch::indexing::Slice(0, 1)})
-                   .transpose(1, 2)
-                   .contiguous()
-                   .set_requires_grad(true);
-
-    auto shN = shs.index({torch::indexing::Slice(),
-                          torch::indexing::Slice(),
-                          torch::indexing::Slice(1, torch::indexing::None)})
-                   .transpose(1, 2)
-                   .contiguous()
-                   .set_requires_grad(true);
-
-    std::cout << "Scene scale: " << scene_scale << std::endl;
-    std::cout << "Initialized SplatData with:" << std::endl;
-    std::cout << "  - " << means.size(0) << " points" << std::endl;
-    std::cout << "  - Max SH degree: " << params.optimization.sh_degree << std::endl;
-    std::cout << "  - Total SH coefficients: " << feature_shape << std::endl;
-    std::cout << "  - sh0 shape: " << sh0.sizes() << std::endl;
-    std::cout << "  - shN shape: " << shN.sizes() << std::endl;
-
-    return SplatData(params.optimization.sh_degree, means, sh0, shN, scaling, rotation, opacity, scene_scale);
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Failed to initialize SplatData: {}", e.what()));
+    }
 }
