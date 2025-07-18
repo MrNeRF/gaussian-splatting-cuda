@@ -340,12 +340,14 @@ namespace gs {
                 }
 
                 // Save model at specified steps
-                if (!params_.optimization.skip_intermediate_saving) {for (size_t save_step : params_.optimization.save_steps) {
-                    if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
-                        const bool join_threads = (iter == params_.optimization.save_steps.back());
-                        strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/join_threads);
+                if (!params_.optimization.skip_intermediate_saving) {
+                    for (size_t save_step : params_.optimization.save_steps) {
+                        if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
+                            const bool join_threads = (iter == params_.optimization.save_steps.back());
+                            strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/join_threads);
+                        }
                     }
-                }}
+                }
 
                 auto do_strategy = [&]() {
                     strategy_->post_backward(iter, r_output);

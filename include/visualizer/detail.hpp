@@ -166,7 +166,6 @@ namespace gs {
         // camera controls
         void renderCameraControlsWindow();
         bool show_camera_controls_window_ = false;
-
     };
 
 } // namespace gs
