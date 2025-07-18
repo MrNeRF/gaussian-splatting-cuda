@@ -163,9 +163,9 @@ namespace gs {
         bool manual_start_triggered_ = false;
         bool training_started_ = false;
 
-        // shortcuts
-        void renderShortcutsWindow();
-        bool show_shortcuts_window_ = false;
+        // camera controls
+        void renderCameraControlsWindow();
+        bool show_camera_controls_window_ = false;
 
     };
 
