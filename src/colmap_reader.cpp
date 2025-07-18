@@ -267,10 +267,12 @@ std::tuple<std::vector<CameraData>, torch::Tensor>
 read_colmap_cameras(const std::filesystem::path base_path,
                     const std::unordered_map<uint32_t, CameraData>& cams,
                     const std::vector<Image>& images,
-                    const std::string& images_folder = "images") {
+                    const std::string& images_folder = "images",
+                    const std::string& masks_folder = "masks") {
     std::vector<CameraData> out(images.size());
 
     std::filesystem::path images_path = base_path / images_folder;
+    std::filesystem::path masks_path = base_path / masks_folder;
 
     // Prepare tensor to store all camera locations [N, 3]
     torch::Tensor camera_locations = torch::zeros({static_cast<int64_t>(images.size()), 3}, torch::kFloat32);
@@ -288,6 +290,11 @@ read_colmap_cameras(const std::filesystem::path base_path,
 
         out[i] = it->second;
         out[i]._image_path = images_path / img._name;
+        if (std::filesystem::exists(masks_path)) {
+            out[i]._mask_path = masks_path / img._name;
+        } else {
+            out[i]._mask_path = "";
+        }
         out[i]._image_name = img._name;
 
         out[i]._R = qvec2rotmat(img._qvec);
@@ -445,7 +452,8 @@ PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
 
 std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images(
     const std::filesystem::path& base,
-    const std::string& images_folder) {
+    const std::string& images_folder,
+    const std::string& masks_folder) {
 
     fs::path cams_file = get_sparse_file_path(base, "cameras.bin");
     fs::path images_file = get_sparse_file_path(base, "images.bin");
@@ -453,5 +461,5 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_image
     auto cams = read_cameras_binary(cams_file);
     auto images = read_images_binary(images_file);
 
-    return read_colmap_cameras(base, cams, images, images_folder);
+    return read_colmap_cameras(base, cams, images, images_folder, masks_folder);
 }

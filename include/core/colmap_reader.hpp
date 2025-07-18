@@ -31,6 +31,7 @@ struct CameraData {
     float _center_y = 0.f;
     std::string _image_name;
     std::filesystem::path _image_path;
+    std::filesystem::path _mask_path;
     CAMERA_MODEL _camera_model = CAMERA_MODEL::UNDEFINED;
     gsplat::CameraModelType _camera_model_type = gsplat::CameraModelType::PINHOLE;
     int _width = 0;
@@ -48,7 +49,8 @@ struct CameraData {
 // Read COLMAP cameras, images, and compute nerf norm
 std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images(
     const std::filesystem::path& base,
-    const std::string& images_folder = "images");
+    const std::string& images_folder = "images",
+    const std::string& masks_folder = "masks");
 
 // Read COLMAP point cloud
 PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath);

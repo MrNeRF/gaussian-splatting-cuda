@@ -26,6 +26,7 @@ Camera::Camera(const torch::Tensor& R,
                gsplat::CameraModelType camera_model_type,
                const std::string& image_name,
                const std::filesystem::path& image_path,
+               const std::filesystem::path& mask_path,
                int camera_width, int camera_height,
                int uid)
     : _uid(uid),
@@ -38,6 +39,7 @@ Camera::Camera(const torch::Tensor& R,
       _camera_model_type(camera_model_type),
       _image_name(image_name),
       _image_path(image_path),
+      _mask_path(mask_path),
       _camera_width(camera_width),
       _camera_height(camera_height),
       _image_width(camera_width),
@@ -68,22 +70,64 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
     h = std::get<2>(result);
     c = std::get<3>(result);
 
+    if (!data || w <= 0 || h <= 0 || c <= 0) {
+        throw std::runtime_error("Failed to load image or invalid dimensions");
+    }
+
     _image_width = w;
     _image_height = h;
 
     // Use pinned memory for faster GPU transfer
     auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
 
-    torch::Tensor image = torch::from_blob(
-                              data,
-                              {h, w, c},
-                              {w * c, c, 1},
-                              pinned_options)
-                              .to(torch::kFloat32)
-                              .permute({2, 0, 1})
-                              .clone() /
-                          255.0f;
+    torch::Tensor tmp = torch::from_blob(
+                            data,
+                            {h, w, c},
+                            {w * c, c, 1},
+                            pinned_options)
+                            .permute({2, 0, 1});
+
+    torch::Tensor image_cpu = tmp.to(torch::kFloat32)
+                                .clone()
+                                .div_(255.0f);
 
     free_image(data);
-    return image.to(torch::kCUDA, /*non_blocking=*/true);
+    return image_cpu.to(torch::kCUDA, /*non_blocking=*/true);
+}
+
+torch::Tensor Camera::load_and_get_attention_mask(int resolution) {
+    unsigned char* data;
+    int w, h, c;
+
+    // Otherwise load synchronously
+    auto result = load_image(_image_path, resolution);
+    data = std::get<0>(result);
+    w = std::get<1>(result);
+    h = std::get<2>(result);
+    c = std::get<3>(result);
+
+    if (!data || w <= 0 || h <= 0 || c <= 0) {
+        return torch::Tensor();
+    }
+
+    _image_width = w;
+    _image_height = h;
+
+    // Use pinned memory for faster GPU transfer
+    auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
+
+    torch::Tensor tmp = torch::from_blob(
+                            data,
+                            {h, w, c},
+                            {w * c, c, 1},
+                            pinned_options)
+                            .permute({2, 0, 1});
+
+    auto channel0 = tmp.select(0, /*dim=*/0);
+
+    auto mask_cpu = channel0.clone().to(torch::kBool);
+
+
+    free_image(data);
+    return mask_cpu.to(torch::kCUDA, /*non_blocking=*/true);
 }

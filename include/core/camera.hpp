@@ -20,6 +20,7 @@ public:
            gsplat::CameraModelType camera_model_type,
            const std::string& image_name,
            const std::filesystem::path& image_path,
+           const std::filesystem::path& mask_path,
            int camera_width, int camera_height,
            int uid);
 
@@ -34,6 +35,9 @@ public:
 
     // Load image from disk and return it
     torch::Tensor load_and_get_image(int resolution = -1);
+
+    // Load mask from disk and return it
+    torch::Tensor load_and_get_attention_mask(int resolution = -1);
 
     // Accessors - now return const references to avoid copies
     const torch::Tensor& world_view_transform() const {
@@ -67,6 +71,7 @@ private:
     // Image info
     std::string _image_name;
     std::filesystem::path _image_path;
+    std::filesystem::path _mask_path;
     int _camera_width = 0;
     int _camera_height = 0;
     int _image_width = 0;

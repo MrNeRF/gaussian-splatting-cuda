@@ -348,6 +348,8 @@ namespace gs {
                 params.output_path = json["output_path"].get<std::string>();
             if (json.contains("images"))
                 params.images = json["images"];
+            if (json.contains("attention_masks"))
+                params.attention_masks = json["attention_masks"];
             if (json.contains("resolution"))
                 params.resolution = json["resolution"];
             return params;
@@ -366,6 +368,7 @@ namespace gs {
             json["dataset"]["data_path"] = params.dataset.data_path.string();
             json["dataset"]["output_path"] = params.dataset.output_path.string();
             json["dataset"]["images"] = params.dataset.images;
+            json["dataset"]["attention_masks"] = params.dataset.attention_masks;
             json["dataset"]["resolution"] = params.dataset.resolution;
             json["dataset"]["test_every"] = params.dataset.test_every;
 

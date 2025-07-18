@@ -45,6 +45,7 @@ namespace {
         ::args::ValueFlag<int> resolution(parser, "resolution", "Set resolution", {'r', "resolution"});
         ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
         ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
+        ::args::ValueFlag<std::string> attention_masks_folder(parser, "attention_masks_folder", "Attention masks folder name", {"attention-masks-folder"});
         ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
         ::args::ValueFlag<float> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
         ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "SH degree interval", {"sh-degree-interval"});
@@ -60,6 +61,7 @@ namespace {
         ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
         ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
         ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
+        ::args::Flag use_attention_mask(parser, "attention_masks", "Use attention masks on training", {"attention-masks"});
 
         // Parse arguments
         try {
@@ -127,6 +129,7 @@ namespace {
         setVal(steps_scaler, opt.steps_scaler);
         setVal(sh_degree_interval, opt.sh_degree_interval);
         setVal(sh_degree, opt.sh_degree);
+        setVal(attention_masks_folder, ds.attention_masks);
 
         // Flag arguments
         setFlag(use_bilateral_grid, opt.use_bilateral_grid);
@@ -135,6 +138,9 @@ namespace {
         setFlag(selective_adam, opt.selective_adam);
         setFlag(enable_save_eval_images, opt.enable_save_eval_images);
         setFlag(skip_intermediate_saving, opt.skip_intermediate_saving);
+        setFlag(use_attention_mask, opt.use_attention_mask);
+        if (!opt.use_attention_mask)
+            ds.attention_masks = "no-mask-path";    
 
         // Special case: validate render mode
         if (render_mode) {

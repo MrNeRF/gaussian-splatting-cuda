@@ -281,6 +281,7 @@ namespace gs {
             gsplat::CameraModelType::PINHOLE,
             "online",
             "none image",
+            "none mask",
             reso.x,
             reso.y,
             -1);
