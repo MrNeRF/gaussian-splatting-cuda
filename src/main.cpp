@@ -5,7 +5,6 @@
 #include "core/trainer.hpp"
 #include "visualizer/detail.hpp"
 #include <iostream>
-#include <memory>
 #include <thread>
 
 int main(int argc, char* argv[]) {
