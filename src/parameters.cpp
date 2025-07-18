@@ -116,6 +116,7 @@ namespace gs {
                     {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
                     {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
                     {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
+                    {"skip_intermediate", defaults.skip_intermediate_saving, "Skip saving intermediate results and only save final output"},
                     {"use_bilateral_grid", defaults.use_bilateral_grid, "Enable bilateral grid for appearance modeling"},
                     {"bilateral_grid_X", defaults.bilateral_grid_X, "Bilateral grid X dimension"},
                     {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
@@ -306,7 +307,10 @@ namespace gs {
                 if (json.contains("enable_save_eval_images")) {
                     params.enable_save_eval_images = json["enable_save_eval_images"];
                 }
-                if (json.contains("use_bilateral_grid")) {
+                if (json.contains("skip_intermediate")) {
+                params.skip_intermediate_saving = json["skip_intermediate"];
+            }
+            if (json.contains("use_bilateral_grid")) {
                     params.use_bilateral_grid = json["use_bilateral_grid"];
                 }
                 if (json.contains("bilateral_grid_X")) {
@@ -386,7 +390,7 @@ namespace gs {
                 opt_json["save_steps"] = params.optimization.save_steps;
                 opt_json["enable_eval"] = params.optimization.enable_eval;
                 opt_json["enable_save_eval_images"] = params.optimization.enable_save_eval_images;
-                opt_json["use_bilateral_grid"] = params.optimization.use_bilateral_grid;
+                opt_json["skip_intermediate"] = params.optimization.skip_intermediate_saving;opt_json["use_bilateral_grid"] = params.optimization.use_bilateral_grid;
                 opt_json["bilateral_grid_X"] = params.optimization.bilateral_grid_X;
                 opt_json["bilateral_grid_Y"] = params.optimization.bilateral_grid_Y;
                 opt_json["bilateral_grid_W"] = params.optimization.bilateral_grid_W;

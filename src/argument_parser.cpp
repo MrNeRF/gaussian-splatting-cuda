@@ -52,8 +52,10 @@ namespace {
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
-            ::args::ValueFlag<int> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
+            ::args::ValueFlag<float> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
             ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "SH degree interval", {"sh-degree-interval"});
+        ::args::ValueFlag<int> sh_degree(parser, "sh_degree", "Max SH degree [1-3]", {"sh-degree"});
+        ::args::ValueFlag<float> min_opacity(parser, "min_opacity", "Minimum opacity threshold", {"min-opacity"});
             ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
 
             // Optional flag arguments
@@ -63,6 +65,7 @@ namespace {
             ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
+        ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
 
             // Parse arguments
             try {
@@ -132,6 +135,8 @@ namespace {
             setVal(test_every, ds.test_every);
             setVal(steps_scaler, opt.steps_scaler);
             setVal(sh_degree_interval, opt.sh_degree_interval);
+        setVal(sh_degree, opt.sh_degree);
+        setVal(min_opacity, opt.min_opacity);
 
             // Flag arguments
             setFlag(use_bilateral_grid, opt.use_bilateral_grid);
@@ -139,6 +144,7 @@ namespace {
             setFlag(enable_viz, opt.enable_viz);
             setFlag(selective_adam, opt.selective_adam);
             setFlag(enable_save_eval_images, opt.enable_save_eval_images);
+        setFlag(skip_intermediate_saving, opt.skip_intermediate_saving);
 
             // Special case: validate render mode
             if (render_mode) {
@@ -160,9 +166,9 @@ namespace {
 
     void apply_step_scaling(gs::param::TrainingParameters& params) {
         auto& opt = params.optimization;
-        const size_t scaler = opt.steps_scaler;
+        const float scaler = opt.steps_scaler;
 
-        if (scaler > 1) {
+        if (scaler > 0) {
             std::println("Scaling training steps by factor: {}", scaler);
 
             opt.iterations *= scaler;

@@ -332,6 +332,62 @@ namespace gs {
         screen_renderer_->render(quadShader_, viewport_);
     }
 
+    void GSViewer::renderCameraControlsWindow() {
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+
+
+        if (ImGui::Begin("Camera Controls", &show_camera_controls_window_, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("Camera Controls:");
+            ImGui::Separator();
+
+            // Table for better formatting
+            if (ImGui::BeginTable("camera_controls_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 300.0f);
+                ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableHeadersRow();
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Local Translate Camera");
+                ImGui::TableNextColumn();
+                ImGui::Text("Left Mouse + Drag");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Local Rotate Camera (Pitch/Yaw)");
+                ImGui::TableNextColumn();
+                ImGui::Text("Right Mouse + Drag");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Rotate Around Scene Center");
+                ImGui::TableNextColumn();
+                ImGui::Text("Middle Mouse + Drag");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Zoom");
+                ImGui::TableNextColumn();
+                ImGui::Text("Mouse Scroll");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Roll Camera");
+                ImGui::TableNextColumn();
+                ImGui::Text("R + Mouse Scroll");
+
+                ImGui::EndTable();
+            }
+
+            ImGui::Separator();
+        }
+        ImGui::End();
+        ImGui::PopStyleColor(4);
+    }
+
     void GSViewer::configuration() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -517,8 +573,22 @@ namespace gs {
 
         ImGui::Text("num Splats: %d", num_splats);
 
+        // Show Camera Controls button
+        ImGui::Separator();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.7f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.8f, 1.0f));
+        if (ImGui::Button("Show Camera Controls", ImVec2(-1, 0))) {
+            show_camera_controls_window_ = true;
+        }
+        ImGui::PopStyleColor(2);
+
         ImGui::End();
         ImGui::PopStyleColor();
+
+        // Camera Controls window
+        if (show_camera_controls_window_) {
+            renderCameraControlsWindow();
+        }
     }
 
     void GSViewer::draw() {
