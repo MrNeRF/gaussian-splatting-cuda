@@ -334,19 +334,19 @@ namespace gs {
         screen_renderer_->render(quadShader_, viewport_);
     }
 
-    void GSViewer::renderShortcutsWindow() {
+    void GSViewer::renderCameraControlsWindow() {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
 
 
-        if (ImGui::Begin("Camera Controls", &show_shortcuts_window_, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::Begin("Camera Controls", &show_camera_controls_window_, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("Camera Controls:");
             ImGui::Separator();
 
             // Table for better formatting
-            if (ImGui::BeginTable("shortcuts_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            if (ImGui::BeginTable("camera_controls_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                 ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 300.0f);
                 ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
@@ -575,21 +575,21 @@ namespace gs {
 
         ImGui::Text("num Splats: %d", num_splats);
 
-        // Show Shortcuts button
+        // Show Camera Controls button
         ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.7f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.8f, 1.0f));
-        if (ImGui::Button("Show Shortcuts", ImVec2(-1, 0))) {
-            show_shortcuts_window_ = true;
+        if (ImGui::Button("Show Camera Controls", ImVec2(-1, 0))) {
+            show_camera_controls_window_ = true;
         }
         ImGui::PopStyleColor(2);
 
         ImGui::End();
         ImGui::PopStyleColor();
 
-        // Shortcuts window
-        if (show_shortcuts_window_) {
-            renderShortcutsWindow();
+        // Camera Controls window
+        if (show_camera_controls_window_) {
+            renderCameraControlsWindow();
         }
     }
 
