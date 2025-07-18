@@ -40,7 +40,6 @@ inline torch::Tensor qvec2rotmat(const torch::Tensor& qraw) {
     return R;
 }
 
-
 class Image {
 public:
     Image() = default;
@@ -389,7 +388,7 @@ read_colmap_cameras(const std::filesystem::path base_path,
             float k2 = out[i]._params[5].item<float>();
             float k3 = out[i]._params[6].item<float>();
             float k4 = out[i]._params[7].item<float>();
-            out[i]._radial_distortion = torch::tensor({k1, k2, k3, k4}, torch::kFloat32);            
+            out[i]._radial_distortion = torch::tensor({k1, k2, k3, k4}, torch::kFloat32);
             out[i]._camera_model_type = gsplat::CameraModelType::FISHEYE;
             break;
         }
