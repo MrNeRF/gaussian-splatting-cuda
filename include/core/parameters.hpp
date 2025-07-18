@@ -45,8 +45,8 @@ namespace gs {
             float bilateral_grid_lr = 2e-3;
             float tv_loss_weight = 10.0f;
 
-            float steps_scaler = -1;        // If < 0, step size scaling is disabled
-            bool selective_adam = false;    // Use Selective Adam optimizer
+            float steps_scaler = -1;     // If < 0, step size scaling is disabled
+            bool selective_adam = false; // Use Selective Adam optimizer
         };
 
         struct DatasetConfig {
