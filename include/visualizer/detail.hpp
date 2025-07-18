@@ -162,6 +162,11 @@ namespace gs {
         std::chrono::steady_clock::time_point save_start_time_;
         bool manual_start_triggered_ = false;
         bool training_started_ = false;
+
+        // camera controls
+        void renderCameraControlsWindow();
+        bool show_camera_controls_window_ = false;
+
     };
 
 } // namespace gs
