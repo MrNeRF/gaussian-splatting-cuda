@@ -1,7 +1,7 @@
 #pragma once
+#include "Common.h"
 #include "core/camera.hpp"
 #include "core/point_cloud.hpp"
-#include "Common.h"
 #include <filesystem>
 #include <vector>
 
