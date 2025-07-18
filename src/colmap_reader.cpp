@@ -2,111 +2,17 @@
 #include "core/point_cloud.hpp"
 #include "core/torch_shapes.hpp"
 #include <algorithm>
-#include <coroutine>
 #include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <future>
 #include <iostream>
-#include <stdexcept>
-#include <thread>
+#include <memory>
 #include <torch/torch.h>
 #include <unordered_map>
 #include <vector>
 
-namespace fs = std::filesystem;
 namespace F = torch::nn::functional;
-
-// Internal coroutine support
-template <typename T>
-struct CoroTask {
-    struct promise_type {
-        T value;
-        std::exception_ptr exception;
-
-        CoroTask get_return_object() {
-            return CoroTask{std::coroutine_handle<promise_type>::from_promise(*this)};
-        }
-
-        std::suspend_never initial_suspend() { return {}; }
-        std::suspend_always final_suspend() noexcept { return {}; }
-
-        void return_value(T val) {
-            value = std::move(val);
-        }
-
-        void unhandled_exception() {
-            exception = std::current_exception();
-        }
-    };
-
-    std::coroutine_handle<promise_type> coro;
-
-    CoroTask(std::coroutine_handle<promise_type> h) : coro(h) {}
-
-    ~CoroTask() {
-        if (coro)
-            coro.destroy();
-    }
-
-    CoroTask(const CoroTask&) = delete;
-    CoroTask& operator=(const CoroTask&) = delete;
-
-    CoroTask(CoroTask&& other) noexcept : coro(std::exchange(other.coro, {})) {}
-    CoroTask& operator=(CoroTask&& other) noexcept {
-        if (this != &other) {
-            if (coro)
-                coro.destroy();
-            coro = std::exchange(other.coro, {});
-        }
-        return *this;
-    }
-
-    T get() {
-        while (!coro.done()) {
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-        }
-
-        if (coro.promise().exception) {
-            std::rethrow_exception(coro.promise().exception);
-        }
-
-        return std::move(coro.promise().value);
-    }
-
-    // Awaitable interface
-    bool await_ready() const noexcept {
-        return coro.done();
-    }
-
-    void await_suspend(std::coroutine_handle<> h) const {
-        std::thread([this, h]() {
-            while (!coro.done()) {
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
-            }
-            h.resume();
-        }).detach();
-    }
-
-    T await_resume() {
-        if (coro.promise().exception) {
-            std::rethrow_exception(coro.promise().exception);
-        }
-        return std::move(coro.promise().value);
-    }
-};
-
-struct yield_now {
-    bool await_ready() const noexcept { return false; }
-    void await_suspend(std::coroutine_handle<> h) const {
-        std::thread([h]() {
-            std::this_thread::sleep_for(std::chrono::microseconds(1));
-            h.resume();
-        }).detach();
-    }
-    void await_resume() const noexcept {}
-};
 
 // -----------------------------------------------------------------------------
 //  Quaternion to rotation matrix
@@ -213,41 +119,29 @@ static const std::unordered_map<int, std::pair<CAMERA_MODEL, int32_t>> camera_mo
     {11, {CAMERA_MODEL::UNDEFINED, -1}}};
 
 // -----------------------------------------------------------------------------
-//  Async binary-file loader using coroutines
+//  Binary-file loader
 // -----------------------------------------------------------------------------
-static CoroTask<std::unique_ptr<std::vector<char>>>
-read_binary_async(const std::filesystem::path& p) {
-    auto buf = std::make_unique<std::vector<char>>();
+static std::unique_ptr<std::vector<char>>
+read_binary(const std::filesystem::path& p) {
+    std::ifstream f(p, std::ios::binary | std::ios::ate);
+    if (!f)
+        throw std::runtime_error("Failed to open " + p.string());
 
-    // Use async file I/O
-    auto future = std::async(std::launch::async, [&p, buf = buf.get()]() {
-        std::ifstream f(p, std::ios::binary | std::ios::ate);
-        if (!f)
-            throw std::runtime_error("Failed to open " + p.string());
+    auto sz = static_cast<std::streamsize>(f.tellg());
+    auto buf = std::make_unique<std::vector<char>>(static_cast<size_t>(sz));
 
-        auto sz = static_cast<std::streamsize>(f.tellg());
-        buf->resize(static_cast<size_t>(sz));
-
-        f.seekg(0, std::ios::beg);
-        f.read(buf->data(), sz);
-        if (!f)
-            throw std::runtime_error("Short read on " + p.string());
-    });
-
-    // Yield while file is being read
-    while (future.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready) {
-        co_await yield_now{};
-    }
-
-    future.get(); // Will throw if there was an error
-    co_return std::move(buf);
+    f.seekg(0, std::ios::beg);
+    f.read(buf->data(), sz);
+    if (!f)
+        throw std::runtime_error("Short read on " + p.string());
+    return buf;
 }
 
 // -----------------------------------------------------------------------------
-//  Async images.bin parser
+//  images.bin
 // -----------------------------------------------------------------------------
-CoroTask<std::vector<Image>> read_images_binary_async(const std::filesystem::path& file_path) {
-    auto buf_owner = co_await read_binary_async(file_path);
+std::vector<Image> read_images_binary(const std::filesystem::path& file_path) {
+    auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
 
@@ -277,23 +171,18 @@ CoroTask<std::vector<Image>> read_images_binary_async(const std::filesystem::pat
 
         uint64_t npts = read_u64(cur); // skip 2-D points
         cur += npts * (sizeof(double) * 2 + sizeof(uint64_t));
-
-        // Yield every 100 images to prevent blocking
-        if (i % 100 == 0) {
-            co_await yield_now{};
-        }
     }
     if (cur != end)
         throw std::runtime_error("images.bin: trailing bytes");
-    co_return std::move(images);
+    return images;
 }
 
 // -----------------------------------------------------------------------------
-//  Async cameras.bin parser
+//  cameras.bin
 // -----------------------------------------------------------------------------
-CoroTask<std::unordered_map<uint32_t, CameraData>>
-read_cameras_binary_async(const std::filesystem::path& file_path) {
-    auto buf_owner = co_await read_binary_async(file_path);
+std::unordered_map<uint32_t, CameraData>
+read_cameras_binary(const std::filesystem::path& file_path) {
+    auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
 
@@ -322,22 +211,17 @@ read_cameras_binary_async(const std::filesystem::path& file_path) {
         cur += param_cnt * sizeof(double);
 
         cams.emplace(cam._camera_ID, std::move(cam));
-
-        // Yield every 50 cameras
-        if (i % 50 == 0) {
-            co_await yield_now{};
-        }
     }
     if (cur != end)
         throw std::runtime_error("cameras.bin: trailing bytes");
-    co_return std::move(cams);
+    return cams;
 }
 
 // -----------------------------------------------------------------------------
-//  Async points3D.bin parser
+//  points3D.bin
 // -----------------------------------------------------------------------------
-CoroTask<PointCloud> read_point3D_binary_async(const std::filesystem::path& file_path) {
-    auto buf_owner = co_await read_binary_async(file_path);
+PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
+    auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
 
@@ -366,27 +250,22 @@ CoroTask<PointCloud> read_point3D_binary_async(const std::filesystem::path& file
 
         cur += 8;                                    // skip reprojection error
         cur += read_u64(cur) * sizeof(uint32_t) * 2; // skip track
-
-        // Yield every 1000 points
-        if (i % 1000 == 0) {
-            co_await yield_now{};
-        }
     }
 
     if (cur != end)
         throw std::runtime_error("points3D.bin: trailing bytes");
 
-    co_return PointCloud(positions, colors);
+    return PointCloud(positions, colors);
 }
 
 // -----------------------------------------------------------------------------
-//  Async camera processing
+//  Assemble per-image camera information
 // -----------------------------------------------------------------------------
-CoroTask<std::tuple<std::vector<CameraData>, torch::Tensor>>
-read_colmap_cameras_async(const std::filesystem::path base_path,
-                          const std::unordered_map<uint32_t, CameraData>& cams,
-                          const std::vector<Image>& images,
-                          const std::string& images_folder = "images") {
+std::tuple<std::vector<CameraData>, torch::Tensor>
+read_colmap_cameras(const std::filesystem::path base_path,
+                    const std::unordered_map<uint32_t, CameraData>& cams,
+                    const std::vector<Image>& images,
+                    const std::string& images_folder = "images") {
     std::vector<CameraData> out(images.size());
 
     std::filesystem::path images_path = base_path / images_folder;
@@ -532,75 +411,25 @@ read_colmap_cameras_async(const std::filesystem::path base_path,
 
         out[i]._img_w = out[i]._img_h = out[i]._channels = 0;
         out[i]._img_data = nullptr;
-
-        // Yield every 10 cameras to prevent blocking
-        if (i % 10 == 0) {
-            co_await yield_now{};
-        }
     }
 
     std::cout << "Training with " << out.size() << " images \n";
-    co_return std::make_tuple(std::move(out), camera_locations.mean(0));
+    return {std::move(out), camera_locations.mean(0)};
 }
 
 // -----------------------------------------------------------------------------
-//  Helper function to get sparse file paths
+//  Public API functions
 // -----------------------------------------------------------------------------
-static fs::path get_sparse_file_path(const fs::path& base, const std::string& filename) {
-    fs::path candidate0 = base / "sparse" / "0" / filename;
-    if (fs::exists(candidate0))
-        return candidate0;
-
-    fs::path candidate = base / "sparse" / filename;
-    if (fs::exists(candidate))
-        return candidate;
-
-    throw std::runtime_error(
-        "Cannot find \"" + filename +
-        "\" in \"" + candidate0.string() + "\" or \"" + candidate.string() + "\". "
-                                                                             "Expected directory structure: 'sparse/0/' or 'sparse/'.");
+PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
+    return read_point3D_binary(filepath / "sparse/0/points3D.bin");
 }
 
-// -----------------------------------------------------------------------------
-//  Main async coordinator
-// -----------------------------------------------------------------------------
-CoroTask<std::tuple<std::vector<CameraData>, torch::Tensor>>
-read_colmap_cameras_and_images_async_impl(
-    const std::filesystem::path& base,
-    const std::string& images_folder) {
-
-    fs::path cams_file = get_sparse_file_path(base, "cameras.bin");
-    fs::path images_file = get_sparse_file_path(base, "images.bin");
-
-    // Start both file reads concurrently
-    auto cams_task = read_cameras_binary_async(cams_file);
-    auto images_task = read_images_binary_async(images_file);
-
-    // Wait for both to complete
-    auto cams = co_await cams_task;
-    auto images = co_await images_task;
-
-    // Process the data
-    co_return co_await read_colmap_cameras_async(base, cams, images, images_folder);
-}
-
-CoroTask<PointCloud> read_colmap_point_cloud_async_impl(const std::filesystem::path& filepath) {
-    fs::path points3d_file = get_sparse_file_path(filepath, "points3D.bin");
-    co_return co_await read_point3D_binary_async(points3d_file);
-}
-
-// -----------------------------------------------------------------------------
-//  Public API - same interface, coroutines under the hood
-// -----------------------------------------------------------------------------
 std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images(
     const std::filesystem::path& base,
     const std::string& images_folder) {
 
-    auto task = read_colmap_cameras_and_images_async_impl(base, images_folder);
-    return task.get();
-}
+    auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");
+    auto images = read_images_binary(base / "sparse/0/images.bin");
 
-PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
-    auto task = read_colmap_point_cloud_async_impl(filepath);
-    return task.get();
+    return read_colmap_cameras(base, cams, images, images_folder);
 }
