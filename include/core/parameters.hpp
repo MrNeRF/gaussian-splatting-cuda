@@ -2,6 +2,7 @@
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
 
+#include <expected>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -44,8 +45,8 @@ namespace gs {
             float bilateral_grid_lr = 2e-3;
             float tv_loss_weight = 10.0f;
 
-            float steps_scaler = -1;        // If < 0, step size scaling is disabled
-            bool selective_adam = false;    // Use Selective Adam optimizer
+            float steps_scaler = -1;     // If < 0, step size scaling is disabled
+            bool selective_adam = false; // Use Selective Adam optimizer
         };
 
         struct DatasetConfig {
@@ -61,10 +62,12 @@ namespace gs {
             OptimizationParameters optimization;
         };
 
-        OptimizationParameters read_optim_params_from_json();
+        // Modern C++23 functions returning expected values
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_json();
 
         // Save training parameters to JSON
-        void save_training_parameters_to_json(const TrainingParameters& params,
-                                              const std::filesystem::path& output_path);
+        std::expected<void, std::string> save_training_parameters_to_json(
+            const TrainingParameters& params,
+            const std::filesystem::path& output_path);
     } // namespace param
 } // namespace gs

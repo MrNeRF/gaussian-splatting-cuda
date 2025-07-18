@@ -42,21 +42,19 @@ class Viewport {
             glm::mat3 Ry = glm::mat3(glm::rotate(glm::mat4(1.0f), y, R[1]));
             glm::mat3 Rp = glm::mat3(glm::rotate(glm::mat4(1.0f), p, R[0]));
             auto U = Rp * Ry;
-            t = U*t;
-            R = U*R;
+            t = U * t;
+            R = U * R;
             prePos = pos;
         }
 
         void rotate_roll(float diff) {
-            float ang_rad = diff*rotateRollSpeed;
+            float ang_rad = diff * rotateRollSpeed;
             glm::mat3 rot_z = glm::mat3(
                 glm::cos(ang_rad), -glm::sin(ang_rad), 0.0f,
-                glm::sin(ang_rad),  glm::cos(ang_rad), 0.0f,
-                0.0f,               0.0f,              1.0f
-            );
+                glm::sin(ang_rad), glm::cos(ang_rad), 0.0f,
+                0.0f, 0.0f, 1.0f);
 
-            R = R*rot_z;
-
+            R = R * rot_z;
         }
 
         void translate(const glm::vec2& pos) {
