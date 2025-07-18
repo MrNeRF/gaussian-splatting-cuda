@@ -8,10 +8,12 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <torch/torch.h>
 #include <unordered_map>
 #include <vector>
 
+namespace fs = std::filesystem;
 namespace F = torch::nn::functional;
 
 // -----------------------------------------------------------------------------
@@ -420,16 +422,36 @@ read_colmap_cameras(const std::filesystem::path base_path,
 // -----------------------------------------------------------------------------
 //  Public API functions
 // -----------------------------------------------------------------------------
+
+static fs::path get_sparse_file_path(const fs::path& base, const std::string& filename) {
+    fs::path candidate0 = base / "sparse" / "0" / filename;
+    if (fs::exists(candidate0))
+        return candidate0;
+
+    fs::path candidate = base / "sparse" / filename;
+    if (fs::exists(candidate))
+        return candidate;
+
+    throw std::runtime_error(
+        "Cannot find \"" + filename +
+        "\" in \"" + candidate0.string() + "\" or \"" + candidate.string() + "\". "
+        "Expected directory structure: 'sparse/0/' or 'sparse/'.");
+}
+
 PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
-    return read_point3D_binary(filepath / "sparse/0/points3D.bin");
+    fs::path points3d_file = get_sparse_file_path(filepath, "points3D.bin");
+    return read_point3D_binary(points3d_file);
 }
 
 std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images(
     const std::filesystem::path& base,
     const std::string& images_folder) {
 
-    auto cams = read_cameras_binary(base / "sparse/0/cameras.bin");
-    auto images = read_images_binary(base / "sparse/0/images.bin");
+    fs::path cams_file = get_sparse_file_path(base, "cameras.bin");
+    fs::path images_file = get_sparse_file_path(base, "images.bin");
+
+    auto cams = read_cameras_binary(cams_file);
+    auto images = read_images_binary(images_file);
 
     return read_colmap_cameras(base, cams, images, images_folder);
 }
