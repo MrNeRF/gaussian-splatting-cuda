@@ -2,6 +2,7 @@
 #pragma once
 
 #include "core/parameters.hpp"
+#include <expected>
 
 namespace gs {
     namespace args {
@@ -9,9 +10,9 @@ namespace gs {
          * @brief Parse command-line arguments and load parameters from JSON
          * @param argc Number of arguments
          * @param argv Array of argument strings (const-correct)
-         * @return TrainingParameters Populated parameter structure
-         * @throws std::runtime_error if argument parsing fails
+         * @return Expected TrainingParameters or error message
          */
-        gs::param::TrainingParameters parse_args_and_params(int argc, const char* const argv[]);
+        std::expected<gs::param::TrainingParameters, std::string>
+        parse_args_and_params(int argc, const char* const argv[]);
     } // namespace args
 } // namespace gs

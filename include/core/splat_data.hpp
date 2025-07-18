@@ -1,7 +1,7 @@
-// Updated splat_data.hpp
 #pragma once
 
 #include "core/point_cloud.hpp"
+#include <expected>
 #include <filesystem>
 #include <mutex>
 #include <string>
@@ -33,8 +33,10 @@ public:
               torch::Tensor opacity,
               float scene_scale);
 
-    // Static factory method to create from PointCloud
-    static SplatData init_model_from_pointcloud(const gs::param::TrainingParameters& params, torch::Tensor scene_center);
+    // Static factory method to create from PointCloud - now returns expected
+    static std::expected<SplatData, std::string> init_model_from_pointcloud(
+        const gs::param::TrainingParameters& params,
+        torch::Tensor scene_center);
 
     // Computed getters (implemented in cpp)
     torch::Tensor get_means() const;
@@ -44,18 +46,18 @@ public:
     torch::Tensor get_shs() const;
 
     // Simple inline getters
-    inline int get_active_sh_degree() const { return _active_sh_degree; }
-    inline float get_scene_scale() const { return _scene_scale; }
-    inline int64_t size() const { return _means.size(0); }
+    int get_active_sh_degree() const { return _active_sh_degree; }
+    float get_scene_scale() const { return _scene_scale; }
+    int64_t size() const { return _means.size(0); }
 
     // Raw tensor access for optimization (inline for performance)
-    inline torch::Tensor& means() { return _means; }
-    inline torch::Tensor& opacity_raw() { return _opacity; }
-    inline torch::Tensor& rotation_raw() { return _rotation; }
-    inline torch::Tensor& scaling_raw() { return _scaling; }
-    inline torch::Tensor& sh0() { return _sh0; }
-    inline torch::Tensor& shN() { return _shN; }
-    inline torch::Tensor& max_radii2D() { return _max_radii2D; }
+    torch::Tensor& means() { return _means; }
+    torch::Tensor& opacity_raw() { return _opacity; }
+    torch::Tensor& rotation_raw() { return _rotation; }
+    torch::Tensor& scaling_raw() { return _scaling; }
+    torch::Tensor& sh0() { return _sh0; }
+    torch::Tensor& shN() { return _shN; }
+    torch::Tensor& max_radii2D() { return _max_radii2D; }
 
     // Utility methods
     void increment_sh_degree();
