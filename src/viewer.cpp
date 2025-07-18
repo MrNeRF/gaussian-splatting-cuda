@@ -153,8 +153,7 @@ namespace gs {
             detail_->viewport_.camera.translate(glm::vec2(x, y));
         } else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
             detail_->viewport_.camera.rotate(glm::vec2(x, y));
-        }
-        else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
+        } else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
             detail_->viewport_.camera.rotate_around_center(glm::vec2(x, y));
         }
     }
@@ -170,8 +169,7 @@ namespace gs {
         if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
             // 'R' key is currently pressed
             detail_->viewport_.camera.rotate_roll(delta);
-        }
-        else {
+        } else {
             detail_->viewport_.camera.zoom(delta);
         }
     }
@@ -339,7 +337,6 @@ namespace gs {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
-
 
         if (ImGui::Begin("Camera Controls", &show_camera_controls_window_, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("Camera Controls:");
