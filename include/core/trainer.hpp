@@ -7,7 +7,9 @@
 #include "core/parameters.hpp"
 #include "core/training_progress.hpp"
 #include <atomic>
+#include <expected>
 #include <memory>
+#include <stop_token>
 #include <torch/torch.h>
 
 namespace gs {
@@ -31,11 +33,11 @@ namespace gs {
 
         ~Trainer();
 
-        // Main training method
-        void train();
+        // Main training method with stop token support
+        std::expected<void, std::string> train(std::stop_token stop_token = {});
 
         // Create viewer and return it for main thread execution
-        GSViewer* create_and_get_viewer();
+        std::expected<GSViewer*, std::string> create_and_get_viewer();
 
         // Control methods for GUI interaction
         void request_pause() { pause_requested_ = true; }
@@ -56,26 +58,45 @@ namespace gs {
         const IStrategy& get_strategy() const { return *strategy_; }
 
     private:
+        // Training step result
+        enum class StepResult {
+            Continue,
+            Stop,
+            Error
+        };
+
         // Protected method for processing a single training step
-        // Returns true if training should continue
-        bool train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode);
+        // Returns result indicating whether training should continue
+        std::expected<StepResult, std::string> train_step(
+            int iter,
+            Camera* cam,
+            torch::Tensor gt_image,
+            RenderMode render_mode,
+            std::stop_token stop_token = {});
 
-        // Protected methods for computing loss
-        torch::Tensor compute_photometric_loss(const RenderOutput& render_output,
-                                               const torch::Tensor& gt_image,
-                                               const SplatData& splatData,
-                                               const param::OptimizationParameters& opt_params);
-        torch::Tensor compute_scale_reg_loss(const SplatData& splatData,
-                                             const param::OptimizationParameters& opt_params);
-        torch::Tensor compute_opacity_reg_loss(const SplatData& splatData,
-                                               const param::OptimizationParameters& opt_params);
-        torch::Tensor compute_bilateral_grid_tv_loss(const std::unique_ptr<gs::BilateralGrid>& bilateral_grid,
-                                                     const param::OptimizationParameters& opt_params);
+        // Protected methods for computing loss - now return expected values
+        std::expected<torch::Tensor, std::string> compute_photometric_loss(
+            const RenderOutput& render_output,
+            const torch::Tensor& gt_image,
+            const SplatData& splatData,
+            const param::OptimizationParameters& opt_params);
 
-        void initialize_bilateral_grid();
+        std::expected<torch::Tensor, std::string> compute_scale_reg_loss(
+            const SplatData& splatData,
+            const param::OptimizationParameters& opt_params);
+
+        std::expected<torch::Tensor, std::string> compute_opacity_reg_loss(
+            const SplatData& splatData,
+            const param::OptimizationParameters& opt_params);
+
+        std::expected<torch::Tensor, std::string> compute_bilateral_grid_tv_loss(
+            const std::unique_ptr<gs::BilateralGrid>& bilateral_grid,
+            const param::OptimizationParameters& opt_params);
+
+        std::expected<void, std::string> initialize_bilateral_grid();
 
         // Handle control requests
-        void handle_control_requests(int iter);
+        void handle_control_requests(int iter, std::stop_token stop_token = {});
 
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
