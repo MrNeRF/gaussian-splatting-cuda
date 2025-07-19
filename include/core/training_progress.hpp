@@ -25,15 +25,15 @@ public:
         progress_bar_->set_option(indicators::option::BarWidth(40));
         progress_bar_->set_option(indicators::option::Start("["));
 
-        #ifdef _WIN32
-            progress_bar_->set_option(indicators::option::Fill("#"));
-            progress_bar_->set_option(indicators::option::Lead(">"));
-            progress_bar_->set_option(indicators::option::Remainder("-"));
-        #else
-            progress_bar_->set_option(indicators::option::Fill("█"));
-            progress_bar_->set_option(indicators::option::Lead("▌"));
-            progress_bar_->set_option(indicators::option::Remainder("░"));
-        #endif // _WIN32
+#ifdef _WIN32
+        progress_bar_->set_option(indicators::option::Fill("#"));
+        progress_bar_->set_option(indicators::option::Lead(">"));
+        progress_bar_->set_option(indicators::option::Remainder("-"));
+#else
+        progress_bar_->set_option(indicators::option::Fill("█"));
+        progress_bar_->set_option(indicators::option::Lead("▌"));
+        progress_bar_->set_option(indicators::option::Remainder("░"));
+#endif // _WIN32
 
         progress_bar_->set_option(indicators::option::End("]"));
         progress_bar_->set_option(indicators::option::PrefixText("Training "));

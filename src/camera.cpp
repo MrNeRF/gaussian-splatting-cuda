@@ -88,8 +88,8 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
                             .permute({2, 0, 1});
 
     torch::Tensor image_cpu = tmp.to(torch::kFloat32)
-                                .clone()
-                                .div_(255.0f);
+                                  .clone()
+                                  .div_(255.0f);
 
     free_image(data);
     return image_cpu.to(torch::kCUDA, /*non_blocking=*/true);
@@ -126,7 +126,6 @@ torch::Tensor Camera::load_and_get_attention_mask(int resolution) {
     auto channel0 = tmp.select(0, /*dim=*/0);
 
     auto mask_cpu = channel0.clone().to(torch::kBool);
-
 
     free_image(data);
     return mask_cpu.to(torch::kCUDA, /*non_blocking=*/true);

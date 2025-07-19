@@ -140,7 +140,7 @@ namespace {
         setFlag(skip_intermediate_saving, opt.skip_intermediate_saving);
         setFlag(use_attention_mask, opt.use_attention_mask);
         if (!opt.use_attention_mask)
-            ds.attention_masks = "no-mask-path";    
+            ds.attention_masks = "no-mask-path";
 
         // Special case: validate render mode
         if (render_mode) {

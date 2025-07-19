@@ -103,7 +103,7 @@ namespace gs {
         // Additive loss is generally more stable than multiplicative factors.
         return current_photometric_loss * (1 + mean_combined_loss);
     }*/
-    
+
     torch::Tensor Trainer::compute_photometric_loss(const RenderOutput& render_output,
                                                     const torch::Tensor& gt_image,
                                                     const torch::Tensor& mask_image,
@@ -118,7 +118,7 @@ namespace gs {
 
         // Ensure images have same dimensions
         torch::Tensor rendered = render_output.image;
-        torch::Tensor gt = gt_image;//victor mira l1 loss y fused ssmim
+        torch::Tensor gt = gt_image;
 
         // Ensure both tensors are 4D (batch, height, width, channels)
         rendered = rendered.dim() == 3 ? rendered.unsqueeze(0) : rendered;
@@ -131,7 +131,6 @@ namespace gs {
                     "ERROR: size mismatch - rendered ", rendered.sizes(), " vs. mask ", mask_image.sizes());
 
         torch::Tensor inv = mask_image;
-        //torch::Tensor inv = (~mask_image).to(torch::kBool);
         if (inv.dim() == 2) {
             inv = inv.unsqueeze(0); // [1,H,W]
         }
@@ -141,7 +140,7 @@ namespace gs {
 
         // Params
         const float invalidPixelWeight = 1.0f / 20.0f;
-        const int ExpandRimRadius = 0; 
+        const int ExpandRimRadius = 0;
 
         torch::Tensor W;
         if (ExpandRimRadius > 0) {
@@ -194,32 +193,56 @@ namespace gs {
                              torch::full_like(invF, invalidPixelWeight, torch::kFloat),
                              torch::ones_like(invF, torch::kFloat));
         }
-        //victor
-        torch::Tensor wSum = W.sum().clamp_min(1e-6f);
-
         int totalPixels = (Height * Width);
-        // 1) pixel-wise L1 map and weighted L1 loss
 
+        // Pixel-wise L1 map and weighted L1 loss
         auto l1_map = torch::abs(rendered - gt).mean(/*dim=*/1); // Resultado: [B, H, W]
-
-        // 2. Aplica los pesos, suma los errores y normaliza por el número total de píxeles.
+        auto wSum = W.sum().clamp_min(1e-6f);
         auto l1_loss = (l1_map * W).sum() / totalPixels;
 
         // 2) pixel-wise SSIM map and weighted SSIM loss
 
-        #ifdef weigthed_ssim
-            auto ssim_map = fused_ssim_map(rendered, gt, "same", /*train=*/true);
-            if (ssim_map.dim() == 4) {
-                ssim_map = ssim_map.mean(/*dim=*/1); // → [B,H,W]
-            }
-            // Clampeamos a [0,1] por seguridad
-            ssim_map = ssim_map.clamp(0.0f, 1.0f);
-            // Calculamos 1 - SSIM, luego ponderamos y sumamos
-            auto ssim_loss_map = 1.0f - ssim_map;
-            auto ssim_loss = (ssim_loss_map * W).sum() / totalPixels;
-        #else
-            auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
-        #endif
+#define weigthed_ssim
+#ifdef weigthed_ssim
+        // Compute the SSIM map. Using "valid" padding results in a smaller map.
+        auto ssim_map_raw = fused_ssim_map(rendered, gt, "valid", /*train=*/true);
+
+        // Process the raw SSIM map: average over channels and clamp values to [0, 1].
+        torch::Tensor ssim_map;
+        if (ssim_map_raw.dim() == 4) {
+            ssim_map = ssim_map_raw.mean(1); // Average channel dimension -> [B, H, W]
+        } else {
+            ssim_map = ssim_map_raw;
+        }
+        ssim_map = ssim_map.clamp(0.0f, 1.0f);
+
+        // Manually crop the weight map `W` to match the `ssim_map` dimensions.
+        namespace I = torch::indexing;
+
+        // Get original and target dimensions.
+        const int orig_h = W.size(-2);
+        const int orig_w = W.size(-1);
+        const int target_h = ssim_map.size(-2);
+        const int target_w = ssim_map.size(-1);
+
+        // Calculate offsets for a centered crop.
+        const int crop_h_start = (orig_h - target_h) / 2;
+        const int crop_w_start = (orig_w - target_w) / 2;
+
+        // Apply the crop using tensor slicing.
+        torch::Tensor W_cropped = W.index({I::Slice(),
+                                           I::Slice(crop_h_start, crop_h_start + target_h),
+                                           I::Slice(crop_w_start, crop_w_start + target_w)});
+
+        // Compute the weighted SSIM loss.
+        auto ssim_loss_map = 1.0f - ssim_map;
+
+        // Normalize by the sum of the cropped weights for correct loss scaling.
+        auto W_cropped_sum = W_cropped.sum().clamp_min(1e-6f);
+        auto ssim_loss = (ssim_loss_map * W_cropped).sum() / W_cropped_sum;
+#else
+        auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
+#endif
 
         // 3) combined loss
         auto loss = (1.0f - opt_params.lambda_dssim) * l1_loss + opt_params.lambda_dssim * ssim_loss;
@@ -410,7 +433,7 @@ namespace gs {
 
         // Compute loss using the factored-out function
         torch::Tensor loss;
-        if (!mask_image.defined() || params_.optimization.iterations*0.1 > iter)
+        if (!mask_image.defined() || params_.optimization.iterations * 0.1 > iter)
             loss = compute_photometric_loss(r_output, gt_image, strategy_->get_model(), params_.optimization);
         else
             loss = compute_photometric_loss(r_output, gt_image, mask_image, out_of_mask_penalty, strategy_->get_model(), params_.optimization);
@@ -533,7 +556,6 @@ namespace gs {
                     float out_of_mask_penalty = epoch * 4 < epochs_needed ? 1.0f : 0.0f;
                     should_continue = train_step(iter, cam, gt_image, mask_image, render_mode, out_of_mask_penalty);
                 }
-
 
                 if (!should_continue) {
                     break;

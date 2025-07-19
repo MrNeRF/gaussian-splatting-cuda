@@ -294,7 +294,7 @@ namespace gs {
                     params.save_steps.push_back(step.get<size_t>());
                 }
             }
-                        
+
             if (json.contains("enable_eval")) {
                 params.enable_eval = json["enable_eval"];
             }
