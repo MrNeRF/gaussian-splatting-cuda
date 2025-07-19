@@ -1,4 +1,7 @@
-set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+# windows/linux platform independent
+set(RAW_VCPKG_PATH $ENV{VCPKG_ROOT})
+file(TO_CMAKE_PATH "${RAW_VCPKG_PATH}" VCPKG_ROOT)
+set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
 
 cmake_minimum_required(VERSION 3.24...3.30)
 project(gaussian_splatting_cuda LANGUAGES CUDA CXX C)
