@@ -140,59 +140,11 @@ namespace gs {
 
         // Params
         const float invalidPixelWeight = 1.0f / 20.0f;
-        const int ExpandRimRadius = 0;
 
         torch::Tensor W;
-        if (ExpandRimRadius > 0) {
-            const int ExpandRimWindow = 2 * ExpandRimRadius + 1;
-
-            // invF: [B,H,W] o [H,W]
-            torch::Tensor invF4;
-            if (invF.dim() == 2) {
-                invF4 = invF.unsqueeze(0).unsqueeze(0);
-            } else if (invF.dim() == 3) {
-                invF4 = invF.unsqueeze(1);
-            } else {
-                throw std::runtime_error("Unexpected mask dimensionality");
-            }
-
-            const int K = 2 * ExpandRimRadius + 1;
-            // Exterior dilation
-            auto dil4 = torch::nn::functional::max_pool2d(
-                invF4,
-                torch::nn::functional::MaxPool2dFuncOptions({K, K})
-                    .stride(1)
-                    .padding(ExpandRimRadius));
-            // Back to the original shape
-            torch::Tensor dil = (invF.dim() == 2)
-                                    ? dil4.squeeze(0).squeeze(0)
-                                    : dil4.squeeze(1);
-
-            // Same for avg:
-            auto avg4 = torch::nn::functional::avg_pool2d(
-                invF4,
-                torch::nn::functional::AvgPool2dFuncOptions({K, K})
-                    .stride(1)
-                    .padding(ExpandRimRadius));
-            torch::Tensor soft = (invF.dim() == 2)
-                                     ? avg4.squeeze(0).squeeze(0)
-                                     : avg4.squeeze(1);
-
-            /* Final map */
-            W = torch::ones_like(invF);              // weight 1 as default
-            W.masked_fill_(inv, invalidPixelWeight); // invalid interior
-
-            torch::Tensor rim = (dil > 0.5f) & (~inv); // exterior border
-            if (rim.any().item<bool>()) {
-                torch::Tensor wRim = 1.f - soft * (1.f - invalidPixelWeight);
-                W.masked_scatter_(rim, wRim.masked_select(rim));
-            }
-        } else {
-            // no rim
-            W = torch::where(inv,
-                             torch::full_like(invF, invalidPixelWeight, torch::kFloat),
-                             torch::ones_like(invF, torch::kFloat));
-        }
+        W = torch::where(inv,
+                         torch::full_like(invF, invalidPixelWeight, torch::kFloat),
+                         torch::ones_like(invF, torch::kFloat));
         int totalPixels = (Height * Width);
 
         // Pixel-wise L1 map and weighted L1 loss
@@ -202,8 +154,6 @@ namespace gs {
 
         // 2) pixel-wise SSIM map and weighted SSIM loss
 
-#define weigthed_ssim
-#ifdef weigthed_ssim
         // Compute the SSIM map. Using "valid" padding results in a smaller map.
         auto ssim_map_raw = fused_ssim_map(rendered, gt, "valid", /*train=*/true);
 
@@ -240,9 +190,6 @@ namespace gs {
         // Normalize by the sum of the cropped weights for correct loss scaling.
         auto W_cropped_sum = W_cropped.sum().clamp_min(1e-6f);
         auto ssim_loss = (ssim_loss_map * W_cropped).sum() / W_cropped_sum;
-#else
-        auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
-#endif
 
         // 3) combined loss
         auto loss = (1.0f - opt_params.lambda_dssim) * l1_loss + opt_params.lambda_dssim * ssim_loss;
