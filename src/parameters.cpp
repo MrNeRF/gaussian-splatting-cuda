@@ -335,6 +335,9 @@ namespace gs {
                 if (json.contains("antialiasing")) {
                     params.antialiasing = json["antialiasing"];
                 }
+                if (json.contains("skip_intermediate")) {
+                    params.antialiasing = json["skip_intermediate"];
+                }
                 if (json.contains("sh_degree_interval")) {
                     params.sh_degree_interval = json["sh_degree_interval"];
                 }
