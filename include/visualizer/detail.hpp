@@ -51,7 +51,7 @@ namespace gs {
 
         static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
-        static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+        static void wsad_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
         void run();
 
