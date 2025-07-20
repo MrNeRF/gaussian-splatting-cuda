@@ -139,6 +139,7 @@ namespace gs {
         ~GSViewer();
 
         void setTrainer(Trainer* trainer);
+        void setAntiAliasing(bool enable);
 
         void drawFrame();
 
@@ -168,6 +169,7 @@ namespace gs {
         // camera controls
         void renderCameraControlsWindow();
         bool show_camera_controls_window_ = false;
+        bool anti_aliasing_ = false;
     };
 
 } // namespace gs

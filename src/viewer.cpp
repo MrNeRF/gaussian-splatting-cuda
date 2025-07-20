@@ -293,6 +293,10 @@ namespace gs {
         trainer_ = trainer;
     }
 
+    void GSViewer::setAntiAliasing(bool enable) {
+        anti_aliasing_ = enable;
+    }
+
     void GSViewer::drawFrame() {
         // Only render if trainer is available
         if (!trainer_) {
@@ -348,7 +352,7 @@ namespace gs {
                 background,
                 config_->scaling_modifier,
                 false,
-                false,
+                anti_aliasing_,
                 RenderMode::RGB);
         }
 

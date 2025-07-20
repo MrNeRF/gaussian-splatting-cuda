@@ -132,17 +132,15 @@ sudo apt install cuda-cudart-dev-12-8 cuda-curand-dev-12-8 cuda-cublas-dev-12-8
 Ensure you have a modern compiler:
 ```bash
 # Check compiler version
-gcc --version  # Should be 13+ for full C++23 support
+gcc --version  # Should be 14+ for full C++23 support
 clang --version  # Should be 17+ for full C++23 support
 
 # Install newer GCC on Ubuntu 22.04
-sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-sudo apt update
-sudo apt install gcc-13 g++-13
+You must build g++-14 from sources on Ubuntu 22.04. On Ubuntu >24.04 it can be installed via apt.
 
 # Set as default
-sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 60
-sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 60
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 60
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 60
 ```
 
 ## LibTorch 2.7.0
