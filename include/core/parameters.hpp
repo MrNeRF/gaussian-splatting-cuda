@@ -33,7 +33,7 @@ namespace gs {
             std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
             bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
-            bool enable_save_eval_images = false;             // Save during evaluation images
+            bool enable_save_eval_images = true;             // Save during evaluation images
             bool enable_viz = false;                          // Enable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
 
@@ -42,10 +42,10 @@ namespace gs {
             int bilateral_grid_X = 16;
             int bilateral_grid_Y = 16;
             int bilateral_grid_W = 8;
-            float bilateral_grid_lr = 2e-3;
-            float tv_loss_weight = 10.0f;
+            float bilateral_grid_lr = 2e-3f;
+            float tv_loss_weight = 10.f;
 
-            float steps_scaler = -1;     // If < 0, step size scaling is disabled
+            float steps_scaler = 0.f;     // If < 0, step size scaling is disabled
             bool selective_adam = false; // Use Selective Adam optimizer
             bool antialiasing = false;   // Enable antialiasing in rendering
         };
