@@ -59,6 +59,7 @@ namespace gs {
         glfwSetMouseButtonCallback(window_, mouseButtonCallback);
         glfwSetCursorPosCallback(window_, cursorPosCallback);
         glfwSetScrollCallback(window_, scrollCallback);
+        glfwSetKeyCallback(window_, wsad_callback);
 
         glEnable(GL_LINE_SMOOTH);
         glDepthFunc(GL_LEQUAL);
@@ -171,6 +172,33 @@ namespace gs {
             detail_->viewport_.camera.rotate_roll(delta);
         } else {
             detail_->viewport_.camera.zoom(delta);
+        }
+    }
+
+    void ViewerDetail::wsad_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+
+        const float ADVANCE_RATE = 1.0f;
+        const float ADVANCE_RATE_FINE_TUNE = 0.3f;
+
+        float advance_rate = (action == GLFW_PRESS) ? ADVANCE_RATE_FINE_TUNE : (action == GLFW_REPEAT) ? ADVANCE_RATE
+                                                                                                       : 0.0f;
+        if (advance_rate == 0) {
+            return;
+        }
+
+        switch (key) {
+        case GLFW_KEY_W:
+            detail_->viewport_.camera.advance_forward(advance_rate);
+            break;
+        case GLFW_KEY_A:
+            detail_->viewport_.camera.advance_left(advance_rate);
+            break;
+        case GLFW_KEY_S:
+            detail_->viewport_.camera.advance_backward(advance_rate);
+            break;
+        case GLFW_KEY_D:
+            detail_->viewport_.camera.advance_right(advance_rate);
+            break;
         }
     }
 
@@ -348,7 +376,7 @@ namespace gs {
 
             // Table for better formatting
             if (ImGui::BeginTable("camera_controls_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 300.0f);
+                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 400.0f);
                 ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
@@ -381,6 +409,12 @@ namespace gs {
                 ImGui::Text("Roll Camera");
                 ImGui::TableNextColumn();
                 ImGui::Text("R + Mouse Scroll");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Move forward, backward, left and right within the scene");
+                ImGui::TableNextColumn();
+                ImGui::Text("w, s, a, d keys");
 
                 ImGui::EndTable();
             }
