@@ -19,6 +19,7 @@ class Viewport {
         float rotateCenterSpeed = 0.002f;
         float rotateRollSpeed = 0.01f;
         float translateSpeed = 0.001f;
+        float wasdSpeed = 0.03f;
 
         glm::mat3 R = glm::mat3(1.0f);
         glm::vec3 t = glm::vec3(0.0f);
@@ -65,6 +66,19 @@ class Viewport {
 
         void zoom(float delta) {
             t += delta * zoomSpeed * R[2];
+        }
+
+        void advance_forward(float deltaTime) {
+            t += R * glm::vec3(0, 0, 1) * deltaTime * wasdSpeed;
+        }
+        void advance_backward(float deltaTime) {
+            t += R * glm::vec3(0, 0, -1) * deltaTime * wasdSpeed;
+        }
+        void advance_left(float deltaTime) {
+            t += R * glm::vec3(-1, 0, 0) * deltaTime * wasdSpeed;
+        }
+        void advance_right(float deltaTime) {
+            t += R * glm::vec3(1, 0, 0) * deltaTime * wasdSpeed;
         }
 
         void initScreenPos(const glm::vec2& pos) {
