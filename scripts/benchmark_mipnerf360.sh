@@ -24,7 +24,7 @@ do
         --images images_${DATA_FACTOR} \
         --test-every 8 \
         --eval \
-        --save-eval-images
+        --save-eval-images --antialiasing
 
     echo "Completed $SCENE"
     echo
