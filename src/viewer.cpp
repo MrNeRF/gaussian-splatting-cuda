@@ -59,7 +59,7 @@ namespace gs {
         glfwSetMouseButtonCallback(window_, mouseButtonCallback);
         glfwSetCursorPosCallback(window_, cursorPosCallback);
         glfwSetScrollCallback(window_, scrollCallback);
-        glfwSetKeyCallback(window_, key_callback);
+        glfwSetKeyCallback(window_, wsad_callback);
 
         glEnable(GL_LINE_SMOOTH);
         glDepthFunc(GL_LEQUAL);
@@ -175,44 +175,30 @@ namespace gs {
         }
     }
 
-    void ViewerDetail::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-        // Handle key press events
-        if (action == GLFW_PRESS) {
-            float advance_rate = 0.3; // fine tune speed
+    void ViewerDetail::wsad_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 
-            switch (key) {
-            case GLFW_KEY_W:
-                detail_->viewport_.camera.advance_forward(advance_rate);
-                break;
-            case GLFW_KEY_A:
-                detail_->viewport_.camera.advance_left(advance_rate);
-                break;
-            case GLFW_KEY_S:
-                detail_->viewport_.camera.advance_backward(advance_rate);
-                break;
-            case GLFW_KEY_D:
-                detail_->viewport_.camera.advance_right(advance_rate);
-                break;
-            }
+        const float ADVANCE_RATE = 1.0f;
+        const float ADVANCE_RATE_FINE_TUNE = 0.3f;
+
+        float advance_rate = (action == GLFW_PRESS) ? ADVANCE_RATE_FINE_TUNE : (action == GLFW_REPEAT) ? ADVANCE_RATE
+                                                                                                       : 0.0f;
+        if (advance_rate == 0) {
+            return;
         }
-        // Handle key repeat events (while key is held down)
-        else if (action == GLFW_REPEAT) {
-            float advance_rate = 1;
 
-            switch (key) {
-            case GLFW_KEY_W:
-                detail_->viewport_.camera.advance_forward(advance_rate);
-                break;
-            case GLFW_KEY_A:
-                detail_->viewport_.camera.advance_left(advance_rate);
-                break;
-            case GLFW_KEY_S:
-                detail_->viewport_.camera.advance_backward(advance_rate);
-                break;
-            case GLFW_KEY_D:
-                detail_->viewport_.camera.advance_right(advance_rate);
-                break;
-            }
+        switch (key) {
+        case GLFW_KEY_W:
+            detail_->viewport_.camera.advance_forward(advance_rate);
+            break;
+        case GLFW_KEY_A:
+            detail_->viewport_.camera.advance_left(advance_rate);
+            break;
+        case GLFW_KEY_S:
+            detail_->viewport_.camera.advance_backward(advance_rate);
+            break;
+        case GLFW_KEY_D:
+            detail_->viewport_.camera.advance_right(advance_rate);
+            break;
         }
     }
 
