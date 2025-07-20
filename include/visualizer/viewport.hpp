@@ -69,16 +69,16 @@ class Viewport {
         }
 
         void advance_forward(float deltaTime) {
-            t += R*glm::vec3(0,0,1)*deltaTime*wasdSpeed;
+            t += R * glm::vec3(0, 0, 1) * deltaTime * wasdSpeed;
         }
         void advance_backward(float deltaTime) {
-            t += R*glm::vec3(0,0,-1)*deltaTime*wasdSpeed;
+            t += R * glm::vec3(0, 0, -1) * deltaTime * wasdSpeed;
         }
         void advance_left(float deltaTime) {
-            t += R*glm::vec3(-1,0,0)*deltaTime*wasdSpeed;
+            t += R * glm::vec3(-1, 0, 0) * deltaTime * wasdSpeed;
         }
         void advance_right(float deltaTime) {
-            t += R*glm::vec3(1,0,0)*deltaTime*wasdSpeed;
+            t += R * glm::vec3(1, 0, 0) * deltaTime * wasdSpeed;
         }
 
         void initScreenPos(const glm::vec2& pos) {
