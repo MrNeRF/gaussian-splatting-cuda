@@ -59,6 +59,7 @@ namespace gs {
         glfwSetMouseButtonCallback(window_, mouseButtonCallback);
         glfwSetCursorPosCallback(window_, cursorPosCallback);
         glfwSetScrollCallback(window_, scrollCallback);
+        glfwSetKeyCallback(window_, key_callback);
 
         glEnable(GL_LINE_SMOOTH);
         glDepthFunc(GL_LEQUAL);
@@ -173,6 +174,49 @@ namespace gs {
             detail_->viewport_.camera.zoom(delta);
         }
     }
+
+    void ViewerDetail::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+    {
+        // Handle key press events
+        if (action == GLFW_PRESS) {
+            float advance_rate = 0.3; // fine tune speed
+
+            switch (key) {
+            case GLFW_KEY_W:
+                detail_->viewport_.camera.advance_forward(advance_rate);
+                break;
+            case GLFW_KEY_A:
+                detail_->viewport_.camera.advance_left(advance_rate);
+                break;
+            case GLFW_KEY_S:
+                detail_->viewport_.camera.advance_backward(advance_rate);
+                break;
+            case GLFW_KEY_D:
+                detail_->viewport_.camera.advance_right(advance_rate);
+                break;
+            }
+        }
+        // Handle key repeat events (while key is held down)
+        else if (action == GLFW_REPEAT) {
+            float advance_rate = 1;
+
+            switch (key) {
+            case GLFW_KEY_W:
+                detail_->viewport_.camera.advance_forward(advance_rate);
+                break;
+            case GLFW_KEY_A:
+                detail_->viewport_.camera.advance_left(advance_rate);
+                break;
+            case GLFW_KEY_S:
+                detail_->viewport_.camera.advance_backward(advance_rate);
+                break;
+            case GLFW_KEY_D:
+                detail_->viewport_.camera.advance_right(advance_rate);
+                break;
+            }
+        }
+    }
+
 
     void ViewerDetail::run() {
 
@@ -344,7 +388,7 @@ namespace gs {
 
             // Table for better formatting
             if (ImGui::BeginTable("camera_controls_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 300.0f);
+                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 400.0f);
                 ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
@@ -377,6 +421,12 @@ namespace gs {
                 ImGui::Text("Roll Camera");
                 ImGui::TableNextColumn();
                 ImGui::Text("R + Mouse Scroll");
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Move forward, backward, left and right within the scene");
+                ImGui::TableNextColumn();
+                ImGui::Text("w, s, a, d keys");
 
                 ImGui::EndTable();
             }
