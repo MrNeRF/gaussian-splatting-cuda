@@ -266,7 +266,7 @@ namespace gs {
                     background_,
                     1.0f,
                     false,
-                    false,
+                    params_.optimization.antialiasing,
                     render_mode);
             };
 
