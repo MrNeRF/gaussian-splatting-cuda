@@ -175,8 +175,7 @@ namespace gs {
         }
     }
 
-    void ViewerDetail::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-    {
+    void ViewerDetail::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
         // Handle key press events
         if (action == GLFW_PRESS) {
             float advance_rate = 0.3; // fine tune speed
@@ -216,7 +215,6 @@ namespace gs {
             }
         }
     }
-
 
     void ViewerDetail::run() {
 
