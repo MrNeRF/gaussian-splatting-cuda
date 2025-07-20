@@ -124,6 +124,7 @@ namespace gs {
                     {"bilateral_grid_lr", defaults.bilateral_grid_lr, "Learning rate for bilateral grid"},
                     {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"},
                     {"steps_scaler", defaults.steps_scaler, "Scales the training steps and values"},
+                    {"antialiasing", defaults.antialiasing, "Enables antialiasing"},
                     {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
                     {"selective_adam", defaults.selective_adam, "Selective Adam optimizer flag"}};
 
@@ -331,6 +332,9 @@ namespace gs {
                 if (json.contains("steps_scaler")) {
                     params.steps_scaler = json["steps_scaler"];
                 }
+                if (json.contains("antialiasing")) {
+                    params.antialiasing = json["antialiasing"];
+                }
                 if (json.contains("sh_degree_interval")) {
                     params.sh_degree_interval = json["sh_degree_interval"];
                 }
@@ -398,6 +402,7 @@ namespace gs {
                 opt_json["bilateral_grid_lr"] = params.optimization.bilateral_grid_lr;
                 opt_json["tv_loss_weight"] = params.optimization.tv_loss_weight;
                 opt_json["steps_scaler"] = params.optimization.steps_scaler;
+                opt_json["antialiasing"] = params.optimization.antialiasing;
                 opt_json["sh_degree_interval"] = params.optimization.sh_degree_interval;
                 opt_json["selective_adam"] = params.optimization.selective_adam;
 
