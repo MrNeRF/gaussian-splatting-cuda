@@ -34,8 +34,7 @@ unsigned char* strip_image_alpha(unsigned char * img, int width, int height)
 
 
 // Existing implementations...
-std::tuple<unsigned char*, int, int, int>
-load_image(std::filesystem::path p, int res_div) {
+std::tuple<unsigned char*, int, int, int> load_image(std::filesystem::path p, int res_div) {
     int w, h, c;
     unsigned char* img = stbi_load(p.string().c_str(), &w, &h, &c, 0);
     if (!img)
