@@ -1,5 +1,6 @@
 #include "core/splat_data.hpp"
 #include "core/colmap_reader.hpp"
+#include "core/transforms_reader.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
 #include "external/nanoflann.hpp"
@@ -347,7 +348,7 @@ std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
 
     try {
         // Helper lambdas
-        auto pcd = read_colmap_point_cloud(params.dataset.data_path);
+        auto pcd = generate_random_point_cloud();
 
         const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
         const auto scene_scale = dists.median().item<float>();

@@ -31,7 +31,8 @@ int main(int argc, char* argv[]) {
     //--------------------------------------------------------------------------
     // 3. Create dataset from COLMAP
     //--------------------------------------------------------------------------
-    auto dataset_result = create_dataset_from_colmap(params.dataset);
+    auto dataset_result = create_dataset_from_transforms(params.dataset);
+
     if (!dataset_result) {
         std::println(stderr, "Error creating dataset: {}", dataset_result.error());
         return -1;

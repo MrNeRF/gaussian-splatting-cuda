@@ -108,6 +108,7 @@ set(HOST_SOURCES
         src/camera.cpp
         src/image_io.cpp
         src/colmap_reader.cpp
+        src/transforms_reader.cpp
         src/parameters.cpp
         src/splat_data.cpp
         src/trainer.cpp
@@ -119,7 +120,7 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
-)
+        src/transforms_reader.cpp)
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
 
