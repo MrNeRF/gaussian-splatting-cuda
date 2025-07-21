@@ -34,7 +34,7 @@ namespace gs {
             bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
             bool enable_save_eval_images = true;             // Save during evaluation images
-            bool enable_viz = false;                          // Enable visualization during training
+            bool headless = false;                          // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
 
             // Bilateral grid parameters

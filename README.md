@@ -318,7 +318,7 @@ Extract it to the `data` folder in the project root.
 
 ### Visualization Options
 
-- **`-v, --viz`**  
+- **`--headless`**  
   Enable the Visualization mode
   - Displays the current state of the Gaussian splatting in a window
   - Useful for debugging and monitoring training progress
