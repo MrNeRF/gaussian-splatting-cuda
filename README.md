@@ -143,6 +143,10 @@ sudo apt install gcc-14 g++-14
 # Set as default
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 60
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 60
+
+# Select the gcc/g++-14
+sudo update-alternatives --config gcc
+sudo update-alternatives --config g++ 
 ```
 
 ##### Ubuntu 22.04:
