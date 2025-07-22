@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <numbers>
@@ -18,7 +19,6 @@ float fov_deg_to_focal_length(int resolution, float fov_deg) {
 float fov_rad_to_focal_length(int resolution, float fov_rad) {
     return 0.5f * (float)resolution / tanf(0.5f * fov_rad);
 }
-
 
 // Function to create a 3x3 rotation matrix around Y-axis embeded in 4x4 matrix
 torch::Tensor createYRotationMatrix(float angle_radians) {
@@ -105,10 +105,29 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
     } else {
         cy = 0.5 * h;
     }
+    float k1 = 0;
+    float k2 = 0;
+    float p1 = 0;
+    float p2 = 0;
+    if (transforms.contains("k1")) {
+        k1 = float(transforms["k1"]);
+    }
+    if (transforms.contains("k2")) {
+        k2 = float(transforms["k2"]);
+    }
+    if (transforms.contains("p1")) {
+        p1 = float(transforms["p1"]);
+    }
+    if (transforms.contains("p2")) {
+        p2 = float(transforms["p2"]);
+    }
+    if (k1 > 0 || k2 > 0 || p1 > 0 || p2 > 0) {
+        throw std::runtime_error(std::format("GS don't support distortion for now: k1={}, k2={}, p1={}, p2={}", k1, k2, p1, p2));
+    }
 
-    uint64_t counter = 0;
     std::vector<CameraData> camerasdata;
     if (transforms.contains("frames") && transforms["frames"].is_array()) {
+        uint64_t counter = 0;
         for (int frameInd = 0; frameInd < transforms["frames"].size(); ++frameInd) {
             CameraData camdata;
             auto& frame = transforms["frames"][frameInd];
