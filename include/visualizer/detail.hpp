@@ -160,17 +160,16 @@ namespace gs {
                 output_buffer_.clear();
             }
 
-            void addLog(const std::string& fmt, ...) {
+            void addLog(const char* fmt, ...) {
                 char buf[1024];
                 va_list args;
                 va_start(args, fmt);
-                vsnprintf(buf, sizeof(buf), fmt.c_str(), args);
+                vsnprintf(buf, sizeof(buf), fmt, args);
                 buf[sizeof(buf) - 1] = 0;
                 va_end(args);
 
                 output_buffer_.push_back(std::string(buf));
 
-                // Keep buffer size manageable
                 while (output_buffer_.size() > max_output_lines_) {
                     output_buffer_.erase(output_buffer_.begin());
                 }
