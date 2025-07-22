@@ -14,7 +14,8 @@ namespace {
     enum class ParseResult {
         Success,
         Help,
-        Error
+        Error,
+        ViewerMode
     };
 
     const std::set<std::string> VALID_RENDER_MODES = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
@@ -36,13 +37,19 @@ namespace {
         try {
             ::args::ArgumentParser parser(
                 "3D Gaussian Splatting CUDA Implementation\n",
-                "Lightning-fast CUDA implementation of 3D Gaussian Splatting algorithm.");
+                "Lightning-fast CUDA implementation of 3D Gaussian Splatting algorithm.\n\n"
+                "Usage:\n"
+                "  Training:  gs_cuda --data-path <path> --output-path <path> [options]\n"
+                "  Viewing:   gs_cuda --view <path_to_ply> [options]");
 
             // Define all arguments
             ::args::HelpFlag help(parser, "help", "Display help menu", {'h', "help"});
             ::args::CompletionFlag completion(parser, {"complete"});
 
-            // Required arguments
+            // PLY viewing mode
+            ::args::ValueFlag<std::string> view_ply(parser, "ply_file", "View a PLY file", {'v', "view"});
+
+            // Training mode arguments
             ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to training data", {'d', "data-path"});
             ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to output", {'o', "output-path"});
 
@@ -62,7 +69,7 @@ namespace {
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
             ::args::Flag headless(parser, "headless", "Disable visualization during training", {"headless"});
-            ::args::Flag antialiasing(parser, "antialiasing", "Enable antialiasing during training", {'a', "antialiasing"});
+            ::args::Flag antialiasing(parser, "antialiasing", "Enable antialiasing", {'a', "antialiasing"});
             ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
@@ -93,14 +100,32 @@ namespace {
                 return ParseResult::Help;
             }
 
-            // Validate required arguments - check if flags were provided
+            // Check for viewer mode
+            if (view_ply) {
+                params.viewer_mode = true;
+                params.ply_path = ::args::get(view_ply);
+
+                // Check if PLY file exists
+                if (!std::filesystem::exists(params.ply_path)) {
+                    return std::unexpected(std::format("PLY file does not exist: {}", params.ply_path.string()));
+                }
+
+                // Check antialiasing flag for viewer mode
+                if (antialiasing) {
+                    params.optimization.antialiasing = true;
+                }
+
+                return ParseResult::ViewerMode;
+            }
+
+            // Otherwise, we're in training mode - validate required arguments
             if (!data_path || !output_path) {
                 return std::unexpected(std::format(
-                    "ERROR: Both --data-path and --output-path are required\n\n{}",
+                    "ERROR: Training mode requires both --data-path and --output-path\n\n{}",
                     parser.Help()));
             }
 
-            // Set required parameters
+            // Set required parameters for training
             params.dataset.data_path = ::args::get(data_path);
             params.dataset.output_path = ::args::get(output_path);
 
@@ -194,27 +219,33 @@ namespace {
 std::expected<gs::param::TrainingParameters, std::string>
 gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
-    // First load optimization parameters from JSON
+    gs::param::TrainingParameters params;
+
+    // Parse command line arguments first
+    auto parse_result = parse_arguments(convert_args(argc, argv), params);
+    if (!parse_result) {
+        return std::unexpected(parse_result.error());
+    }
+
+    // Handle help case
+    if (*parse_result == ParseResult::Help) {
+        // In a real implementation, you might want to handle this differently
+        std::exit(0);
+    }
+
+    // Handle viewer mode - return early without loading optimization params
+    if (*parse_result == ParseResult::ViewerMode) {
+        return params;
+    }
+
+    // Training mode - load optimization parameters from JSON
     auto opt_params_result = gs::param::read_optim_params_from_json();
     if (!opt_params_result) {
         return std::unexpected(std::format("Failed to load optimization parameters: {}",
                                            opt_params_result.error()));
     }
 
-    gs::param::TrainingParameters params;
     params.optimization = *opt_params_result;
-
-    // Parse command line arguments
-    auto parse_result = parse_arguments(convert_args(argc, argv), params);
-    if (!parse_result) {
-        return std::unexpected(parse_result.error());
-    }
-
-    // Handle help case (this should normally result in program exit)
-    if (*parse_result == ParseResult::Help) {
-        // In a real implementation, you might want to handle this differently
-        std::exit(0);
-    }
 
     // Apply step scaling
     apply_step_scaling(params);

@@ -2,6 +2,7 @@
 #include "core/dataset.hpp"
 #include "core/mcmc.hpp"
 #include "core/parameters.hpp"
+#include "core/ply_loader.hpp"
 #include "core/trainer.hpp"
 #include "visualizer/detail.hpp"
 #include <expected>
@@ -10,7 +11,7 @@
 
 int main(int argc, char* argv[]) {
     //--------------------------------------------------------------------------
-    // 1. Parse arguments and load parameters
+    // 1. Parse arguments
     //--------------------------------------------------------------------------
     auto params_result = gs::args::parse_args_and_params(argc, argv);
     if (!params_result) {
@@ -20,7 +21,44 @@ int main(int argc, char* argv[]) {
     auto params = std::move(*params_result);
 
     //--------------------------------------------------------------------------
-    // 2. Save training configuration to output directory
+    // 2. Check if we're in viewer mode
+    //--------------------------------------------------------------------------
+
+    // @TODO: Refactor viewer mode logic into a separate function or class.
+    // The current implementation tightly couples viewer mode handling with the main function,
+    // making the code less modular and harder to maintain. Extracting this logic will improve
+    // code readability and reusability.
+    if (params.viewer_mode) {
+        // PLY Viewer Mode
+        std::println("Loading PLY file: {}", params.ply_path.string());
+
+        auto splat_result = gs::load_ply(params.ply_path);
+        if (!splat_result) {
+            std::println(stderr, "Error loading PLY: {}", splat_result.error());
+            return -1;
+        }
+
+        auto splat_data = std::make_unique<SplatData>(std::move(*splat_result));
+        std::println("Loaded {} Gaussians", splat_data->size());
+
+        // Create viewer without trainer
+        std::string title = "3DGS Viewer - " + params.ply_path.filename().string();
+        auto viewer = std::make_unique<gs::GSViewer>(title, 1280, 720);
+        viewer->setTrainer(nullptr); // No trainer in viewer mode
+        viewer->setStandaloneModel(std::move(splat_data));
+        viewer->setAntiAliasing(params.optimization.antialiasing);
+
+        std::println("Starting viewer...");
+        std::println("Anti-aliasing: {}", params.optimization.antialiasing ? "enabled" : "disabled");
+
+        viewer->run();
+
+        std::println("Viewer closed.");
+        return 0;
+    }
+
+    //--------------------------------------------------------------------------
+    // 3. Save training configuration to output directory
     //--------------------------------------------------------------------------
     auto save_result = gs::param::save_training_parameters_to_json(params, params.dataset.output_path);
     if (!save_result) {
@@ -29,7 +67,7 @@ int main(int argc, char* argv[]) {
     }
 
     //--------------------------------------------------------------------------
-    // 3. Create dataset from COLMAP
+    // 4. Create dataset from COLMAP
     //--------------------------------------------------------------------------
     auto dataset_result = create_dataset_from_colmap(params.dataset);
     if (!dataset_result) {
@@ -39,7 +77,7 @@ int main(int argc, char* argv[]) {
     auto [dataset, scene_center] = std::move(*dataset_result);
 
     //--------------------------------------------------------------------------
-    // 4. Model initialisation
+    // 5. Model initialisation
     //--------------------------------------------------------------------------
     auto splat_result = SplatData::init_model_from_pointcloud(params, scene_center);
     if (!splat_result) {
@@ -49,12 +87,12 @@ int main(int argc, char* argv[]) {
     auto splat_data = std::move(*splat_result);
 
     //--------------------------------------------------------------------------
-    // 5. Create strategy
+    // 6. Create strategy
     //--------------------------------------------------------------------------
     auto strategy = std::make_unique<MCMC>(std::move(splat_data));
 
     //--------------------------------------------------------------------------
-    // 6. Create trainer
+    // 7. Create trainer
     //--------------------------------------------------------------------------
     auto trainer = std::make_unique<gs::Trainer>(
         std::move(dataset),
@@ -62,7 +100,7 @@ int main(int argc, char* argv[]) {
         params);
 
     //--------------------------------------------------------------------------
-    // 7. Start training based on visualization mode
+    // 8. Start training based on visualization mode
     //--------------------------------------------------------------------------
     if (!params.optimization.headless) {
         // GUI Mode: Create viewer and run it in main thread
