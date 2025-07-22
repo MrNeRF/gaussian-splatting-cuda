@@ -14,12 +14,14 @@
 #include <condition_variable>
 #include <cuda_runtime.h>
 #include <deque>
+#include <functional>
 #include <glm/glm.hpp>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <thread>
 #include <torch/torch.h>
 #include <vector>
@@ -134,6 +136,105 @@ namespace gs {
             }
         };
 
+        struct ScriptingConsole {
+            std::vector<std::string> history_;
+            std::vector<std::string> output_buffer_;
+            char input_buffer_[1024] = "";
+            int history_pos_ = -1;
+            bool scroll_to_bottom_ = false;
+            bool reclaim_focus_ = false;
+            size_t max_output_lines_ = 1000;
+
+            // Callback function for executing scripts
+            std::function<std::string(const std::string&)> execute_callback_;
+
+            ScriptingConsole() {
+                clearLog();
+                // Set default callback that just echoes input
+                execute_callback_ = [](const std::string& input) -> std::string {
+                    return "Echo: " + input;
+                };
+            }
+
+            void clearLog() {
+                output_buffer_.clear();
+            }
+
+            void addLog(const std::string& fmt, ...) {
+                char buf[1024];
+                va_list args;
+                va_start(args, fmt);
+                vsnprintf(buf, sizeof(buf), fmt.c_str(), args);
+                buf[sizeof(buf) - 1] = 0;
+                va_end(args);
+
+                output_buffer_.push_back(std::string(buf));
+
+                // Keep buffer size manageable
+                while (output_buffer_.size() > max_output_lines_) {
+                    output_buffer_.erase(output_buffer_.begin());
+                }
+
+                scroll_to_bottom_ = true;
+            }
+
+            void executeCommand(const std::string& command) {
+                addLog(">>> %s", command.c_str());
+
+                // Add to history
+                history_.push_back(command);
+
+                // Execute command through callback
+                if (execute_callback_) {
+                    try {
+                        std::string result = execute_callback_(command);
+                        if (!result.empty()) {
+                            addLog("%s", result.c_str());
+                        }
+                    } catch (const std::exception& e) {
+                        addLog("Error: %s", e.what());
+                    }
+                }
+
+                scroll_to_bottom_ = true;
+            }
+
+            static int textEditCallbackStub(ImGuiInputTextCallbackData* data) {
+                ScriptingConsole* console = (ScriptingConsole*)data->UserData;
+                return console->textEditCallback(data);
+            }
+
+            int textEditCallback(ImGuiInputTextCallbackData* data) {
+                switch (data->EventFlag) {
+                case ImGuiInputTextFlags_CallbackCompletion:
+                    // Handle tab completion here if needed
+                    break;
+
+                case ImGuiInputTextFlags_CallbackHistory: {
+                    const int prev_history_pos = history_pos_;
+                    if (data->EventKey == ImGuiKey_UpArrow) {
+                        if (history_pos_ == -1)
+                            history_pos_ = static_cast<int>(history_.size()) - 1;
+                        else if (history_pos_ > 0)
+                            history_pos_--;
+                    } else if (data->EventKey == ImGuiKey_DownArrow) {
+                        if (history_pos_ != -1) {
+                            if (++history_pos_ >= static_cast<int>(history_.size()))
+                                history_pos_ = -1;
+                        }
+                    }
+
+                    if (prev_history_pos != history_pos_) {
+                        const char* history_str = (history_pos_ >= 0) ? history_[history_pos_].c_str() : "";
+                        data->DeleteChars(0, data->BufTextLen);
+                        data->InsertChars(0, history_str);
+                    }
+                } break;
+                }
+                return 0;
+            }
+        };
+
     public:
         GSViewer(std::string title, int width, int height);
         ~GSViewer();
@@ -146,6 +247,10 @@ namespace gs {
         void configuration();
 
         void draw() override;
+
+        // Scripting system methods
+        void renderScriptingConsole();
+        void setScriptExecutor(std::function<std::string(const std::string&)> executor);
 
     public:
         std::shared_ptr<TrainingInfo> info_;
@@ -170,6 +275,10 @@ namespace gs {
         void renderCameraControlsWindow();
         bool show_camera_controls_window_ = false;
         bool anti_aliasing_ = false;
+
+        // Scripting console
+        std::unique_ptr<ScriptingConsole> scripting_console_;
+        bool show_scripting_console_ = false;
     };
 
 } // namespace gs
