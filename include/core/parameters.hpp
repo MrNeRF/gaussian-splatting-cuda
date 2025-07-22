@@ -61,6 +61,10 @@ namespace gs {
         struct TrainingParameters {
             DatasetConfig dataset;
             OptimizationParameters optimization;
+
+            // Viewer mode specific
+            bool viewer_mode = false;
+            std::filesystem::path ply_path = "";
         };
 
         // Modern C++23 functions returning expected values
