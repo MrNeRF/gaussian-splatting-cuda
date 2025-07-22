@@ -35,6 +35,31 @@ void PrintMat(const torch::Tensor & transform_4x4)
 
 }
 
+// Function to create a 3x3 rotation matrix around Y-axis embeded in 4x4 matrix
+torch::Tensor createYRotationMatrix(float angle_radians) {
+    torch::Tensor rotMat = torch::eye(4);
+    float cos_angle = std::cos(angle_radians);
+    float sin_angle = std::sin(angle_radians);
+
+    // Rotation matrix around Y-axis by angle θ:
+    // [cos(θ)   0   sin(θ) 0]
+    // [  0      1     0    0]
+    // [-sin(θ)  0   cos(θ) 0]
+    // [0        0   0      1]
+
+    rotMat[0][0] = cos_angle;   // cos(θ)
+    rotMat[0][1] = 0.0f;        // 0
+    rotMat[0][2] = sin_angle;   // sin(θ)
+    rotMat[1][0] = 0.0f;        // 0
+    rotMat[1][1] = 1.0f;        // 1
+    rotMat[1][2] = 0.0f;        // 0
+    rotMat[2][0] = -sin_angle;  // -sin(θ)
+    rotMat[2][1] = 0.0f;        // 0
+    rotMat[2][2] = cos_angle;   // cos(θ)
+
+    return rotMat;
+}
+
 
 std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
     const std::filesystem::path& transPath,
@@ -55,7 +80,7 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
     int w=-1, h = -1;
     if (!transforms.contains("w") or !transforms.contains("h"))
     {
-        throw std::runtime_error("needs width and heigth in transforms file for now");
+        throw std::runtime_error("transforms file must contain width (w) and heigth (h)");
     }else
     {
         w= int(transforms["w"]);
@@ -135,6 +160,10 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
 
             // Get the world-to-camera transform by computing inverse of c2w
             torch::Tensor w2c = torch::inverse(c2w);
+
+            // fix so that the z direction will be the same (currently it is faceing downward)
+            torch::Tensor fixMat = createYRotationMatrix(M_PI);
+            w2c = torch::mm(w2c,fixMat);
 
             // Extract rotation matrix R (transposed due to 'glm' in CUDA code)
             // R = np.transpose(w2c[:3,:3])
