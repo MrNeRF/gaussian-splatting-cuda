@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
     //--------------------------------------------------------------------------
     // 7. Start training based on visualization mode
     //--------------------------------------------------------------------------
-    if (params.optimization.enable_viz) {
+    if (!params.optimization.headless) {
         // GUI Mode: Create viewer and run it in main thread
         auto viewer_result = trainer->create_and_get_viewer();
         if (!viewer_result) {

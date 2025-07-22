@@ -75,7 +75,7 @@ Join our growing community for discussions, support, and updates:
 ### Software Prerequisites
 1. **Linux** (tested with Ubuntu 22.04+) or Windows
 2. **CMake** 3.24 or higher
-3. **C++23 compatible compiler** (GCC 13+ or Clang 17+)
+3. **C++23 compatible compiler** (GCC 14+ or Clang 17+)
 4. **CUDA** 12.8 or higher (**Required**: CUDA 11.8 and lower are no longer supported)
 5. **Python** with development headers
 6. **LibTorch 2.7.0** - Setup instructions below
@@ -86,14 +86,15 @@ Join our growing community for discussions, support, and updates:
 
 ### Hardware Prerequisites
 1. **NVIDIA GPU** with CUDA support and compute capability 7.5+
-  - Successfully tested: RTX 4090, RTX A5000, RTX 3090Ti, A100, RTX 2060 SUPER
-  - Known issue with RTX 3080Ti on larger datasets (see #21)
+- Successfully tested: RTX 4090, RTX A5000, RTX 3090Ti, A100, RTX 2060 SUPER
+- Known issue with RTX 3080Ti on larger datasets (see #21)
 2. **GPU Memory**: Minimum 8GB VRAM recommended for training
 
 > If you successfully run on other hardware, please share your experience in the Discussions section!
 
 ### Build Instructions
 
+#### Linux
 ```bash
 # Set up vcpkg once
 git clone https://github.com/microsoft/vcpkg.git
@@ -114,6 +115,43 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 cmake --build build -- -j$(nproc)
 ```
 
+#### Windows
+Instructions must be run in **VS Developer Command Prompt** 
+```bash
+# Set up vcpkg once
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg && .\bootstrap-vcpkg.bat -disableMetrics && cd ..
+set VCPKG_ROOT=%CD%\vcpkg
+# Note: Add VCPKG_ROOT to your system environment variables permanently via System Properties > Advanced > Environment Variables
+
+# Clone the repository
+git clone https://github.com/MrNeRF/gaussian-splatting-cuda
+cd gaussian-splatting-cuda
+
+# Download and setup LibTorch 2.7.0 with CUDA 12.8 support
+# Create directories for debug and release versions (create directories if they don't exist)
+if not exist external mkdir external
+if not exist external\debug mkdir external\debug
+if not exist external\release mkdir external\release
+
+# LibTorch must be downloaded separately for debug and release in Windows
+# Download and extract debug version
+curl -L -o libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-debug-2.7.0%2Bcu128.zip
+tar -xf libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip -C external\debug
+del libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip
+
+# Download and extract release version
+curl -L -o libtorch-win-shared-with-deps-2.7.0+cu128.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-2.7.0%2Bcu128.zip
+tar -xf libtorch-win-shared-with-deps-2.7.0+cu128.zip -C external\release
+del libtorch-win-shared-with-deps-2.7.0+cu128.zip
+
+# Build the project
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j
+
+```
+Note: Building in Debug mode requires building debug python libraries (python3*_d.dll, python3*_d.lib) separately.
+
 ### Troubleshooting Build Issues
 
 #### Missing CUDA Libraries:
@@ -130,18 +168,60 @@ sudo apt install cuda-cudart-dev-12-8 cuda-curand-dev-12-8 cuda-cublas-dev-12-8
 
 #### C++23 Compiler Issues:
 Ensure you have a modern compiler:
+
+##### Ubuntu 24.04+:
 ```bash
 # Check compiler version
 gcc --version  # Should be 14+ for full C++23 support
-clang --version  # Should be 17+ for full C++23 support
 
-# Install newer GCC on Ubuntu 22.04
-You must build g++-14 from sources on Ubuntu 22.04. On Ubuntu >24.04 it can be installed via apt.
+# Install GCC 14 (Ubuntu 24.04+)
+sudo apt update
+sudo apt install gcc-14 g++-14
 
 # Set as default
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 60
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 60
+
+# Select the gcc/g++-14
+sudo update-alternatives --config gcc
+sudo update-alternatives --config g++ 
 ```
+
+##### Ubuntu 22.04:
+GCC 14 must be built from source on Ubuntu 22.04:
+
+```bash
+# Install build dependencies
+sudo apt update
+sudo apt install build-essential
+sudo apt install libmpfr-dev libgmp3-dev libmpc-dev -y
+
+# Download and build GCC 14.1.0
+wget http://ftp.gnu.org/gnu/gcc/gcc-14.1.0/gcc-14.1.0.tar.gz
+tar -xf gcc-14.1.0.tar.gz
+cd gcc-14.1.0
+
+# Configure build (this may take several minutes)
+./configure -v --build=x86_64-linux-gnu --host=x86_64-linux-gnu --target=x86_64-linux-gnu \
+    --prefix=/usr/local/gcc-14.1.0 --enable-checking=release --enable-languages=c,c++ \
+    --disable-multilib --program-suffix=-14.1.0
+
+# Build GCC (this will take 1-2 hours depending on your system)
+make -j$(nproc)
+
+# Install GCC
+sudo make install
+
+# Set up alternatives to use the new GCC version
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/local/gcc-14.1.0/bin/gcc-14.1.0 14
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/local/gcc-14.1.0/bin/g++-14.1.0 14
+
+# Verify installation
+gcc --version
+g++ --version
+```
+
+**Note**: Building GCC from source is time-intensive (1-2 hours). Consider using Ubuntu 24.04+ or Docker for faster setup if possible.
 
 ## LibTorch 2.7.0
 
@@ -193,7 +273,7 @@ GPU acceleration and GUI support (e.g., OpenGL viewers) are enabled if supported
 
 ### Upgrading from Previous Versions
 1. **Update CUDA to 12.8+** if using an older version
-2. **Update compiler to support C++23** (GCC 13+ or Clang 17+)
+2. **Update compiler to support C++23** (GCC 14+ or Clang 17+)
 3. Download the new LibTorch version with CUDA 12.8 support using the build instructions
 4. Clean your build directory: `rm -rf build/`
 5. Rebuild the project
@@ -276,7 +356,7 @@ Extract it to the `data` folder in the project root.
 
 ### Visualization Options
 
-- **`-v, --viz`**  
+- **`--headless`**  
   Enable the Visualization mode
   - Displays the current state of the Gaussian splatting in a window
   - Useful for debugging and monitoring training progress
@@ -354,19 +434,19 @@ Key parameters can be overridden via command-line options.
 We welcome contributions! Here's how to get started:
 
 1. **Getting Started**:
-  - Check out issues labeled as **good first issues** for beginner-friendly tasks
-  - For new ideas, open a discussion or join our [Discord](https://discord.gg/TbxJST2BbC)
+- Check out issues labeled as **good first issues** for beginner-friendly tasks
+- For new ideas, open a discussion or join our [Discord](https://discord.gg/TbxJST2BbC)
 
 2. **Development Requirements**:
-  - **C++23** compatible compiler (GCC 13+ or Clang 17+)
-  - **CUDA 12.8+** for GPU development
-  - Follow the build instructions above
+- **C++23** compatible compiler (GCC 14+ or Clang 17+)
+- **CUDA 12.8+** for GPU development
+- Follow the build instructions above
 
 3. **Before Submitting a PR**:
-  - Apply `clang-format` for consistent code style
-  - Use the pre-commit hook: `cp tools/pre-commit .git/hooks/`
-  - Discuss new dependencies in an issue first - we aim to minimize dependencies
-  - Ensure your changes work with both Debug and Release builds
+- Apply `clang-format` for consistent code style
+- Use the pre-commit hook: `cp tools/pre-commit .git/hooks/`
+- Discuss new dependencies in an issue first - we aim to minimize dependencies
+- Ensure your changes work with both Debug and Release builds
 
 ## Acknowledgments
 
