@@ -12,7 +12,7 @@
 namespace gs::param {
     struct TrainingParameters;
 }
-class DataReader;
+class IDataReader;
 
 class SplatData {
 public:
@@ -38,7 +38,7 @@ public:
     static std::expected<SplatData, std::string> init_model_from_pointcloud(
         const gs::param::TrainingParameters& params,
         torch::Tensor scene_center,
-        std::unique_ptr<DataReader> dataSetReader);
+        std::unique_ptr<IDataReader> dataSetReader);
 
     // Computed getters (implemented in cpp)
     torch::Tensor get_means() const;

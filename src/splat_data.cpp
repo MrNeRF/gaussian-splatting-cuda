@@ -347,7 +347,7 @@ PointCloud SplatData::to_point_cloud() const {
 std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
     const gs::param::TrainingParameters& params,
     torch::Tensor scene_center,
-    std::unique_ptr<DataReader> dataSetReader) {
+    std::unique_ptr<IDataReader> dataSetReader) {
 
     try {
         // Helper lambdas

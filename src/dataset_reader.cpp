@@ -35,7 +35,7 @@ bool does_sparse_file_path_exists(const std::filesystem::path& base, const std::
 
 bool ColmapReader::isValid() const {
     if (!std::filesystem::exists(m_datasetConfig.data_path)) {
-        std::println("data path does not exist {}", m_datasetConfig.data_path);
+        std::println("data path does not exist {}", m_datasetConfig.data_path.string());
         return false;
     }
 
@@ -76,7 +76,7 @@ bool BlenderReader::isValid() const {
         }
     }
     if (!std::filesystem::is_regular_file(transformsFile)) {
-        std::print(transformsFile.string()+" is not a file");
+        std::println(" {} is not a file", transformsFile.string());
         return false;
     }
 
@@ -84,11 +84,11 @@ bool BlenderReader::isValid() const {
 }
 
 // factory method implementation
-std::unique_ptr<DataReader> GetValidDataReader(const gs::param::DatasetConfig& datasetConfig) {
+std::unique_ptr<IDataReader> GetValidDataReader(const gs::param::DatasetConfig& datasetConfig) {
     // Iterate through all DataReaderType enum values
     for (const auto& readerType : {DataReaderType::Colmap, DataReaderType::Blender}) {
 
-        std::unique_ptr<DataReader> reader = nullptr;
+        std::unique_ptr<IDataReader> reader = nullptr;
 
         // Create appropriate reader based on enum value
         switch (readerType) {

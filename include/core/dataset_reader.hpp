@@ -21,26 +21,26 @@ class PointCloud;
 /**
  * Abstract base class for reading different types of datasets
  */
-class DataReader {
+class IDataReader {
 public:
     /**
      * Constructor
      * @param datasetConfig Configuration parameters for the dataset
      */
-    explicit DataReader(const gs::param::DatasetConfig& datasetConfig);
+    explicit IDataReader(const gs::param::DatasetConfig& datasetConfig);
 
     /**
      * Virtual destructor for proper cleanup of derived classes
      */
-    virtual ~DataReader() = default;
+    virtual ~IDataReader() = default;
 
     // Make class non-copyable
-    DataReader(const DataReader&) = delete;
-    DataReader& operator=(const DataReader&) = delete;
+    IDataReader(const IDataReader&) = delete;
+    IDataReader& operator=(const IDataReader&) = delete;
 
     // Allow move operations (optional - remove if you want to disable moving too)
-    DataReader(DataReader&&) = default;
-    DataReader& operator=(DataReader&&) = default;
+    IDataReader(IDataReader&&) = default;
+    IDataReader& operator=(IDataReader&&) = default;
 
     /**
      * Creates a dataset with camera data and associated tensor
@@ -70,14 +70,14 @@ protected:
 };
 
 // Constructor implementation
-inline DataReader::DataReader(const gs::param::DatasetConfig& datasetConfig)
+inline IDataReader::IDataReader(const gs::param::DatasetConfig& datasetConfig)
     : m_datasetConfig(datasetConfig) {
 }
 
 /**
  * BlenderReader - Derived class for reading Blender-generated datasets
  */
-class BlenderReader : public DataReader {
+class BlenderReader : public IDataReader {
 public:
     /**
      * Constructor - inherits from DataReader
@@ -109,7 +109,7 @@ public:
 /**
  * ColmapReader - Derived class for reading COLMAP datasets
  */
-class ColmapReader : public DataReader {
+class ColmapReader : public IDataReader {
 public:
     /**
      * Constructor - inherits from DataReader
@@ -140,12 +140,12 @@ public:
 
 // Inline constructor implementations
 inline BlenderReader::BlenderReader(const gs::param::DatasetConfig& datasetConfig)
-    : DataReader(datasetConfig) {
+    : IDataReader(datasetConfig) {
 }
 
 inline ColmapReader::ColmapReader(const gs::param::DatasetConfig& datasetConfig)
-    : DataReader(datasetConfig) {
+    : IDataReader(datasetConfig) {
 }
 
 // factory method implementation
-std::unique_ptr<DataReader> GetValidDataReader(const gs::param::DatasetConfig& datasetConfig);
+std::unique_ptr<IDataReader> GetValidDataReader(const gs::param::DatasetConfig& datasetConfig);
