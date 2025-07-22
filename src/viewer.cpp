@@ -1,6 +1,8 @@
 #include "config.h" // Include generated config
 #include "visualizer/detail.hpp"
 #include <chrono>
+#include <iomanip>
+#include <sstream>
 #include <thread>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
@@ -256,8 +258,148 @@ namespace gs {
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<Notifier>();
+        scripting_console_ = std::make_unique<ScriptingConsole>();
 
         setFrameRate(30);
+
+        // Set up default script executor with basic functionality
+        setScriptExecutor([this](const std::string& command) -> std::string {
+            std::ostringstream result;
+
+            // Basic command parsing
+            if (command.empty()) {
+                return "";
+            }
+
+            // Handle basic commands
+            if (command == "help" || command == "h") {
+                result << "Available commands:\n";
+                result << "  help, h - Show this help\n";
+                result << "  clear - Clear console\n";
+                result << "  status - Show training status\n";
+                result << "  model_info - Show model information\n";
+                result << "  tensor_info <name> - Show tensor information\n";
+                result << "  gpu_info - Show GPU information\n";
+                return result.str();
+            }
+
+            if (command == "clear") {
+                scripting_console_->clearLog();
+                return "";
+            }
+
+            if (command == "status") {
+                if (!trainer_) {
+                    return "Trainer not available";
+                }
+                result << "Training Status:\n";
+                result << "  Running: " << (trainer_->is_running() ? "Yes" : "No") << "\n";
+                result << "  Paused: " << (trainer_->is_paused() ? "Yes" : "No") << "\n";
+                result << "  Complete: " << (trainer_->is_training_complete() ? "Yes" : "No") << "\n";
+                result << "  Current Iteration: " << trainer_->get_current_iteration() << "\n";
+                result << "  Current Loss: " << std::fixed << std::setprecision(6) << trainer_->get_current_loss();
+                return result.str();
+            }
+
+            if (command == "model_info") {
+                if (!trainer_) {
+                    return "Trainer not available";
+                }
+
+                std::lock_guard<std::mutex> lock(splat_mtx_);
+                auto& model = trainer_->get_strategy().get_model();
+
+                result << "Model Information:\n";
+                result << "  Number of Gaussians: " << model.size() << "\n";
+                result << "  Positions shape: [" << model.get_means().size(0) << ", " << model.get_means().size(1) << "]\n";
+                result << "  Device: " << model.get_means().device() << "\n";
+                result << "  Dtype: " << model.get_means().dtype() << "\n";
+                result << "  Active SH degree: " << model.get_active_sh_degree() << "\n";
+                result << "  Scene scale: " << model.get_scene_scale();
+                return result.str();
+            }
+
+            if (command == "gpu_info") {
+                size_t free_byte, total_byte;
+                cudaDeviceSynchronize();
+                cudaMemGetInfo(&free_byte, &total_byte);
+
+                double free_gb = free_byte / 1024.0 / 1024.0 / 1024.0;
+                double total_gb = total_byte / 1024.0 / 1024.0 / 1024.0;
+                double used_gb = total_gb - free_gb;
+
+                result << "GPU Memory Info:\n";
+                result << "  Total: " << std::fixed << std::setprecision(2) << total_gb << " GB\n";
+                result << "  Used: " << used_gb << " GB\n";
+                result << "  Free: " << free_gb << " GB\n";
+                result << "  Usage: " << std::setprecision(1) << (used_gb / total_gb * 100.0) << "%";
+                return result.str();
+            }
+
+            // Handle tensor_info command
+            if (command.substr(0, 11) == "tensor_info") {
+                if (!trainer_) {
+                    return "Trainer not available";
+                }
+
+                std::string tensor_name = "";
+                if (command.length() > 12) {
+                    tensor_name = command.substr(12); // Get parameter after "tensor_info "
+                }
+
+                if (tensor_name.empty()) {
+                    return "Usage: tensor_info <tensor_name>\nAvailable: means, scaling, rotation, shs, opacity";
+                }
+
+                std::lock_guard<std::mutex> lock(splat_mtx_);
+                auto& model = trainer_->get_strategy().get_model();
+
+                torch::Tensor tensor;
+                if (tensor_name == "means" || tensor_name == "positions") {
+                    tensor = model.get_means();
+                } else if (tensor_name == "scales" || tensor_name == "scaling") {
+                    tensor = model.get_scaling();
+                } else if (tensor_name == "rotations" || tensor_name == "rotation" || tensor_name == "quats") {
+                    tensor = model.get_rotation();
+                } else if (tensor_name == "features" || tensor_name == "colors" || tensor_name == "shs") {
+                    tensor = model.get_shs();
+                } else if (tensor_name == "opacities" || tensor_name == "opacity") {
+                    tensor = model.get_opacity();
+                } else {
+                    return "Unknown tensor: " + tensor_name + "\nAvailable: means, scaling, rotation, shs, opacity";
+                }
+
+                result << "Tensor '" << tensor_name << "' info:\n";
+                result << "  Shape: [";
+                for (int i = 0; i < tensor.dim(); i++) {
+                    if (i > 0)
+                        result << ", ";
+                    result << tensor.size(i);
+                }
+                result << "]\n";
+                result << "  Device: " << tensor.device() << "\n";
+                result << "  Dtype: " << tensor.dtype() << "\n";
+                result << "  Requires grad: " << (tensor.requires_grad() ? "Yes" : "No") << "\n";
+
+                // Show some statistics if tensor is on CPU or we can move it
+                try {
+                    auto cpu_tensor = tensor.cpu();
+                    auto flat = cpu_tensor.flatten();
+                    if (flat.numel() > 0) {
+                        result << "  Min: " << torch::min(flat).item<float>() << "\n";
+                        result << "  Max: " << torch::max(flat).item<float>() << "\n";
+                        result << "  Mean: " << torch::mean(flat).item<float>() << "\n";
+                        result << "  Std: " << torch::std(flat).item<float>();
+                    }
+                } catch (...) {
+                    result << "  (Statistics unavailable)";
+                }
+
+                return result.str();
+            }
+
+            return "Unknown command: '" + command + "'. Type 'help' for available commands.";
+        });
     }
 
     GSViewer::~GSViewer() {
@@ -279,6 +421,123 @@ namespace gs {
 
     void GSViewer::setAntiAliasing(bool enable) {
         anti_aliasing_ = enable;
+    }
+
+    void GSViewer::setScriptExecutor(std::function<std::string(const std::string&)> executor) {
+        if (scripting_console_) {
+            scripting_console_->execute_callback_ = executor;
+        }
+    }
+
+    void GSViewer::renderScriptingConsole() {
+        if (!show_scripting_console_ || !scripting_console_) {
+            return;
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.08f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.1f, 0.1f, 0.15f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.15f, 0.15f, 0.25f, 1.0f));
+
+        if (!ImGui::Begin("Scripting Console", &show_scripting_console_, ImGuiWindowFlags_MenuBar)) {
+            ImGui::End();
+            ImGui::PopStyleColor(4);
+            return;
+        }
+
+        // Menu bar
+        if (ImGui::BeginMenuBar()) {
+            if (ImGui::BeginMenu("Console")) {
+                if (ImGui::MenuItem("Clear", "Ctrl+L")) {
+                    scripting_console_->clearLog();
+                }
+                if (ImGui::MenuItem("Copy Output")) {
+                    std::string output;
+                    for (const auto& line : scripting_console_->output_buffer_) {
+                        output += line + "\n";
+                    }
+                    ImGui::SetClipboardText(output.c_str());
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenuBar();
+        }
+
+        // Output area
+        const float footer_height_to_reserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
+        if (ImGui::BeginChild("ScrollingRegion", ImVec2(0, -footer_height_to_reserve), false, ImGuiWindowFlags_HorizontalScrollbar)) {
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 1));
+
+            for (const auto& line : scripting_console_->output_buffer_) {
+                ImVec4 color;
+                bool has_color = false;
+
+                // Color coding for different types of output
+                if (line.find(">>>") == 0) {
+                    color = ImVec4(0.8f, 0.8f, 0.2f, 1.0f); // Yellow for commands
+                    has_color = true;
+                } else if (line.find("Error:") == 0) {
+                    color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); // Red for errors
+                    has_color = true;
+                } else if (line.find("Info:") == 0 || line.find("GPU Memory") == 0 || line.find("Model Information") == 0 || line.find("Training Status") == 0) {
+                    color = ImVec4(0.3f, 0.8f, 0.3f, 1.0f); // Green for info
+                    has_color = true;
+                }
+
+                if (has_color)
+                    ImGui::PushStyleColor(ImGuiCol_Text, color);
+
+                ImGui::TextUnformatted(line.c_str());
+
+                if (has_color)
+                    ImGui::PopStyleColor();
+            }
+
+            ImGui::PopStyleVar();
+
+            if (scripting_console_->scroll_to_bottom_ || ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+                ImGui::SetScrollHereY(1.0f);
+            scripting_console_->scroll_to_bottom_ = false;
+        }
+        ImGui::EndChild();
+
+        // Command input
+        ImGui::Separator();
+
+        // Input field - fix colors for visibility
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.2f, 0.25f, 1.0f));         // Dark background
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.25f, 0.25f, 0.3f, 1.0f)); // Slightly lighter on hover
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.3f, 0.3f, 0.35f, 1.0f));   // Even lighter when active
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));             // White text
+
+        bool reclaim_focus = false;
+        ImGuiInputTextFlags input_text_flags = ImGuiInputTextFlags_EnterReturnsTrue |
+                                               ImGuiInputTextFlags_CallbackCompletion |
+                                               ImGuiInputTextFlags_CallbackHistory;
+
+        ImGui::PushItemWidth(-1);
+        if (ImGui::InputText("##input", scripting_console_->input_buffer_, sizeof(scripting_console_->input_buffer_),
+                             input_text_flags, &ScriptingConsole::textEditCallbackStub, (void*)scripting_console_.get())) {
+
+            std::string command = scripting_console_->input_buffer_;
+            if (!command.empty()) {
+                scripting_console_->executeCommand(command);
+                scripting_console_->input_buffer_[0] = 0;
+                reclaim_focus = true;
+            }
+        }
+        ImGui::PopItemWidth();
+        ImGui::PopStyleColor(4); // Pop the 4 colors we pushed
+
+        // Auto-focus on window appearing
+        ImGui::SetItemDefaultFocus();
+        if (reclaim_focus)
+            ImGui::SetKeyboardFocusHere(-1); // Auto focus previous widget
+
+        ImGui::End();
+        ImGui::PopStyleColor(4);
     }
 
     void GSViewer::drawFrame() {
@@ -619,6 +878,17 @@ namespace gs {
         }
         ImGui::PopStyleColor(2);
 
+        // Scripting Console button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.3f, 1.0f));
+        if (ImGui::Button("Open Console", ImVec2(-1, 0))) {
+            show_scripting_console_ = true;
+            if (scripting_console_) {
+                scripting_console_->addLog("Console opened. Type 'help' for available commands.");
+            }
+        }
+        ImGui::PopStyleColor(2);
+
         ImGui::End();
         ImGui::PopStyleColor();
 
@@ -626,6 +896,9 @@ namespace gs {
         if (show_camera_controls_window_) {
             renderCameraControlsWindow();
         }
+
+        // Scripting Console window
+        renderScriptingConsole();
     }
 
     void GSViewer::draw() {

@@ -161,7 +161,7 @@ namespace gs {
 
         // Print render mode configuration
         std::println("Render mode: {}", params.optimization.render_mode);
-        std::println("Visualization: {}", params.optimization.enable_viz ? "enabled" : "disabled");
+        std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
     }
 
     Trainer::~Trainer() {
@@ -170,7 +170,7 @@ namespace gs {
     }
 
     std::expected<GSViewer*, std::string> Trainer::create_and_get_viewer() {
-        if (!params_.optimization.enable_viz) {
+        if (params_.optimization.headless) {
             return std::unexpected("Visualization is disabled in parameters");
         }
 
