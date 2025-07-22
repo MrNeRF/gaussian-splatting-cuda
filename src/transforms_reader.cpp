@@ -9,10 +9,10 @@
 
 namespace F = torch::nn::functional;
 
-const double PI = 3.141592653589793;
+// Use std::numbers::pi instead of a custom PI constant.
 
 float fov_deg_to_focal_length(int resolution, float fov_deg) {
-    return 0.5f * (float)resolution / tanf(0.5f * fov_deg * PI / 180.0f);
+    return 0.5f * (float)resolution / tanf(0.5f * fov_deg * std::numbers::pi / 180.0f);
 }
 
 float fov_rad_to_focal_length(int resolution, float fov_rad) {
