@@ -19,20 +19,6 @@ float fov_rad_to_focal_length(int resolution, float fov_rad) {
     return 0.5f * (float)resolution / tanf(0.5f * fov_rad);
 }
 
-// Print the matrix nicely for debugging
-void PrintMat(const torch::Tensor& transform_4x4) {
-    std::cout << "4x4 Transformation Matrix:" << std::endl;
-    for (int i = 0; i < 4; ++i) {
-        std::cout << "[ ";
-        for (int j = 0; j < 4; ++j) {
-            std::cout << std::fixed << std::setprecision(6) << std::setw(10)
-                      << transform_4x4[i][j].item<float>();
-            if (j < 3)
-                std::cout << ", ";
-        }
-        std::cout << " ]" << std::endl;
-    }
-}
 
 // Function to create a 3x3 rotation matrix around Y-axis embeded in 4x4 matrix
 torch::Tensor createYRotationMatrix(float angle_radians) {
