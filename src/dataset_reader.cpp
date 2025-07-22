@@ -69,7 +69,7 @@ bool BlenderReader::isValid() const {
         if (std::filesystem::is_regular_file(m_datasetConfig.data_path / "transforms_train.json")) {
             transformsFile = m_datasetConfig.data_path / "transforms_train.json";
         } else if (std::filesystem::is_regular_file(m_datasetConfig.data_path / "transforms.json")) {
-            transformsFile = m_datasetConfig.data_path / "transforms_train.json";
+            transformsFile = m_datasetConfig.data_path / "transforms.json";
         } else {
             std::println("could not find transforms_train.json nor transforms.json in: {}", transformsFile.string());
             return true;
