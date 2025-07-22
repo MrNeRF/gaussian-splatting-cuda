@@ -194,7 +194,7 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
         }
     }
 
-    auto center = torch::zeros({static_cast<int64_t>(1, 3)}, torch::kFloat32);
+    auto center = torch::zeros({1, 3}, torch::kFloat32);
 
     return {camerasdata, center};
 }
