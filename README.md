@@ -137,12 +137,12 @@ if not exist external\release mkdir external\release
 # LibTorch must be downloaded separately for debug and release in Windows
 # Download and extract debug version
 curl -L -o libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-debug-2.7.0%2Bcu128.zip
-powershell -command "Expand-Archive -Path libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip -DestinationPath external\debug\"
+tar -xf libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip -C external\debug
 del libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip
 
 # Download and extract release version
 curl -L -o libtorch-win-shared-with-deps-2.7.0+cu128.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-2.7.0%2Bcu128.zip
-powershell -command "Expand-Archive -Path libtorch-win-shared-with-deps-2.7.0+cu128.zip -DestinationPath external\release\"
+tar -xf libtorch-win-shared-with-deps-2.7.0+cu128.zip -C external\release
 del libtorch-win-shared-with-deps-2.7.0+cu128.zip
 
 # Build the project
