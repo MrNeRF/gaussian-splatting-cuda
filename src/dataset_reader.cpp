@@ -119,7 +119,7 @@ std::unique_ptr<DataReader> GetValidDataReader(const gs::param::DatasetConfig& d
                 std::println("Tried Colmap dataset and failed");
                 break;
             case DataReaderType::Blender:
-                std::println("Tried Colmap dataset and failed");
+                std::println("Tried Blender dataset and failed");
                 break;
             }
         }
