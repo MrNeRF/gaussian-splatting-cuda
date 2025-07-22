@@ -19,6 +19,23 @@ float fov_rad_to_focal_length(int resolution, float fov_rad) {
     return 0.5f * (float)resolution / tanf(0.5f * fov_rad);
 }
 
+// Print the matrix nicely for debugging
+void PrintMat(const torch::Tensor & transform_4x4)
+{
+    std::cout << "4x4 Transformation Matrix:" << std::endl;
+    for (int i = 0; i < 4; ++i) {
+        std::cout << "[ ";
+        for (int j = 0; j < 4; ++j) {
+            std::cout << std::fixed << std::setprecision(6) << std::setw(10)
+                      << transform_4x4[i][j].item<float>();
+            if (j < 3) std::cout << ", ";
+        }
+        std::cout << " ]" << std::endl;
+    }
+
+}
+
+
 std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
     const std::filesystem::path& transPath,
     const std::string& images_folder) {
@@ -102,21 +119,30 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
                 throw std::runtime_error("transform_matrix has the wrong dimensions");
             }
 
-            torch::Tensor R = torch::empty({3, 3}, torch::kFloat32);
-            for (int i=0;i<3;++i)
-            {
-                for (int j=0;j<3;++j)
-                {
-                    R[i][j] = float(frame["transform_matrix"][i][j]);
+            // Create camera-to-world transform matrix
+            torch::Tensor c2w = torch::empty({4, 4}, torch::kFloat32);
+
+            // Fill the c2w matrix from the JSON data
+            for (int i = 0; i < 4; ++i) {
+                for (int j = 0; j < 4; ++j) {
+                    c2w[i][j] = float(frame["transform_matrix"][i][j]);
                 }
             }
 
-            torch::Tensor T = torch::zeros({3}, torch::kFloat32);
+            // Change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
+            // c2w[:3, 1:3] *= -1
+            c2w.slice(0, 0, 3).slice(1, 1, 3) *= -1;
 
-            for (int i=0;i<3;++i)
-            {
-                T[i] = float(frame["transform_matrix"][i][3]);
-            }
+            // Get the world-to-camera transform by computing inverse of c2w
+            torch::Tensor w2c = torch::inverse(c2w);
+
+            // Extract rotation matrix R (transposed due to 'glm' in CUDA code)
+            // R = np.transpose(w2c[:3,:3])
+            torch::Tensor R =w2c.slice(0, 0, 3).slice(1, 0, 3);
+
+            // Extract translation vector T
+            // T = w2c[:3, 3]
+            torch::Tensor T = w2c.slice(0, 0, 3).slice(1, 3, 4).squeeze(1);
 
             auto image_path = dir_path / frame["file_path"];
             auto image_path_png = std::filesystem::path(image_path.string() + ".png");
@@ -134,8 +160,8 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
             camdata._width = w;
             camdata._height = h;
 
-            camdata._T =-torch::matmul(R.t(), T);
-            camdata._R = R.t();
+            camdata._T = T;
+            camdata._R = R;
 
 
             camdata._focal_x = fl_x;
@@ -158,14 +184,14 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
 
 
 PointCloud generate_random_point_cloud() {
-    int numInitGaussian = 2000;
+    int numInitGaussian = 10000;
 
     uint64_t seed = 8128;
     // Set random seed for reproducibility
     torch::manual_seed(seed);
 
     torch::Tensor positions = torch::rand({numInitGaussian, 3}); // in [0, 1]
-    positions = positions * 4.0 - 2.0;  // now in [-2, 2]
+    positions = positions * 2.0 - 1.0;  // now in [-2, 2]
     // Random RGB colors
     torch::Tensor colors = torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
 
