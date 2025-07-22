@@ -33,7 +33,14 @@ namespace gs {
                 char executablePathWindows[MAX_PATH];
                 GetModuleFileNameA(nullptr, executablePathWindows, MAX_PATH);
                 std::filesystem::path executablePath = std::filesystem::path(executablePathWindows);
-                std::filesystem::path parentDir = executablePath.parent_path().parent_path().parent_path();
+                std::filesystem::path parentDir = executablePath;
+                do {
+                    parentDir = parentDir.parent_path();
+                } while (!parentDir.empty() && !std::filesystem::exists( parentDir / "parameter" / filename));
+
+                if (parentDir.empty()) {
+                    throw std::runtime_error("could not find "+(std::filesystem::path("parameter")/filename).string());
+                }
 #else
                 std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
                 std::filesystem::path parentDir = executablePath.parent_path().parent_path();
