@@ -129,9 +129,7 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
             if (!frame.contains("transform_matrix")) {
                 throw std::runtime_error("expected all frames to contain transform_matrix");
             }
-
-            nlohmann::json& jsonmatrix_start = frame["transform_matrix"];
-            if (!(frame["transform_matrix"].is_array() and transforms["frames"].size() != 4)) {
+            if (!(frame["transform_matrix"].is_array() and frame["transform_matrix"].size() == 4)) {
                 throw std::runtime_error("transform_matrix has the wrong dimensions");
             }
 
