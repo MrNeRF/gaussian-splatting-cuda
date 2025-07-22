@@ -23,7 +23,7 @@ bool does_sparse_file_path_exists(const std::filesystem::path& base, const std::
     if (std::filesystem::exists(candidate0))
         return true;
 
-    std::print("could not find candidate {}", candidate0.string());
+    std::println("could not find candidate {}", candidate0.string());
 
     std::filesystem::path candidate = base / "sparse" / filename;
     if (std::filesystem::exists(candidate))
@@ -35,7 +35,7 @@ bool does_sparse_file_path_exists(const std::filesystem::path& base, const std::
 
 bool ColmapReader::isValid() const {
     if (!std::filesystem::exists(m_datasetConfig.data_path)) {
-        // std::println("data path does not exist {}", m_datasetConfig.data_path);
+        std::println("data path does not exist {}", m_datasetConfig.data_path);
         return false;
     }
 
@@ -76,7 +76,7 @@ bool BlenderReader::isValid() const {
         }
     }
     if (!std::filesystem::is_regular_file(transformsFile)) {
-        // std::print(transformsFile.string()+" is not a file");
+        std::print(transformsFile.string()+" is not a file");
         return false;
     }
 
@@ -86,8 +86,7 @@ bool BlenderReader::isValid() const {
 // factory method implementation
 std::unique_ptr<DataReader> GetValidDataReader(const gs::param::DatasetConfig& datasetConfig) {
     // Iterate through all DataReaderType enum values
-    for (int enumValue = 0; enumValue <= 1; ++enumValue) {
-        DataReaderType readerType = static_cast<DataReaderType>(enumValue);
+    for (const auto& readerType : {DataReaderType::Colmap, DataReaderType::Blender}) {
 
         std::unique_ptr<DataReader> reader = nullptr;
 
@@ -113,15 +112,6 @@ std::unique_ptr<DataReader> GetValidDataReader(const gs::param::DatasetConfig& d
                 break;
             }
             return reader;
-        } else {
-            switch (readerType) {
-            case DataReaderType::Colmap:
-                std::println("Tried Colmap dataset and failed");
-                break;
-            case DataReaderType::Blender:
-                std::println("Tried Blender dataset and failed");
-                break;
-            }
         }
     }
 
