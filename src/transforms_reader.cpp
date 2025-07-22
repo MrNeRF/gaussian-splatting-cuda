@@ -231,7 +231,7 @@ PointCloud generate_random_point_cloud() {
     torch::manual_seed(seed);
 
     torch::Tensor positions = torch::rand({numInitGaussian, 3}); // in [0, 1]
-    positions = positions * 2.0 - 1.0;  // now in [-2, 2]
+    positions = positions * 2.0 - 1.0;  // now in [-1, 1]
     // Random RGB colors
     torch::Tensor colors = torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
 
