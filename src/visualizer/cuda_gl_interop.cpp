@@ -179,7 +179,6 @@ namespace gs {
     InteropFrameBuffer::InteropFrameBuffer(bool use_interop)
         : FrameBuffer(),
           use_interop_(use_interop) {
-        use_interop_=false;
         if (use_interop_) {
             try {
                 interop_texture_.init(width, height);
