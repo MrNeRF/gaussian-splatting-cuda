@@ -31,8 +31,9 @@ do
         -d $SCENE_DIR/$SCENE/ \
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
-        --iter 30000
-    
+        --iter 30000 \
+        --headless
+
     # End timer for this scene
     scene_end=$(date +%s)
     scene_duration=$((scene_end - scene_start))
