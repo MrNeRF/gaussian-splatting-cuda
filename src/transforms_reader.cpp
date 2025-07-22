@@ -69,7 +69,7 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
         } else if (std::filesystem::is_regular_file(transPath / "transforms.json")) {
             transformsFile = transPath / "transforms.json";
         } else {
-            throw std::runtime_error("could not find transforms_traim.json nor transforms.json in " + transPath.string());
+            throw std::runtime_error("could not find transforms_train.json nor transforms.json in " + transPath.string());
         }
     }
 
