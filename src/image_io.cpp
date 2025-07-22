@@ -19,7 +19,6 @@ unsigned char* strip_image_alpha(unsigned char * img, int width, int height)
     if (!new_img) {
         stbi_image_free(img);
         throw std::runtime_error("failed allocating img in strip_image_alpha");
-        return nullptr;
     }
 
     for (int i = 0; i < width * height; ++i) {
