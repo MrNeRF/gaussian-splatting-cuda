@@ -94,6 +94,7 @@ Join our growing community for discussions, support, and updates:
 
 ### Build Instructions
 
+#### Linux
 ```bash
 # Set up vcpkg once
 git clone https://github.com/microsoft/vcpkg.git
@@ -113,6 +114,43 @@ rm libtorch-cxx11-abi-shared-with-deps-2.7.0+cu128.zip
 cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 cmake --build build -- -j$(nproc)
 ```
+
+#### Windows
+Instructions must be run in **VS Developer Command Prompt** 
+```bash
+# Set up vcpkg once
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg && .\bootstrap-vcpkg.bat -disableMetrics && cd ..
+set VCPKG_ROOT=%CD%\vcpkg
+# Note: Add VCPKG_ROOT to your system environment variables permanently via System Properties > Advanced > Environment Variables
+
+# Clone the repository
+git clone https://github.com/MrNeRF/gaussian-splatting-cuda
+cd gaussian-splatting-cuda
+
+# Download and setup LibTorch 2.7.0 with CUDA 12.8 support
+# Create directories for debug and release versions (create directories if they don't exist)
+if not exist external mkdir external
+if not exist external\debug mkdir external\debug
+if not exist external\release mkdir external\release
+
+# LibTorch must be downloaded separately for debug and release in Windows
+# Download and extract debug version
+curl -L -o libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-debug-2.7.0%2Bcu128.zip
+powershell -command "Expand-Archive -Path libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip -DestinationPath external\debug\"
+del libtorch-win-shared-with-deps-debug-2.7.0+cu128.zip
+
+# Download and extract release version
+curl -L -o libtorch-win-shared-with-deps-2.7.0+cu128.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-2.7.0%2Bcu128.zip
+powershell -command "Expand-Archive -Path libtorch-win-shared-with-deps-2.7.0+cu128.zip -DestinationPath external\release\"
+del libtorch-win-shared-with-deps-2.7.0+cu128.zip
+
+# Build the project
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j
+
+```
+Note: Building in Debug mode requires building debug python libraries (python3*_d.dll, python3*_d.lib) separately . 
 
 ### Troubleshooting Build Issues
 
