@@ -170,7 +170,6 @@ namespace gs {
 
                 output_buffer_.push_back(std::string(buf));
 
-                // Keep buffer size manageable
                 while (output_buffer_.size() > max_output_lines_) {
                     output_buffer_.erase(output_buffer_.begin());
                 }
