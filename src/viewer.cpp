@@ -290,7 +290,7 @@ namespace gs {
 
             if (command == "status") {
                 if (!trainer_) {
-                    return "Trainer not available";
+                    return "No trainer available (viewer mode)";
                 }
                 result << "Training Status:\n";
                 result << "  Running: " << (trainer_->is_running() ? "Yes" : "No") << "\n";
@@ -302,20 +302,32 @@ namespace gs {
             }
 
             if (command == "model_info") {
-                if (!trainer_) {
-                    return "Trainer not available";
+                if (!trainer_ && !standalone_model_) {
+                    return "No model available";
                 }
 
-                std::lock_guard<std::mutex> lock(splat_mtx_);
-                auto& model = trainer_->get_strategy().get_model();
-
                 result << "Model Information:\n";
-                result << "  Number of Gaussians: " << model.size() << "\n";
-                result << "  Positions shape: [" << model.get_means().size(0) << ", " << model.get_means().size(1) << "]\n";
-                result << "  Device: " << model.get_means().device() << "\n";
-                result << "  Dtype: " << model.get_means().dtype() << "\n";
-                result << "  Active SH degree: " << model.get_active_sh_degree() << "\n";
-                result << "  Scene scale: " << model.get_scene_scale();
+
+                if (trainer_) {
+                    std::lock_guard<std::mutex> lock(splat_mtx_);
+                    auto& model = trainer_->get_strategy().get_model();
+                    result << "  Number of Gaussians: " << model.size() << "\n";
+                    result << "  Positions shape: [" << model.get_means().size(0) << ", " << model.get_means().size(1) << "]\n";
+                    result << "  Device: " << model.get_means().device() << "\n";
+                    result << "  Dtype: " << model.get_means().dtype() << "\n";
+                    result << "  Active SH degree: " << model.get_active_sh_degree() << "\n";
+                    result << "  Scene scale: " << model.get_scene_scale();
+                } else if (standalone_model_) {
+                    std::lock_guard<std::mutex> lock(splat_mtx_);
+                    result << "  Number of Gaussians: " << standalone_model_->size() << "\n";
+                    result << "  Positions shape: [" << standalone_model_->get_means().size(0) << ", " << standalone_model_->get_means().size(1) << "]\n";
+                    result << "  Device: " << standalone_model_->get_means().device() << "\n";
+                    result << "  Dtype: " << standalone_model_->get_means().dtype() << "\n";
+                    result << "  Active SH degree: " << standalone_model_->get_active_sh_degree() << "\n";
+                    result << "  Scene scale: " << standalone_model_->get_scene_scale();
+                    result << "\n  Mode: Viewer (no training)";
+                }
+
                 return result.str();
             }
 
@@ -338,8 +350,8 @@ namespace gs {
 
             // Handle tensor_info command
             if (command.substr(0, 11) == "tensor_info") {
-                if (!trainer_) {
-                    return "Trainer not available";
+                if (!trainer_ && !standalone_model_) {
+                    return "No model available";
                 }
 
                 std::string tensor_name = "";
@@ -352,19 +364,30 @@ namespace gs {
                 }
 
                 std::lock_guard<std::mutex> lock(splat_mtx_);
-                auto& model = trainer_->get_strategy().get_model();
+
+                // Get model reference
+                SplatData* model = nullptr;
+                if (trainer_) {
+                    model = const_cast<SplatData*>(&trainer_->get_strategy().get_model());
+                } else if (standalone_model_) {
+                    model = standalone_model_.get();
+                }
+
+                if (!model) {
+                    return "Model not available";
+                }
 
                 torch::Tensor tensor;
                 if (tensor_name == "means" || tensor_name == "positions") {
-                    tensor = model.get_means();
+                    tensor = model->get_means();
                 } else if (tensor_name == "scales" || tensor_name == "scaling") {
-                    tensor = model.get_scaling();
+                    tensor = model->get_scaling();
                 } else if (tensor_name == "rotations" || tensor_name == "rotation" || tensor_name == "quats") {
-                    tensor = model.get_rotation();
+                    tensor = model->get_rotation();
                 } else if (tensor_name == "features" || tensor_name == "colors" || tensor_name == "shs") {
-                    tensor = model.get_shs();
+                    tensor = model->get_shs();
                 } else if (tensor_name == "opacities" || tensor_name == "opacity") {
-                    tensor = model.get_opacity();
+                    tensor = model->get_opacity();
                 } else {
                     return "Unknown tensor: " + tensor_name + "\nAvailable: means, scaling, rotation, shs, opacity";
                 }
@@ -417,6 +440,10 @@ namespace gs {
 
     void GSViewer::setTrainer(Trainer* trainer) {
         trainer_ = trainer;
+    }
+
+    void GSViewer::setStandaloneModel(std::unique_ptr<SplatData> model) {
+        standalone_model_ = std::move(model);
     }
 
     void GSViewer::setAntiAliasing(bool enable) {
@@ -541,8 +568,8 @@ namespace gs {
     }
 
     void GSViewer::drawFrame() {
-        // Only render if trainer is available
-        if (!trainer_) {
+        // Only render if we have a model to render
+        if (!trainer_ && !standalone_model_) {
             return;
         }
 
@@ -589,9 +616,21 @@ namespace gs {
         {
             std::lock_guard<std::mutex> lock(splat_mtx_);
 
+            // Get model from trainer or standalone
+            SplatData* model = nullptr;
+            if (trainer_) {
+                model = const_cast<SplatData*>(&trainer_->get_strategy().get_model());
+            } else if (standalone_model_) {
+                model = standalone_model_.get();
+            }
+
+            if (!model) {
+                return;
+            }
+
             output = gs::rasterize(
                 cam,
-                trainer_->get_strategy().get_model(),
+                *model,
                 background,
                 config_->scaling_modifier,
                 false,
@@ -695,109 +734,129 @@ namespace gs {
         ImGui::Begin("Rendering Setting", nullptr, window_flags);
         ImGui::SetWindowSize(ImVec2(300, 0));
 
-        // Check if trainer is set
-        if (!trainer_) {
-            ImGui::Text("Waiting for trainer initialization...");
+        // Check if trainer or standalone model is set
+        if (!trainer_ && !standalone_model_) {
+            ImGui::Text("No model loaded.");
             ImGui::End();
             ImGui::PopStyleColor();
             return;
         }
 
-        // Training control section
-        ImGui::Separator();
-        ImGui::Text("Training Control");
-        ImGui::Separator();
+        // Training control section - only show if trainer exists
+        if (trainer_) {
+            ImGui::Separator();
+            ImGui::Text("Training Control");
+            ImGui::Separator();
 
-        bool is_training = trainer_->is_running();
-        bool is_paused = trainer_->is_paused();
-        bool is_complete = trainer_->is_training_complete();
-        bool has_stopped = trainer_->has_stopped();
+            bool is_training = trainer_->is_running();
+            bool is_paused = trainer_->is_paused();
+            bool is_complete = trainer_->is_training_complete();
+            bool has_stopped = trainer_->has_stopped();
 
-        // Show appropriate controls based on state
-        if (!training_started_ && !is_training) {
-            // Initial state - show start button
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
-            if (ImGui::Button("Start Training", ImVec2(-1, 0))) {
-                manual_start_triggered_ = true;
-                training_started_ = true;
-            }
-            ImGui::PopStyleColor(2);
-        } else if (is_complete || has_stopped) {
-            // Training finished - show status
-            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f),
-                               has_stopped ? "Training Stopped!" : "Training Complete!");
-        } else {
-            // Training in progress - show control buttons
-
-            // Pause/Resume button
-            if (is_paused) {
+            // Show appropriate controls based on state
+            if (!training_started_ && !is_training) {
+                // Initial state - show start button
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
-                if (ImGui::Button("Resume", ImVec2(-1, 0))) {
-                    trainer_->request_resume();
+                if (ImGui::Button("Start Training", ImVec2(-1, 0))) {
+                    manual_start_triggered_ = true;
+                    training_started_ = true;
                 }
                 ImGui::PopStyleColor(2);
-
-                // When paused, show stop button too
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
-                if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
-                    trainer_->request_stop();
-                }
-                ImGui::PopStyleColor(2);
+            } else if (is_complete || has_stopped) {
+                // Training finished - show status
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f),
+                                   has_stopped ? "Training Stopped!" : "Training Complete!");
             } else {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
-                if (ImGui::Button("Pause", ImVec2(-1, 0))) {
-                    trainer_->request_pause();
+                // Training in progress - show control buttons
+
+                // Pause/Resume button
+                if (is_paused) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+                    if (ImGui::Button("Resume", ImVec2(-1, 0))) {
+                        trainer_->request_resume();
+                    }
+                    ImGui::PopStyleColor(2);
+
+                    // When paused, show stop button too
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
+                    if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
+                        trainer_->request_stop();
+                    }
+                    ImGui::PopStyleColor(2);
+                } else {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
+                    if (ImGui::Button("Pause", ImVec2(-1, 0))) {
+                        trainer_->request_pause();
+                    }
+                    ImGui::PopStyleColor(2);
+                }
+
+                // Save checkpoint button (always visible during training)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+                if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
+                    trainer_->request_save();
+                    save_in_progress_ = true;
+                    save_start_time_ = std::chrono::steady_clock::now();
                 }
                 ImGui::PopStyleColor(2);
             }
 
-            // Save checkpoint button (always visible during training)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
-            if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
-                trainer_->request_save();
-                save_in_progress_ = true;
-                save_start_time_ = std::chrono::steady_clock::now();
+            // Show save progress feedback
+            if (save_in_progress_) {
+                auto now = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - save_start_time_).count();
+                if (elapsed < 2000) {
+                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Checkpoint saved!");
+                } else {
+                    save_in_progress_ = false;
+                }
             }
-            ImGui::PopStyleColor(2);
-        }
 
-        // Show save progress feedback
-        if (save_in_progress_) {
-            auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - save_start_time_).count();
-            if (elapsed < 2000) {
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Checkpoint saved!");
-            } else {
-                save_in_progress_ = false;
-            }
-        }
+            // Status display
+            ImGui::Separator();
+            int current_iter = trainer_->get_current_iteration();
+            float current_loss = trainer_->get_current_loss();
+            ImGui::Text("Status: %s", is_complete ? "Complete" : (is_paused ? "Paused" : (is_training ? "Training" : "Ready")));
+            ImGui::Text("Iteration: %d", current_iter);
+            ImGui::Text("Loss: %.6f", current_loss);
 
-        // Status display
-        ImGui::Separator();
-        int current_iter = trainer_->get_current_iteration();
-        float current_loss = trainer_->get_current_loss();
-        ImGui::Text("Status: %s", is_complete ? "Complete" : (is_paused ? "Paused" : (is_training ? "Training" : "Ready")));
-        ImGui::Text("Iteration: %d", current_iter);
-        ImGui::Text("Loss: %.6f", current_loss);
-
-        // Display render mode
+            // Display render mode
 #ifdef CUDA_GL_INTEROP_ENABLED
-        ImGui::Text("Render Mode: GPU Direct (Interop)");
+            ImGui::Text("Render Mode: GPU Direct (Interop)");
 #else
-        ImGui::Text("Render Mode: CPU Copy");
+            ImGui::Text("Render Mode: CPU Copy");
 #endif
 
-        // Handle the start trigger
-        if (notifier_ && manual_start_triggered_) {
-            std::lock_guard<std::mutex> lock(notifier_->mtx);
-            notifier_->ready = true;
-            notifier_->cv.notify_one();
-            manual_start_triggered_ = false;
+            // Handle the start trigger
+            if (notifier_ && manual_start_triggered_) {
+                std::lock_guard<std::mutex> lock(notifier_->mtx);
+                notifier_->ready = true;
+                notifier_->cv.notify_one();
+                manual_start_triggered_ = false;
+            }
+        } else {
+            // Standalone model info (viewer mode)
+            ImGui::Separator();
+            ImGui::Text("Model Information");
+            ImGui::Separator();
+
+            if (standalone_model_) {
+                ImGui::Text("Gaussians: %lld", standalone_model_->size());
+                ImGui::Text("SH Degree: %d", standalone_model_->get_active_sh_degree());
+                ImGui::Text("Scene Scale: %.3f", standalone_model_->get_scene_scale());
+            }
+
+            // Greyed out start training button
+            ImGui::BeginDisabled(true);
+            ImGui::Button("Start Training", ImVec2(-1, 0));
+            ImGui::EndDisabled();
+
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Viewer mode - no training available");
         }
 
         ImGui::Separator();
@@ -818,56 +877,59 @@ namespace gs {
             config_->fov = 75.0f;
         }
 
-        int current_iter2;
-        int total_iter;
-        int num_splats;
-        std::vector<float> loss_data;
-        {
-            std::lock_guard<std::mutex> lock(info_->mtx);
-            current_iter2 = info_->curr_iterations_;
-            total_iter = info_->total_iterations_;
-            num_splats = info_->num_splats_;
-            loss_data.assign(info_->loss_buffer_.begin(), info_->loss_buffer_.end());
-        }
-
-        float fraction = total_iter > 0 ? float(current_iter2) / float(total_iter) : 0.0f;
-        char overlay_text[64];
-        std::snprintf(overlay_text, sizeof(overlay_text), "%d / %d", current_iter2, total_iter);
-        ImGui::ProgressBar(fraction, ImVec2(-1, 20), overlay_text);
-
-        if (loss_data.size() > 0) {
-            auto [min_it, max_it] = std::minmax_element(loss_data.begin(), loss_data.end());
-            float min_val = *min_it, max_val = *max_it;
-
-            if (min_val == max_val) {
-                min_val -= 1.0f;
-                max_val += 1.0f;
-            } else {
-                float margin = (max_val - min_val) * 0.05f;
-                min_val -= margin;
-                max_val += margin;
+        // Only show training progress if trainer exists
+        if (trainer_) {
+            int current_iter2;
+            int total_iter;
+            int num_splats;
+            std::vector<float> loss_data;
+            {
+                std::lock_guard<std::mutex> lock(info_->mtx);
+                current_iter2 = info_->curr_iterations_;
+                total_iter = info_->total_iterations_;
+                num_splats = info_->num_splats_;
+                loss_data.assign(info_->loss_buffer_.begin(), info_->loss_buffer_.end());
             }
 
-            char loss_label[64];
-            std::snprintf(loss_label, sizeof(loss_label), "Loss: %.4f", loss_data.back());
+            float fraction = total_iter > 0 ? float(current_iter2) / float(total_iter) : 0.0f;
+            char overlay_text[64];
+            std::snprintf(overlay_text, sizeof(overlay_text), "%d / %d", current_iter2, total_iter);
+            ImGui::ProgressBar(fraction, ImVec2(-1, 20), overlay_text);
 
-            ImGui::PlotLines(
-                "##Loss",
-                loss_data.data(),
-                static_cast<int>(loss_data.size()),
-                0,
-                loss_label,
-                min_val,
-                max_val,
-                ImVec2(-1, 50));
+            if (loss_data.size() > 0) {
+                auto [min_it, max_it] = std::minmax_element(loss_data.begin(), loss_data.end());
+                float min_val = *min_it, max_val = *max_it;
+
+                if (min_val == max_val) {
+                    min_val -= 1.0f;
+                    max_val += 1.0f;
+                } else {
+                    float margin = (max_val - min_val) * 0.05f;
+                    min_val -= margin;
+                    max_val += margin;
+                }
+
+                char loss_label[64];
+                std::snprintf(loss_label, sizeof(loss_label), "Loss: %.4f", loss_data.back());
+
+                ImGui::PlotLines(
+                    "##Loss",
+                    loss_data.data(),
+                    static_cast<int>(loss_data.size()),
+                    0,
+                    loss_label,
+                    min_val,
+                    max_val,
+                    ImVec2(-1, 50));
+            }
+
+            ImGui::Text("num Splats: %d", num_splats);
         }
 
         float gpuUsage = getGPUUsage();
         char gpuText[64];
         std::snprintf(gpuText, sizeof(gpuText), "GPU Usage: %.1f%%", gpuUsage);
         ImGui::ProgressBar(gpuUsage / 100.0f, ImVec2(-1, 20), gpuText);
-
-        ImGui::Text("num Splats: %d", num_splats);
 
         // Show Camera Controls button
         ImGui::Separator();

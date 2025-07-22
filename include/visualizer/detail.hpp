@@ -239,6 +239,7 @@ namespace gs {
         ~GSViewer();
 
         void setTrainer(Trainer* trainer);
+        void setStandaloneModel(std::unique_ptr<SplatData> model);
         void setAntiAliasing(bool enable);
 
         void drawFrame();
@@ -262,6 +263,7 @@ namespace gs {
         std::shared_ptr<RenderingConfig> config_;
 
         Trainer* trainer_;
+        std::unique_ptr<SplatData> standalone_model_;
 
         // Control button states
         bool show_control_panel_ = true;

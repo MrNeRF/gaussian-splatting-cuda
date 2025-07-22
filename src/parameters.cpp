@@ -36,10 +36,10 @@ namespace gs {
                 std::filesystem::path parentDir = executablePath;
                 do {
                     parentDir = parentDir.parent_path();
-                } while (!parentDir.empty() && !std::filesystem::exists( parentDir / "parameter" / filename));
+                } while (!parentDir.empty() && !std::filesystem::exists(parentDir / "parameter" / filename));
 
                 if (parentDir.empty()) {
-                    throw std::runtime_error("could not find "+(std::filesystem::path("parameter")/filename).string());
+                    throw std::runtime_error("could not find " + (std::filesystem::path("parameter") / filename).string());
                 }
 #else
                 std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
