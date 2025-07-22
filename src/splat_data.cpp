@@ -1,10 +1,10 @@
 #include "core/splat_data.hpp"
 #include "core/colmap_reader.hpp"
-#include "core/transforms_reader.hpp"
+#include "core/dataset_reader.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
-#include "core/dataset_reader.hpp"
-\
+#include "core/transforms_reader.hpp"
+
 #include "external/nanoflann.hpp"
 #include "external/tinyply.hpp"
 #include <algorithm>

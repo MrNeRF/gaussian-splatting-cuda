@@ -1,9 +1,9 @@
 #include "core/argument_parser.hpp"
 #include "core/dataset.hpp"
+#include "core/dataset_reader.hpp"
 #include "core/mcmc.hpp"
 #include "core/parameters.hpp"
 #include "core/trainer.hpp"
-#include "core/dataset_reader.hpp"
 #include "visualizer/detail.hpp"
 #include <expected>
 #include <print>

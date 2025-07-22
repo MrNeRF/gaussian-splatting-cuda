@@ -1,18 +1,17 @@
 #pragma once
 
-#include <memory>
-#include <tuple>
 #include <expected>
+#include <memory>
 #include <string>
 #include <torch/torch.h>
+#include <tuple>
 
 #include "core/camera.hpp"
 #include "core/parameters.hpp"
 
-
 enum class DataReaderType {
- Colmap = 0,   ///< COLMAP dataset format
- Blender = 1   ///< Blender dataset format
+    Colmap = 0, ///< COLMAP dataset format
+    Blender = 1 ///< Blender dataset format
 };
 
 // Forward declarations - adjust these includes based on your project structure
@@ -58,9 +57,9 @@ public:
     virtual PointCloud createPointCloud() const = 0;
 
     /**
-       * Validates if the dataset configuration and data are valid
-       * @return true if the dataset is valid and can be processed, false otherwise
-       */
+     * Validates if the dataset configuration and data are valid
+     * @return true if the dataset is valid and can be processed, false otherwise
+     */
     virtual bool isValid() const = 0;
 
 protected:
@@ -100,11 +99,11 @@ public:
      */
     PointCloud createPointCloud() const override;
 
-     /**
+    /**
      * Validates if the dataset configuration and data are valid
      * @return true if the dataset is valid and can be processed, false otherwise
      */
-     bool isValid() const override;
+    bool isValid() const override;
 };
 
 /**
@@ -130,7 +129,7 @@ public:
      * Creates a point cloud from COLMAP dataset
      * @return PointCloud object created from COLMAP data
      */
-    PointCloud createPointCloud()  const override;
+    PointCloud createPointCloud() const override;
 
     /**
      * Validates if the dataset configuration and data are valid

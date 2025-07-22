@@ -2,8 +2,8 @@
 
 #include "core/camera.hpp"
 #include "core/colmap_reader.hpp"
-#include "core/transforms_reader.hpp"
 #include "core/parameters.hpp"
+#include "core/transforms_reader.hpp"
 #include <expected>
 #include <format>
 #include <memory>
@@ -135,7 +135,6 @@ create_dataset_from_colmap(const gs::param::DatasetConfig& datasetConfig) {
     }
 }
 
-
 inline std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
 create_dataset_from_transforms(const gs::param::DatasetConfig& datasetConfig) {
 
@@ -184,7 +183,6 @@ create_dataset_from_transforms(const gs::param::DatasetConfig& datasetConfig) {
         return std::unexpected(std::format("Failed to create dataset from COLMAP: {}", e.what()));
     }
 }
-
 
 inline auto create_dataloader_from_dataset(
     std::shared_ptr<CameraDataset> dataset,
