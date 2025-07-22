@@ -10,7 +10,6 @@
 
 
 std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
-    const std::filesystem::path& base,
-    const std::string& images_folder);
+    const std::filesystem::path& transPath);
 
 PointCloud generate_random_point_cloud();

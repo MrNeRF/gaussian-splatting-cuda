@@ -3,6 +3,7 @@
 #include "core/mcmc.hpp"
 #include "core/parameters.hpp"
 #include "core/trainer.hpp"
+#include "core/dataset_reader.hpp"
 #include "visualizer/detail.hpp"
 #include <expected>
 #include <print>
@@ -29,9 +30,11 @@ int main(int argc, char* argv[]) {
     }
 
     //--------------------------------------------------------------------------
-    // 3. Create dataset from COLMAP
+    // 3. Find and Create dataset
     //--------------------------------------------------------------------------
-    auto dataset_result = create_dataset_from_transforms(params.dataset);
+
+    auto dataSetReader = GetValidDataReader(params.dataset);
+    auto dataset_result = dataSetReader->create_dataset();
 
     if (!dataset_result) {
         std::println(stderr, "Error creating dataset: {}", dataset_result.error());
@@ -42,7 +45,7 @@ int main(int argc, char* argv[]) {
     //--------------------------------------------------------------------------
     // 4. Model initialisation
     //--------------------------------------------------------------------------
-    auto splat_result = SplatData::init_model_from_pointcloud(params, scene_center);
+    auto splat_result = SplatData::init_model_from_pointcloud(params, scene_center, std::move(dataSetReader));
     if (!splat_result) {
         std::println(stderr, "Error initializing model: {}", splat_result.error());
         return -1;

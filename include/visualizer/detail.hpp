@@ -160,11 +160,11 @@ namespace gs {
                 output_buffer_.clear();
             }
 
-            void addLog(const std::string& fmt, ...) {
+            void addLog(const char* fmt, ...) {
                 char buf[1024];
                 va_list args;
                 va_start(args, fmt);
-                vsnprintf(buf, sizeof(buf), fmt.c_str(), args);
+                vsnprintf(buf, sizeof(buf), fmt, args);
                 buf[sizeof(buf) - 1] = 0;
                 va_end(args);
 

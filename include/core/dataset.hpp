@@ -147,7 +147,7 @@ create_dataset_from_transforms(const gs::param::DatasetConfig& datasetConfig) {
 
         // Read COLMAP data with specified images folder
         auto [camera_infos, scene_center] = read_transforms_cameras_and_images(
-            datasetConfig.data_path, datasetConfig.images);
+            datasetConfig.data_path);
 
         std::vector<std::shared_ptr<Camera>> cameras;
         cameras.reserve(camera_infos.size());

@@ -62,18 +62,29 @@ torch::Tensor createYRotationMatrix(float angle_radians) {
 
 
 std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
-    const std::filesystem::path& transPath,
-    const std::string& images_folder) {
+    const std::filesystem::path& transPath) {
 
-
-
-    std::ifstream trans_file{transPath.string()};
-
-    if (!std::filesystem::is_regular_file(transPath))
-    {
-        throw std::runtime_error(transPath.string()+ " is not a valid file");
+    std::filesystem::path transformsFile = transPath;
+    if (std::filesystem::is_directory(transPath)) {
+        if (std::filesystem::is_regular_file(transPath/"transforms_train.json")) {
+            transformsFile=transPath/"transforms_train.json";
+        }
+        else if (std::filesystem::is_regular_file(transPath/"transforms.json")) {
+            transformsFile=transPath/"transforms_train.json";
+        }
+        else {
+            throw std::runtime_error("could not find transforms_traim.json nor transforms.json in "+transPath.string());
+        }
     }
-    std::filesystem::path dir_path  = transPath.parent_path();
+
+    if (!std::filesystem::is_regular_file(transformsFile))
+    {
+        throw std::runtime_error(transformsFile.string()+ " is not a valid file");
+    }
+    std::ifstream trans_file{transformsFile.string()};
+
+
+    std::filesystem::path dir_path  = transformsFile.parent_path();
 
     // should throw if parse fails
     nlohmann::json transforms = nlohmann::json::parse(trans_file, nullptr, true, true);

@@ -3,6 +3,8 @@
 #include "core/transforms_reader.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
+#include "core/dataset_reader.hpp"
+\
 #include "external/nanoflann.hpp"
 #include "external/tinyply.hpp"
 #include <algorithm>
@@ -344,11 +346,12 @@ PointCloud SplatData::to_point_cloud() const {
 
 std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
     const gs::param::TrainingParameters& params,
-    torch::Tensor scene_center) {
+    torch::Tensor scene_center,
+    std::unique_ptr<DataReader> dataSetReader) {
 
     try {
         // Helper lambdas
-        auto pcd = generate_random_point_cloud();
+        auto pcd = dataSetReader->createPointCloud();
 
         const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
         const auto scene_scale = dists.median().item<float>();
