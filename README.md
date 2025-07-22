@@ -150,7 +150,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release -j
 
 ```
-Note: Building in Debug mode requires building debug python libraries (python3*_d.dll, python3*_d.lib) separately . 
+Note: Building in Debug mode requires building debug python libraries (python3*_d.dll, python3*_d.lib) separately.
 
 ### Troubleshooting Build Issues
 
