@@ -84,7 +84,7 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
     nlohmann::json transforms = nlohmann::json::parse(trans_file, nullptr, true, true);
     int w = -1, h = -1;
     if (!transforms.contains("w") or !transforms.contains("h")) {
-        throw std::runtime_error("transforms file must contain width (w) and heigth (h)");
+        throw std::runtime_error("transforms file must contain width (w) and height (h)");
     } else {
         w = int(transforms["w"]);
         h = int(transforms["h"]);
