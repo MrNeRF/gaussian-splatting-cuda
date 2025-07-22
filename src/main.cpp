@@ -24,7 +24,10 @@ int main(int argc, char* argv[]) {
     // 2. Check if we're in viewer mode
     //--------------------------------------------------------------------------
 
-    // @TODO: That sucks here. For now it is good but it should be refactored.
+    // @TODO: Refactor viewer mode logic into a separate function or class.
+    // The current implementation tightly couples viewer mode handling with the main function,
+    // making the code less modular and harder to maintain. Extracting this logic will improve
+    // code readability and reusability.
     if (params.viewer_mode) {
         // PLY Viewer Mode
         std::println("Loading PLY file: {}", params.ply_path.string());
