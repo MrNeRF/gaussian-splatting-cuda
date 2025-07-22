@@ -6,6 +6,42 @@
 
 namespace gs {
 
+    // Constants for PLY format
+    namespace ply_constants {
+        // Maximum number of SH coefficient components
+        constexpr int MAX_DC_COMPONENTS = 48;
+        constexpr int MAX_REST_COMPONENTS = 135;
+
+        // Dimension requirements
+        constexpr int COLOR_CHANNELS = 3;
+        constexpr int POSITION_DIMS = 3;
+        constexpr int SCALE_DIMS = 3;
+        constexpr int QUATERNION_DIMS = 4;
+
+        // Default values
+        constexpr float DEFAULT_LOG_SCALE = -5.0f;
+        constexpr float IDENTITY_QUATERNION_W = 1.0f;
+        constexpr float SCENE_SCALE_FACTOR = 0.5f;
+
+        // SH degree calculation
+        constexpr int SH_DEGREE_3_REST_COEFFS = 15; // (4^2 - 1) = 15 for degree 3
+        constexpr int SH_DEGREE_OFFSET = 1;
+
+        // Property names
+        constexpr const char* VERTEX_ELEMENT = "vertex";
+        constexpr const char* POS_X = "x";
+        constexpr const char* POS_Y = "y";
+        constexpr const char* POS_Z = "z";
+        constexpr const char* NORMAL_X = "nx";
+        constexpr const char* NORMAL_Y = "ny";
+        constexpr const char* NORMAL_Z = "nz";
+        constexpr const char* OPACITY = "opacity";
+        constexpr const char* DC_PREFIX = "f_dc_";
+        constexpr const char* REST_PREFIX = "f_rest_";
+        constexpr const char* SCALE_PREFIX = "scale_";
+        constexpr const char* ROT_PREFIX = "rot_";
+    } // namespace ply_constants
+
     std::expected<SplatData, std::string> load_ply(const std::filesystem::path& filepath) {
         try {
             if (!std::filesystem::exists(filepath)) {
@@ -24,7 +60,7 @@ namespace gs {
             auto elements = ply_file.get_elements();
             size_t vertex_count = 0;
             for (const auto& e : elements) {
-                if (e.name == "vertex") {
+                if (e.name == ply_constants::VERTEX_ELEMENT) {
                     vertex_count = e.size;
                     break;
                 }
@@ -41,14 +77,20 @@ namespace gs {
 
             // Try to request all properties we know about
             try {
-                positions = ply_file.request_properties_from_element("vertex", {"x", "y", "z"});
-                normals = ply_file.request_properties_from_element("vertex", {"nx", "ny", "nz"});
+                positions = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT,
+                    {ply_constants::POS_X, ply_constants::POS_Y, ply_constants::POS_Z});
 
-                // SH coefficients - DC terms (f_dc_0, f_dc_1, f_dc_2)
-                for (int i = 0; i < 48; ++i) {
+                normals = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT,
+                    {ply_constants::NORMAL_X, ply_constants::NORMAL_Y, ply_constants::NORMAL_Z});
+
+                // SH coefficients - DC terms
+                for (int i = 0; i < ply_constants::MAX_DC_COMPONENTS; ++i) {
                     try {
                         auto component = ply_file.request_properties_from_element(
-                            "vertex", {std::format("f_dc_{}", i)});
+                            ply_constants::VERTEX_ELEMENT,
+                            {std::format("{}{}", ply_constants::DC_PREFIX, i)});
                         if (component) {
                             f_dc_components.push_back(component);
                         }
@@ -57,11 +99,12 @@ namespace gs {
                     }
                 }
 
-                // SH coefficients - rest terms (f_rest_0, f_rest_1, f_rest_2, ...)
-                for (int i = 0; i < 135; ++i) {
+                // SH coefficients - rest terms
+                for (int i = 0; i < ply_constants::MAX_REST_COMPONENTS; ++i) {
                     try {
                         auto component = ply_file.request_properties_from_element(
-                            "vertex", {std::format("f_rest_{}", i)});
+                            ply_constants::VERTEX_ELEMENT,
+                            {std::format("{}{}", ply_constants::REST_PREFIX, i)});
                         if (component) {
                             f_rest_components.push_back(component);
                         }
@@ -70,14 +113,26 @@ namespace gs {
                     }
                 }
 
-                opacity = ply_file.request_properties_from_element("vertex", {"opacity"});
-                scale_0 = ply_file.request_properties_from_element("vertex", {"scale_0"});
-                scale_1 = ply_file.request_properties_from_element("vertex", {"scale_1"});
-                scale_2 = ply_file.request_properties_from_element("vertex", {"scale_2"});
-                rot_0 = ply_file.request_properties_from_element("vertex", {"rot_0"});
-                rot_1 = ply_file.request_properties_from_element("vertex", {"rot_1"});
-                rot_2 = ply_file.request_properties_from_element("vertex", {"rot_2"});
-                rot_3 = ply_file.request_properties_from_element("vertex", {"rot_3"});
+                opacity = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT, {ply_constants::OPACITY});
+
+                // Scale components
+                scale_0 = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT, {std::format("{}0", ply_constants::SCALE_PREFIX)});
+                scale_1 = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT, {std::format("{}1", ply_constants::SCALE_PREFIX)});
+                scale_2 = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT, {std::format("{}2", ply_constants::SCALE_PREFIX)});
+
+                // Rotation components
+                rot_0 = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT, {std::format("{}0", ply_constants::ROT_PREFIX)});
+                rot_1 = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT, {std::format("{}1", ply_constants::ROT_PREFIX)});
+                rot_2 = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT, {std::format("{}2", ply_constants::ROT_PREFIX)});
+                rot_3 = ply_file.request_properties_from_element(
+                    ply_constants::VERTEX_ELEMENT, {std::format("{}3", ply_constants::ROT_PREFIX)});
             } catch (const std::exception& e) {
                 std::println("Note: Some properties not found ({}), continuing...", e.what());
             }
@@ -98,7 +153,7 @@ namespace gs {
             // Positions
             auto means = torch::from_blob(
                              positions->buffer.get(),
-                             {static_cast<int64_t>(num_points), 3},
+                             {static_cast<int64_t>(num_points), ply_constants::POSITION_DIMS},
                              options)
                              .clone();
 
@@ -120,15 +175,17 @@ namespace gs {
                 auto f_dc = torch::stack(dc_values, 1);
                 int dc_dim = f_dc.size(1);
 
-                if (dc_dim % 3 != 0) {
-                    return std::unexpected(std::format("f_dc dimension {} is not a multiple of 3", dc_dim));
+                if (dc_dim % ply_constants::COLOR_CHANNELS != 0) {
+                    return std::unexpected(std::format("f_dc dimension {} is not a multiple of {}",
+                                                       dc_dim, ply_constants::COLOR_CHANNELS));
                 }
 
                 // Reshape from [N, dc_dim] to [N, 3, B0] then transpose to [N, B0, 3]
-                int B0 = dc_dim / 3;
-                sh0 = f_dc.reshape({static_cast<int64_t>(num_points), 3, B0}).transpose(1, 2);
+                int B0 = dc_dim / ply_constants::COLOR_CHANNELS;
+                sh0 = f_dc.reshape({static_cast<int64_t>(num_points), ply_constants::COLOR_CHANNELS, B0})
+                          .transpose(1, 2);
             } else {
-                sh0 = torch::zeros({static_cast<int64_t>(num_points), 1, 3}, options);
+                sh0 = torch::zeros({static_cast<int64_t>(num_points), 1, ply_constants::COLOR_CHANNELS}, options);
             }
 
             // Process rest components
@@ -146,16 +203,21 @@ namespace gs {
                 auto f_rest = torch::stack(rest_values, 1);
                 int rest_dim = f_rest.size(1);
 
-                if (rest_dim % 3 != 0) {
-                    return std::unexpected(std::format("f_rest dimension {} is not a multiple of 3", rest_dim));
+                if (rest_dim % ply_constants::COLOR_CHANNELS != 0) {
+                    return std::unexpected(std::format("f_rest dimension {} is not a multiple of {}",
+                                                       rest_dim, ply_constants::COLOR_CHANNELS));
                 }
 
                 // Reshape from [N, rest_dim] to [N, 3, Bn] then transpose to [N, Bn, 3]
-                int Bn = rest_dim / 3;
-                shN = f_rest.reshape({static_cast<int64_t>(num_points), 3, Bn}).transpose(1, 2);
+                int Bn = rest_dim / ply_constants::COLOR_CHANNELS;
+                shN = f_rest.reshape({static_cast<int64_t>(num_points), ply_constants::COLOR_CHANNELS, Bn})
+                          .transpose(1, 2);
             } else {
                 // Default: assume SH degree 3 -> 15 rest coefficients
-                shN = torch::zeros({static_cast<int64_t>(num_points), 15, 3}, options);
+                shN = torch::zeros({static_cast<int64_t>(num_points),
+                                    ply_constants::SH_DEGREE_3_REST_COEFFS,
+                                    ply_constants::COLOR_CHANNELS},
+                                   options);
             }
 
             // Opacity - raw values are stored (already inverse sigmoid)
@@ -178,7 +240,8 @@ namespace gs {
                 auto s2 = torch::from_blob(scale_2->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
                 scaling = torch::stack({s0, s1, s2}, 1);
             } else {
-                scaling = torch::full({static_cast<int64_t>(num_points), 3}, -5.0, options);
+                scaling = torch::full({static_cast<int64_t>(num_points), ply_constants::SCALE_DIMS},
+                                      ply_constants::DEFAULT_LOG_SCALE, options);
             }
 
             // Rotation quaternion - raw values are stored
@@ -190,28 +253,27 @@ namespace gs {
                 auto r3 = torch::from_blob(rot_3->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
                 rotation = torch::stack({r0, r1, r2, r3}, 1);
             } else {
-                rotation = torch::zeros({static_cast<int64_t>(num_points), 4}, options);
-                rotation.index_put_({torch::indexing::Slice(), 0}, 1.0); // Identity quaternion
+                rotation = torch::zeros({static_cast<int64_t>(num_points), ply_constants::QUATERNION_DIMS}, options);
+                rotation.index_put_({torch::indexing::Slice(), 0}, ply_constants::IDENTITY_QUATERNION_W);
             }
 
             // Move everything to CUDA
-            means = means.to(torch::kCUDA).set_requires_grad(true);
-            sh0 = sh0.to(torch::kCUDA).set_requires_grad(true);
-            shN = shN.to(torch::kCUDA).set_requires_grad(true);
-            scaling = scaling.to(torch::kCUDA).set_requires_grad(true);
-            rotation = rotation.to(torch::kCUDA).set_requires_grad(true);
-            opacity_tensor = opacity_tensor.to(torch::kCUDA).set_requires_grad(true);
+            means = means.to(torch::kCUDA);
+            sh0 = sh0.to(torch::kCUDA);
+            shN = shN.to(torch::kCUDA);
+            scaling = scaling.to(torch::kCUDA);
+            rotation = rotation.to(torch::kCUDA);
+            opacity_tensor = opacity_tensor.to(torch::kCUDA);
 
             // Calculate SH degree from shN dimensions
-            int sh_degree = static_cast<int>(std::sqrt(shN.size(1) + 1)) - 1;
+            int sh_degree = static_cast<int>(std::sqrt(shN.size(1) + ply_constants::SH_DEGREE_OFFSET)) -
+                            ply_constants::SH_DEGREE_OFFSET;
 
             // Estimate scene scale from point cloud bounds
             auto min_vals = std::get<0>(means.min(0));
             auto max_vals = std::get<0>(means.max(0));
-            float scene_scale = (max_vals - min_vals).max().item<float>() * 0.5f;
 
             std::println("Successfully loaded {} Gaussians with SH degree {}", num_points, sh_degree);
-            std::println("Scene scale: {}", scene_scale);
 
             return SplatData(
                 sh_degree,
@@ -221,7 +283,7 @@ namespace gs {
                 scaling,
                 rotation,
                 opacity_tensor,
-                scene_scale);
+                1.f);
 
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to load PLY file: {}", e.what()));
