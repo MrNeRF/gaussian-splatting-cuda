@@ -3,9 +3,11 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <numbers>
+#include <print>
 #include <torch/torch.h>
 
 #include "core/colmap_reader.hpp"
+#include "core/image_io.hpp"
 #include "core/transforms_reader.hpp"
 
 namespace F = torch::nn::functional;
@@ -45,6 +47,16 @@ torch::Tensor createYRotationMatrix(float angle_radians) {
     return rotMat;
 }
 
+std::filesystem::path GetTransformImagePath(const std::filesystem::path& dir_path, const nlohmann::json& frame) {
+    auto image_path = dir_path / frame["file_path"];
+    auto image_path_png = std::filesystem::path(image_path.string() + ".png");
+    if (std::filesystem::exists(image_path_png)) {
+        // blender data set has not extension, must assumes png
+        image_path = image_path_png;
+    }
+    return image_path;
+}
+
 std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
     const std::filesystem::path& transPath) {
 
@@ -70,7 +82,22 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
     nlohmann::json transforms = nlohmann::json::parse(trans_file, nullptr, true, true);
     int w = -1, h = -1;
     if (!transforms.contains("w") or !transforms.contains("h")) {
-        throw std::runtime_error("transforms file must contain width (w) and height (h)");
+
+        try {
+            std::println("Could not find w and h in trans.json file. Reading them from first image");
+            auto first_frame_img_path = GetTransformImagePath(dir_path, transforms["frames"][0]);
+            auto result = load_image(first_frame_img_path);
+            w = std::get<1>(result);
+            h = std::get<2>(result);
+        } catch (const std::exception& e) {
+            std::string error_msg = "Error while trying to read image dimensions: " + std::string(e.what());
+            std::println("{}", error_msg);
+            throw std::runtime_error(error_msg);
+        } catch (...) {
+            std::string error_msg = "Unknown error while trying to read image dimensions";
+            std::println("{}", error_msg);
+            throw std::runtime_error(error_msg);
+        }
     } else {
         w = int(transforms["w"]);
         h = int(transforms["h"]);
@@ -167,14 +194,7 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
             // T = w2c[:3, 3]
             torch::Tensor T = w2c.slice(0, 0, 3).slice(1, 3, 4).squeeze(1);
 
-            auto image_path = dir_path / frame["file_path"];
-            auto image_path_png = std::filesystem::path(image_path.string() + ".png");
-            if (std::filesystem::exists(image_path_png)) {
-                // blender data set has not extension, bust assumes png
-                camdata._image_path = image_path_png;
-            } else {
-                camdata._image_path = image_path;
-            }
+            camdata._image_path = GetTransformImagePath(dir_path, frame);
 
             camdata._image_name = std::filesystem::path(camdata._image_path).filename().string();
 
