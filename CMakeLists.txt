@@ -134,7 +134,8 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
-        src/dataset_reader.cpp)
+        src/dataset_reader.cpp
+        src/ply_loader.cpp)
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
 
