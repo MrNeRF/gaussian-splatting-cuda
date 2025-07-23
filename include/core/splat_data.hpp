@@ -12,6 +12,7 @@
 namespace gs::param {
     struct TrainingParameters;
 }
+class IDataReader;
 
 class SplatData {
 public:
@@ -36,7 +37,8 @@ public:
     // Static factory method to create from PointCloud - now returns expected
     static std::expected<SplatData, std::string> init_model_from_pointcloud(
         const gs::param::TrainingParameters& params,
-        torch::Tensor scene_center);
+        torch::Tensor scene_center,
+        std::unique_ptr<IDataReader> dataSetReader);
 
     // Computed getters (implemented in cpp)
     torch::Tensor get_means() const;

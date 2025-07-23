@@ -3,6 +3,7 @@
 #include "core/camera.hpp"
 #include "core/colmap_reader.hpp"
 #include "core/parameters.hpp"
+#include "core/transforms_reader.hpp"
 #include <expected>
 #include <format>
 #include <memory>
@@ -97,6 +98,55 @@ create_dataset_from_colmap(const gs::param::DatasetConfig& datasetConfig) {
         // Read COLMAP data with specified images folder
         auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
             datasetConfig.data_path, datasetConfig.images);
+
+        std::vector<std::shared_ptr<Camera>> cameras;
+        cameras.reserve(camera_infos.size());
+
+        for (size_t i = 0; i < camera_infos.size(); ++i) {
+            const auto& info = camera_infos[i];
+
+            auto cam = std::make_shared<Camera>(
+                info._R,
+                info._T,
+                info._focal_x,
+                info._focal_y,
+                info._center_x,
+                info._center_y,
+                info._radial_distortion,
+                info._tangential_distortion,
+                info._camera_model_type,
+                info._image_name,
+                info._image_path,
+                info._width,
+                info._height,
+                static_cast<int>(i));
+
+            cameras.push_back(std::move(cam));
+        }
+
+        // Create dataset with ALL images
+        auto dataset = std::make_shared<CameraDataset>(
+            std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
+
+        return std::make_tuple(dataset, scene_center);
+
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Failed to create dataset from COLMAP: {}", e.what()));
+    }
+}
+
+inline std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
+create_dataset_from_transforms(const gs::param::DatasetConfig& datasetConfig) {
+
+    try {
+        if (!std::filesystem::exists(datasetConfig.data_path)) {
+            return std::unexpected(std::format("Data path does not exist: {}",
+                                               datasetConfig.data_path.string()));
+        }
+
+        // Read COLMAP data with specified images folder
+        auto [camera_infos, scene_center] = read_transforms_cameras_and_images(
+            datasetConfig.data_path);
 
         std::vector<std::shared_ptr<Camera>> cameras;
         cameras.reserve(camera_infos.size());
