@@ -424,7 +424,7 @@ namespace gs {
                     1.0f,
                     false,
                     false,
-                    stringToRenderMode(_params.optimization.render_mode), true);
+                    stringToRenderMode(_params.optimization.render_mode), _params.optimization.gut);
 
                 // Only compute metrics if we have RGB output
                 if (has_rgb()) {

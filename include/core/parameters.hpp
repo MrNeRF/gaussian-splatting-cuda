@@ -45,6 +45,8 @@ namespace gs {
 
             int steps_scaler = 1;
             bool selective_adam = false; // Use Selective Adam optimizer
+
+            bool gut = false;
         };
 
         struct DatasetConfig {

@@ -844,15 +844,10 @@ namespace gs {
 
         // Extract gradients
         auto v_means3D = std::get<0>(raster_grads);
-        INSPECT_TENSOR(v_means3D);
         auto v_quats = std::get<1>(raster_grads);
-        INSPECT_TENSOR(v_quats);
         auto v_scales = std::get<2>(raster_grads);
-        INSPECT_TENSOR(v_scales);
         auto v_colors = std::get<3>(raster_grads);
-        INSPECT_TENSOR(v_colors);
         auto v_opacities = std::get<4>(raster_grads);
-        INSPECT_TENSOR(v_opacities);
 
         auto v_bg_color = torch::Tensor();
         if (ctx->needs_input_grad(5)) {

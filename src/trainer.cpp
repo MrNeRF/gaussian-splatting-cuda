@@ -142,7 +142,7 @@ namespace gs {
         }
 
         if (!viewer_) {
-            viewer_ = std::make_unique<GSViewer>("GS-CUDA", 1280, 720);
+            viewer_ = std::make_unique<GSViewer>("GS-CUDA", 1280, 720, params_.optimization.gut);
             viewer_->setTrainer(this);
         }
 
@@ -217,7 +217,7 @@ namespace gs {
                 1.0f,
                 false,
                 false,
-                render_mode, true);
+                render_mode, params_.optimization.gut);
         };
 
         RenderOutput r_output;

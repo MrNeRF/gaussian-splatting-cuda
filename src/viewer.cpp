@@ -214,14 +214,14 @@ namespace gs {
         glfwTerminate();
     }
 
-    GSViewer::GSViewer(std::string title, int width, int height)
+    GSViewer::GSViewer(std::string title, int width, int height, bool gut)
         : ViewerDetail(title, width, height),
           trainer_(nullptr) {
 
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<Notifier>();
-
+        gut_ = gut;
         setFrameRate(30);
     }
 
@@ -298,7 +298,7 @@ namespace gs {
                 config_->scaling_modifier,
                 false,
                 false,
-                RenderMode::RGB, true);
+                RenderMode::RGB, gut_);
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED
