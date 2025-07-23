@@ -1,4 +1,4 @@
-# windows/linux platform independent
+﻿# windows/linux platform independent
 set(RAW_VCPKG_PATH $ENV{VCPKG_ROOT})
 file(TO_CMAKE_PATH "${RAW_VCPKG_PATH}" VCPKG_ROOT)
 set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
@@ -11,12 +11,17 @@ get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 
 # Set Torch_DIR based on platform and build type
 if (WIN32)
-    if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(CMAKE_CONFIGURATION_TYPES)
+        # https://github.com/pytorch/pytorch/issues/155667
         set(Torch_DIR "${PROJ_ROOT_DIR}/external/release/libtorch/share/cmake/Torch")
-    elseif (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(Torch_DIR "${PROJ_ROOT_DIR}/external/debug/libtorch/share/cmake/Torch")
     else()
-        message(FATAL_ERROR "libtorch binaries only available for Debug and Release on Windows. Current build type: '${CMAKE_BUILD_TYPE}'")
+        if (CMAKE_BUILD_TYPE STREQUAL "Release")
+            set(Torch_DIR "${PROJ_ROOT_DIR}/external/release/libtorch/share/cmake/Torch")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(Torch_DIR "${PROJ_ROOT_DIR}/external/debug/libtorch/share/cmake/Torch")
+        else()
+            message(FATAL_ERROR "libtorch binaries only available for Debug and Release on Windows. Current build type: '${CMAKE_BUILD_TYPE}'")
+        endif()
     endif()
 else()
     set(Torch_DIR "${PROJ_ROOT_DIR}/external/libtorch/share/cmake/Torch")
