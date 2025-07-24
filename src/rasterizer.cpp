@@ -142,7 +142,7 @@ namespace gs {
         auto compensations = proj_outputs[4];
 
         // Create means2d with gradient tracking for backward compatibility
-        auto means2d_with_grad = means2d.squeeze(0).contiguous();
+        auto means2d_with_grad = means2d.contiguous();
         means2d_with_grad.set_requires_grad(true);
         means2d_with_grad.retain_grad();
 
@@ -217,7 +217,7 @@ namespace gs {
         const int tile_height = (image_height + tile_size - 1) / tile_size;
 
         const auto isect_results = gsplat::intersect_tile(
-            means2d, radii, depths, {}, {},
+            means2d_with_grad, radii, depths, {}, {},
             1, tile_size, tile_width, tile_height,
             true);
 
@@ -241,7 +241,7 @@ namespace gs {
                                              torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
         auto raster_outputs = RasterizationFunction::apply(
-            means2d, conics, render_colors, final_opacities, final_bg,
+            means2d_with_grad, conics, render_colors, final_opacities, final_bg,
             isect_offsets, flatten_ids, raster_settings);
 
         auto rendered_image = raster_outputs[0];
