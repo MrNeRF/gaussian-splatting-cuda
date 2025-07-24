@@ -2,9 +2,7 @@
 
 #include "core/dataset.hpp"
 #include <filesystem>
-#include <nlohmann/json.hpp>
 #include <print>
-#include <torch/torch.h>
 
 #include "core/colmap_reader.hpp"
 #include "core/transforms_reader.hpp"
@@ -54,6 +52,17 @@ bool ColmapReader::isValid() const {
     return true;
 }
 
+void ColmapReader::printValidationInfoMessage() const {
+    std::println("Colmap dataset directory structure should look like under: {}", m_datasetConfig.data_path.string());
+    std::println(
+        "├── images/\n"
+        "└── sparse/\n"
+        "    └── 0/\n"
+        "        ├── cameras.bin\n"
+        "        ├── images.bin\n"
+        "        └── points3D.bin\n");
+}
+
 std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
 BlenderReader::create_dataset() const {
     return create_dataset_from_transforms(m_datasetConfig);
@@ -81,6 +90,14 @@ bool BlenderReader::isValid() const {
     }
 
     return true;
+}
+
+void BlenderReader::printValidationInfoMessage() const {
+    if (std::filesystem::is_directory(m_datasetConfig.data_path)) {
+        std::println("Blender data set dir is {} should contain transforms.json or transforms_train.json", m_datasetConfig.data_path.string());
+    } else {
+        std::println("Blender data dile {} should be valid Blender transforms json", m_datasetConfig.data_path.string());
+    }
 }
 
 // factory method implementation
@@ -112,6 +129,11 @@ std::unique_ptr<IDataReader> GetValidDataReader(const gs::param::DatasetConfig& 
                 break;
             }
             return reader;
+        } else {
+            if (reader) {
+                std::println("{} dataset failed:", reader->Name());
+                reader->printValidationInfoMessage();
+            }
         }
     }
 

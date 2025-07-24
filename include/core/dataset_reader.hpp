@@ -61,6 +61,16 @@ public:
      * @return true if the dataset is valid and can be processed, false otherwise
      */
     virtual bool isValid() const = 0;
+    /**
+     * Get DataSet Name
+     * @return  Data Set Name
+     */
+    virtual std::string Name() const = 0;
+
+    /**
+     * prints a message explaining dataset structure expectation
+     */
+    virtual void printValidationInfoMessage() const = 0;
 
 protected:
     /**
@@ -104,6 +114,18 @@ public:
      * @return true if the dataset is valid and can be processed, false otherwise
      */
     bool isValid() const override;
+
+    /**
+     * Get DataSet Name
+     */
+    std::string Name() const override {
+        return "Blender";
+    };
+
+    /**
+     * prints a message explaining dataset structure expectation
+     */
+    void printValidationInfoMessage() const override;
 };
 
 /**
@@ -136,6 +158,18 @@ public:
      * @return true if the dataset is valid and can be processed, false otherwise
      */
     bool isValid() const override;
+
+    /**
+     * Get DataSet Name
+     */
+    std::string Name() const override {
+        return "Colmap";
+    };
+
+    /**
+     * prints a message explaining dataset structure expectation
+     */
+    void printValidationInfoMessage() const override;
 };
 
 // Inline constructor implementations
