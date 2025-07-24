@@ -94,7 +94,7 @@ bool BlenderReader::isValid() const {
 
 void BlenderReader::printValidationInfoMessage() const {
     if (std::filesystem::is_directory(m_datasetConfig.data_path)) {
-        std::println("Blender data set dir is {} should contain transforms.json or transforms_train.json", m_datasetConfig.data_path.string());
+        std::println("Blender data set directory {} should contain transforms.json or transforms_train.json", m_datasetConfig.data_path.string());
     } else {
         std::println("Blender data file {} should be valid Blender transforms json", m_datasetConfig.data_path.string());
     }
