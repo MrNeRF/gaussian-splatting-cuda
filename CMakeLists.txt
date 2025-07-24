@@ -123,6 +123,8 @@ add_subdirectory(gsplat)
 # =============================================================================
 
 set(HOST_SOURCES
+        src/application.cpp
+        src/argument_parser.cpp
         src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp
@@ -131,7 +133,6 @@ set(HOST_SOURCES
         src/parameters.cpp
         src/splat_data.cpp
         src/trainer.cpp
-        src/argument_parser.cpp
         src/rasterizer.cpp
         src/metrics.cpp
         src/rasterizer_autograd.cpp
@@ -140,6 +141,7 @@ set(HOST_SOURCES
         src/bilateral_grid.cpp
         src/selective_adam.cpp
         src/dataset_reader.cpp
+        src/training_setup.cpp
         src/ply_loader.cpp)
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})

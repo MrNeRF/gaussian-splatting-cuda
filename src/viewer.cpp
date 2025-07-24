@@ -1,12 +1,24 @@
 #include "config.h" // Include generated config
+#include "core/ply_loader.hpp"
+#include "core/training_setup.hpp"
 #include "visualizer/detail.hpp"
 #include <chrono>
 #include <iomanip>
+#include <print>
 #include <sstream>
 #include <thread>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "visualizer/cuda_gl_interop.hpp"
+#endif
+
+// Add file dialog support
+#ifdef _WIN32
+#include <commdlg.h>
+#include <shlobj.h>
+#include <windows.h>
+#else
+#include <cstdlib>
 #endif
 
 namespace gs {
@@ -253,7 +265,8 @@ namespace gs {
 
     GSViewer::GSViewer(std::string title, int width, int height)
         : ViewerDetail(title, width, height),
-          trainer_(nullptr) {
+          trainer_(nullptr),
+          current_mode_(ViewerMode::Empty) {
 
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
@@ -426,24 +439,91 @@ namespace gs {
     }
 
     GSViewer::~GSViewer() {
-        // If trainer is still running, request it to stop
-        if (trainer_ && trainer_->is_running()) {
-            std::cout << "Viewer closing - stopping training..." << std::endl;
-            trainer_->request_stop();
-
-            // Give the training thread a moment to acknowledge the stop request
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
+        // Clean up any active mode
+        cleanupCurrentMode();
 
         std::cout << "GSViewer destroyed." << std::endl;
     }
 
+    void GSViewer::transitionToMode(ViewerMode new_mode) {
+        if (current_mode_ == new_mode)
+            return;
+
+        // Clean up current mode
+        cleanupCurrentMode();
+
+        // Update mode
+        current_mode_ = new_mode;
+
+        // Reset training started flag when switching modes
+        training_started_ = false;
+        manual_start_triggered_ = false;
+
+        // Update UI state
+        switch (new_mode) {
+        case ViewerMode::Empty:
+            glfwSetWindowTitle(window_, "3DGS Viewer - No Data");
+            break;
+        case ViewerMode::PLYViewer:
+            // Title set when PLY is loaded
+            break;
+        case ViewerMode::Training:
+            glfwSetWindowTitle(window_, "3DGS Viewer - Training");
+            break;
+        }
+    }
+
+    void GSViewer::cleanupCurrentMode() {
+        switch (current_mode_) {
+        case ViewerMode::Empty:
+            // Nothing to clean
+            break;
+
+        case ViewerMode::PLYViewer:
+            // Clear PLY model
+            standalone_model_ = nullptr;
+            break;
+
+        case ViewerMode::Training:
+            // Stop training if running
+            if (trainer_ && trainer_->is_running()) {
+                std::println("Stopping training...");
+                trainer_->request_stop();
+
+                // Wait for training thread to finish
+                if (training_thread_ && training_thread_->joinable()) {
+                    training_thread_->request_stop();
+                    training_thread_->join();
+                }
+                training_thread_ = nullptr;
+            }
+            trainer_ = nullptr;
+            training_started_ = false;
+            manual_start_triggered_ = false;
+            break;
+        }
+
+        // Clear any shared resources
+        if (notifier_) {
+            std::lock_guard<std::mutex> lock(notifier_->mtx);
+            notifier_->ready = false;
+        }
+    }
+
     void GSViewer::setTrainer(Trainer* trainer) {
         trainer_ = trainer;
+        if (trainer) {
+            current_mode_ = ViewerMode::Training;
+            // When trainer is set from command line, training should start immediately
+            training_started_ = trainer_->is_running();
+        }
     }
 
     void GSViewer::setStandaloneModel(std::unique_ptr<SplatData> model) {
         standalone_model_ = std::move(model);
+        if (standalone_model_) {
+            current_mode_ = ViewerMode::PLYViewer;
+        }
     }
 
     void GSViewer::setAntiAliasing(bool enable) {
@@ -454,6 +534,405 @@ namespace gs {
         if (scripting_console_) {
             scripting_console_->execute_callback_ = executor;
         }
+    }
+
+    void GSViewer::loadPLYFile(const std::filesystem::path& path) {
+        std::println("Loading PLY file: {}", path.string());
+
+        // Try to load first
+        auto splat_result = load_ply(path);
+        if (!splat_result) {
+            // Show error dialog
+            scripting_console_->addLog("Error: Failed to load PLY - %s", splat_result.error().c_str());
+            return;
+        }
+
+        // Success - transition to PLY mode
+        transitionToMode(ViewerMode::PLYViewer);
+
+        // Set new model
+        standalone_model_ = std::make_unique<SplatData>(std::move(*splat_result));
+        std::println("Loaded {} Gaussians", standalone_model_->size());
+
+        // Update title
+        std::string title = "3DGS Viewer - " + path.filename().string();
+        glfwSetWindowTitle(window_, title.c_str());
+
+        // Log success
+        if (scripting_console_) {
+            scripting_console_->addLog("Loaded PLY: %s (%lld Gaussians)",
+                                       path.filename().string().c_str(),
+                                       standalone_model_->size());
+        }
+    }
+
+    void GSViewer::loadDataset(const std::filesystem::path& path) {
+        std::println("Loading dataset from: {}", path.string());
+
+        // Update params with new path
+        auto new_params = stored_params_;
+        new_params.dataset.data_path = path;
+        new_params.dataset.output_path = path / "output";
+
+        // Try to set up training
+        auto setup_result = setupTraining(new_params);
+        if (!setup_result) {
+            scripting_console_->addLog("Error: Failed to load dataset - %s", setup_result.error().c_str());
+            return;
+        }
+
+        // Success - transition to training mode
+        transitionToMode(ViewerMode::Training);
+
+        // Take ownership of the trainer
+        trainer_ = setup_result->trainer.release();
+        setTrainer(trainer_);
+
+        // DO NOT START TRAINING AUTOMATICALLY
+        // User must press "Start Training" button
+
+        // Log success
+        if (scripting_console_) {
+            scripting_console_->addLog("Loaded dataset: %s", path.filename().string().c_str());
+            scripting_console_->addLog("Press 'Start Training' to begin");
+        }
+    }
+
+    void GSViewer::closeCurrentData() {
+        transitionToMode(ViewerMode::Empty);
+
+        if (scripting_console_) {
+            scripting_console_->addLog("Closed current data");
+        }
+    }
+
+    void GSViewer::showFileMenu() {
+        if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                if (ImGui::MenuItem("Open PLY...", "Ctrl+O")) {
+                    openPLYDialog();
+                }
+
+                if (ImGui::MenuItem("Open Dataset...", "Ctrl+D")) {
+                    openDatasetDialog();
+                }
+
+                ImGui::Separator();
+
+                // Close option - only enabled when data is loaded
+                bool has_data = (current_mode_ != ViewerMode::Empty);
+                if (ImGui::MenuItem("Close", "Ctrl+W", false, has_data)) {
+                    closeCurrentData();
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Exit", "Alt+F4")) {
+                    glfwSetWindowShouldClose(window_, GLFW_TRUE);
+                }
+
+                ImGui::EndMenu();
+            }
+
+            // Mode indicator in menu bar
+            ImGui::Separator();
+            switch (current_mode_) {
+            case ViewerMode::Empty:
+                ImGui::Text("No Data");
+                break;
+            case ViewerMode::PLYViewer:
+                ImGui::Text("PLY Mode");
+                break;
+            case ViewerMode::Training:
+                ImGui::Text("Training Mode");
+                if (trainer_) {
+                    ImGui::Text("| Iter: %d", trainer_->get_current_iteration());
+                }
+                break;
+            }
+
+            ImGui::EndMainMenuBar();
+        }
+    }
+
+    void GSViewer::openPLYDialog() {
+#ifdef _WIN32
+        char filename[MAX_PATH] = "";
+        OPENFILENAMEA ofn;
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = glfwGetWin32Window(window_);
+        ofn.lpstrFile = filename;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.lpstrFilter = "PLY Files\0*.ply\0All Files\0*.*\0";
+        ofn.nFilterIndex = 1;
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+
+        if (GetOpenFileNameA(&ofn)) {
+            loadPLYFile(filename);
+        }
+#else
+        // Simple fallback for Linux/Mac using zenity or similar
+        std::string cmd = "zenity --file-selection --file-filter='PLY files | *.ply' 2>/dev/null";
+        FILE* pipe = popen(cmd.c_str(), "r");
+        if (pipe) {
+            char buffer[1024];
+            if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                // Remove newline
+                buffer[strcspn(buffer, "\n")] = 0;
+                loadPLYFile(buffer);
+            }
+            pclose(pipe);
+        }
+#endif
+    }
+
+    void GSViewer::openDatasetDialog() {
+#ifdef _WIN32
+        char folderPath[MAX_PATH] = "";
+        BROWSEINFOA bi = {0};
+        bi.hwndOwner = glfwGetWin32Window(window_);
+        bi.lpszTitle = "Select Dataset Folder";
+        bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+
+        LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
+        if (pidl != 0) {
+            if (SHGetPathFromIDListA(pidl, folderPath)) {
+                loadDataset(folderPath);
+            }
+            CoTaskMemFree(pidl);
+        }
+#else
+        // Simple fallback for Linux/Mac
+        std::string cmd = "zenity --file-selection --directory 2>/dev/null";
+        FILE* pipe = popen(cmd.c_str(), "r");
+        if (pipe) {
+            char buffer[1024];
+            if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                // Remove newline
+                buffer[strcspn(buffer, "\n")] = 0;
+                loadDataset(buffer);
+            }
+            pclose(pipe);
+        }
+#endif
+    }
+
+    void GSViewer::renderEmptyModeUI() {
+        ImGui::Begin("Welcome", nullptr, window_flags);
+        ImGui::SetWindowSize(ImVec2(300, 0));
+
+        ImGui::Text("No data loaded");
+        ImGui::Separator();
+
+        if (ImGui::Button("Open PLY File", ImVec2(-1, 30))) {
+            openPLYDialog();
+        }
+
+        if (ImGui::Button("Open Dataset", ImVec2(-1, 30))) {
+            openDatasetDialog();
+        }
+
+        ImGui::Separator();
+        ImGui::TextWrapped("Use File menu or buttons above to load data.");
+
+        ImGui::End();
+    }
+
+    void GSViewer::renderPLYModeUI() {
+        ImGui::Begin("PLY Viewer", nullptr, window_flags);
+        ImGui::SetWindowSize(ImVec2(300, 0));
+
+        if (standalone_model_) {
+            ImGui::Text("Gaussians: %lld", standalone_model_->size());
+            ImGui::Text("SH Degree: %d", standalone_model_->get_active_sh_degree());
+            ImGui::Text("Scene Scale: %.3f", standalone_model_->get_scene_scale());
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Rendering Settings");
+        ImGui::Separator();
+
+        ImGui::SetNextItemWidth(200);
+        ImGui::SliderFloat("##scale_slider", &config_->scaling_modifier, 0.01f, 3.0f, "Scale=%.2f");
+        ImGui::SameLine();
+        if (ImGui::Button("Reset##scale", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
+            config_->scaling_modifier = 1.0f;
+        }
+
+        ImGui::SetNextItemWidth(200);
+        ImGui::SliderFloat("##fov_slider", &config_->fov, 45.0f, 120.0f, "FoV=%.2f");
+        ImGui::SameLine();
+        if (ImGui::Button("Reset##fov", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
+            config_->fov = 75.0f;
+        }
+
+        float gpuUsage = getGPUUsage();
+        char gpuText[64];
+        std::snprintf(gpuText, sizeof(gpuText), "GPU Usage: %.1f%%", gpuUsage);
+        ImGui::ProgressBar(gpuUsage / 100.0f, ImVec2(-1, 20), gpuText);
+
+        ImGui::End();
+    }
+
+    void GSViewer::renderTrainingModeUI() {
+        ImGui::Begin("Training Control", nullptr, window_flags);
+        ImGui::SetWindowSize(ImVec2(300, 0));
+
+        bool is_training = trainer_->is_running();
+        bool is_paused = trainer_->is_paused();
+        bool is_complete = trainer_->is_training_complete();
+        bool has_stopped = trainer_->has_stopped();
+
+        // Show appropriate controls based on state
+        if (!training_started_ && !is_training) {
+            // Initial state - show start button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+            if (ImGui::Button("Start Training", ImVec2(-1, 0))) {
+                // Start training thread when button is pressed
+                training_thread_ = std::make_unique<std::jthread>(
+                    [this](std::stop_token stop_token) {
+                        auto train_result = trainer_->train(stop_token);
+                        if (!train_result) {
+                            scripting_console_->addLog("Training error: %s", train_result.error().c_str());
+                        }
+                    });
+                training_started_ = true;
+            }
+            ImGui::PopStyleColor(2);
+        } else if (is_complete || has_stopped) {
+            // Training finished - show status
+            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f),
+                               has_stopped ? "Training Stopped!" : "Training Complete!");
+        } else {
+            // Training in progress - show control buttons
+
+            // Pause/Resume button
+            if (is_paused) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+                if (ImGui::Button("Resume", ImVec2(-1, 0))) {
+                    trainer_->request_resume();
+                }
+                ImGui::PopStyleColor(2);
+
+                // When paused, show stop button too
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
+                if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
+                    trainer_->request_stop();
+                }
+                ImGui::PopStyleColor(2);
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
+                if (ImGui::Button("Pause", ImVec2(-1, 0))) {
+                    trainer_->request_pause();
+                }
+                ImGui::PopStyleColor(2);
+            }
+
+            // Save checkpoint button (always visible during training)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+            if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
+                trainer_->request_save();
+                save_in_progress_ = true;
+                save_start_time_ = std::chrono::steady_clock::now();
+            }
+            ImGui::PopStyleColor(2);
+        }
+
+        // Show save progress feedback
+        if (save_in_progress_) {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - save_start_time_).count();
+            if (elapsed < 2000) {
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Checkpoint saved!");
+            } else {
+                save_in_progress_ = false;
+            }
+        }
+
+        // Status display
+        ImGui::Separator();
+        int current_iter = trainer_->get_current_iteration();
+        float current_loss = trainer_->get_current_loss();
+        ImGui::Text("Status: %s", is_complete ? "Complete" : (is_paused ? "Paused" : (is_training ? "Training" : "Ready")));
+        ImGui::Text("Iteration: %d", current_iter);
+        ImGui::Text("Loss: %.6f", current_loss);
+
+        ImGui::Separator();
+        ImGui::Text("Rendering Settings");
+        ImGui::Separator();
+
+        ImGui::SetNextItemWidth(200);
+        ImGui::SliderFloat("##scale_slider", &config_->scaling_modifier, 0.01f, 3.0f, "Scale=%.2f");
+        ImGui::SameLine();
+        if (ImGui::Button("Reset##scale", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
+            config_->scaling_modifier = 1.0f;
+        }
+
+        ImGui::SetNextItemWidth(200);
+        ImGui::SliderFloat("##fov_slider", &config_->fov, 45.0f, 120.0f, "FoV=%.2f");
+        ImGui::SameLine();
+        if (ImGui::Button("Reset##fov", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
+            config_->fov = 75.0f;
+        }
+
+        // Training progress - sync with trainer's actual iteration
+        int total_iter;
+        int num_splats;
+        std::vector<float> loss_data;
+        {
+            std::lock_guard<std::mutex> lock(info_->mtx);
+            info_->updateProgress(current_iter, stored_params_.optimization.iterations);
+            total_iter = info_->total_iterations_;
+            num_splats = info_->num_splats_;
+            loss_data.assign(info_->loss_buffer_.begin(), info_->loss_buffer_.end());
+        }
+
+        float fraction = total_iter > 0 ? float(current_iter) / float(total_iter) : 0.0f;
+        char overlay_text[64];
+        std::snprintf(overlay_text, sizeof(overlay_text), "%d / %d", current_iter, total_iter);
+        ImGui::ProgressBar(fraction, ImVec2(-1, 20), overlay_text);
+
+        if (loss_data.size() > 0) {
+            auto [min_it, max_it] = std::minmax_element(loss_data.begin(), loss_data.end());
+            float min_val = *min_it, max_val = *max_it;
+
+            if (min_val == max_val) {
+                min_val -= 1.0f;
+                max_val += 1.0f;
+            } else {
+                float margin = (max_val - min_val) * 0.05f;
+                min_val -= margin;
+                max_val += margin;
+            }
+
+            char loss_label[64];
+            std::snprintf(loss_label, sizeof(loss_label), "Loss: %.4f", loss_data.back());
+
+            ImGui::PlotLines(
+                "##Loss",
+                loss_data.data(),
+                static_cast<int>(loss_data.size()),
+                0,
+                loss_label,
+                min_val,
+                max_val,
+                ImVec2(-1, 50));
+        }
+
+        ImGui::Text("num Splats: %d", num_splats);
+
+        float gpuUsage = getGPUUsage();
+        char gpuText[64];
+        std::snprintf(gpuText, sizeof(gpuText), "GPU Usage: %.1f%%", gpuUsage);
+        ImGui::ProgressBar(gpuUsage / 100.0f, ImVec2(-1, 20), gpuText);
+
+        ImGui::End();
     }
 
     void GSViewer::renderScriptingConsole() {
@@ -569,7 +1048,7 @@ namespace gs {
 
     void GSViewer::drawFrame() {
         // Only render if we have a model to render
-        if (!trainer_ && !standalone_model_) {
+        if (!hasData()) {
             return;
         }
 
@@ -730,209 +1209,29 @@ namespace gs {
 
         any_window_active = ImGui::IsAnyItemActive();
 
+        // Show menu bar
+        showFileMenu();
+
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
-        ImGui::Begin("Rendering Setting", nullptr, window_flags);
+
+        // Show mode-specific UI
+        switch (current_mode_) {
+        case ViewerMode::Empty:
+            renderEmptyModeUI();
+            break;
+        case ViewerMode::PLYViewer:
+            renderPLYModeUI();
+            break;
+        case ViewerMode::Training:
+            renderTrainingModeUI();
+            break;
+        }
+
+        // Common UI elements
+        ImGui::Begin("Common Controls", nullptr, window_flags);
         ImGui::SetWindowSize(ImVec2(300, 0));
 
-        // Check if trainer or standalone model is set
-        if (!trainer_ && !standalone_model_) {
-            ImGui::Text("No model loaded.");
-            ImGui::End();
-            ImGui::PopStyleColor();
-            return;
-        }
-
-        // Training control section - only show if trainer exists
-        if (trainer_) {
-            ImGui::Separator();
-            ImGui::Text("Training Control");
-            ImGui::Separator();
-
-            bool is_training = trainer_->is_running();
-            bool is_paused = trainer_->is_paused();
-            bool is_complete = trainer_->is_training_complete();
-            bool has_stopped = trainer_->has_stopped();
-
-            // Show appropriate controls based on state
-            if (!training_started_ && !is_training) {
-                // Initial state - show start button
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
-                if (ImGui::Button("Start Training", ImVec2(-1, 0))) {
-                    manual_start_triggered_ = true;
-                    training_started_ = true;
-                }
-                ImGui::PopStyleColor(2);
-            } else if (is_complete || has_stopped) {
-                // Training finished - show status
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f),
-                                   has_stopped ? "Training Stopped!" : "Training Complete!");
-            } else {
-                // Training in progress - show control buttons
-
-                // Pause/Resume button
-                if (is_paused) {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
-                    if (ImGui::Button("Resume", ImVec2(-1, 0))) {
-                        trainer_->request_resume();
-                    }
-                    ImGui::PopStyleColor(2);
-
-                    // When paused, show stop button too
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
-                    if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
-                        trainer_->request_stop();
-                    }
-                    ImGui::PopStyleColor(2);
-                } else {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
-                    if (ImGui::Button("Pause", ImVec2(-1, 0))) {
-                        trainer_->request_pause();
-                    }
-                    ImGui::PopStyleColor(2);
-                }
-
-                // Save checkpoint button (always visible during training)
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
-                if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
-                    trainer_->request_save();
-                    save_in_progress_ = true;
-                    save_start_time_ = std::chrono::steady_clock::now();
-                }
-                ImGui::PopStyleColor(2);
-            }
-
-            // Show save progress feedback
-            if (save_in_progress_) {
-                auto now = std::chrono::steady_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - save_start_time_).count();
-                if (elapsed < 2000) {
-                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Checkpoint saved!");
-                } else {
-                    save_in_progress_ = false;
-                }
-            }
-
-            // Status display
-            ImGui::Separator();
-            int current_iter = trainer_->get_current_iteration();
-            float current_loss = trainer_->get_current_loss();
-            ImGui::Text("Status: %s", is_complete ? "Complete" : (is_paused ? "Paused" : (is_training ? "Training" : "Ready")));
-            ImGui::Text("Iteration: %d", current_iter);
-            ImGui::Text("Loss: %.6f", current_loss);
-
-            // Display render mode
-#ifdef CUDA_GL_INTEROP_ENABLED
-            ImGui::Text("Render Mode: GPU Direct (Interop)");
-#else
-            ImGui::Text("Render Mode: CPU Copy");
-#endif
-
-            // Handle the start trigger
-            if (notifier_ && manual_start_triggered_) {
-                std::lock_guard<std::mutex> lock(notifier_->mtx);
-                notifier_->ready = true;
-                notifier_->cv.notify_one();
-                manual_start_triggered_ = false;
-            }
-        } else {
-            // Standalone model info (viewer mode)
-            ImGui::Separator();
-            ImGui::Text("Model Information");
-            ImGui::Separator();
-
-            if (standalone_model_) {
-                ImGui::Text("Gaussians: %lld", standalone_model_->size());
-                ImGui::Text("SH Degree: %d", standalone_model_->get_active_sh_degree());
-                ImGui::Text("Scene Scale: %.3f", standalone_model_->get_scene_scale());
-            }
-
-            // Greyed out start training button
-            ImGui::BeginDisabled(true);
-            ImGui::Button("Start Training", ImVec2(-1, 0));
-            ImGui::EndDisabled();
-
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Viewer mode - no training available");
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Rendering Settings");
-        ImGui::Separator();
-
-        ImGui::SetNextItemWidth(200);
-        ImGui::SliderFloat("##scale_slider", &config_->scaling_modifier, 0.01f, 3.0f, "Scale=%.2f");
-        ImGui::SameLine();
-        if (ImGui::Button("Reset##scale", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
-            config_->scaling_modifier = 1.0f;
-        }
-
-        ImGui::SetNextItemWidth(200);
-        ImGui::SliderFloat("##fov_slider", &config_->fov, 45.0f, 120.0f, "FoV=%.2f");
-        ImGui::SameLine();
-        if (ImGui::Button("Reset##fov", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
-            config_->fov = 75.0f;
-        }
-
-        // Only show training progress if trainer exists
-        if (trainer_) {
-            int current_iter2;
-            int total_iter;
-            int num_splats;
-            std::vector<float> loss_data;
-            {
-                std::lock_guard<std::mutex> lock(info_->mtx);
-                current_iter2 = info_->curr_iterations_;
-                total_iter = info_->total_iterations_;
-                num_splats = info_->num_splats_;
-                loss_data.assign(info_->loss_buffer_.begin(), info_->loss_buffer_.end());
-            }
-
-            float fraction = total_iter > 0 ? float(current_iter2) / float(total_iter) : 0.0f;
-            char overlay_text[64];
-            std::snprintf(overlay_text, sizeof(overlay_text), "%d / %d", current_iter2, total_iter);
-            ImGui::ProgressBar(fraction, ImVec2(-1, 20), overlay_text);
-
-            if (loss_data.size() > 0) {
-                auto [min_it, max_it] = std::minmax_element(loss_data.begin(), loss_data.end());
-                float min_val = *min_it, max_val = *max_it;
-
-                if (min_val == max_val) {
-                    min_val -= 1.0f;
-                    max_val += 1.0f;
-                } else {
-                    float margin = (max_val - min_val) * 0.05f;
-                    min_val -= margin;
-                    max_val += margin;
-                }
-
-                char loss_label[64];
-                std::snprintf(loss_label, sizeof(loss_label), "Loss: %.4f", loss_data.back());
-
-                ImGui::PlotLines(
-                    "##Loss",
-                    loss_data.data(),
-                    static_cast<int>(loss_data.size()),
-                    0,
-                    loss_label,
-                    min_val,
-                    max_val,
-                    ImVec2(-1, 50));
-            }
-
-            ImGui::Text("num Splats: %d", num_splats);
-        }
-
-        float gpuUsage = getGPUUsage();
-        char gpuText[64];
-        std::snprintf(gpuText, sizeof(gpuText), "GPU Usage: %.1f%%", gpuUsage);
-        ImGui::ProgressBar(gpuUsage / 100.0f, ImVec2(-1, 20), gpuText);
-
         // Show Camera Controls button
-        ImGui::Separator();
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.7f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.8f, 1.0f));
         if (ImGui::Button("Show Camera Controls", ImVec2(-1, 0))) {
@@ -950,6 +1249,13 @@ namespace gs {
             }
         }
         ImGui::PopStyleColor(2);
+
+        // Display render mode
+#ifdef CUDA_GL_INTEROP_ENABLED
+        ImGui::Text("Render Mode: GPU Direct (Interop)");
+#else
+        ImGui::Text("Render Mode: CPU Copy");
+#endif
 
         ImGui::End();
         ImGui::PopStyleColor();

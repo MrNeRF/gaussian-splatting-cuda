@@ -4,6 +4,7 @@
 
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -65,6 +66,9 @@ namespace gs {
             // Viewer mode specific
             bool viewer_mode = false;
             std::filesystem::path ply_path = "";
+            bool interactive_mode = false;
+
+            std::function<void()> _apply_cmd_overrides;
         };
 
         // Modern C++23 functions returning expected values

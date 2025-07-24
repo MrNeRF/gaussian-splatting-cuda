@@ -40,7 +40,8 @@ namespace {
                 "Lightning-fast CUDA implementation of 3D Gaussian Splatting algorithm.\n\n"
                 "Usage:\n"
                 "  Training:  gs_cuda --data-path <path> --output-path <path> [options]\n"
-                "  Viewing:   gs_cuda --view <path_to_ply> [options]");
+                "  Viewing:   gs_cuda --view <path_to_ply> [options]\n"
+                "  Interactive: gs_cuda  (starts empty viewer)");
 
             // Define all arguments
             ::args::HelpFlag help(parser, "help", "Display help menu", {'h', "help"});
@@ -89,91 +90,64 @@ namespace {
                 return std::unexpected(std::format("Parse error: {}\n{}", e.what(), parser.Help()));
             }
 
-            // Show help if no arguments provided
+            // Check if explicitly displaying help
+            if (help) {
+                return ParseResult::Help;
+            }
+
+            // NO ARGUMENTS = INTERACTIVE VIEWER MODE
             if (args.size() == 1) {
-                std::print("{}", parser.Help());
-                return ParseResult::Help;
+                params.viewer_mode = true;
+                return ParseResult::ViewerMode;
             }
 
-            // Check if just displaying help
-            if (args.size() == 2 && (args[1] == "-h" || args[1] == "--help")) {
-                return ParseResult::Help;
-            }
-
-            // Check for viewer mode
+            // Check for viewer mode with PLY
             if (view_ply) {
                 params.viewer_mode = true;
-                params.ply_path = ::args::get(view_ply);
+                const auto ply_path = ::args::get(view_ply);
+                if (!ply_path.empty()) {
+                    params.ply_path = ply_path;
 
-                // Check if PLY file exists
-                if (!std::filesystem::exists(params.ply_path)) {
-                    return std::unexpected(std::format("PLY file does not exist: {}", params.ply_path.string()));
-                }
-
-                // Check antialiasing flag for viewer mode
-                if (antialiasing) {
-                    params.optimization.antialiasing = true;
+                    // Check if PLY file exists
+                    if (!std::filesystem::exists(params.ply_path)) {
+                        return std::unexpected(std::format("PLY file does not exist: {}", params.ply_path.string()));
+                    }
                 }
 
                 return ParseResult::ViewerMode;
             }
 
-            // Otherwise, we're in training mode - validate required arguments
-            if (!data_path || !output_path) {
+            // Training mode
+            bool has_data_path = data_path && !::args::get(data_path).empty();
+            bool has_output_path = output_path && !::args::get(output_path).empty();
+
+            // If headless mode, require data path
+            if (headless && !has_data_path) {
+                return std::unexpected(std::format(
+                    "ERROR: Headless mode requires --data-path\n\n{}",
+                    parser.Help()));
+            }
+
+            // If both paths provided, it's training mode
+            if (has_data_path && has_output_path) {
+                params.dataset.data_path = ::args::get(data_path);
+                params.dataset.output_path = ::args::get(output_path);
+
+                // Create output directory
+                std::error_code ec;
+                std::filesystem::create_directories(params.dataset.output_path, ec);
+                if (ec) {
+                    return std::unexpected(std::format(
+                        "Failed to create output directory '{}': {}",
+                        params.dataset.output_path.string(), ec.message()));
+                }
+            } else if (has_data_path != has_output_path) {
                 return std::unexpected(std::format(
                     "ERROR: Training mode requires both --data-path and --output-path\n\n{}",
                     parser.Help()));
             }
 
-            // Set required parameters for training
-            params.dataset.data_path = ::args::get(data_path);
-            params.dataset.output_path = ::args::get(output_path);
-
-            // Create output directory
-            std::error_code ec;
-            std::filesystem::create_directories(params.dataset.output_path, ec);
-            if (ec) {
-                return std::unexpected(std::format(
-                    "Failed to create output directory '{}': {}",
-                    params.dataset.output_path.string(), ec.message()));
-            }
-
-            // Lambdas for compact argument processing
-            auto setVal = [](auto& flag, auto& target) {
-                if (flag)
-                    target = ::args::get(flag);
-            };
-
-            auto setFlag = [](auto& flag, auto& target) {
-                if (flag)
-                    target = true;
-            };
-
-            // Process all optional arguments compactly
-            auto& opt = params.optimization;
-            auto& ds = params.dataset;
-
-            // Value arguments
-            setVal(iterations, opt.iterations);
-            setVal(resolution, ds.resolution);
-            setVal(max_cap, opt.max_cap);
-            setVal(images_folder, ds.images);
-            setVal(test_every, ds.test_every);
-            setVal(steps_scaler, opt.steps_scaler);
-            setVal(sh_degree_interval, opt.sh_degree_interval);
-            setVal(sh_degree, opt.sh_degree);
-            setVal(min_opacity, opt.min_opacity);
-
-            // Flag arguments
-            setFlag(use_bilateral_grid, opt.use_bilateral_grid);
-            setFlag(enable_eval, opt.enable_eval);
-            setFlag(headless, opt.headless);
-            setFlag(antialiasing, opt.antialiasing);
-            setFlag(selective_adam, opt.selective_adam);
-            setFlag(enable_save_eval_images, opt.enable_save_eval_images);
-            setFlag(skip_intermediate_saving, opt.skip_intermediate_saving);
-
-            // Special case: validate render mode
+            // Validate render mode if provided
             if (render_mode) {
                 const auto mode = ::args::get(render_mode);
                 if (VALID_RENDER_MODES.find(mode) == VALID_RENDER_MODES.end()) {
@@ -181,8 +155,44 @@ namespace {
                         "ERROR: Invalid render mode '{}'. Valid modes are: RGB, D, ED, RGB_D, RGB_ED",
                         mode));
                 }
-                opt.render_mode = mode;
             }
+
+            // Create lambda to apply command line overrides after JSON loading
+            params._apply_cmd_overrides = [&]() {
+                auto& opt = params.optimization;
+                auto& ds = params.dataset;
+
+                // Simple lambdas to apply if flag/value exists
+                auto setVal = [](auto& flag, auto& target) {
+                    if (flag)
+                        target = ::args::get(flag);
+                };
+
+                auto setFlag = [](auto& flag, auto& target) {
+                    if (flag)
+                        target = true;
+                };
+
+                // Apply all overrides
+                setVal(iterations, opt.iterations);
+                setVal(resolution, ds.resolution);
+                setVal(max_cap, opt.max_cap);
+                setVal(images_folder, ds.images);
+                setVal(test_every, ds.test_every);
+                setVal(steps_scaler, opt.steps_scaler);
+                setVal(sh_degree_interval, opt.sh_degree_interval);
+                setVal(sh_degree, opt.sh_degree);
+                setVal(min_opacity, opt.min_opacity);
+                setVal(render_mode, opt.render_mode);
+
+                setFlag(use_bilateral_grid, opt.use_bilateral_grid);
+                setFlag(enable_eval, opt.enable_eval);
+                setFlag(headless, opt.headless);
+                setFlag(antialiasing, opt.antialiasing);
+                setFlag(selective_adam, opt.selective_adam);
+                setFlag(enable_save_eval_images, opt.enable_save_eval_images);
+                setFlag(skip_intermediate_saving, opt.skip_intermediate_saving);
+            };
 
             return ParseResult::Success;
 
@@ -209,7 +219,7 @@ namespace {
         }
     }
 
-    std::vector<std::string> convert_args(int argc, const char* const argv[]) {
+    std::vector<std::string> convert_args(int argc, char* argv[]) {
         return std::vector<std::string>(argv, argv + argc);
     }
 
@@ -217,11 +227,11 @@ namespace {
 
 // Public interface
 std::expected<gs::param::TrainingParameters, std::string>
-gs::args::parse_args_and_params(int argc, const char* const argv[]) {
+gs::args::parse_args_and_params(int argc, char* argv[]) {
 
     gs::param::TrainingParameters params;
 
-    // Parse command line arguments first
+    // Parse command line arguments
     auto parse_result = parse_arguments(convert_args(argc, argv), params);
     if (!parse_result) {
         return std::unexpected(parse_result.error());
@@ -229,23 +239,31 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
     // Handle help case
     if (*parse_result == ParseResult::Help) {
-        // In a real implementation, you might want to handle this differently
         std::exit(0);
     }
 
-    // Handle viewer mode - return early without loading optimization params
+    // Handle viewer mode
     if (*parse_result == ParseResult::ViewerMode) {
+        if (params._apply_cmd_overrides) {
+            params._apply_cmd_overrides();
+        }
         return params;
     }
 
-    // Training mode - load optimization parameters from JSON
-    auto opt_params_result = gs::param::read_optim_params_from_json();
-    if (!opt_params_result) {
-        return std::unexpected(std::format("Failed to load optimization parameters: {}",
-                                           opt_params_result.error()));
+    // Training mode - load JSON first
+    if (!params.dataset.data_path.empty()) {
+        auto opt_params_result = gs::param::read_optim_params_from_json();
+        if (!opt_params_result) {
+            return std::unexpected(std::format("Failed to load optimization parameters: {}",
+                                               opt_params_result.error()));
+        }
+        params.optimization = *opt_params_result;
     }
 
-    params.optimization = *opt_params_result;
+    // Apply command line overrides
+    if (params._apply_cmd_overrides) {
+        params._apply_cmd_overrides();
+    }
 
     // Apply step scaling
     apply_step_scaling(params);

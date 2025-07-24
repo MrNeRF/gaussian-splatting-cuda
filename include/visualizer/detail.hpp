@@ -2,6 +2,7 @@
 
 #include "core/camera.hpp"
 #include "core/image_io.hpp"
+#include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
 #include "core/trainer.hpp"
 #include "visualizer/renderer.hpp"
@@ -70,10 +71,10 @@ namespace gs {
 
         std::shared_ptr<Shader> quadShader_;
 
+        GLFWwindow* window_;
+
     private:
         std::string title_;
-
-        GLFWwindow* window_;
 
         static ViewerDetail* detail_;
 
@@ -235,12 +236,19 @@ namespace gs {
         };
 
     public:
+        enum class ViewerMode {
+            Empty,     // No data loaded
+            PLYViewer, // Viewing a static PLY
+            Training   // Active training session
+        };
+
         GSViewer(std::string title, int width, int height);
         ~GSViewer();
 
         void setTrainer(Trainer* trainer);
         void setStandaloneModel(std::unique_ptr<SplatData> model);
         void setAntiAliasing(bool enable);
+        void setStoredParams(const param::TrainingParameters& params) { stored_params_ = params; }
 
         void drawFrame();
 
@@ -251,6 +259,11 @@ namespace gs {
         // Scripting system methods
         void renderScriptingConsole();
         void setScriptExecutor(std::function<std::string(const std::string&)> executor);
+
+        // File loading methods
+        void loadPLYFile(const std::filesystem::path& path);
+        void loadDataset(const std::filesystem::path& path);
+        void closeCurrentData();
 
     public:
         std::shared_ptr<TrainingInfo> info_;
@@ -280,6 +293,30 @@ namespace gs {
         // Scripting console
         std::unique_ptr<ScriptingConsole> scripting_console_;
         bool show_scripting_console_ = false;
+
+        // Mode management
+        ViewerMode current_mode_ = ViewerMode::Empty;
+        param::TrainingParameters stored_params_;
+        std::unique_ptr<std::jthread> training_thread_;
+
+        // Mode transition methods
+        void transitionToMode(ViewerMode new_mode);
+        void cleanupCurrentMode();
+
+        // File menu
+        void showFileMenu();
+        void openPLYDialog();
+        void openDatasetDialog();
+
+        // Mode-specific UI
+        void renderEmptyModeUI();
+        void renderPLYModeUI();
+        void renderTrainingModeUI();
+
+        // Helper to check if we have data
+        bool hasData() const {
+            return (trainer_ != nullptr) || (standalone_model_ != nullptr);
+        }
     };
 
 } // namespace gs
