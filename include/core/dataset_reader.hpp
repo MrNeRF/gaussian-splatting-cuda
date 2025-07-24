@@ -120,7 +120,7 @@ public:
      */
     std::string Name() const override {
         return "Blender";
-    };
+    }
 
     /**
      * prints a message explaining dataset structure expectation
