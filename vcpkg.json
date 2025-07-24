@@ -13,6 +13,12 @@
       ]
     },
     "nlohmann-json",
-    "tbb"
+    "tbb",
+    {
+      "name": "python3",
+      "features": [
+        "extensions"
+      ]
+    }
   ]
 }
