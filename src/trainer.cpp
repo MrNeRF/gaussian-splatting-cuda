@@ -275,6 +275,8 @@ namespace gs {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
             }
 
+            strategy_->pre_backward(r_output);
+
             // Compute losses using the factored-out functions
             auto loss_result = compute_photometric_loss(r_output,
                                                         gt_image,

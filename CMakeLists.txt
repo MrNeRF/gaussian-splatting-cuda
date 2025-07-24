@@ -125,6 +125,8 @@ add_subdirectory(gsplat)
 set(HOST_SOURCES
         src/application.cpp
         src/argument_parser.cpp
+        src/scheduler.cpp
+        src/strategy.cpp
         src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp
