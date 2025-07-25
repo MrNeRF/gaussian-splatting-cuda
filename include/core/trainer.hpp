@@ -83,6 +83,8 @@ namespace gs {
         // Handle control requests
         void handle_control_requests(int iter);
 
+        void prune_after_training(float threshold);
+
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;

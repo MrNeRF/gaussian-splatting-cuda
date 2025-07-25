@@ -52,57 +52,71 @@ namespace gs {
         return loss;
     }
 
-    /* torch::Tensor Model::outsideMaskOpacityPenalty(const torch::Tensor& current_photometric_loss,
-                                                   const torch::Tensor& mask) {
-        // --- 1. Pre-computation checks (same as before) ----------------------------
-        bool can_apply_loss = mask.defined() && mask.numel() > 0 &&
-                              final_pixel_transmittance.defined() && xys.defined() &&
-                              radii.defined() && opacities.defined() &&
-                              opacities.size(0) == radii.size(0) && xys.size(0) == radii.size(0);
+    // This function should be inside trainer.cpp
 
-        if (!can_apply_loss) {
-            return current_photometric_loss;
+    /**
+     * @brief Penalizes opacity outside the mask and rewards opacity inside.
+     * @param base_loss The pre-computed photometric loss.
+     * @param out The RenderOutput from the rasterizer.
+     * @param mask The binary attention mask where `true` or `1` means INSIDE the ROI.
+     * @param opacities_logits The raw opacity logits tensor from the model.
+     * @param w The global weight multiplier for this penalty.
+     */
+    static torch::Tensor outsideMaskOpacityPenalty(const torch::Tensor& base_loss,
+                                                   const RenderOutput& out,
+                                                   const torch::Tensor& mask,
+                                                   const torch::Tensor& opacities_logits,
+                                                   float w) {
+        if (w == 0.0f) {
+            return base_loss;
+        }
+        if (!mask.defined() || !out.means2d.defined() || !out.radii.defined()) {
+            return base_loss;
         }
 
-        // --- 2. Identify splats projected on screen (same as before) ---------------
-        torch::Tensor visible_splats_mask = (radii > 0.0f).squeeze(-1);
-        if (!visible_splats_mask.any().item<bool>()) {
-            return current_photometric_loss;
+        torch::Tensor means2d = out.means2d;
+        torch::Tensor radii = out.radii;
+        TORCH_CHECK(opacities_logits.numel() == radii.numel(),
+                    "opacities and radii must match");
+
+        //Filter for splats that are projected onto the screen (radius > 0)
+        torch::Tensor visible_mask = (radii > 0.0f);
+        if (!visible_mask.any().item<bool>()) {
+            return base_loss;
         }
 
-        // --- 3. Get opacity and pixel coordinates (same as before) -----------------
-        torch::Tensor visible_opacities_logits = opacities.squeeze(-1).index({visible_splats_mask});
-        torch::Tensor visible_splats_alpha = torch::sigmoid(visible_opacities_logits);
+        auto visible_indices = visible_mask.nonzero().squeeze();
+        auto xy = means2d.index({visible_indices});
+        // Convert logits to alpha values (0-1) for visible splats
+        auto alpha = torch::sigmoid(opacities_logits.index({visible_indices}));
 
-        int H = final_pixel_transmittance.size(0);
-        int W = final_pixel_transmittance.size(1);
-        torch::Tensor visible_xys = xys.index({visible_splats_mask});
-        torch::Tensor x_coords = torch::round(visible_xys.select(1, 0)).to(torch::kLong).clamp(0, W - 1);
-        torch::Tensor y_coords = torch::round(visible_xys.select(1, 1)).to(torch::kLong).clamp(0, H - 1);
-        torch::Tensor linear_indices = y_coords * W + x_coords;
+        // Get pixel coordinates and clamp them
+        const int W = out.width, H = out.height;
+        auto x = torch::round(xy.select(1, 0)).to(torch::kLong).clamp(0, W - 1);
+        auto y = torch::round(xy.select(1, 1)).to(torch::kLong).clamp(0, H - 1);
+        auto linear_indices = y * W + x;
 
-        // --- 4. Create per-splat masks for inside/outside regions ------------------
-        torch::Tensor is_outside_mask = mask.flatten().index({linear_indices}).to(torch::kFloat32);
-        torch::Tensor is_inside_mask = 1.0f - is_outside_mask;
+        // Get per-splat inside/outside masks from the attention mask
+        // Since mask is already bool {true=IN, false=OUT}, we just convert to float.
+        auto is_in_mask = mask.to(torch::kFloat32).flatten();
 
-        // --- 5. Calculate the two loss components ----------------------------------
-        // Penalty for being opaque OUTSIDE the mask
-        torch::Tensor outside_penalty = visible_splats_alpha * is_outside_mask;
+        // Sample the mask to see if each splat is inside or outside the ROI
+        auto is_in = is_in_mask.index({linear_indices}); // Will be 1.0f for splats inside, 0.0f for splats outside
+        auto is_out = 1.0f - is_in;
 
-        // Reward for being opaque INSIDE the mask (implemented as a penalty on transparency)
-        torch::Tensor inside_reward_as_penalty = (1.0f - visible_splats_alpha) * is_inside_mask;
+        // Calculate penalties
+        const float kOut = 20.0f; // High penalty for being opaque OUTSIDE the mask
+        const float kIn = 0.10f;  // Low penalty for being transparent INSIDE the mask
 
-        // --- 6. Combine losses with their respective weights -----------------------
-        torch::Tensor combined_loss_per_splat =
-            (this->outsideMaskPenaltyWeight * 20.0f * outside_penalty) +
-            (this->outsideMaskPenaltyWeight * 0.10f * inside_reward_as_penalty);
+        auto outside_penalty = alpha * is_out;
+        auto inside_penalty = (1.0f - alpha) * is_in;
 
-        torch::Tensor mean_combined_loss = combined_loss_per_splat.mean();
+        auto combined_penalty = w * (kOut * outside_penalty + kIn * inside_penalty);
+        auto mean_penalty = combined_penalty.mean();
 
-        // --- 7. Apply final loss (additively) --------------------------------------
-        // Additive loss is generally more stable than multiplicative factors.
-        return current_photometric_loss * (1 + mean_combined_loss);
-    }*/
+        // Apply the penalty multiplicatively for stability
+        return base_loss * (1.0f + mean_penalty);
+    }
 
     torch::Tensor Trainer::compute_photometric_loss(const RenderOutput& render_output,
                                                     const torch::Tensor& gt_image,
@@ -142,57 +156,117 @@ namespace gs {
         const float invalidPixelWeight = 1.0f / 20.0f;
 
         torch::Tensor W;
-        W = torch::where(inv,
-                         torch::full_like(invF, invalidPixelWeight, torch::kFloat),
-                         torch::ones_like(invF, torch::kFloat));
+        const int ExpandRimRadius = 0;
+        if (ExpandRimRadius > 0) {
+            const int ExpandRimWindow = 2 * ExpandRimRadius + 1;
+
+            // invF: [B,H,W] o [H,W]
+            torch::Tensor invF4;
+            if (invF.dim() == 2) {
+                invF4 = invF.unsqueeze(0).unsqueeze(0);
+            } else if (invF.dim() == 3) {
+                invF4 = invF.unsqueeze(1);
+            } else {
+                throw std::runtime_error("Unexpected mask dimensionality");
+            }
+
+            const int K = 2 * ExpandRimRadius + 1;
+            // Exterior dilation
+            auto dil4 = torch::nn::functional::max_pool2d(
+                invF4,
+                torch::nn::functional::MaxPool2dFuncOptions({K, K})
+                    .stride(1)
+                    .padding(ExpandRimRadius));
+            // Back to the original shape
+            torch::Tensor dil = (invF.dim() == 2)
+                                    ? dil4.squeeze(0).squeeze(0)
+                                    : dil4.squeeze(1);
+
+            // Same for avg:
+            auto avg4 = torch::nn::functional::avg_pool2d(
+                invF4,
+                torch::nn::functional::AvgPool2dFuncOptions({K, K})
+                    .stride(1)
+                    .padding(ExpandRimRadius));
+            torch::Tensor soft = (invF.dim() == 2)
+                                     ? avg4.squeeze(0).squeeze(0)
+                                     : avg4.squeeze(1);
+
+            /* Final map */
+            W = torch::ones_like(invF);              // weight 1 as default
+            W.masked_fill_(inv, invalidPixelWeight); // invalid interior
+
+            torch::Tensor rim = (dil > 0.5f) & (~inv); // exterior border
+            if (rim.any().item<bool>()) {
+                torch::Tensor wRim = 1.f - soft * (1.f - invalidPixelWeight);
+                W.masked_scatter_(rim, wRim.masked_select(rim));
+            }
+        } else {
+            // no rim
+            /* W = torch::where(inv,
+                             torch::full_like(invF, invalidPixelWeight, torch::kFloat),
+                             torch::ones_like(invF, torch::kFloat));*/
+            W = torch::where(inv,
+                             torch::ones_like(invF, torch::kFloat),
+                             torch::full_like(invF, invalidPixelWeight, torch::kFloat));
+        }
+
         int totalPixels = (Height * Width);
 
         // Pixel-wise L1 map and weighted L1 loss
         auto l1_map = torch::abs(rendered - gt).mean(/*dim=*/1); // Resultado: [B, H, W]
         auto wSum = W.sum().clamp_min(1e-6f);
-        auto l1_loss = (l1_map * W).sum() / totalPixels;
+        auto l1_loss = (l1_map * W).sum() / wSum;
 
         // 2) pixel-wise SSIM map and weighted SSIM loss
 
-        // Compute the SSIM map. Using "valid" padding results in a smaller map.
-        auto ssim_map_raw = fused_ssim_map(rendered, gt, "valid", /*train=*/true);
+        #define weight_in_ssim
+        #ifdef weight_in_ssim
+            // Compute the SSIM map. Using "valid" padding results in a smaller map.
+            auto ssim_map = fused_ssim_map(rendered, gt, "valid", /*train=*/true);
 
-        // Process the raw SSIM map: average over channels and clamp values to [0, 1].
-        torch::Tensor ssim_map;
-        if (ssim_map_raw.dim() == 4) {
-            ssim_map = ssim_map_raw.mean(1); // Average channel dimension -> [B, H, W]
-        } else {
-            ssim_map = ssim_map_raw;
-        }
-        ssim_map = ssim_map.clamp(0.0f, 1.0f);
+            // Manually crop the weight map `W` to match the `ssim_map` dimensions.
+            namespace I = torch::indexing;
 
-        // Manually crop the weight map `W` to match the `ssim_map` dimensions.
-        namespace I = torch::indexing;
+            // Get original and target dimensions.
+            const int orig_h = W.size(-2);
+            const int orig_w = W.size(-1);
+            const int target_h = ssim_map.size(-2);
+            const int target_w = ssim_map.size(-1);
 
-        // Get original and target dimensions.
-        const int orig_h = W.size(-2);
-        const int orig_w = W.size(-1);
-        const int target_h = ssim_map.size(-2);
-        const int target_w = ssim_map.size(-1);
+            // Calculate offsets for a centered crop.
+            const int crop_h_start = (orig_h - target_h) / 2;
+            const int crop_w_start = (orig_w - target_w) / 2;
 
-        // Calculate offsets for a centered crop.
-        const int crop_h_start = (orig_h - target_h) / 2;
-        const int crop_w_start = (orig_w - target_w) / 2;
+            // Apply the crop using tensor slicing.
+            torch::Tensor W_cropped = W.index({I::Slice(),
+                                                I::Slice(crop_h_start, crop_h_start + target_h),
+                                                I::Slice(crop_w_start, crop_w_start + target_w)});
+            // Compute the weighted SSIM loss.
+            auto ssim_loss_map = 1.0f - ssim_map;
 
-        // Apply the crop using tensor slicing.
-        torch::Tensor W_cropped = W.index({I::Slice(),
-                                           I::Slice(crop_h_start, crop_h_start + target_h),
-                                           I::Slice(crop_w_start, crop_w_start + target_w)});
-
-        // Compute the weighted SSIM loss.
-        auto ssim_loss_map = 1.0f - ssim_map;
-
-        // Normalize by the sum of the cropped weights for correct loss scaling.
-        auto W_cropped_sum = W_cropped.sum().clamp_min(1e-6f);
-        auto ssim_loss = (ssim_loss_map * W_cropped).sum() / W_cropped_sum;
+            // Normalize by the sum of the cropped weights for correct loss scaling.
+            auto W_cropped_sum = W_cropped.sum().clamp_min(1e-6f);
+            auto ssim_loss = (ssim_loss_map * W_cropped).sum() / W_cropped_sum;
+        #else
+            auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
+        #endif
 
         // 3) combined loss
         auto loss = (1.0f - opt_params.lambda_dssim) * l1_loss + opt_params.lambda_dssim * ssim_loss;
+        
+       /* 
+       if (outOfMaskAlphaPenalty > 0) {
+            auto opacity_logits = splatData.opacity_raw(); 
+    
+            loss = outsideMaskOpacityPenalty(loss,
+                                             render_output,
+                                             mask_image,
+                                             opacity_logits,
+                                             outOfMaskAlphaPenalty);
+       }
+       */
+
         return loss;
     }
 
@@ -380,10 +454,13 @@ namespace gs {
 
         // Compute loss using the factored-out function
         torch::Tensor loss;
-        if (!mask_image.defined() || params_.optimization.iterations * 0.1 > iter)
+        if (!mask_image.defined() || params_.optimization.iterations * 0.1 > iter) {
             loss = compute_photometric_loss(r_output, gt_image, strategy_->get_model(), params_.optimization);
-        else
-            loss = compute_photometric_loss(r_output, gt_image, mask_image, out_of_mask_penalty, strategy_->get_model(), params_.optimization);
+        } 
+        else {
+            const float curr_out_of_mask_penalty = params_.optimization.iterations * 0.5 > iter ? 0 : out_of_mask_penalty;
+            loss = compute_photometric_loss(r_output, gt_image, mask_image, curr_out_of_mask_penalty, strategy_->get_model(), params_.optimization);
+        }
 
         loss.backward();
         float loss_value = loss.item<float>();
@@ -488,7 +565,6 @@ namespace gs {
         const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
         bool should_continue = true;
-
         for (int epoch = 0; epoch < epochs_needed && should_continue; ++epoch) {
             auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
 
@@ -496,11 +572,11 @@ namespace gs {
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera;
                 torch::Tensor gt_image = std::move(camera_with_image.imageTensor);
-                if (!params_.optimization.use_attention_mask) {
+                if (!params_.optimization.use_attention_mask || !camera_with_image.maskTensor.defined()) {
                     should_continue = train_step(iter, cam, gt_image, torch::Tensor(), render_mode, 0.0f);
                 } else {
                     torch::Tensor mask_image = std::move(camera_with_image.maskTensor);
-                    float out_of_mask_penalty = epoch * 4 < epochs_needed ? 1.0f : 0.0f;
+                    float out_of_mask_penalty = 1.0f;
                     should_continue = train_step(iter, cam, gt_image, mask_image, render_mode, out_of_mask_penalty);
                 }
 
@@ -512,6 +588,7 @@ namespace gs {
             }
         }
 
+        prune_after_training(0.8);
         // Final save if not already saved by stop request
         if (!stop_requested_) {
             strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
@@ -523,6 +600,60 @@ namespace gs {
 
         is_running_ = false;
         training_complete_ = true;
+    }
+
+    void Trainer::prune_after_training(float threshold) {
+        torch::NoGradGuard no_grad;
+
+        auto& model = strategy_->get_model();
+
+        const int64_t N = model.get_means().size(0);
+        if (N == 0) {
+            return;
+        }
+
+        torch::Tensor pos = torch::zeros({N}, torch::kInt32).cuda();
+        torch::Tensor tot = torch::zeros({N}, torch::kInt32).cuda();
+        torch::Tensor bg;
+
+        for (auto& camPtr : train_dataset_->get_cameras()) {
+            Camera* cam = camPtr.get();
+            torch::Tensor mask = cam->load_and_get_attention_mask(0);
+            if (!mask.defined()) {
+                continue;
+            }
+
+            RenderOutput out = gs::rasterize(*cam, model, bg, 1.f, false, false, RenderMode::D);
+
+            auto visible = out.radii.squeeze(-1) > 0.0f;
+            if (!visible.any().item<bool>()) {
+                continue;
+            }
+
+            auto idx = visible.nonzero().squeeze();
+            auto xy = out.means2d.index({idx});
+
+            const int W = mask.size(1);
+            const int H = mask.size(0);
+            auto x = torch::round(xy.select(1, 0)).to(torch::kLong).clamp(0, W - 1);
+            auto y = torch::round(xy.select(1, 1)).to(torch::kLong).clamp(0, H - 1);
+            auto lin = y * W + x;
+
+            auto white = mask.flatten().index({lin}) > 0;
+            pos.index_add_(0, idx, white.to(torch::kInt32));
+            tot.index_add_(0, idx, torch::ones_like(white, torch::kInt32));
+        }
+
+        const int min_visibility_count = 3; // Or another value you prefer
+        auto ratio = pos.to(torch::kFloat32) / tot.to(torch::kFloat32).clamp_min(1.0f);
+        auto keep_mask = (tot >= min_visibility_count) & (ratio >= threshold);
+
+        const int removed = (keep_mask == 0).sum().item<int>();
+        model.filterByMask(keep_mask);
+
+        std::cout << "[Trainer] prune_after_training: removed "
+                  << removed << " / " << N << " splats (thr = "
+                  << threshold << ", min_vis = " << min_visibility_count << ")\n";
     }
 
 } // namespace gs

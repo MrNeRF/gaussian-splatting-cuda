@@ -96,11 +96,14 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
 }
 
 torch::Tensor Camera::load_and_get_attention_mask(int resolution) {
+    if (_mask_path.empty())
+        return torch::Tensor(); // no mask available
+
     unsigned char* data;
     int w, h, c;
 
     // Otherwise load synchronously
-    auto result = load_image(_image_path, resolution);
+    auto result = load_image(_mask_path, resolution);
     data = std::get<0>(result);
     w = std::get<1>(result);
     h = std::get<2>(result);
