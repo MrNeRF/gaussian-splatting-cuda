@@ -169,22 +169,6 @@ namespace gs {
         stop_requested_ = true;
     }
 
-    std::expected<GSViewer*, std::string> Trainer::create_and_get_viewer() {
-        if (params_.optimization.headless) {
-            return std::unexpected("Visualization is disabled in parameters");
-        }
-
-        try {
-            if (!viewer_) {
-                viewer_ = std::make_unique<GSViewer>("GS-CUDA", 1280, 720);
-                viewer_->setTrainer(this);
-            }
-            return viewer_.get();
-        } catch (const std::exception& e) {
-            return std::unexpected(std::format("Failed to create viewer: {}", e.what()));
-        }
-    }
-
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
         // Check stop token first
         if (stop_token.stop_requested()) {
@@ -418,6 +402,9 @@ namespace gs {
             const int num_workers = 4;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
+            progress_->update(iter, current_loss_,
+                              static_cast<int>(strategy_->get_model().size()),
+                              strategy_->is_refining(iter));
             for (int epoch = 0; epoch < epochs_needed; ++epoch) {
                 if (stop_token.stop_requested() || stop_requested_) {
                     break;

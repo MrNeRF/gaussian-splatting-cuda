@@ -241,6 +241,7 @@ namespace gs {
         void setTrainer(Trainer* trainer);
         void setStandaloneModel(std::unique_ptr<SplatData> model);
         void setAntiAliasing(bool enable);
+        void setParameters(const gs::param::TrainingParameters& params) { params_ = params; } // Add this!
 
         void drawFrame();
 
@@ -301,12 +302,17 @@ namespace gs {
         std::string file_browser_current_path_;
         std::string file_browser_selected_file_;
 
+        param::TrainingParameters params_;
+
         // Current mode
         ViewerMode current_mode_ = ViewerMode::Empty;
 
         // Store paths for current data
         std::filesystem::path current_ply_path_;
         std::filesystem::path current_dataset_path_;
+
+        // Training thread
+        std::unique_ptr<std::jthread> training_thread_;
     };
 
 } // namespace gs

@@ -430,6 +430,13 @@ namespace gs {
     }
 
     GSViewer::~GSViewer() {
+        // Stop training thread if running
+        if (training_thread_ && training_thread_->joinable()) {
+            std::cout << "Viewer closing - stopping training thread..." << std::endl;
+            training_thread_->request_stop();
+            training_thread_->join();
+        }
+
         // If trainer is still running, request it to stop
         if (trainer_ && trainer_->is_running()) {
             std::cout << "Viewer closing - stopping training..." << std::endl;
@@ -755,31 +762,25 @@ namespace gs {
             // Clear any existing data
             clearCurrentData();
 
-            // Create temporary parameters for dataset loading
-            gs::param::TrainingParameters params;
-            params.dataset.data_path = path;
-            params.dataset.output_path = std::filesystem::current_path() / "output";
-            params.dataset.resolution = -1;
-            params.dataset.test_every = 8;
-
-            // Read optimization parameters from JSON
-            auto opt_params_result = gs::param::read_optim_params_from_json();
-            if (!opt_params_result) {
-                scripting_console_->addLog("Warning: Using default optimization parameters");
-            } else {
-                params.optimization = *opt_params_result;
-            }
+            // Use the parameters that were passed to the viewer
+            param::TrainingParameters dataset_params = params_;
+            dataset_params.dataset.data_path = path; // Override with the selected path
 
             // Setup training
-            auto setup_result = gs::setupTraining(params);
+            auto setup_result = gs::setupTraining(dataset_params);
             if (!setup_result) {
                 scripting_console_->addLog("Error: Failed to setup training: %s", setup_result.error().c_str());
                 return;
             }
 
-            // Store the trainer
+            // Store the trainer (but don't take ownership yet)
+            auto trainer_ptr = setup_result->trainer.get();
+
+            // Link the trainer to this viewer
+            trainer_ptr->setViewer(this);
+
+            // Now take ownership
             trainer_ = setup_result->trainer.release();
-            // trainer_->setAntiAliasing(anti_aliasing_);
 
             current_dataset_path_ = path;
             current_mode_ = ViewerMode::Training;
@@ -794,6 +795,7 @@ namespace gs {
                                        num_images, num_gaussians);
             scripting_console_->addLog("Info: Ready to start training from %s",
                                        path.filename().string().c_str());
+            scripting_console_->addLog("Info: Using parameters from command line/config");
 
         } catch (const std::exception& e) {
             scripting_console_->addLog("Error: Exception loading dataset: %s", e.what());
@@ -801,7 +803,15 @@ namespace gs {
     }
 
     void GSViewer::clearCurrentData() {
-        // Stop any ongoing training
+        // Stop any ongoing training thread
+        if (training_thread_ && training_thread_->joinable()) {
+            std::println("Stopping training thread...");
+            training_thread_->request_stop();
+            training_thread_->join();
+            training_thread_.reset();
+        }
+
+        // Stop any ongoing training via trainer
         if (trainer_ && trainer_->is_running()) {
             trainer_->request_stop();
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -1218,11 +1228,27 @@ namespace gs {
             ImGui::Text("Loss: %.6f", current_loss);
 
             // Handle the start trigger
-            if (notifier_ && manual_start_triggered_) {
-                std::lock_guard<std::mutex> lock(notifier_->mtx);
-                notifier_->ready = true;
-                notifier_->cv.notify_one();
+            if (manual_start_triggered_ && !training_thread_) {
+                // First notify the trainer that it's ready to start
+                if (notifier_) {
+                    std::lock_guard<std::mutex> lock(notifier_->mtx);
+                    notifier_->ready = true;
+                    notifier_->cv.notify_one();
+                }
+
+                // Then start training in a separate thread
+                training_thread_ = std::make_unique<std::jthread>(
+                    [trainer_ptr = trainer_](std::stop_token stop_token) {
+                        std::println("Training thread started");
+                        auto train_result = trainer_ptr->train(stop_token);
+                        if (!train_result) {
+                            std::println(stderr, "Training error: {}", train_result.error());
+                        }
+                        std::println("Training thread finished");
+                    });
+
                 manual_start_triggered_ = false;
+                std::println("Training thread launched");
             }
 
         } else if (current_mode_ == ViewerMode::PLYViewer && standalone_model_) {
