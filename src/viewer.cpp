@@ -645,6 +645,9 @@ namespace gs {
 
         // Before the uploadData call, add another safety check
 #ifdef CUDA_GL_INTEROP_ENABLED
+        // Use interop for direct GPU transfer
+        auto interop_renderer = std::dynamic_pointer_cast<ScreenQuadRendererInterop>(screen_renderer_);
+
         if (interop_renderer && interop_renderer->isInteropEnabled()) {
             // Keep data on GPU - convert [C, H, W] to [H, W, C] format
             auto image_hwc = output.image.permute({1, 2, 0}).contiguous();
