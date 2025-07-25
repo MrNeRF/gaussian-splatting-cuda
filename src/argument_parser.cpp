@@ -160,7 +160,6 @@ namespace {
                         "ERROR: Invalid optimization strategy '{}'. Valid strategies are: mcmc, default",
                         strat));
                 }
-                opt.strategy = strat;
             }
 
             // Create lambda to apply command line overrides after JSON loading
@@ -176,6 +175,7 @@ namespace {
                                         sh_degree_val = sh_degree ? std::optional<int>(::args::get(sh_degree)) : std::optional<int>(),
                                         min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
+                                        strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
@@ -209,6 +209,7 @@ namespace {
                 setVal(sh_degree_val, opt.sh_degree);
                 setVal(min_opacity_val, opt.min_opacity);
                 setVal(render_mode_val, opt.render_mode);
+                setVal(strategy_val, opt.strategy);
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);

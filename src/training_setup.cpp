@@ -26,9 +26,9 @@ namespace gs {
         // 4. Create strategy
         std::unique_ptr<IStrategy> strategy;
         if (params.optimization.strategy == "mcmc") {
-            strategy = std::make_unique<MCMC>(std::move(splat_data));
+            strategy = std::make_unique<MCMC>(std::move(*splat_result));
         } else {
-            strategy = std::make_unique<DefaultStrategy>(std::move(splat_data));
+            strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
         }
 
         // 5. Create trainer
