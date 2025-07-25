@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Janusch Patas.
+// Copyright (c) 2025 Janusch Patas.
 #pragma once
 
 #include "core/parameters.hpp"

@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Janusch Patas.
+// Copyright (c) 2025 Janusch Patas.
 
 #include "core/argument_parser.hpp"
 #include "core/parameters.hpp"
@@ -14,7 +14,6 @@ namespace {
     enum class ParseResult {
         Success,
         Help,
-        Error,
         ViewerMode
     };
 
@@ -30,7 +29,7 @@ namespace {
         steps.assign(unique_steps.begin(), unique_steps.end());
     }
 
-    std::expected<ParseResult, std::string> parse_arguments(
+    std::expected<std::tuple<ParseResult, std::function<void()>>, std::string> parse_arguments(
         const std::vector<std::string>& args,
         gs::param::TrainingParameters& params) {
 
@@ -40,7 +39,7 @@ namespace {
                 "Lightning-fast CUDA implementation of 3D Gaussian Splatting algorithm.\n\n"
                 "Usage:\n"
                 "  Training:  gs_cuda --data-path <path> --output-path <path> [options]\n"
-                "  Viewing:   gs_cuda --view <path_to_ply> [options]");
+                "  Viewing:   gs_cuda --view <path_to_ply> [options]\n");
 
             // Define all arguments
             ::args::HelpFlag help(parser, "help", "Display help menu", {'h', "help"});
@@ -81,99 +80,72 @@ namespace {
                 parser.ParseArgs(std::vector<std::string>(args.begin() + 1, args.end()));
             } catch (const ::args::Help&) {
                 std::print("{}", parser.Help());
-                return ParseResult::Help;
+                return std::make_tuple(ParseResult::Help, std::function<void()>{});
             } catch (const ::args::Completion& e) {
                 std::print("{}", e.what());
-                return ParseResult::Help;
+                return std::make_tuple(ParseResult::Help, std::function<void()>{});
             } catch (const ::args::ParseError& e) {
                 return std::unexpected(std::format("Parse error: {}\n{}", e.what(), parser.Help()));
             }
 
-            // Show help if no arguments provided
+            // Check if explicitly displaying help
+            if (help) {
+                return std::make_tuple(ParseResult::Help, std::function<void()>{});
+            }
+
+            // NO ARGUMENTS = INTERACTIVE VIEWER MODE
             if (args.size() == 1) {
-                std::print("{}", parser.Help());
-                return ParseResult::Help;
+                params.viewer_mode = true;
+                return std::make_tuple(ParseResult::ViewerMode, std::function<void()>{});
             }
 
-            // Check if just displaying help
-            if (args.size() == 2 && (args[1] == "-h" || args[1] == "--help")) {
-                return ParseResult::Help;
-            }
-
-            // Check for viewer mode
+            // Check for viewer mode with PLY
             if (view_ply) {
                 params.viewer_mode = true;
-                params.ply_path = ::args::get(view_ply);
+                const auto ply_path = ::args::get(view_ply);
+                if (!ply_path.empty()) {
+                    params.ply_path = ply_path;
 
-                // Check if PLY file exists
-                if (!std::filesystem::exists(params.ply_path)) {
-                    return std::unexpected(std::format("PLY file does not exist: {}", params.ply_path.string()));
+                    // Check if PLY file exists
+                    if (!std::filesystem::exists(params.ply_path)) {
+                        return std::unexpected(std::format("PLY file does not exist: {}", params.ply_path.string()));
+                    }
                 }
 
-                // Check antialiasing flag for viewer mode
-                if (antialiasing) {
-                    params.optimization.antialiasing = true;
-                }
-
-                return ParseResult::ViewerMode;
+                return std::make_tuple(ParseResult::ViewerMode, std::function<void()>{});
             }
 
-            // Otherwise, we're in training mode - validate required arguments
-            if (!data_path || !output_path) {
+            // Training mode
+            bool has_data_path = data_path && !::args::get(data_path).empty();
+            bool has_output_path = output_path && !::args::get(output_path).empty();
+
+            // If headless mode, require data path
+            if (headless && !has_data_path) {
+                return std::unexpected(std::format(
+                    "ERROR: Headless mode requires --data-path\n\n{}",
+                    parser.Help()));
+            }
+
+            // If both paths provided, it's training mode
+            if (has_data_path && has_output_path) {
+                params.dataset.data_path = ::args::get(data_path);
+                params.dataset.output_path = ::args::get(output_path);
+
+                // Create output directory
+                std::error_code ec;
+                std::filesystem::create_directories(params.dataset.output_path, ec);
+                if (ec) {
+                    return std::unexpected(std::format(
+                        "Failed to create output directory '{}': {}",
+                        params.dataset.output_path.string(), ec.message()));
+                }
+            } else if (has_data_path != has_output_path) {
                 return std::unexpected(std::format(
                     "ERROR: Training mode requires both --data-path and --output-path\n\n{}",
                     parser.Help()));
             }
 
-            // Set required parameters for training
-            params.dataset.data_path = ::args::get(data_path);
-            params.dataset.output_path = ::args::get(output_path);
-
-            // Create output directory
-            std::error_code ec;
-            std::filesystem::create_directories(params.dataset.output_path, ec);
-            if (ec) {
-                return std::unexpected(std::format(
-                    "Failed to create output directory '{}': {}",
-                    params.dataset.output_path.string(), ec.message()));
-            }
-
-            // Lambdas for compact argument processing
-            auto setVal = [](auto& flag, auto& target) {
-                if (flag)
-                    target = ::args::get(flag);
-            };
-
-            auto setFlag = [](auto& flag, auto& target) {
-                if (flag)
-                    target = true;
-            };
-
-            // Process all optional arguments compactly
-            auto& opt = params.optimization;
-            auto& ds = params.dataset;
-
-            // Value arguments
-            setVal(iterations, opt.iterations);
-            setVal(resolution, ds.resolution);
-            setVal(max_cap, opt.max_cap);
-            setVal(images_folder, ds.images);
-            setVal(test_every, ds.test_every);
-            setVal(steps_scaler, opt.steps_scaler);
-            setVal(sh_degree_interval, opt.sh_degree_interval);
-            setVal(sh_degree, opt.sh_degree);
-            setVal(min_opacity, opt.min_opacity);
-
-            // Flag arguments
-            setFlag(use_bilateral_grid, opt.use_bilateral_grid);
-            setFlag(enable_eval, opt.enable_eval);
-            setFlag(headless, opt.headless);
-            setFlag(antialiasing, opt.antialiasing);
-            setFlag(selective_adam, opt.selective_adam);
-            setFlag(enable_save_eval_images, opt.enable_save_eval_images);
-            setFlag(skip_intermediate_saving, opt.skip_intermediate_saving);
-
-            // Special case: validate render mode
+            // Validate render mode if provided
             if (render_mode) {
                 const auto mode = ::args::get(render_mode);
                 if (VALID_RENDER_MODES.find(mode) == VALID_RENDER_MODES.end()) {
@@ -181,10 +153,65 @@ namespace {
                         "ERROR: Invalid render mode '{}'. Valid modes are: RGB, D, ED, RGB_D, RGB_ED",
                         mode));
                 }
-                opt.render_mode = mode;
             }
 
-            return ParseResult::Success;
+            // Create lambda to apply command line overrides after JSON loading
+            auto apply_cmd_overrides = [&params,
+                                        // Capture values, not references
+                                        iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
+                                        resolution_val = resolution ? std::optional<int>(::args::get(resolution)) : std::optional<int>(),
+                                        max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
+                                        images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
+                                        test_every_val = test_every ? std::optional<int>(::args::get(test_every)) : std::optional<int>(),
+                                        steps_scaler_val = steps_scaler ? std::optional<float>(::args::get(steps_scaler)) : std::optional<float>(),
+                                        sh_degree_interval_val = sh_degree_interval ? std::optional<int>(::args::get(sh_degree_interval)) : std::optional<int>(),
+                                        sh_degree_val = sh_degree ? std::optional<int>(::args::get(sh_degree)) : std::optional<int>(),
+                                        min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
+                                        render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
+                                        // Capture flag states
+                                        use_bilateral_grid_flag = bool(use_bilateral_grid),
+                                        enable_eval_flag = bool(enable_eval),
+                                        headless_flag = bool(headless),
+                                        antialiasing_flag = bool(antialiasing),
+                                        selective_adam_flag = bool(selective_adam),
+                                        enable_save_eval_images_flag = bool(enable_save_eval_images),
+                                        skip_intermediate_saving_flag = bool(skip_intermediate_saving)]() {
+                auto& opt = params.optimization;
+                auto& ds = params.dataset;
+
+                // Simple lambdas to apply if flag/value exists
+                auto setVal = [](const auto& flag, auto& target) {
+                    if (flag)
+                        target = *flag;
+                };
+
+                auto setFlag = [](bool flag, auto& target) {
+                    if (flag)
+                        target = true;
+                };
+
+                // Apply all overrides
+                setVal(iterations_val, opt.iterations);
+                setVal(resolution_val, ds.resolution);
+                setVal(max_cap_val, opt.max_cap);
+                setVal(images_folder_val, ds.images);
+                setVal(test_every_val, ds.test_every);
+                setVal(steps_scaler_val, opt.steps_scaler);
+                setVal(sh_degree_interval_val, opt.sh_degree_interval);
+                setVal(sh_degree_val, opt.sh_degree);
+                setVal(min_opacity_val, opt.min_opacity);
+                setVal(render_mode_val, opt.render_mode);
+
+                setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
+                setFlag(enable_eval_flag, opt.enable_eval);
+                setFlag(headless_flag, opt.headless);
+                setFlag(antialiasing_flag, opt.antialiasing);
+                setFlag(selective_adam_flag, opt.selective_adam);
+                setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
+                setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
+            };
+
+            return std::make_tuple(ParseResult::Success, apply_cmd_overrides);
 
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Unexpected error during argument parsing: {}", e.what()));
@@ -221,31 +248,41 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
     gs::param::TrainingParameters params;
 
-    // Parse command line arguments first
+    // Parse command line arguments
     auto parse_result = parse_arguments(convert_args(argc, argv), params);
     if (!parse_result) {
         return std::unexpected(parse_result.error());
     }
 
+    auto [result, apply_overrides] = *parse_result;
+
     // Handle help case
-    if (*parse_result == ParseResult::Help) {
-        // In a real implementation, you might want to handle this differently
+    if (result == ParseResult::Help) {
         std::exit(0);
     }
 
-    // Handle viewer mode - return early without loading optimization params
-    if (*parse_result == ParseResult::ViewerMode) {
+    // Handle viewer mode
+    if (result == ParseResult::ViewerMode) {
+        if (apply_overrides) {
+            apply_overrides();
+        }
         return params;
     }
 
-    // Training mode - load optimization parameters from JSON
-    auto opt_params_result = gs::param::read_optim_params_from_json();
-    if (!opt_params_result) {
-        return std::unexpected(std::format("Failed to load optimization parameters: {}",
-                                           opt_params_result.error()));
+    // Training mode - load JSON first
+    if (!params.dataset.data_path.empty()) {
+        auto opt_params_result = gs::param::read_optim_params_from_json();
+        if (!opt_params_result) {
+            return std::unexpected(std::format("Failed to load optimization parameters: {}",
+                                               opt_params_result.error()));
+        }
+        params.optimization = *opt_params_result;
     }
 
-    params.optimization = *opt_params_result;
+    // Apply command line overrides
+    if (apply_overrides) {
+        apply_overrides();
+    }
 
     // Apply step scaling
     apply_step_scaling(params);
