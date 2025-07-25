@@ -20,7 +20,8 @@ namespace gs {
 
     ViewerDetail::ViewerDetail(std::string title, int width, int height)
         : title_(title),
-          viewport_(width, height) {
+          viewport_(width, height),
+          window_manager_(std::make_unique<WindowManager>(title, width, height)) {
         detail_ = this;
     }
 
@@ -29,63 +30,20 @@ namespace gs {
     }
 
     bool ViewerDetail::init() {
-
-        if (!glfwInit()) {
-            std::cerr << "Failed to initialize GLFW!" << std::endl;
+        if (!window_manager_->init()) {
             return false;
         }
 
-        glfwWindowHint(GLFW_SAMPLES, 8);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_FALSE);
-        glfwWindowHint(GLFW_DEPTH_BITS, 24);
-
-        window_ = glfwCreateWindow(
-            detail_->viewport_.windowSize.x,
-            detail_->viewport_.windowSize.y,
-            detail_->title_.c_str(), NULL, NULL);
-
-        if (window_ == NULL) {
-            std::cerr << "Failed to create GLFW window!" << std::endl;
-            glfwTerminate();
-            return false;
-        }
-
-        glfwMakeContextCurrent(window_);
-
-        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-            std::cerr << "GLAD init failed" << std::endl;
-            glfwTerminate();
-            return false;
-        }
-
-        glfwSwapInterval(1); // Enable vsync
-
-        glfwSetMouseButtonCallback(window_, mouseButtonCallback);
-        glfwSetCursorPosCallback(window_, cursorPosCallback);
-        glfwSetScrollCallback(window_, scrollCallback);
-        glfwSetKeyCallback(window_, wsad_callback);
-        glfwSetDropCallback(window_, dropCallback); // Add drag-and-drop callback
-
-        glEnable(GL_LINE_SMOOTH);
-        glDepthFunc(GL_LEQUAL);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glBlendEquation(GL_FUNC_ADD);
-        glEnable(GL_PROGRAM_POINT_SIZE);
+        // Set this viewer as the callback handler
+        window_manager_->setCallbackHandler(this);
 
         return true;
     }
 
     void ViewerDetail::updateWindowSize() {
-        int winW, winH, fbW, fbH;
-        glfwGetWindowSize(window_, &winW, &winH);
-        glfwGetFramebufferSize(window_, &fbW, &fbH);
-        viewport_.windowSize = glm::ivec2(winW, winH);
-        viewport_.frameBufferSize = glm::ivec2(fbW, fbH);
-        glViewport(0, 0, fbW, fbH);
+        window_manager_->updateWindowSize();
+        viewport_.windowSize = window_manager_->getWindowSize();
+        viewport_.frameBufferSize = window_manager_->getFramebufferSize();
     }
 
     float ViewerDetail::getGPUUsage() {
@@ -273,7 +231,7 @@ namespace gs {
         std::cout << "Using CPU copy for rendering (interop not available)" << std::endl;
 #endif
 
-        while (!glfwWindowShouldClose(window_)) {
+        while (!window_manager_->shouldClose()) {
 
             // Clear with a dark background
             glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -285,13 +243,9 @@ namespace gs {
 
             draw();
 
-            glfwSwapBuffers(window_);
-            glfwPollEvents();
+            window_manager_->swapBuffers();
+            window_manager_->pollEvents();
         }
-
-        // Cleanup
-        glfwDestroyWindow(window_);
-        glfwTerminate();
     }
 
     GSViewer::GSViewer(std::string title, int width, int height)
