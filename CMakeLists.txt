@@ -139,6 +139,7 @@ set(HOST_SOURCES
         src/visualizer/camera_controller.cpp
         src/visualizer/gui_manager.cpp
         src/visualizer/input_handler.cpp
+        src/visualizer/rendering_pipeline.cpp
         src/visualizer/viewer.cpp
         src/visualizer/window_manager.cpp
         src/external/tinyply.cpp
