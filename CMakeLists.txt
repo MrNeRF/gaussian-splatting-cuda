@@ -312,7 +312,11 @@ if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
     list(APPEND MAIN_LINK_LIBRARIES gaussian_visualizer)
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ${MAIN_LINK_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}
+        PRIVATE
+        ${MAIN_LINK_LIBRARIES}
+        taywee::args
+)
 
 # Platform-specific settings
 if(WIN32)

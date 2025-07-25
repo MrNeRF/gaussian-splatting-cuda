@@ -3,6 +3,7 @@
 
 #include "core/parameters.hpp"
 #include <expected>
+#include <memory>
 
 namespace gs {
     namespace args {
@@ -12,7 +13,7 @@ namespace gs {
          * @param argv Array of argument strings (const-correct)
          * @return Expected TrainingParameters or error message
          */
-        std::expected<gs::param::TrainingParameters, std::string>
+        std::expected<std::unique_ptr<param::TrainingParameters>, std::string>
         parse_args_and_params(int argc, const char* const argv[]);
     } // namespace args
 } // namespace gs
