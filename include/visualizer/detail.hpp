@@ -55,6 +55,8 @@ namespace gs {
 
         static void wsad_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
+        static void dropCallback(GLFWwindow* window, int count, const char** paths);
+
         void run();
 
         virtual void draw() = 0;
@@ -267,6 +269,8 @@ namespace gs {
         };
 
         ViewerMode getCurrentMode() const { return current_mode_; }
+
+        friend void ViewerDetail::dropCallback(GLFWwindow*, int, const char**);
 
     public:
         std::shared_ptr<TrainingInfo> info_;
