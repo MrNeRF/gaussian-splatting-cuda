@@ -2,6 +2,8 @@
 
 #include "core/image_io.hpp"
 #include "core/trainer.hpp"
+#include "visualizer/camera_controller.hpp"
+#include "visualizer/input_handler.hpp"
 #include "visualizer/renderer.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
@@ -40,16 +42,6 @@ namespace gs {
 
         void controlFrameRate();
 
-        static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-
-        static void cursorPosCallback(GLFWwindow* window, double x, double y);
-
-        static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-
-        static void wsad_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
-
-        static void dropCallback(GLFWwindow* window, int count, const char** paths);
-
         void run();
 
         virtual void draw() = 0;
@@ -65,10 +57,12 @@ namespace gs {
 
         std::unique_ptr<WindowManager> window_manager_;
 
+        std::unique_ptr<InputHandler> input_handler_;
+
+        std::unique_ptr<CameraController> camera_controller_;
+
     private:
         std::string title_;
-
-        static ViewerDetail* detail_;
 
         int targetFPS = 30;
 
@@ -164,7 +158,9 @@ namespace gs {
         // GUI access for static callbacks
         bool isGuiActive() const;
 
-        friend void ViewerDetail::dropCallback(GLFWwindow*, int, const char**);
+    private:
+        // Input handlers
+        bool handleFileDrop(const InputHandler::FileDropEvent& event);
 
     public:
         std::shared_ptr<TrainingInfo> info_;
