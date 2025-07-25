@@ -137,6 +137,7 @@ set(HOST_SOURCES
         src/metrics.cpp
         src/rasterizer_autograd.cpp
         src/viewer.cpp
+        src/gui_manager.cpp
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
