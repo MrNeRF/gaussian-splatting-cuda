@@ -5,6 +5,7 @@
 #include "visualizer/camera_controller.hpp"
 #include "visualizer/input_handler.hpp"
 #include "visualizer/renderer.hpp"
+#include "visualizer/rendering_pipeline.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
 #include <chrono>
@@ -14,7 +15,6 @@
 #include <string>
 #include <thread>
 #include <torch/torch.h>
-#include <vector>
 
 using uchar = unsigned char;
 
@@ -169,7 +169,7 @@ namespace gs {
 
         std::mutex splat_mtx_;
 
-    private:
+        std::unique_ptr<RenderingPipeline> rendering_pipeline_;
         std::shared_ptr<RenderingConfig> config_;
 
         Trainer* trainer_;

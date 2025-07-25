@@ -179,6 +179,8 @@ namespace gs {
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<ViewerNotifier>();
 
+        rendering_pipeline_ = std::make_unique<RenderingPipeline>();
+
         setFrameRate(30);
 
         // Create GUI manager
@@ -535,107 +537,35 @@ namespace gs {
             return;
         }
 
-        glm::mat3 R = viewport_.getRotationMatrix();
-        glm::vec3 t = viewport_.getTranslation();
-
-        glm::ivec2& reso = viewport_.windowSize;
-        // Comprehensive dimension validation, prevents crash when minimizing window (see issue 190)
-        if (reso.x <= 0 || reso.y <= 0 || reso.x > 16384 || reso.y > 16384) {
-            return; // Skip rendering for invalid dimensions
-        }
-
-        torch::Tensor R_tensor = torch::tensor({R[0][0], R[1][0], R[2][0],
-                                                R[0][1], R[1][1], R[2][1],
-                                                R[0][2], R[1][2], R[2][2]},
-                                               torch::TensorOptions().dtype(torch::kFloat32))
-                                     .reshape({3, 3});
-
-        torch::Tensor t_tensor = torch::tensor({t[0],
-                                                t[1],
-                                                t[2]},
-                                               torch::TensorOptions().dtype(torch::kFloat32))
-                                     .reshape({3, 1});
-
-        R_tensor = R_tensor.transpose(0, 1);
-        t_tensor = -R_tensor.mm(t_tensor).squeeze();
-
-        glm::vec2 fov = config_->getFov(reso.x, reso.y);
-
-        Camera cam = Camera(
-            R_tensor,
-            t_tensor,
-            fov2focal(fov.x, reso.x),
-            fov2focal(fov.y, reso.y),
-            reso.x / 2.0f,
-            reso.y / 2.0f,
-            torch::empty({0}, torch::kFloat32),
-            torch::empty({0}, torch::kFloat32),
-            gsplat::CameraModelType::PINHOLE,
-            "online",
-            "none image",
-            reso.x,
-            reso.y,
-            -1);
-
-        torch::Tensor background = torch::zeros({3});
-
-        RenderOutput output;
+        // Get model reference
+        SplatData* model = nullptr;
         {
             std::lock_guard<std::mutex> lock(splat_mtx_);
-
-            // Get model from trainer or standalone
-            SplatData* model = nullptr;
-            if (trainer_) {
-                model = const_cast<SplatData*>(&trainer_->get_strategy().get_model());
-            } else if (standalone_model_) {
-                model = standalone_model_.get();
-            }
+            model = trainer_ ? const_cast<SplatData*>(&trainer_->get_strategy().get_model()) : standalone_model_.get();
 
             if (!model) {
                 return;
             }
-
-            output = gs::rasterize(
-                cam,
-                *model,
-                background,
-                config_->scaling_modifier,
-                false,
-                anti_aliasing_,
-                RenderMode::RGB);
         }
 
-        // Before the uploadData call, add another safety check
-#ifdef CUDA_GL_INTEROP_ENABLED
-        // Use interop for direct GPU transfer
-        auto interop_renderer = std::dynamic_pointer_cast<ScreenQuadRendererInterop>(screen_renderer_);
+        // Build render request
+        RenderingPipeline::RenderRequest request{
+            .view_rotation = viewport_.getRotationMatrix(),
+            .view_translation = viewport_.getTranslation(),
+            .viewport_size = viewport_.windowSize,
+            .fov = config_->fov,
+            .scaling_modifier = config_->scaling_modifier,
+            .antialiasing = anti_aliasing_,
+            .render_mode = RenderMode::RGB};
 
-        if (interop_renderer && interop_renderer->isInteropEnabled()) {
-            // Keep data on GPU - convert [C, H, W] to [H, W, C] format
-            auto image_hwc = output.image.permute({1, 2, 0}).contiguous();
-            // Direct CUDA->OpenGL update (no CPU copy!)
-            // Verify tensor dimensions match expected size
-            if (image_hwc.size(0) == reso.y && image_hwc.size(1) == reso.x) {
-                interop_renderer->uploadFromCUDA(image_hwc, reso.x, reso.y);
-            }
-        } else {
-            // Fallback to CPU copy
-            auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
+        // Render
+        auto result = rendering_pipeline_->render(*model, request);
 
-            // Verify tensor dimensions before upload
-            if (image.size(0) == reso.y && image.size(1) == reso.x && image.data_ptr<uchar>()) {
-                screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
-            }
+        // Upload to screen
+        if (result.valid) {
+            rendering_pipeline_->uploadToScreen(result, *screen_renderer_, viewport_.windowSize);
+            screen_renderer_->render(quadShader_, viewport_);
         }
-#else
-        // Original CPU copy path
-        auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
-        if (image.size(0) == reso.y && image.size(1) == reso.x && image.data_ptr<uchar>()) {
-            screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
-        }
-#endif
-
-        screen_renderer_->render(quadShader_, viewport_);
     }
 
     void GSViewer::draw() {
