@@ -576,6 +576,12 @@ namespace gs {
         glm::mat3 R = viewport_.getRotationMatrix();
         glm::vec3 t = viewport_.getTranslation();
 
+        glm::ivec2& reso = viewport_.windowSize;
+        // Comprehensive dimension validation, prevents crash when minimizing window (see issue 190)
+        if (reso.x <= 0 || reso.y <= 0 || reso.x > 16384 || reso.y > 16384) {
+            return; // Skip rendering for invalid dimensions
+        }
+
         torch::Tensor R_tensor = torch::tensor({R[0][0], R[1][0], R[2][0],
                                                 R[0][1], R[1][1], R[2][1],
                                                 R[0][2], R[1][2], R[2][2]},
@@ -591,7 +597,6 @@ namespace gs {
         R_tensor = R_tensor.transpose(0, 1);
         t_tensor = -R_tensor.mm(t_tensor).squeeze();
 
-        glm::ivec2& reso = viewport_.windowSize;
         glm::vec2 fov = config_->getFov(reso.x, reso.y);
 
         Camera cam = Camera(
@@ -638,25 +643,31 @@ namespace gs {
                 RenderMode::RGB);
         }
 
+        // Before the uploadData call, add another safety check
 #ifdef CUDA_GL_INTEROP_ENABLED
-        // Use interop for direct GPU transfer
-        auto interop_renderer = std::dynamic_pointer_cast<ScreenQuadRendererInterop>(screen_renderer_);
-
         if (interop_renderer && interop_renderer->isInteropEnabled()) {
             // Keep data on GPU - convert [C, H, W] to [H, W, C] format
             auto image_hwc = output.image.permute({1, 2, 0}).contiguous();
-
             // Direct CUDA->OpenGL update (no CPU copy!)
-            interop_renderer->uploadFromCUDA(image_hwc, reso.x, reso.y);
+            // Verify tensor dimensions match expected size
+            if (image_hwc.size(0) == reso.y && image_hwc.size(1) == reso.x) {
+                interop_renderer->uploadFromCUDA(image_hwc, reso.x, reso.y);
+            }
         } else {
             // Fallback to CPU copy
             auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
-            screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
+
+            // Verify tensor dimensions before upload
+            if (image.size(0) == reso.y && image.size(1) == reso.x && image.data_ptr<uchar>()) {
+                screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
+            }
         }
 #else
         // Original CPU copy path
         auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
-        screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
+        if (image.size(0) == reso.y && image.size(1) == reso.x && image.data_ptr<uchar>()) {
+            screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
+        }
 #endif
 
         screen_renderer_->render(quadShader_, viewport_);
