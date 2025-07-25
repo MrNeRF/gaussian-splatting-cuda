@@ -261,7 +261,7 @@ TEST_F(MCMCTest, RelocationMechanicsTest) {
 
     params.optimization.min_opacity = 0.005f;
     params.optimization.start_refine = 500;
-    params.optimization.stop_refine= 1000;
+    params.optimization.stop_refine = 1000;
     mcmc->initialize(params.optimization);
 
     // Initialize optimizer
