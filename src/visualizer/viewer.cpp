@@ -23,6 +23,7 @@ namespace gs {
           viewport_(width, height),
           window_manager_(std::make_unique<WindowManager>(title, width, height)) {
         detail_ = this;
+        camera_controller_ = std::make_unique<CameraController>(viewport_);
     }
 
     ViewerDetail::~ViewerDetail() {
@@ -142,11 +143,9 @@ namespace gs {
         if (viewer && viewer->isGuiActive())
             return;
 
-        if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT || button == GLFW_MOUSE_BUTTON_MIDDLE) && action == GLFW_PRESS) {
-            double xpos, ypos;
-            glfwGetCursorPos(window, &xpos, &ypos);
-            detail_->viewport_.camera.initScreenPos(glm::vec2(xpos, ypos));
-        }
+        double xpos, ypos;
+        glfwGetCursorPos(window, &xpos, &ypos);
+        detail_->camera_controller_->handleMouseButton(button, action, xpos, ypos);
     }
 
     void ViewerDetail::cursorPosCallback(GLFWwindow* window, double x, double y) {
@@ -155,13 +154,7 @@ namespace gs {
         if (viewer && viewer->isGuiActive())
             return;
 
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            detail_->viewport_.camera.translate(glm::vec2(x, y));
-        } else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-            detail_->viewport_.camera.rotate(glm::vec2(x, y));
-        } else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
-            detail_->viewport_.camera.rotate_around_center(glm::vec2(x, y));
-        }
+        detail_->camera_controller_->handleMouseMove(x, y);
     }
 
     void ViewerDetail::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
@@ -170,20 +163,11 @@ namespace gs {
         if (viewer && viewer->isGuiActive())
             return;
 
-        float delta = static_cast<float>(yoffset);
-        if (std::abs(delta) < 1.0e-2f)
-            return;
-
-        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-            // 'R' key is currently pressed
-            detail_->viewport_.camera.rotate_roll(delta);
-        } else {
-            detail_->viewport_.camera.zoom(delta);
-        }
+        bool roll_modifier = (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS);
+        detail_->camera_controller_->handleScroll(yoffset, roll_modifier);
     }
 
     void ViewerDetail::wsad_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-
         const float ADVANCE_RATE = 1.0f;
         const float ADVANCE_RATE_FINE_TUNE = 0.3f;
 
@@ -193,20 +177,7 @@ namespace gs {
             return;
         }
 
-        switch (key) {
-        case GLFW_KEY_W:
-            detail_->viewport_.camera.advance_forward(advance_rate);
-            break;
-        case GLFW_KEY_A:
-            detail_->viewport_.camera.advance_left(advance_rate);
-            break;
-        case GLFW_KEY_S:
-            detail_->viewport_.camera.advance_backward(advance_rate);
-            break;
-        case GLFW_KEY_D:
-            detail_->viewport_.camera.advance_right(advance_rate);
-            break;
-        }
+        detail_->camera_controller_->handleKeyboard(key, advance_rate);
     }
 
     void ViewerDetail::run() {

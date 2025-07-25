@@ -2,6 +2,7 @@
 
 #include "core/image_io.hpp"
 #include "core/trainer.hpp"
+#include "visualizer/camera_controller.hpp"
 #include "visualizer/renderer.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
@@ -64,6 +65,8 @@ namespace gs {
         std::shared_ptr<Shader> quadShader_;
 
         std::unique_ptr<WindowManager> window_manager_;
+
+        std::unique_ptr<CameraController> camera_controller_;
 
     private:
         std::string title_;
