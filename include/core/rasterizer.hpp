@@ -8,10 +8,10 @@
 namespace gs {
 
     struct RenderOutput {
-        torch::Tensor image;      // [..., C, H, W, channels]
+        torch::Tensor image;      // [..., channels, H, W]
         torch::Tensor alpha;      // [..., C, H, W, 1]
         torch::Tensor depth;      // [..., C, H, W, 1] - accumulated or expected depth
-        torch::Tensor means2d;    // [..., N, 2]
+        torch::Tensor means2d;    // [..., C, N, 2]
         torch::Tensor depths;     // [..., N] - per-gaussian depths
         torch::Tensor radii;      // [..., N]
         torch::Tensor visibility; // [..., N]
