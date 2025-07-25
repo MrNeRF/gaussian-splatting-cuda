@@ -240,13 +240,13 @@ namespace {
 } // anonymous namespace
 
 // Public interface
-std::expected<gs::param::TrainingParameters, std::string>
+std::expected<std::unique_ptr<gs::param::TrainingParameters>, std::string>
 gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
-    gs::param::TrainingParameters params;
+    auto params = std::make_unique<gs::param::TrainingParameters>();
 
     // Parse command line arguments
-    auto parse_result = parse_arguments(convert_args(argc, argv), params);
+    auto parse_result = parse_arguments(convert_args(argc, argv), *params);
     if (!parse_result) {
         return std::unexpected(parse_result.error());
     }
@@ -259,13 +259,13 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
     }
 
     // Training mode - load JSON first
-    if (!params.dataset.data_path.empty()) {
+    if (!params->dataset.data_path.empty()) {
         auto opt_params_result = gs::param::read_optim_params_from_json();
         if (!opt_params_result) {
             return std::unexpected(std::format("Failed to load optimization parameters: {}",
                                                opt_params_result.error()));
         }
-        params.optimization = *opt_params_result;
+        params->optimization = *opt_params_result;
     }
 
     // Apply command line overrides
@@ -274,7 +274,7 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
     }
 
     // Apply step scaling
-    apply_step_scaling(params);
+    apply_step_scaling(*params);
 
     return params;
 }

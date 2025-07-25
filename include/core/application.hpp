@@ -1,10 +1,18 @@
 #pragma once
 
+#include <memory>
+
 namespace gs {
+
+    namespace param {
+        struct TrainingParameters;
+    } // namespace param
+
+    struct TrainingParameters;
 
     class Application {
     public:
-        int run(int argc, char* argv[]);
+        int run(std::unique_ptr<param::TrainingParameters> params);
     };
 
 } // namespace gs
