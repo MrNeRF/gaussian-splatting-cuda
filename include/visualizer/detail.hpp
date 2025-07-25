@@ -5,20 +5,17 @@
 #include "core/rasterizer.hpp"
 #include "core/trainer.hpp"
 #include "visualizer/renderer.hpp"
+#include "visualizer/viewer_notifier.hpp"
 // clang-format off
 // CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 // clang-format on
 #include <chrono>
-#include <condition_variable>
 #include <cuda_runtime.h>
 #include <deque>
 #include <functional>
 #include <glm/glm.hpp>
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -29,6 +26,11 @@
 using uchar = unsigned char;
 
 namespace gs {
+
+    // Forward declarations
+    namespace gui {
+        class GuiManager;
+    }
 
     class ViewerDetail {
 
@@ -61,11 +63,9 @@ namespace gs {
 
         virtual void draw() = 0;
 
+        GLFWwindow* getWindow() const { return window_; }
+
     protected:
-        ImGuiWindowFlags window_flags = 0;
-
-        bool any_window_active = false;
-
         Viewport viewport_;
 
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
@@ -88,13 +88,7 @@ namespace gs {
 
     class GSViewer : public ViewerDetail {
 
-        struct Notifier {
-        public:
-            bool ready = false;
-            std::mutex mtx;
-            std::condition_variable cv;
-        };
-
+    public:
         struct TrainingInfo {
 
             std::mutex mtx;
@@ -138,102 +132,11 @@ namespace gs {
             }
         };
 
-        struct ScriptingConsole {
-            std::vector<std::string> history_;
-            std::vector<std::string> output_buffer_;
-            char input_buffer_[1024] = "";
-            int history_pos_ = -1;
-            bool scroll_to_bottom_ = false;
-            bool reclaim_focus_ = false;
-            size_t max_output_lines_ = 1000;
-
-            // Callback function for executing scripts
-            std::function<std::string(const std::string&)> execute_callback_;
-
-            ScriptingConsole() {
-                clearLog();
-                // Set default callback that just echoes input
-                execute_callback_ = [](const std::string& input) -> std::string {
-                    return "Echo: " + input;
-                };
-            }
-
-            void clearLog() {
-                output_buffer_.clear();
-            }
-
-            void addLog(const char* fmt, ...) {
-                char buf[1024];
-                va_list args;
-                va_start(args, fmt);
-                vsnprintf(buf, sizeof(buf), fmt, args);
-                buf[sizeof(buf) - 1] = 0;
-                va_end(args);
-
-                output_buffer_.push_back(std::string(buf));
-
-                while (output_buffer_.size() > max_output_lines_) {
-                    output_buffer_.erase(output_buffer_.begin());
-                }
-
-                scroll_to_bottom_ = true;
-            }
-
-            void executeCommand(const std::string& command) {
-                addLog(">>> %s", command.c_str());
-
-                // Add to history
-                history_.push_back(command);
-
-                // Execute command through callback
-                if (execute_callback_) {
-                    try {
-                        std::string result = execute_callback_(command);
-                        if (!result.empty()) {
-                            addLog("%s", result.c_str());
-                        }
-                    } catch (const std::exception& e) {
-                        addLog("Error: %s", e.what());
-                    }
-                }
-
-                scroll_to_bottom_ = true;
-            }
-
-            static int textEditCallbackStub(ImGuiInputTextCallbackData* data) {
-                ScriptingConsole* console = (ScriptingConsole*)data->UserData;
-                return console->textEditCallback(data);
-            }
-
-            int textEditCallback(ImGuiInputTextCallbackData* data) {
-                switch (data->EventFlag) {
-                case ImGuiInputTextFlags_CallbackCompletion:
-                    // Handle tab completion here if needed
-                    break;
-
-                case ImGuiInputTextFlags_CallbackHistory: {
-                    const int prev_history_pos = history_pos_;
-                    if (data->EventKey == ImGuiKey_UpArrow) {
-                        if (history_pos_ == -1)
-                            history_pos_ = static_cast<int>(history_.size()) - 1;
-                        else if (history_pos_ > 0)
-                            history_pos_--;
-                    } else if (data->EventKey == ImGuiKey_DownArrow) {
-                        if (history_pos_ != -1) {
-                            if (++history_pos_ >= static_cast<int>(history_.size()))
-                                history_pos_ = -1;
-                        }
-                    }
-
-                    if (prev_history_pos != history_pos_) {
-                        const char* history_str = (history_pos_ >= 0) ? history_[history_pos_].c_str() : "";
-                        data->DeleteChars(0, data->BufTextLen);
-                        data->InsertChars(0, history_str);
-                    }
-                } break;
-                }
-                return 0;
-            }
+        // Add mode enum
+        enum class ViewerMode {
+            Empty,     // No data loaded
+            PLYViewer, // Viewing a PLY file
+            Training   // Ready to train or training
         };
 
     public:
@@ -243,39 +146,39 @@ namespace gs {
         void setTrainer(Trainer* trainer);
         void setStandaloneModel(std::unique_ptr<SplatData> model);
         void setAntiAliasing(bool enable);
-        void setParameters(const gs::param::TrainingParameters& params) { params_ = params; } // Add this!
+        void setParameters(const gs::param::TrainingParameters& params) { params_ = params; }
 
         void drawFrame();
 
-        void configuration();
-
         void draw() override;
 
-        // Scripting system methods
-        void renderScriptingConsole();
-        void setScriptExecutor(std::function<std::string(const std::string&)> executor);
-
-        // Add new file browser related methods
-        void renderFileBrowser();
+        // Data loading methods
         void loadPLYFile(const std::filesystem::path& path);
         void loadDataset(const std::filesystem::path& path);
         void clearCurrentData();
 
-        // Add mode enum
-        enum class ViewerMode {
-            Empty,     // No data loaded
-            PLYViewer, // Viewing a PLY file
-            Training   // Ready to train or training
-        };
-
+        // Getters for GUI
         ViewerMode getCurrentMode() const { return current_mode_; }
+        Trainer* getTrainer() const { return trainer_; }
+        SplatData* getStandaloneModel() const { return standalone_model_.get(); }
+        std::shared_ptr<TrainingInfo> getTrainingInfo() const { return info_; }
+        std::shared_ptr<RenderingConfig> getRenderingConfig() const { return config_; }
+        std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }
+        const std::filesystem::path& getCurrentPLYPath() const { return current_ply_path_; }
+        const std::filesystem::path& getCurrentDatasetPath() const { return current_dataset_path_; }
+
+        // Training control
+        void startTraining();
+
+        // GUI access for static callbacks
+        bool isGuiActive() const;
 
         friend void ViewerDetail::dropCallback(GLFWwindow*, int, const char**);
 
     public:
         std::shared_ptr<TrainingInfo> info_;
 
-        std::shared_ptr<Notifier> notifier_;
+        std::shared_ptr<ViewerNotifier> notifier_;
 
         std::mutex splat_mtx_;
 
@@ -285,26 +188,7 @@ namespace gs {
         Trainer* trainer_;
         std::unique_ptr<SplatData> standalone_model_;
 
-        // Control button states
-        bool show_control_panel_ = true;
-        bool save_in_progress_ = false;
-        std::chrono::steady_clock::time_point save_start_time_;
-        bool manual_start_triggered_ = false;
-        bool training_started_ = false;
-
-        // camera controls
-        void renderCameraControlsWindow();
-        bool show_camera_controls_window_ = false;
         bool anti_aliasing_ = false;
-
-        // Scripting console
-        std::unique_ptr<ScriptingConsole> scripting_console_;
-        bool show_scripting_console_ = false;
-
-        // File browser state
-        bool show_file_browser_ = false;
-        std::string file_browser_current_path_;
-        std::string file_browser_selected_file_;
 
         param::TrainingParameters params_;
 
@@ -317,6 +201,10 @@ namespace gs {
 
         // Training thread
         std::unique_ptr<std::jthread> training_thread_;
+
+        // GUI manager
+        std::unique_ptr<gui::GuiManager> gui_manager_;
+        friend class gui::GuiManager; // Allow GUI manager to access private members
     };
 
 } // namespace gs
