@@ -1,0 +1,56 @@
+#pragma once
+
+#include <filesystem>
+#include <glm/glm.hpp>
+#include <string>
+
+// Forward declarations
+struct GLFWwindow;
+
+namespace gs {
+
+    class WindowManager {
+    public:
+        WindowManager(const std::string& title, int width, int height);
+        ~WindowManager();
+
+        // Delete copy operations
+        WindowManager(const WindowManager&) = delete;
+        WindowManager& operator=(const WindowManager&) = delete;
+
+        // Initialize GLFW and create window
+        bool init();
+
+        // Window operations
+        void updateWindowSize();
+        void swapBuffers();
+        void pollEvents();
+        bool shouldClose() const;
+        void setVSync(bool enabled);
+
+        // Getters
+        GLFWwindow* getWindow() const { return window_; }
+        glm::ivec2 getWindowSize() const { return window_size_; }
+        glm::ivec2 getFramebufferSize() const { return framebuffer_size_; }
+
+        // Set the callback handler (typically the viewer instance)
+        void setCallbackHandler(void* handler) { callback_handler_ = handler; }
+
+    private:
+        GLFWwindow* window_ = nullptr;
+        std::string title_;
+        glm::ivec2 window_size_;
+        glm::ivec2 framebuffer_size_;
+
+        // Static callback handler pointer
+        static void* callback_handler_;
+
+        // Static GLFW callbacks
+        static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+        static void cursorPosCallback(GLFWwindow* window, double x, double y);
+        static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+        static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+        static void dropCallback(GLFWwindow* window, int count, const char** paths);
+    };
+
+} // namespace gs

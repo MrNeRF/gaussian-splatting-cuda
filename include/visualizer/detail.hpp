@@ -1,22 +1,13 @@
 #pragma once
 
-#include "core/camera.hpp"
 #include "core/image_io.hpp"
-#include "core/rasterizer.hpp"
 #include "core/trainer.hpp"
 #include "visualizer/renderer.hpp"
 #include "visualizer/viewer_notifier.hpp"
-// clang-format off
-// CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-// clang-format on
+#include "visualizer/window_manager.hpp"
 #include <chrono>
-#include <cuda_runtime.h>
 #include <deque>
 #include <functional>
-#include <glm/glm.hpp>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -63,7 +54,7 @@ namespace gs {
 
         virtual void draw() = 0;
 
-        GLFWwindow* getWindow() const { return window_; }
+        GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
 
     protected:
         Viewport viewport_;
@@ -72,10 +63,10 @@ namespace gs {
 
         std::shared_ptr<Shader> quadShader_;
 
+        std::unique_ptr<WindowManager> window_manager_;
+
     private:
         std::string title_;
-
-        GLFWwindow* window_;
 
         static ViewerDetail* detail_;
 
