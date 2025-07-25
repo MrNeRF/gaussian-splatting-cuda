@@ -152,9 +152,12 @@ namespace gs {
         background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
         background_ = background_.to(torch::kCUDA);
 
-        progress_ = std::make_unique<TrainingProgress>(
-            params.optimization.iterations,
-            /*bar_width=*/100);
+        // Only create progress bar if no viewer
+        if (!viewer_) {
+            progress_ = std::make_unique<TrainingProgress>(
+                params.optimization.iterations,
+                /*bar_width=*/100);
+        }
 
         // Initialize the evaluator - it handles all metrics internally
         evaluator_ = std::make_unique<metrics::MetricsEvaluator>(params);
@@ -169,22 +172,6 @@ namespace gs {
         stop_requested_ = true;
     }
 
-    std::expected<GSViewer*, std::string> Trainer::create_and_get_viewer() {
-        if (params_.optimization.headless) {
-            return std::unexpected("Visualization is disabled in parameters");
-        }
-
-        try {
-            if (!viewer_) {
-                viewer_ = std::make_unique<GSViewer>("GS-CUDA", 1280, 720);
-                viewer_->setTrainer(this);
-            }
-            return viewer_.get();
-        } catch (const std::exception& e) {
-            return std::unexpected(std::format("Failed to create viewer: {}", e.what()));
-        }
-    }
-
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
         // Check stop token first
         if (stop_token.stop_requested()) {
@@ -195,12 +182,16 @@ namespace gs {
         // Handle pause/resume
         if (pause_requested_.load() && !is_paused_.load()) {
             is_paused_ = true;
-            progress_->pause();
+            if (!viewer_ && progress_) {
+                progress_->pause();
+            }
             std::println("\nTraining paused at iteration {}", iter);
             std::println("Click 'Resume Training' to continue.");
         } else if (!pause_requested_.load() && is_paused_.load()) {
             is_paused_ = false;
-            progress_->resume(iter, current_loss_, static_cast<int>(strategy_->get_model().size()));
+            if (!viewer_ && progress_) {
+                progress_->resume(iter, current_loss_, static_cast<int>(strategy_->get_model().size()));
+            }
             std::println("\nTraining resumed at iteration {}", iter);
         }
 
@@ -367,9 +358,11 @@ namespace gs {
                 }
             }
 
-            progress_->update(iter, current_loss_,
-                              static_cast<int>(strategy_->get_model().size()),
-                              strategy_->is_refining(iter));
+            if (!viewer_ && progress_) {
+                progress_->update(iter, current_loss_,
+                                  static_cast<int>(strategy_->get_model().size()),
+                                  strategy_->is_refining(iter));
+            }
 
             if (viewer_) {
                 if (viewer_->info_) {
@@ -418,6 +411,11 @@ namespace gs {
             const int num_workers = 4;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
+            if (!viewer_ && progress_) {
+                progress_->update(iter, current_loss_,
+                                  static_cast<int>(strategy_->get_model().size()),
+                                  strategy_->is_refining(iter));
+            }
             for (int epoch = 0; epoch < epochs_needed; ++epoch) {
                 if (stop_token.stop_requested() || stop_requested_) {
                     break;
@@ -453,9 +451,13 @@ training_complete:
                 strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
             }
 
-            progress_->complete();
+            if (!viewer_ && progress_) {
+                progress_->complete();
+            }
             evaluator_->save_report();
-            progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
+            if (!viewer_ && progress_) {
+                progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
+            }
 
             is_running_ = false;
             training_complete_ = true;
