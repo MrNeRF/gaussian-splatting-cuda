@@ -16,14 +16,10 @@
 
 namespace gs {
 
-    ViewerDetail* ViewerDetail::detail_ = nullptr;
-
     ViewerDetail::ViewerDetail(std::string title, int width, int height)
         : title_(title),
           viewport_(width, height),
           window_manager_(std::make_unique<WindowManager>(title, width, height)) {
-        detail_ = this;
-        camera_controller_ = std::make_unique<CameraController>(viewport_);
     }
 
     ViewerDetail::~ViewerDetail() {
@@ -35,8 +31,12 @@ namespace gs {
             return false;
         }
 
-        // Set this viewer as the callback handler
-        window_manager_->setCallbackHandler(this);
+        // Create input handler
+        input_handler_ = std::make_unique<InputHandler>(window_manager_->getWindow());
+
+        // Create camera controller
+        camera_controller_ = std::make_unique<CameraController>(viewport_);
+        camera_controller_->connectToInputHandler(*input_handler_);
 
         return true;
     }
@@ -69,115 +69,6 @@ namespace gs {
             std::this_thread::sleep_for(std::chrono::milliseconds(frameTime - duration));
         }
         lastTime = std::chrono::high_resolution_clock::now();
-    }
-
-    void ViewerDetail::dropCallback(GLFWwindow* window, int count, const char** paths) {
-        // Only handle if GSViewer is available
-        GSViewer* viewer = dynamic_cast<GSViewer*>(detail_);
-        if (!viewer) {
-            return;
-        }
-
-        // Process each dropped file
-        for (int i = 0; i < count; i++) {
-            std::filesystem::path filepath(paths[i]);
-
-            // Check if it's a PLY file
-            if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
-                std::println("Dropped PLY file: {}", filepath.string());
-
-                // Load the PLY file
-                viewer->loadPLYFile(filepath);
-
-                // Log the action
-                if (viewer->gui_manager_) {
-                    viewer->gui_manager_->showScriptingConsole(true);
-                    viewer->gui_manager_->addConsoleLog("Info: Loaded PLY file via drag-and-drop: %s",
-                                                        filepath.filename().string().c_str());
-                }
-
-                // Only process the first PLY file if multiple files were dropped
-                break;
-            }
-            if (std::filesystem::is_directory(filepath)) {
-                // Check if it's a dataset directory
-                bool is_colmap_dataset = false;
-                bool is_transforms_dataset = false;
-
-                // Check for COLMAP dataset structure
-                if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
-                    std::filesystem::exists(filepath / "sparse" / "cameras.bin")) {
-                    is_colmap_dataset = true;
-                }
-
-                // Check for transforms dataset
-                if (std::filesystem::exists(filepath / "transforms.json") ||
-                    std::filesystem::exists(filepath / "transforms_train.json")) {
-                    is_transforms_dataset = true;
-                }
-
-                if (is_colmap_dataset || is_transforms_dataset) {
-                    std::println("Dropped dataset directory: {}", filepath.string());
-
-                    // Load the dataset
-                    viewer->loadDataset(filepath);
-
-                    // Log the action
-                    if (viewer->gui_manager_) {
-                        viewer->gui_manager_->showScriptingConsole(true);
-                        viewer->gui_manager_->addConsoleLog("Info: Loaded %s dataset via drag-and-drop: %s",
-                                                            is_colmap_dataset ? "COLMAP" : "Transforms",
-                                                            filepath.filename().string().c_str());
-                    }
-
-                    // Only process the first valid dataset if multiple were dropped
-                    break;
-                }
-            }
-        }
-    }
-
-    void ViewerDetail::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-        // Check if GUI is handling input
-        GSViewer* viewer = dynamic_cast<GSViewer*>(detail_);
-        if (viewer && viewer->isGuiActive())
-            return;
-
-        double xpos, ypos;
-        glfwGetCursorPos(window, &xpos, &ypos);
-        detail_->camera_controller_->handleMouseButton(button, action, xpos, ypos);
-    }
-
-    void ViewerDetail::cursorPosCallback(GLFWwindow* window, double x, double y) {
-        // Check if GUI is handling input
-        GSViewer* viewer = dynamic_cast<GSViewer*>(detail_);
-        if (viewer && viewer->isGuiActive())
-            return;
-
-        detail_->camera_controller_->handleMouseMove(x, y);
-    }
-
-    void ViewerDetail::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-        // Check if GUI is handling input
-        GSViewer* viewer = dynamic_cast<GSViewer*>(detail_);
-        if (viewer && viewer->isGuiActive())
-            return;
-
-        bool roll_modifier = (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS);
-        detail_->camera_controller_->handleScroll(yoffset, roll_modifier);
-    }
-
-    void ViewerDetail::wsad_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-        const float ADVANCE_RATE = 1.0f;
-        const float ADVANCE_RATE_FINE_TUNE = 0.3f;
-
-        float advance_rate = (action == GLFW_PRESS) ? ADVANCE_RATE_FINE_TUNE : (action == GLFW_REPEAT) ? ADVANCE_RATE
-                                                                                                       : 0.0f;
-        if (advance_rate == 0) {
-            return;
-        }
-
-        detail_->camera_controller_->handleKeyboard(key, advance_rate);
     }
 
     void ViewerDetail::run() {
@@ -217,6 +108,67 @@ namespace gs {
             window_manager_->swapBuffers();
             window_manager_->pollEvents();
         }
+    }
+
+    bool GSViewer::handleFileDrop(const InputHandler::FileDropEvent& event) {
+        // Process each dropped file
+        for (const auto& path_str : event.paths) {
+            std::filesystem::path filepath(path_str);
+
+            // Check if it's a PLY file
+            if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
+                std::println("Dropped PLY file: {}", filepath.string());
+
+                // Load the PLY file
+                loadPLYFile(filepath);
+
+                // Log the action
+                if (gui_manager_) {
+                    gui_manager_->showScriptingConsole(true);
+                    gui_manager_->addConsoleLog("Info: Loaded PLY file via drag-and-drop: %s",
+                                                filepath.filename().string().c_str());
+                }
+
+                // Only process the first PLY file if multiple files were dropped
+                return true;
+            }
+            if (std::filesystem::is_directory(filepath)) {
+                // Check if it's a dataset directory
+                bool is_colmap_dataset = false;
+                bool is_transforms_dataset = false;
+
+                // Check for COLMAP dataset structure
+                if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
+                    std::filesystem::exists(filepath / "sparse" / "cameras.bin")) {
+                    is_colmap_dataset = true;
+                }
+
+                // Check for transforms dataset
+                if (std::filesystem::exists(filepath / "transforms.json") ||
+                    std::filesystem::exists(filepath / "transforms_train.json")) {
+                    is_transforms_dataset = true;
+                }
+
+                if (is_colmap_dataset || is_transforms_dataset) {
+                    std::println("Dropped dataset directory: {}", filepath.string());
+
+                    // Load the dataset
+                    loadDataset(filepath);
+
+                    // Log the action
+                    if (gui_manager_) {
+                        gui_manager_->showScriptingConsole(true);
+                        gui_manager_->addConsoleLog("Info: Loaded %s dataset via drag-and-drop: %s",
+                                                    is_colmap_dataset ? "COLMAP" : "Transforms",
+                                                    filepath.filename().string().c_str());
+                    }
+
+                    // Only process the first valid dataset if multiple were dropped
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     GSViewer::GSViewer(std::string title, int width, int height)
@@ -692,6 +644,30 @@ namespace gs {
         if (!gui_initialized) {
             gui_manager_->init();
             gui_initialized = true;
+
+            // Set up input handlers after GUI is initialized
+
+            // GUI gets first priority
+            input_handler_->addMouseButtonHandler(
+                [this](const InputHandler::MouseButtonEvent& event) {
+                    return isGuiActive(); // Consume if GUI is active
+                });
+
+            input_handler_->addMouseMoveHandler(
+                [this](const InputHandler::MouseMoveEvent& event) {
+                    return isGuiActive(); // Consume if GUI is active
+                });
+
+            input_handler_->addMouseScrollHandler(
+                [this](const InputHandler::MouseScrollEvent& event) {
+                    return isGuiActive(); // Consume if GUI is active
+                });
+
+            // File drop handler
+            input_handler_->addFileDropHandler(
+                [this](const InputHandler::FileDropEvent& event) {
+                    return handleFileDrop(event);
+                });
         }
 
         // Draw the 3D frame first

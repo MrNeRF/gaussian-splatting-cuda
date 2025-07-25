@@ -10,9 +10,6 @@
 
 namespace gs {
 
-    // Initialize static member
-    void* WindowManager::callback_handler_ = nullptr;
-
     WindowManager::WindowManager(const std::string& title, int width, int height)
         : title_(title),
           window_size_(width, height),
@@ -60,13 +57,6 @@ namespace gs {
             return false;
         }
 
-        // Set up callbacks
-        glfwSetMouseButtonCallback(window_, mouseButtonCallback);
-        glfwSetCursorPosCallback(window_, cursorPosCallback);
-        glfwSetScrollCallback(window_, scrollCallback);
-        glfwSetKeyCallback(window_, keyCallback);
-        glfwSetDropCallback(window_, dropCallback);
-
         // Enable vsync by default
         glfwSwapInterval(1);
 
@@ -104,37 +94,6 @@ namespace gs {
 
     void WindowManager::setVSync(bool enabled) {
         glfwSwapInterval(enabled ? 1 : 0);
-    }
-
-    // Static callback implementations
-    void WindowManager::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-        if (callback_handler_) {
-            ViewerDetail::mouseButtonCallback(window, button, action, mods);
-        }
-    }
-
-    void WindowManager::cursorPosCallback(GLFWwindow* window, double x, double y) {
-        if (callback_handler_) {
-            ViewerDetail::cursorPosCallback(window, x, y);
-        }
-    }
-
-    void WindowManager::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-        if (callback_handler_) {
-            ViewerDetail::scrollCallback(window, xoffset, yoffset);
-        }
-    }
-
-    void WindowManager::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-        if (callback_handler_) {
-            ViewerDetail::wsad_callback(window, key, scancode, action, mods);
-        }
-    }
-
-    void WindowManager::dropCallback(GLFWwindow* window, int count, const char** paths) {
-        if (callback_handler_) {
-            ViewerDetail::dropCallback(window, count, paths);
-        }
     }
 
 } // namespace gs

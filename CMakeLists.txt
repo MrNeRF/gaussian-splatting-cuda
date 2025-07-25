@@ -136,8 +136,10 @@ set(HOST_SOURCES
         src/rasterizer.cpp
         src/metrics.cpp
         src/rasterizer_autograd.cpp
-        src/visualizer/viewer.cpp
+        src/visualizer/camera_controller.cpp
         src/visualizer/gui_manager.cpp
+        src/visualizer/input_handler.cpp
+        src/visualizer/viewer.cpp
         src/visualizer/window_manager.cpp
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
