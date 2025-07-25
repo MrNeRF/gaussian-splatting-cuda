@@ -63,7 +63,6 @@ namespace gs {
             OptimizationParameters optimization;
 
             // Viewer mode specific
-            bool viewer_mode = false;
             std::filesystem::path ply_path = "";
         };
 

@@ -36,9 +36,6 @@ namespace gs {
         // Main training method with stop token support
         std::expected<void, std::string> train(std::stop_token stop_token = {});
 
-        // Create viewer and return it for main thread execution
-        std::expected<GSViewer*, std::string> create_and_get_viewer();
-
         // Control methods for GUI interaction
         void request_pause() { pause_requested_ = true; }
         void request_resume() { pause_requested_ = false; }
@@ -56,6 +53,8 @@ namespace gs {
 
         // just for viewer to get model
         const IStrategy& get_strategy() const { return *strategy_; }
+
+        void setViewer(GSViewer* viewer) { viewer_ = viewer; }
 
     private:
         // Training step result
@@ -104,7 +103,7 @@ namespace gs {
         std::unique_ptr<IStrategy> strategy_;
         param::TrainingParameters params_;
 
-        std::unique_ptr<GSViewer> viewer_;
+        GSViewer* viewer_ = nullptr;
 
         torch::Tensor background_{};
         std::unique_ptr<TrainingProgress> progress_;
