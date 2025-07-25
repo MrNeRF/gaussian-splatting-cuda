@@ -165,6 +165,7 @@ namespace gs {
         // Print render mode configuration
         std::println("Render mode: {}", params.optimization.render_mode);
         std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
+        std::println("Strategy: {}", params.optimization.strategy);
     }
 
     Trainer::~Trainer() {

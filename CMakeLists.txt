@@ -127,6 +127,7 @@ set(HOST_SOURCES
         src/argument_parser.cpp
         src/scheduler.cpp
         src/strategy.cpp
+        src/default_strategy.cpp
         src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp

@@ -1,5 +1,6 @@
 #include "core/training_setup.hpp"
 #include "core/dataset_reader.hpp"
+#include "core/default_strategy.hpp"
 #include "core/mcmc.hpp"
 #include <format>
 
@@ -23,7 +24,12 @@ namespace gs {
         }
 
         // 4. Create strategy
-        auto strategy = std::make_unique<MCMC>(std::move(*splat_result));
+        std::unique_ptr<IStrategy> strategy;
+        if (params.optimization.strategy == "mcmc") {
+            strategy = std::make_unique<MCMC>(std::move(splat_data));
+        } else {
+            strategy = std::make_unique<DefaultStrategy>(std::move(splat_data));
+        }
 
         // 5. Create trainer
         auto trainer = std::make_unique<Trainer>(

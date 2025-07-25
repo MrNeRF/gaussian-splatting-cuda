@@ -216,6 +216,11 @@ std::tuple<at::Tensor, at::Tensor> quat_scale_to_covar_preci_bwd(
     const at::optional<at::Tensor> v_precis  // [N, 3, 3] or [N, 6]
 );
 
+// Compute Rotation Matrix from Quaternion
+at::Tensor quats_to_rotmats(
+    const at::Tensor quats // [N, 4]
+);
+
 // Rasterize 3D Gaussian to pixels
 std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
     // Gaussian parameters
