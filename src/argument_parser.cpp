@@ -13,8 +13,7 @@ namespace {
 
     enum class ParseResult {
         Success,
-        Help,
-        ViewerMode
+        Help
     };
 
     const std::set<std::string> VALID_RENDER_MODES = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
@@ -93,15 +92,13 @@ namespace {
                 return std::make_tuple(ParseResult::Help, std::function<void()>{});
             }
 
-            // NO ARGUMENTS = INTERACTIVE VIEWER MODE
+            // NO ARGUMENTS = VIEWER MODE (empty)
             if (args.size() == 1) {
-                params.viewer_mode = true;
-                return std::make_tuple(ParseResult::ViewerMode, std::function<void()>{});
+                return std::make_tuple(ParseResult::Success, std::function<void()>{});
             }
 
             // Check for viewer mode with PLY
             if (view_ply) {
-                params.viewer_mode = true;
                 const auto ply_path = ::args::get(view_ply);
                 if (!ply_path.empty()) {
                     params.ply_path = ply_path;
@@ -112,7 +109,7 @@ namespace {
                     }
                 }
 
-                return std::make_tuple(ParseResult::ViewerMode, std::function<void()>{});
+                return std::make_tuple(ParseResult::Success, std::function<void()>{});
             }
 
             // Training mode
@@ -259,14 +256,6 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
     // Handle help case
     if (result == ParseResult::Help) {
         std::exit(0);
-    }
-
-    // Handle viewer mode
-    if (result == ParseResult::ViewerMode) {
-        if (apply_overrides) {
-            apply_overrides();
-        }
-        return params;
     }
 
     // Training mode - load JSON first

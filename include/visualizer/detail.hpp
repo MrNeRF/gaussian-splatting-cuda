@@ -252,6 +252,21 @@ namespace gs {
         void renderScriptingConsole();
         void setScriptExecutor(std::function<std::string(const std::string&)> executor);
 
+        // Add new file browser related methods
+        void renderFileBrowser();
+        void loadPLYFile(const std::filesystem::path& path);
+        void loadDataset(const std::filesystem::path& path);
+        void clearCurrentData();
+
+        // Add mode enum
+        enum class ViewerMode {
+            Empty,     // No data loaded
+            PLYViewer, // Viewing a PLY file
+            Training   // Ready to train or training
+        };
+
+        ViewerMode getCurrentMode() const { return current_mode_; }
+
     public:
         std::shared_ptr<TrainingInfo> info_;
 
@@ -280,6 +295,18 @@ namespace gs {
         // Scripting console
         std::unique_ptr<ScriptingConsole> scripting_console_;
         bool show_scripting_console_ = false;
+
+        // File browser state
+        bool show_file_browser_ = false;
+        std::string file_browser_current_path_;
+        std::string file_browser_selected_file_;
+
+        // Current mode
+        ViewerMode current_mode_ = ViewerMode::Empty;
+
+        // Store paths for current data
+        std::filesystem::path current_ply_path_;
+        std::filesystem::path current_dataset_path_;
     };
 
 } // namespace gs

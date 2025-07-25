@@ -17,34 +17,6 @@ namespace gs {
         }
         auto params = std::move(*params_result);
 
-        if (params.viewer_mode) {
-            // PLY Viewer Mode
-            std::println("Loading PLY file: {}", params.ply_path.string());
-
-            auto splat_result = load_ply(params.ply_path);
-            if (!splat_result) {
-                std::println(stderr, "Error loading PLY: {}", splat_result.error());
-                return -1;
-            }
-
-            auto splat_data = std::make_unique<SplatData>(std::move(*splat_result));
-            std::println("Loaded {} Gaussians", splat_data->size());
-
-            // Create viewer without trainer
-            std::string title = "3DGS Viewer - " + params.ply_path.filename().string();
-            auto viewer = std::make_unique<GSViewer>(title, 1280, 720);
-            viewer->setTrainer(nullptr); // No trainer in viewer mode
-            viewer->setStandaloneModel(std::move(splat_data));
-            viewer->setAntiAliasing(params.optimization.antialiasing);
-
-            std::println("Starting viewer...");
-            std::println("Anti-aliasing: {}", params.optimization.antialiasing ? "enabled" : "disabled");
-
-            viewer->run();
-
-            std::println("Viewer closed.");
-            return 0;
-        }
         // Headless mode - requires data path
         if (params.optimization.headless) {
             if (params.dataset.data_path.empty()) {
@@ -76,37 +48,27 @@ namespace gs {
             return 0;
         }
 
-        auto setup_result = setupTraining(params);
+        // Viewer mode - create empty viewer
         std::println("Starting viewer mode...");
-        auto viewer_result = setup_result->trainer->create_and_get_viewer();
-        if (!viewer_result) {
-            std::println(stderr, "Error creating viewer: {}", viewer_result.error());
-            return -1;
+
+        auto viewer = std::make_unique<GSViewer>("3DGS Viewer", 1280, 720);
+        viewer->setAntiAliasing(params.optimization.antialiasing);
+
+        // If a PLY was specified via command line, load it
+        if (!params.ply_path.empty()) {
+            viewer->loadPLYFile(params.ply_path);
         }
-        auto viewer = *viewer_result;
+        // If a dataset was specified via command line, load it
+        else if (!params.dataset.data_path.empty()) {
+            viewer->loadDataset(params.dataset.data_path);
+        }
+        // Otherwise start with empty viewer
 
-        // Start training in a separate jthread with stop token support
-        std::jthread training_thread([trainer_ptr = setup_result->trainer.get()](std::stop_token stop_token) {
-            auto train_result = trainer_ptr->train(stop_token);
-            if (!train_result) {
-                std::println(stderr, "Training error: {}", train_result.error());
-            }
-        });
+        std::println("Anti-aliasing: {}", params.optimization.antialiasing ? "enabled" : "disabled");
 
-        // Run GUI in main thread (blocking)
         viewer->run();
 
-        // Request cancellation when GUI closes
-        if (setup_result->trainer->is_running()) {
-            std::println("Main: Requesting training stop...");
-            training_thread.request_stop();
-        }
-
-        // jthread automatically joins when destroyed
-        std::println("Main: Waiting for training thread to finish...");
-        // training_thread destructor will join automatically
-        std::println("Main: Training thread finished.");
-
+        std::println("Viewer closed.");
         return 0;
     }
 
