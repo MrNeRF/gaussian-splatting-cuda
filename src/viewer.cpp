@@ -66,6 +66,7 @@ namespace gs {
         glfwSetCursorPosCallback(window_, cursorPosCallback);
         glfwSetScrollCallback(window_, scrollCallback);
         glfwSetKeyCallback(window_, wsad_callback);
+        glfwSetDropCallback(window_, dropCallback); // Add drag-and-drop callback
 
         glEnable(GL_LINE_SMOOTH);
         glDepthFunc(GL_LEQUAL);
@@ -139,6 +140,78 @@ namespace gs {
             std::this_thread::sleep_for(std::chrono::milliseconds(frameTime - duration));
         }
         lastTime = std::chrono::high_resolution_clock::now();
+    }
+
+    void ViewerDetail::dropCallback(GLFWwindow* window, int count, const char** paths) {
+        // Only handle if GSViewer is available
+        GSViewer* viewer = dynamic_cast<GSViewer*>(detail_);
+        if (!viewer) {
+            return;
+        }
+
+        // Process each dropped file
+        for (int i = 0; i < count; i++) {
+            std::filesystem::path filepath(paths[i]);
+
+            // Check if it's a PLY file
+            if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
+                std::println("Dropped PLY file: {}", filepath.string());
+
+                // Load the PLY file
+                viewer->loadPLYFile(filepath);
+
+                // Close file browser if it's open
+                viewer->show_file_browser_ = false;
+
+                // Show console and log the action
+                if (viewer->scripting_console_) {
+                    viewer->show_scripting_console_ = true;
+                    viewer->scripting_console_->addLog("Info: Loaded PLY file via drag-and-drop: %s",
+                                                       filepath.filename().string().c_str());
+                }
+
+                // Only process the first PLY file if multiple files were dropped
+                break;
+            }
+            if (std::filesystem::is_directory(filepath)) {
+                // Check if it's a dataset directory
+                bool is_colmap_dataset = false;
+                bool is_transforms_dataset = false;
+
+                // Check for COLMAP dataset structure
+                if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
+                    std::filesystem::exists(filepath / "sparse" / "cameras.bin")) {
+                    is_colmap_dataset = true;
+                }
+
+                // Check for transforms dataset
+                if (std::filesystem::exists(filepath / "transforms.json") ||
+                    std::filesystem::exists(filepath / "transforms_train.json")) {
+                    is_transforms_dataset = true;
+                }
+
+                if (is_colmap_dataset || is_transforms_dataset) {
+                    std::println("Dropped dataset directory: {}", filepath.string());
+
+                    // Load the dataset
+                    viewer->loadDataset(filepath);
+
+                    // Close file browser if it's open
+                    viewer->show_file_browser_ = false;
+
+                    // Show console and log the action
+                    if (viewer->scripting_console_) {
+                        viewer->show_scripting_console_ = true;
+                        viewer->scripting_console_->addLog("Info: Loaded %s dataset via drag-and-drop: %s",
+                                                           is_colmap_dataset ? "COLMAP" : "Transforms",
+                                                           filepath.filename().string().c_str());
+                    }
+
+                    // Only process the first valid dataset if multiple were dropped
+                    break;
+                }
+            }
+        }
     }
 
     void ViewerDetail::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
