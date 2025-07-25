@@ -32,9 +32,6 @@ namespace gs {
         constexpr const char* POS_X = "x";
         constexpr const char* POS_Y = "y";
         constexpr const char* POS_Z = "z";
-        constexpr const char* NORMAL_X = "nx";
-        constexpr const char* NORMAL_Y = "ny";
-        constexpr const char* NORMAL_Z = "nz";
         constexpr const char* OPACITY = "opacity";
         constexpr const char* DC_PREFIX = "f_dc_";
         constexpr const char* REST_PREFIX = "f_rest_";
@@ -68,7 +65,7 @@ namespace gs {
             std::println("PLY contains {} vertices", vertex_count);
 
             // Request vertex properties
-            std::shared_ptr<tinyply::PlyData> positions, normals;
+            std::shared_ptr<tinyply::PlyData> positions;
             std::vector<std::shared_ptr<tinyply::PlyData>> f_dc_components;
             std::vector<std::shared_ptr<tinyply::PlyData>> f_rest_components;
             std::shared_ptr<tinyply::PlyData> opacity;
@@ -80,10 +77,6 @@ namespace gs {
                 positions = ply_file.request_properties_from_element(
                     ply_constants::VERTEX_ELEMENT,
                     {ply_constants::POS_X, ply_constants::POS_Y, ply_constants::POS_Z});
-
-                normals = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT,
-                    {ply_constants::NORMAL_X, ply_constants::NORMAL_Y, ply_constants::NORMAL_Z});
 
                 // SH coefficients - DC terms
                 for (int i = 0; i < ply_constants::MAX_DC_COMPONENTS; ++i) {
