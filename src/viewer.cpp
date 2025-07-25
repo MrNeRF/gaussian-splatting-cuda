@@ -547,9 +547,36 @@ namespace gs {
             // Display directories
             for (const auto& dir : dirs) {
                 std::string dirname = "[DIR] " + dir.path().filename().string();
-                if (ImGui::Selectable(dirname.c_str(), false, ImGuiSelectableFlags_DontClosePopups)) {
-                    file_browser_current_path_ = dir.path().string();
-                    file_browser_selected_file_.clear();
+                bool is_selected = (file_browser_selected_file_ == dir.path().string());
+
+                // Check if this is a dataset directory
+                bool is_dataset = false;
+                if (std::filesystem::exists(dir.path() / "sparse" / "0" / "cameras.bin") ||
+                    std::filesystem::exists(dir.path() / "sparse" / "cameras.bin") ||
+                    std::filesystem::exists(dir.path() / "transforms.json") ||
+                    std::filesystem::exists(dir.path() / "transforms_train.json")) {
+                    is_dataset = true;
+                }
+
+                // Color code dataset directories
+                if (is_dataset) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
+                    dirname += " [Dataset]";
+                }
+
+                if (ImGui::Selectable(dirname.c_str(), is_selected, ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_DontClosePopups)) {
+                    if (ImGui::IsMouseDoubleClicked(0)) {
+                        // Double-click enters the directory
+                        file_browser_current_path_ = dir.path().string();
+                        file_browser_selected_file_.clear();
+                    } else {
+                        // Single click selects the directory
+                        file_browser_selected_file_ = dir.path().string();
+                    }
+                }
+
+                if (is_dataset) {
+                    ImGui::PopStyleColor();
                 }
             }
 
@@ -595,39 +622,86 @@ namespace gs {
         // Detect file type and show appropriate button
         if (can_load) {
             std::filesystem::path selected_path(file_browser_selected_file_);
-            auto ext = selected_path.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-            if (ext == ".ply") {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
-                if (ImGui::Button("Load PLY", ImVec2(120, 0))) {
-                    loadPLYFile(selected_path);
-                    show_file_browser_ = false;
-                }
-                ImGui::PopStyleColor();
-            } else {
-                // Check if this might be a dataset directory
-                auto parent = selected_path.parent_path();
-                bool is_dataset = false;
+            // Check if it's a directory
+            if (std::filesystem::is_directory(selected_path)) {
+                // This is a directory - check if it's a dataset
+                bool is_colmap_dataset = false;
+                bool is_transforms_dataset = false;
 
-                // Check for COLMAP dataset
-                if (std::filesystem::exists(parent / "sparse" / "0" / "cameras.bin") ||
-                    std::filesystem::exists(parent / "sparse" / "cameras.bin")) {
-                    is_dataset = true;
+                // Check for COLMAP dataset structure
+                if (std::filesystem::exists(selected_path / "sparse" / "0" / "cameras.bin") ||
+                    std::filesystem::exists(selected_path / "sparse" / "cameras.bin")) {
+                    is_colmap_dataset = true;
                 }
+
                 // Check for transforms dataset
-                else if (std::filesystem::exists(parent / "transforms.json") ||
-                         std::filesystem::exists(parent / "transforms_train.json")) {
-                    is_dataset = true;
+                if (std::filesystem::exists(selected_path / "transforms.json") ||
+                    std::filesystem::exists(selected_path / "transforms_train.json")) {
+                    is_transforms_dataset = true;
                 }
 
-                if (is_dataset) {
+                if (is_colmap_dataset || is_transforms_dataset) {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
                     if (ImGui::Button("Load Dataset", ImVec2(120, 0))) {
-                        loadDataset(parent);
+                        loadDataset(selected_path);
                         show_file_browser_ = false;
                     }
                     ImGui::PopStyleColor();
+
+                    ImGui::SameLine();
+                    ImGui::TextDisabled(is_colmap_dataset ? "(COLMAP)" : "(Transforms)");
+                } else {
+                    // Unknown directory type - but still allow entering it
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+                    if (ImGui::Button("Enter Directory", ImVec2(120, 0))) {
+                        file_browser_current_path_ = selected_path.string();
+                        file_browser_selected_file_.clear();
+                    }
+                    ImGui::PopStyleColor();
+
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(Not a dataset)");
+                }
+            } else {
+                // It's a file
+                auto ext = selected_path.extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+                if (ext == ".ply") {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+                    if (ImGui::Button("Load PLY", ImVec2(120, 0))) {
+                        loadPLYFile(selected_path);
+                        show_file_browser_ = false;
+                    }
+                    ImGui::PopStyleColor();
+                } else {
+                    // Check if this file indicates a dataset in parent directory
+                    auto parent = selected_path.parent_path();
+                    bool is_dataset = false;
+
+                    // Check for COLMAP dataset
+                    if (std::filesystem::exists(parent / "sparse" / "0" / "cameras.bin") ||
+                        std::filesystem::exists(parent / "sparse" / "cameras.bin")) {
+                        is_dataset = true;
+                    }
+                    // Check for transforms dataset
+                    else if (std::filesystem::exists(parent / "transforms.json") ||
+                             std::filesystem::exists(parent / "transforms_train.json")) {
+                        is_dataset = true;
+                    }
+
+                    if (is_dataset) {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
+                        if (ImGui::Button("Load Dataset", ImVec2(120, 0))) {
+                            loadDataset(parent);
+                            show_file_browser_ = false;
+                        }
+                        ImGui::PopStyleColor();
+
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(from parent directory)");
+                    }
                 }
             }
         }
