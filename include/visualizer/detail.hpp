@@ -5,7 +5,7 @@
 #include "visualizer/camera_controller.hpp"
 #include "visualizer/input_handler.hpp"
 #include "visualizer/renderer.hpp"
-#include "visualizer/rendering_pipeline.hpp"
+#include "visualizer/scene.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
 #include <chrono>
@@ -143,9 +143,9 @@ namespace gs {
         void clearCurrentData();
 
         // Getters for GUI
-        ViewerMode getCurrentMode() const { return current_mode_; }
-        Trainer* getTrainer() const { return trainer_; }
-        SplatData* getStandaloneModel() const { return standalone_model_.get(); }
+        ViewerMode getCurrentMode() const;
+        Trainer* getTrainer() const { return scene_->getTrainer(); }
+        SplatData* getStandaloneModel() const { return scene_->getStandaloneModel(); }
         std::shared_ptr<TrainingInfo> getTrainingInfo() const { return info_; }
         std::shared_ptr<RenderingConfig> getRenderingConfig() const { return config_; }
         std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }
@@ -167,13 +167,10 @@ namespace gs {
 
         std::shared_ptr<ViewerNotifier> notifier_;
 
-        std::mutex splat_mtx_;
-
-        std::unique_ptr<RenderingPipeline> rendering_pipeline_;
+        std::unique_ptr<Scene> scene_;
         std::shared_ptr<RenderingConfig> config_;
 
         Trainer* trainer_;
-        std::unique_ptr<SplatData> standalone_model_;
 
         bool anti_aliasing_ = false;
 

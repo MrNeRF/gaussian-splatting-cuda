@@ -179,7 +179,7 @@ namespace gs {
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<ViewerNotifier>();
 
-        rendering_pipeline_ = std::make_unique<RenderingPipeline>();
+        scene_ = std::make_unique<Scene>();
 
         setFrameRate(30);
 
@@ -226,31 +226,27 @@ namespace gs {
             }
 
             if (command == "model_info") {
-                if (!trainer_ && !standalone_model_) {
+                if (!scene_->hasModel()) {
                     return "No model available";
                 }
 
                 result << "Model Information:\n";
 
-                if (trainer_) {
-                    std::lock_guard<std::mutex> lock(splat_mtx_);
-                    auto& model = trainer_->get_strategy().get_model();
-                    result << "  Number of Gaussians: " << model.size() << "\n";
-                    result << "  Positions shape: [" << model.get_means().size(0) << ", " << model.get_means().size(1) << "]\n";
-                    result << "  Device: " << model.get_means().device() << "\n";
-                    result << "  Dtype: " << model.get_means().dtype() << "\n";
-                    result << "  Active SH degree: " << model.get_active_sh_degree() << "\n";
-                    result << "  Scene scale: " << model.get_scene_scale();
-                } else if (standalone_model_) {
-                    std::lock_guard<std::mutex> lock(splat_mtx_);
-                    result << "  Number of Gaussians: " << standalone_model_->size() << "\n";
-                    result << "  Positions shape: [" << standalone_model_->get_means().size(0) << ", " << standalone_model_->get_means().size(1) << "]\n";
-                    result << "  Device: " << standalone_model_->get_means().device() << "\n";
-                    result << "  Dtype: " << standalone_model_->get_means().dtype() << "\n";
-                    result << "  Active SH degree: " << standalone_model_->get_active_sh_degree() << "\n";
-                    result << "  Scene scale: " << standalone_model_->get_scene_scale();
-                    result << "\n  Mode: Viewer (no training)";
-                }
+                scene_->withModel([&](const SplatData* model) {
+                    if (model) {
+                        result << "  Number of Gaussians: " << model->size() << "\n";
+                        result << "  Positions shape: [" << model->get_means().size(0) << ", " << model->get_means().size(1) << "]\n";
+                        result << "  Device: " << model->get_means().device() << "\n";
+                        result << "  Dtype: " << model->get_means().dtype() << "\n";
+                        result << "  Active SH degree: " << model->get_active_sh_degree() << "\n";
+                        result << "  Scene scale: " << model->get_scene_scale();
+
+                        if (scene_->getMode() == Scene::Mode::Viewing) {
+                            result << "\n  Mode: Viewer (no training)";
+                        }
+                    }
+                    return 0;
+                });
 
                 return result.str();
             }
@@ -274,7 +270,7 @@ namespace gs {
 
             // Handle tensor_info command
             if (command.substr(0, 11) == "tensor_info") {
-                if (!trainer_ && !standalone_model_) {
+                if (!scene_->hasModel()) {
                     return "No model available";
                 }
 
@@ -287,62 +283,61 @@ namespace gs {
                     return "Usage: tensor_info <tensor_name>\nAvailable: means, scaling, rotation, shs, opacity";
                 }
 
-                std::lock_guard<std::mutex> lock(splat_mtx_);
-
-                // Get model reference
-                SplatData* model = nullptr;
-                if (trainer_) {
-                    model = const_cast<SplatData*>(&trainer_->get_strategy().get_model());
-                } else if (standalone_model_) {
-                    model = standalone_model_.get();
-                }
-
-                if (!model) {
-                    return "Model not available";
-                }
-
-                torch::Tensor tensor;
-                if (tensor_name == "means" || tensor_name == "positions") {
-                    tensor = model->get_means();
-                } else if (tensor_name == "scales" || tensor_name == "scaling") {
-                    tensor = model->get_scaling();
-                } else if (tensor_name == "rotations" || tensor_name == "rotation" || tensor_name == "quats") {
-                    tensor = model->get_rotation();
-                } else if (tensor_name == "features" || tensor_name == "colors" || tensor_name == "shs") {
-                    tensor = model->get_shs();
-                } else if (tensor_name == "opacities" || tensor_name == "opacity") {
-                    tensor = model->get_opacity();
-                } else {
-                    return "Unknown tensor: " + tensor_name + "\nAvailable: means, scaling, rotation, shs, opacity";
-                }
-
-                result << "Tensor '" << tensor_name << "' info:\n";
-                result << "  Shape: [";
-                for (int i = 0; i < tensor.dim(); i++) {
-                    if (i > 0)
-                        result << ", ";
-                    result << tensor.size(i);
-                }
-                result << "]\n";
-                result << "  Device: " << tensor.device() << "\n";
-                result << "  Dtype: " << tensor.dtype() << "\n";
-                result << "  Requires grad: " << (tensor.requires_grad() ? "Yes" : "No") << "\n";
-
-                // Show some statistics if tensor is on CPU or we can move it
-                try {
-                    auto cpu_tensor = tensor.cpu();
-                    auto flat = cpu_tensor.flatten();
-                    if (flat.numel() > 0) {
-                        result << "  Min: " << torch::min(flat).item<float>() << "\n";
-                        result << "  Max: " << torch::max(flat).item<float>() << "\n";
-                        result << "  Mean: " << torch::mean(flat).item<float>() << "\n";
-                        result << "  Std: " << torch::std(flat).item<float>();
+                std::string tensor_result;
+                scene_->withMutableModel([&](SplatData* model) {
+                    if (!model) {
+                        tensor_result = "Model not available";
+                        return 0;
                     }
-                } catch (...) {
-                    result << "  (Statistics unavailable)";
-                }
 
-                return result.str();
+                    torch::Tensor tensor;
+                    if (tensor_name == "means" || tensor_name == "positions") {
+                        tensor = model->get_means();
+                    } else if (tensor_name == "scales" || tensor_name == "scaling") {
+                        tensor = model->get_scaling();
+                    } else if (tensor_name == "rotations" || tensor_name == "rotation" || tensor_name == "quats") {
+                        tensor = model->get_rotation();
+                    } else if (tensor_name == "features" || tensor_name == "colors" || tensor_name == "shs") {
+                        tensor = model->get_shs();
+                    } else if (tensor_name == "opacities" || tensor_name == "opacity") {
+                        tensor = model->get_opacity();
+                    } else {
+                        tensor_result = "Unknown tensor: " + tensor_name + "\nAvailable: means, scaling, rotation, shs, opacity";
+                        return 0;
+                    }
+
+                    std::ostringstream oss;
+                    oss << "Tensor '" << tensor_name << "' info:\n";
+                    oss << "  Shape: [";
+                    for (int i = 0; i < tensor.dim(); i++) {
+                        if (i > 0)
+                            oss << ", ";
+                        oss << tensor.size(i);
+                    }
+                    oss << "]\n";
+                    oss << "  Device: " << tensor.device() << "\n";
+                    oss << "  Dtype: " << tensor.dtype() << "\n";
+                    oss << "  Requires grad: " << (tensor.requires_grad() ? "Yes" : "No") << "\n";
+
+                    // Show some statistics if tensor is on CPU or we can move it
+                    try {
+                        auto cpu_tensor = tensor.cpu();
+                        auto flat = cpu_tensor.flatten();
+                        if (flat.numel() > 0) {
+                            oss << "  Min: " << torch::min(flat).item<float>() << "\n";
+                            oss << "  Max: " << torch::max(flat).item<float>() << "\n";
+                            oss << "  Mean: " << torch::mean(flat).item<float>() << "\n";
+                            oss << "  Std: " << torch::std(flat).item<float>();
+                        }
+                    } catch (...) {
+                        oss << "  (Statistics unavailable)";
+                    }
+
+                    tensor_result = oss.str();
+                    return 0;
+                });
+
+                return tensor_result;
             }
 
             return "Unknown command: '" + command + "'. Type 'help' for available commands.";
@@ -385,10 +380,15 @@ namespace gs {
 
     void GSViewer::setTrainer(Trainer* trainer) {
         trainer_ = trainer;
+        if (scene_) {
+            scene_->linkToTrainer(trainer);
+        }
     }
 
     void GSViewer::setStandaloneModel(std::unique_ptr<SplatData> model) {
-        standalone_model_ = std::move(model);
+        if (scene_) {
+            scene_->setModel(std::move(model));
+        }
     }
 
     void GSViewer::setAntiAliasing(bool enable) {
@@ -409,12 +409,12 @@ namespace gs {
                 return;
             }
 
-            standalone_model_ = std::make_unique<SplatData>(std::move(*splat_result));
+            scene_->setModel(std::make_unique<SplatData>(std::move(*splat_result)));
             current_ply_path_ = path;
             current_mode_ = ViewerMode::PLYViewer;
 
             gui_manager_->addConsoleLog("Info: Loaded PLY with %lld Gaussians from %s",
-                                        standalone_model_->size(),
+                                        scene_->getStandaloneModel()->size(),
                                         path.filename().string().c_str());
 
         } catch (const std::exception& e) {
@@ -449,6 +449,9 @@ namespace gs {
             // Now take ownership
             trainer_ = setup_result->trainer.release();
 
+            // Link scene to trainer
+            scene_->linkToTrainer(trainer_);
+
             current_dataset_path_ = path;
             current_mode_ = ViewerMode::Training;
 
@@ -482,9 +485,11 @@ namespace gs {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
+        // Clear scene
+        scene_->clearModel();
+
         // Clear data
         trainer_ = nullptr;
-        standalone_model_.reset();
 
         // Reset state
         current_mode_ = ViewerMode::Empty;
@@ -531,21 +536,23 @@ namespace gs {
         return gui_manager_ && gui_manager_->isAnyWindowActive();
     }
 
+    GSViewer::ViewerMode GSViewer::getCurrentMode() const {
+        switch (scene_->getMode()) {
+        case Scene::Mode::Empty:
+            return ViewerMode::Empty;
+        case Scene::Mode::Viewing:
+            return ViewerMode::PLYViewer;
+        case Scene::Mode::Training:
+            return ViewerMode::Training;
+        default:
+            return ViewerMode::Empty;
+        }
+    }
+
     void GSViewer::drawFrame() {
         // Only render if we have a model to render
-        if (!trainer_ && !standalone_model_) {
+        if (!scene_->hasModel()) {
             return;
-        }
-
-        // Get model reference
-        SplatData* model = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(splat_mtx_);
-            model = trainer_ ? const_cast<SplatData*>(&trainer_->get_strategy().get_model()) : standalone_model_.get();
-
-            if (!model) {
-                return;
-            }
         }
 
         // Build render request
@@ -558,12 +565,12 @@ namespace gs {
             .antialiasing = anti_aliasing_,
             .render_mode = RenderMode::RGB};
 
-        // Render
-        auto result = rendering_pipeline_->render(*model, request);
+        // Render through scene
+        auto result = scene_->render(request);
 
         // Upload to screen
         if (result.valid) {
-            rendering_pipeline_->uploadToScreen(result, *screen_renderer_, viewport_.windowSize);
+            RenderingPipeline::uploadToScreen(result, *screen_renderer_, viewport_.windowSize);
             screen_renderer_->render(quadShader_, viewport_);
         }
     }
