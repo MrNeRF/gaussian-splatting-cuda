@@ -11,7 +11,7 @@
 struct CameraWithImage {
     Camera* camera;
     torch::Tensor imageTensor;
-    torch::Tensor maskTensor;
+    torch::Tensor attentionMaskTensor;
 };
 
 using CameraExample = torch::data::Example<CameraWithImage, torch::Tensor>;
@@ -62,10 +62,10 @@ public:
 
         // Just load image - no prefetching since indices are random
         torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
-        torch::Tensor mask = cam->load_and_get_attention_mask(_datasetConfig.resolution);
+        torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resolution);
 
         // Return camera pointer and image
-        return {{cam.get(), std::move(image), std::move(mask)}, torch::empty({})};
+        return {{cam.get(), std::move(image), std::move(attention_weights)}, torch::empty({})};
     }
 
     torch::optional<size_t> size() const override {

@@ -58,7 +58,7 @@ namespace gs {
     private:
         // Protected method for processing a single training step
         // Returns true if training should continue
-        bool train_step(int iter, Camera* cam, torch::Tensor gt_image, torch::Tensor mask_image, RenderMode render_mode, float out_of_mask_penalty);
+        bool train_step(int iter, Camera* cam, torch::Tensor gt_image, torch::Tensor weights, RenderMode render_mode, float out_of_mask_penalty);
 
         // Protected methods for computing loss
         torch::Tensor compute_photometric_loss(const RenderOutput& render_output,
@@ -67,7 +67,7 @@ namespace gs {
                                                const param::OptimizationParameters& opt_params);
         torch::Tensor compute_photometric_loss(const RenderOutput& render_output,
                                                const torch::Tensor& gt_image,
-                                               const torch::Tensor& mask_image,
+                                               const torch::Tensor& weights,
                                                const float outOfMaskAlphaPenalty,
                                                const SplatData& splatData,
                                                const param::OptimizationParameters& opt_params);

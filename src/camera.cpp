@@ -95,7 +95,7 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
     return image_cpu.to(torch::kCUDA, /*non_blocking=*/true);
 }
 
-torch::Tensor Camera::load_and_get_attention_mask(int resolution) {
+torch::Tensor Camera::load_and_get_attention_weights(int resolution) {
     if (_mask_path.empty())
         return torch::Tensor(); // no mask available
 
@@ -129,7 +129,22 @@ torch::Tensor Camera::load_and_get_attention_mask(int resolution) {
     auto channel0 = tmp.select(0, /*dim=*/0);
 
     auto mask_cpu = channel0.clone().to(torch::kBool);
-
     free_image(data);
-    return mask_cpu.to(torch::kCUDA, /*non_blocking=*/true);
+
+    torch::Tensor inv = mask_cpu;
+    if (inv.dim() == 2) {
+        inv = inv.unsqueeze(0); // [1,H,W]
+    }
+    // inv: true = invalid
+    // convert to float wo weights: 1 = invalid
+    torch::Tensor invF = inv.to(torch::kFloat32); // [B,H,W]
+
+    // Params
+    const float invalidPixelWeight = 1.0f / 20.0f;
+
+    torch::Tensor W = torch::where(inv,
+                         torch::ones_like(invF, torch::kFloat),
+                         torch::full_like(invF, invalidPixelWeight, torch::kFloat));
+
+    return W.to(torch::kCUDA, /*non_blocking=*/true);
 }

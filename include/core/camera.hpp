@@ -37,7 +37,7 @@ public:
     torch::Tensor load_and_get_image(int resolution = -1);
 
     // Load mask from disk and return it
-    torch::Tensor load_and_get_attention_mask(int resolution = -1);
+    torch::Tensor load_and_get_attention_weights(int resolution = -1);
 
     // Accessors - now return const references to avoid copies
     const torch::Tensor& world_view_transform() const {

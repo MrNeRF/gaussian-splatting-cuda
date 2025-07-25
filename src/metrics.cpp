@@ -415,7 +415,7 @@ namespace gs {
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera; // rasterize needs non-const Camera&
                 torch::Tensor gt_image = std::move(camera_with_image.imageTensor);
-                torch::Tensor mask_image = std::move(camera_with_image.maskTensor);
+                torch::Tensor attention_mask = std::move(camera_with_image.attentionMaskTensor);
 
                 // Render with configured mode
                 auto r_output = gs::rasterize(
