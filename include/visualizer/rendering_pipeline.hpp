@@ -32,10 +32,10 @@ namespace gs {
         // Main render function
         RenderResult render(const SplatData& model, const RenderRequest& request);
 
-        // Upload result to screen renderer
-        void uploadToScreen(const RenderResult& result,
-                            ScreenQuadRenderer& renderer,
-                            const glm::ivec2& viewport_size);
+        // Static upload function
+        static void uploadToScreen(const RenderResult& result,
+                                   ScreenQuadRenderer& renderer,
+                                   const glm::ivec2& viewport_size);
 
     private:
         Camera createCamera(const RenderRequest& request);
