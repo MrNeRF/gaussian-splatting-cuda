@@ -493,18 +493,7 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output, b
 
     if (is_refining(iter)) {
         const auto [num_duplicates, num_splits] = grow_gs(iter);
-        if (iter > 0 && iter % 100 == 0) {
-            std::cout << "\nStep " << iter << ": "
-                      << num_duplicates << " GSs duplicated, "
-                      << num_splits << " GSs split. Now having "
-                      << _splat_data.size() << " GSs." << std::endl;
-        }
         const auto num_prunes = prune_gs(iter);
-        if (iter > 0 && iter % 100 == 0) {
-            std::cout << "Step " << iter << ": "
-                      << num_prunes << " GSs pruned. Now having "
-                      << _splat_data.size() << " GSs." << std::endl;
-        }
 
         _grad2d.zero_();
         _count.zero_();
