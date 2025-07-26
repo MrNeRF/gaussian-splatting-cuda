@@ -1523,83 +1523,104 @@ namespace gs {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
 
-
     void GSViewer::renderBoundingBoxControls() {
-    if (ImGui::CollapsingHeader("Bounding Box")) {
-        ImGui::Checkbox("Show Bounding Box", &show_bounding_box_);
-        bounding_box_->setVisible(show_bounding_box_);
+        if (ImGui::CollapsingHeader("Bounding Box")) {
+            ImGui::Checkbox("Show Bounding Box", &show_bounding_box_);
+            bounding_box_->setVisible(show_bounding_box_);
 
-        if (show_bounding_box_) {
-            // Initialize if not done yet
-            if (!bounding_box_->isVisible()) {
-                bounding_box_->init();
-            }
-
-            // Color picker
-            static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
-            if (ImGui::ColorEdit3("Box Color", bbox_color)) {
-                bounding_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
-            }
-
-            // Line width and Reset button aligned
-            static float line_width = 2.0f;
-            float available_width = ImGui::GetContentRegionAvail().x;
-            float button_width = 120.0f; // Adjust this value as needed
-            float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
-
-            ImGui::SetNextItemWidth(slider_width);
-            if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
-                bounding_box_->setLineWidth(line_width);
-            }
-
-
-            // Reset button on next line
-            if (ImGui::Button("Reset to Default")) {
-                bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
-            }
-
-            // Manual bounds adjustment
-            if (ImGui::TreeNode("Manual Bounds")) {
-                glm::vec3 current_min = bounding_box_->getMinBounds();
-                glm::vec3 current_max = bounding_box_->getMaxBounds();
-
-                float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
-                float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
-
-                bool bounds_changed = false;
-
-                // Define reasonable ranges for the sliders (adjust these values as needed)
-                float min_range = -8.0f;
-                float max_range = 8.0f;
-
-                // Min Bounds - each slider on separate line
-                ImGui::Text("Min Bounds:");
-                bounds_changed |= ImGui::SliderFloat("Min X", &min_bounds[0], min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                bounds_changed |= ImGui::SliderFloat("Min Y", &min_bounds[1], min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                bounds_changed |= ImGui::SliderFloat("Min Z", &min_bounds[2], min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-
-                // Max Bounds - each slider on separate line
-                ImGui::Text("Max Bounds:");
-                bounds_changed |= ImGui::SliderFloat("Max X", &max_bounds[0], min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                bounds_changed |= ImGui::SliderFloat("Max Y", &max_bounds[1], min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                bounds_changed |= ImGui::SliderFloat("Max Z", &max_bounds[2], min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                if (bounds_changed) {
-                    bounding_box_->setBounds(
-                        glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
-                        glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
+            if (show_bounding_box_) {
+                // Initialize if not done yet
+                if (!bounding_box_->isVisible()) {
+                    bounding_box_->init();
                 }
 
-                // Display current info
-                glm::vec3 center = bounding_box_->getCenter();
-                glm::vec3 size = bounding_box_->getSize();
+                // Color picker
+                static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
+                if (ImGui::ColorEdit3("Box Color", bbox_color)) {
+                    bounding_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
+                }
 
-                ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
-                ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
+                // Line width and Reset button aligned
+                static float line_width = 2.0f;
+                float available_width = ImGui::GetContentRegionAvail().x;
+                float button_width = 120.0f; // Adjust this value as needed
+                float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
 
-                ImGui::TreePop();
+                ImGui::SetNextItemWidth(slider_width);
+                if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
+                    bounding_box_->setLineWidth(line_width);
+                }
+
+                // Reset button on next line
+                if (ImGui::Button("Reset to Default")) {
+                    bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+                }
+
+                // Manual bounds adjustment
+                if (ImGui::TreeNode("Manual Bounds")) {
+                    glm::vec3 current_min = bounding_box_->getMinBounds();
+                    glm::vec3 current_max = bounding_box_->getMaxBounds();
+
+                    float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
+                    float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
+
+                    bool bounds_changed = false;
+
+                    // Define reasonable ranges for the sliders (adjust these values as needed)
+                    const float min_range = -8.0f;
+                    const float max_range = 8.0f;
+
+                    // Min Bounds - each slider on separate line
+                    ImGui::Text("Min Bounds:");
+                    float min_bounds_x = min_bounds[0];
+                    bounds_changed |= ImGui::SliderFloat("Min X", &min_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    min_bounds_x = std::min(min_bounds_x, max_bounds[0]);
+                    min_bounds[0] = min_bounds_x;
+
+                    float min_bounds_y = min_bounds[1];
+                    bounds_changed |= ImGui::SliderFloat("Min Y", &min_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    min_bounds_y = std::min(min_bounds_y, max_bounds[1]);
+                    min_bounds[1] = min_bounds_y;
+
+                    float min_bounds_z = min_bounds[2];
+                    bounds_changed |= ImGui::SliderFloat("Min Z", &min_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    min_bounds_z = std::min(min_bounds_z, max_bounds[2]);
+                    min_bounds[2] = min_bounds_z;
+
+                    // Max Bounds - each slider on separate line
+                    ImGui::Text("Max Bounds:");
+                    float max_bounds_x = max_bounds[0];
+                    bounds_changed |= ImGui::SliderFloat("Max X", &max_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    max_bounds_x = std::max(max_bounds_x, min_bounds[0]);
+                    max_bounds[0] = max_bounds_x;
+
+                    float max_bounds_y = max_bounds[1];
+                    bounds_changed |= ImGui::SliderFloat("Max Y", &max_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    max_bounds_y = std::max(max_bounds_y, min_bounds[1]);
+                    max_bounds[1] = max_bounds_y;
+
+                    float max_bounds_z = max_bounds[2];
+                    bounds_changed |= ImGui::SliderFloat("Max Z", &max_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    max_bounds_z = std::max(max_bounds_z, min_bounds[2]);
+                    max_bounds[2] = max_bounds_z;
+
+                    if (bounds_changed) {
+                        bounding_box_->setBounds(
+                            glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
+                            glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
+                    }
+
+                    // Display current info
+                    glm::vec3 center = bounding_box_->getCenter();
+                    glm::vec3 size = bounding_box_->getSize();
+
+                    ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
+                    ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
+
+                    ImGui::TreePop();
+                }
             }
         }
     }
-}
 
 } // namespace gs
