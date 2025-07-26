@@ -4,7 +4,6 @@ namespace gs {
 
     RenderBoundingBox::RenderBoundingBox() : color_(1.0f, 1.0f, 0.0f), // Yellow by default
                                              line_width_(2.0f),
-                                             visible_(false),
                                              initialized_(false),
                                              VAO_(0),
                                              VBO_(0),
@@ -119,7 +118,7 @@ namespace gs {
     }
 
     void RenderBoundingBox::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!visible_ || !initialized_ || !shader_ || VAO_ == 0)
+        if (!initialized_ || !shader_ || VAO_ == 0)
             return;
 
         // Save current OpenGL state

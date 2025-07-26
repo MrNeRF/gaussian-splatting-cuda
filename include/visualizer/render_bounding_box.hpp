@@ -21,8 +21,10 @@ namespace gs {
         void init();
 
         // Enable/disable bounding box rendering
-        void setVisible(bool visible) { visible_ = visible; }
-        bool isVisible() const { return visible_; }
+        // void setVisible(bool visible) { visible_ = visible; }
+        // bool isVisible() const { return visible_; }
+
+        bool isInitialized() const { return initialized_; }
 
         // Set bounding box color
         void setColor(const glm::vec3& color) { color_ = color; }
@@ -47,7 +49,6 @@ namespace gs {
         // Bounding box properties
         glm::vec3 color_;
         float line_width_;
-        bool visible_;
         bool initialized_;
 
         // Cube geometry data

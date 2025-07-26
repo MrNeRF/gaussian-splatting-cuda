@@ -321,8 +321,9 @@ namespace gs {
         std::unique_ptr<std::jthread> training_thread_;
 
         // Bounding box visualization
-        std::unique_ptr<RenderBoundingBox> bounding_box_;
-        bool show_bounding_box_ = false;
+        std::unique_ptr<RenderBoundingBox> crop_box_;
+        bool show_crop_box_ = false;
+        bool use_crop_box_ = false;
 
         // Add this method declaration
         void renderBoundingBoxControls();

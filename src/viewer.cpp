@@ -331,7 +331,7 @@ namespace gs {
     GSViewer::GSViewer(std::string title, int width, int height)
         : ViewerDetail(title, width, height),
           trainer_(nullptr),
-          bounding_box_(std::make_unique<RenderBoundingBox>()) {
+          crop_box_(std::make_unique<RenderBoundingBox>()) {
 
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
@@ -1114,8 +1114,8 @@ namespace gs {
             }
 
             BoundingBox * bb_for_render = nullptr;
-            if (show_bounding_box_)
-                bb_for_render = bounding_box_.get();
+            if (use_crop_box_)
+                bb_for_render = crop_box_.get();
 
             output = gs::rasterize(
                 cam,
@@ -1160,17 +1160,17 @@ namespace gs {
 
         screen_renderer_->render(quadShader_, viewport_);
 
+        if (!crop_box_->isInitilized()) {
+            crop_box_->init();
+        }
+
         // Render bounding box if enabled
-        if (show_bounding_box_ && bounding_box_->isVisible()) {
+        if (show_crop_box_ && crop_box_->isInitilized()) {
 
             glm::mat4 view = viewport_.getViewMatrix(); // Replace with actual view matrix
 
-            if (!bounding_box_->isInitilized()) {
-                bounding_box_->init();
-            }
-
             // Render the bounding box
-            bounding_box_->render(view, projection);
+            crop_box_->render(view, projection);
         }
     }
 
@@ -1529,20 +1529,20 @@ namespace gs {
     }
 
     void GSViewer::renderBoundingBoxControls() {
-        if (ImGui::CollapsingHeader("Bounding Box")) {
-            ImGui::Checkbox("Show Bounding Box", &show_bounding_box_);
-            bounding_box_->setVisible(show_bounding_box_);
+        if (ImGui::CollapsingHeader("Clip Box")) {
+            ImGui::Checkbox("Show Clip Box", &show_crop_box_);
+            ImGui::Checkbox("Use Clip Box", &use_crop_box_);
 
-            if (show_bounding_box_) {
+            if (show_crop_box_) {
                 // Initialize if not done yet
-                if (!bounding_box_->isVisible()) {
-                    bounding_box_->init();
+                if (!crop_box_->isInitilized()) {
+                    crop_box_->init();
                 }
 
                 // Color picker
                 static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
                 if (ImGui::ColorEdit3("Box Color", bbox_color)) {
-                    bounding_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
+                    crop_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
                 }
 
                 // Line width and Reset button aligned
@@ -1553,18 +1553,18 @@ namespace gs {
 
                 ImGui::SetNextItemWidth(slider_width);
                 if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
-                    bounding_box_->setLineWidth(line_width);
+                    crop_box_->setLineWidth(line_width);
                 }
 
                 // Reset button on next line
                 if (ImGui::Button("Reset to Default")) {
-                    bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+                    crop_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
                 }
 
                 // Manual bounds adjustment
                 if (ImGui::TreeNode("Manual Bounds")) {
-                    glm::vec3 current_min = bounding_box_->getMinBounds();
-                    glm::vec3 current_max = bounding_box_->getMaxBounds();
+                    glm::vec3 current_min = crop_box_->getMinBounds();
+                    glm::vec3 current_max = crop_box_->getMaxBounds();
 
                     float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
                     float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
@@ -1610,14 +1610,14 @@ namespace gs {
                     max_bounds[2] = max_bounds_z;
 
                     if (bounds_changed) {
-                        bounding_box_->setBounds(
+                        crop_box_->setBounds(
                             glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
                             glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
                     }
 
                     // Display current info
-                    glm::vec3 center = bounding_box_->getCenter();
-                    glm::vec3 size = bounding_box_->getSize();
+                    glm::vec3 center = crop_box_->getCenter();
+                    glm::vec3 size = crop_box_->getSize();
 
                     ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
                     ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
