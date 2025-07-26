@@ -10,7 +10,7 @@ namespace gs {
     BoundingBox::BoundingBox()
         : min_bounds_(-1.0f, -1.0f, -1.0f)
         , max_bounds_(1.0f, 1.0f, 1.0f)
-        , transform_(1.0f)
+        , world2BBox_(1.0f)
     {}
 
     BoundingBox::~BoundingBox() {}
@@ -26,8 +26,8 @@ namespace gs {
         max_bounds_ = max;
     }
 
-    void BoundingBox::setTransform(const glm::mat4& transform) {
-        transform_ = transform;
+    void BoundingBox::setworld2BBox(const glm::mat4& transform) {
+        world2BBox_ = transform;
     }
 
 }

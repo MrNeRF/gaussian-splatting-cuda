@@ -135,7 +135,7 @@ namespace gs {
 
         try {
             // Set uniforms
-            glm::mat4 mvp = projection * view * transform_;
+            glm::mat4 mvp = projection * view * world2BBox_;
 
             shader_->set_uniform("u_mvp", mvp);
             shader_->set_uniform("u_color", color_);
