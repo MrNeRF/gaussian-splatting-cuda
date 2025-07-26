@@ -332,6 +332,7 @@ namespace gs {
         : ViewerDetail(title, width, height),
           trainer_(nullptr), bounding_box_(std::make_unique<BoundingBox>())  {
 
+
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<Notifier>();
@@ -1129,6 +1130,7 @@ namespace gs {
         }
 #endif
 
+        screen_renderer_->render(quadShader_, viewport_);
 
         // Render bounding box if enabled
         if (show_bounding_box_ && bounding_box_->isVisible()) {
@@ -1142,12 +1144,32 @@ namespace gs {
 
             glm::mat4 view = viewport_.getViewMatrix();    // Replace with actual view matrix
             glm::mat4 projection = viewport_.getProjectionMatrix(fov, 0.1f, 1000.0f);; // Replace with actual projection matrix
+            GLenum err;
+
+            while (glGetError() != GL_NO_ERROR) {
+                // Just keep calling to flush all errors
+            }
+
+            err = glGetError();
+            if (err != GL_NO_ERROR)
+                std::cerr << "OpenGL1 error during bounding box render: " << std::hex << err << std::endl;
+
+            if (!bounding_box_->isInitilized()) {
+                bounding_box_->init();
+            }
+
+            err = glGetError();
+            if (err != GL_NO_ERROR)
+                std::cerr << "OpenGL2 error during bounding box render: " << std::hex << err << std::endl;
 
             // Render the bounding box
             bounding_box_->render(view, projection);
+
+            err = glGetError();
+            if (err != GL_NO_ERROR)
+                std::cerr << "OpenGL3 error during bounding box render: " << std::hex << err << std::endl;
         }
 
-        screen_renderer_->render(quadShader_, viewport_);
     }
 
     void GSViewer::renderCameraControlsWindow() {

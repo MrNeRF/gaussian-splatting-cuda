@@ -69,6 +69,7 @@ class Viewport {
         }
 
         void advance_forward(float deltaTime) {
+
             t += R * glm::vec3(0, 0, 1) * deltaTime * wasdSpeed;
         }
         void advance_backward(float deltaTime) {
@@ -118,20 +119,22 @@ public:
 
         // In your system: camera.R is rotation, camera.t is translation
         // View matrix is the inverse of the camera transform
+
+
         glm::mat3 R_inv = glm::transpose(camera.R); // Inverse of rotation matrix
         glm::vec3 t_inv = -R_inv * camera.t;       // Inverse translation
 
         glm::mat4 view(1.0f);
 
         // Set rotation part (top-left 3x3)
-        view[0][0] = R_inv[0][0]; view[1][0] = R_inv[0][1]; view[2][0] = R_inv[0][2];
-        view[0][1] = R_inv[1][0]; view[1][1] = R_inv[1][1]; view[2][1] = R_inv[1][2];
-        view[0][2] = R_inv[2][0]; view[1][2] = R_inv[2][1]; view[2][2] = R_inv[2][2];
+        view[0][0] = R_inv[0][0]; view[1][0] = R_inv[1][0]; view[2][0] = R_inv[2][0];
+        view[0][1] = R_inv[0][1]; view[1][1] = R_inv[1][1]; view[2][1] = R_inv[2][1];
+        view[0][2] = R_inv[0][2]; view[1][2] = R_inv[1][2]; view[2][2] = R_inv[2][2];
 
         // Set translation part (last column)
-        view[3][0] = t_inv.x;
-        view[3][1] = t_inv.y;
-        view[3][2] = t_inv.z;
+        view[3][0] = camera.t.x;
+        view[3][1] = camera.t.y;
+        view[3][2] = camera.t.z;
         view[3][3] = 1.0f;
 
         return view;

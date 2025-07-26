@@ -64,11 +64,21 @@ namespace gs {
             glGenBuffers(1, &VBO_);
             glGenBuffers(1, &EBO_);
 
+            initialized_ = true;
             // Initialize cube geometry
             createCubeGeometry();
             setupVertexData();
 
-            initialized_ = true;
+            // Check bindings *after* setup
+            glBindVertexArray(VAO_);
+            GLint vao_check, ebo_check;
+            glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao_check);
+            glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &ebo_check);
+            std::cout << "After rebinding VAO: VAO=" << vao_check << ", EBO=" << ebo_check << std::endl;
+            glBindVertexArray(0);
+
+
+
         } catch (const std::exception& e) {
             std::cerr << "Failed to initialize BoundingBox: " << e.what() << std::endl;
             cleanup();
@@ -107,29 +117,52 @@ namespace gs {
         vertices_[7] = glm::vec3(min_bounds_.x, max_bounds_.y, max_bounds_.z); // 7: +y+z
     }
 
+    // void BoundingBox::setupVertexData2() {
+    //     if (!initialized_ || VAO_ == 0) return;
+    //
+    //     // Bind VAO
+    //     glBindVertexArray(VAO_);
+    //
+    //     // Upload vertex data
+    //     glBindBuffer(GL_ARRAY_BUFFER, VBO_);
+    //     glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(glm::vec3),
+    //                  vertices_.data(), GL_DYNAMIC_DRAW);
+    //
+    //     // Upload index data
+    //     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_);
+    //     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_.size() * sizeof(unsigned int),
+    //                  indices_.data(), GL_STATIC_DRAW);
+    //
+    //     // Set vertex attribute (position)
+    //     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+    //     glEnableVertexAttribArray(0);
+    //
+    //     // Unbind
+    //    // glBindBuffer(GL_ARRAY_BUFFER, 0);
+    //     glBindVertexArray(0);
+    // }
+
+
     void BoundingBox::setupVertexData() {
         if (!initialized_ || VAO_ == 0) return;
 
-        // Bind VAO
         glBindVertexArray(VAO_);
 
-        // Upload vertex data
+        // Bind and upload vertex data
         glBindBuffer(GL_ARRAY_BUFFER, VBO_);
         glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(glm::vec3),
                      vertices_.data(), GL_DYNAMIC_DRAW);
 
-        // Upload index data
+        // ✅ Bind and upload index data WHILE VAO is bound!
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_.size() * sizeof(unsigned int),
                      indices_.data(), GL_STATIC_DRAW);
 
-        // Set vertex attribute (position)
+        // Vertex attribute setup
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
         glEnableVertexAttribArray(0);
 
-        // Unbind
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
+        glBindVertexArray(0); // VAO now remembers VBO + EBO + attributes
     }
 
     void BoundingBox::render(const glm::mat4& view, const glm::mat4& projection) {
@@ -158,8 +191,12 @@ namespace gs {
             shader_->set_uniform("u_mvp", mvp);
             shader_->set_uniform("u_color", color_);
 
+
             // Bind VAO and draw
             glBindVertexArray(VAO_);
+
+            glDisable(GL_DEPTH_TEST);
+
             glDrawElements(GL_LINES, static_cast<GLsizei>(indices_.size()), GL_UNSIGNED_INT, 0);
             glBindVertexArray(0);
 
