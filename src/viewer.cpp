@@ -331,7 +331,7 @@ namespace gs {
     GSViewer::GSViewer(std::string title, int width, int height)
         : ViewerDetail(title, width, height),
           trainer_(nullptr),
-          bounding_box_(std::make_unique<BoundingBox>()) {
+          bounding_box_(std::make_unique<RenderBoundingBox>()) {
 
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
