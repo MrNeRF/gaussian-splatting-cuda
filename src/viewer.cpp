@@ -1113,6 +1113,10 @@ namespace gs {
                 return;
             }
 
+            BoundingBox * bb_for_render = nullptr;
+            if (show_bounding_box_)
+                bb_for_render = bounding_box_.get();
+
             output = gs::rasterize(
                 cam,
                 *model,
@@ -1120,7 +1124,8 @@ namespace gs {
                 config_->scaling_modifier,
                 false,
                 anti_aliasing_,
-                RenderMode::RGB);
+                RenderMode::RGB,
+                bb_for_render);
         }
 
         // Before the uploadData call, add another safety check
