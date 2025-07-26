@@ -268,6 +268,8 @@ int MCMC::add_new_gs() {
     auto new_scaling = _splat_data.scaling_raw().index_select(0, sampled_idxs);
     auto new_rotation = _splat_data.rotation_raw().index_select(0, sampled_idxs);
     auto new_opacity = _splat_data.opacity_raw().index_select(0, sampled_idxs);
+    auto new_max_radii2D = torch::zeros({n_new}, _splat_data.means().options());
+
 
     // Step 1: Concatenate all parameters
     auto concat_means = torch::cat({_splat_data.means(), new_means}, 0).set_requires_grad(true);
@@ -276,6 +278,8 @@ int MCMC::add_new_gs() {
     auto concat_scaling = torch::cat({_splat_data.scaling_raw(), new_scaling}, 0).set_requires_grad(true);
     auto concat_rotation = torch::cat({_splat_data.rotation_raw(), new_rotation}, 0).set_requires_grad(true);
     auto concat_opacity = torch::cat({_splat_data.opacity_raw(), new_opacity}, 0).set_requires_grad(true);
+    auto concat_max_radii2D = torch::cat({_splat_data.max_radii2D(), new_max_radii2D}, 0);
+
 
     // Step 2: SAFER optimizer state update
     // Store the new parameters in a temporary array first
@@ -388,6 +392,7 @@ int MCMC::add_new_gs() {
     _splat_data.scaling_raw() = concat_scaling;
     _splat_data.rotation_raw() = concat_rotation;
     _splat_data.opacity_raw() = concat_opacity;
+    _splat_data.max_radii2D() = concat_max_radii2D;
 
     return n_new;
 }
