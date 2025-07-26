@@ -1024,16 +1024,22 @@ namespace gs {
         ImGui::PopStyleColor(4);
     }
 
-    void printMatrix(const glm::mat4& matrix, const std::string& label = "Matrix") {
-        std::cout << label << ":\n";
-        for (int row = 0; row < 4; ++row) {
-            std::cout << "[ ";
-            for (int col = 0; col < 4; ++col) {
-                std::cout << std::fixed << std::setprecision(3) << std::setw(8)
-                          << matrix[col][row] << " ";
-            }
-            std::cout << "]\n";
-        }
+    glm::mat4 buildProjectionMatrixFromIntrinsics(float fx, float fy, float cx, float cy,
+                                                  float width, float height,
+                                                  float near_plane, float far_plane) {
+        glm::mat4 proj = glm::mat4(0.0f); // Initialize to zero
+
+        proj[0][0] = 2.0f * fx / width;
+        proj[1][1] = 2.0f * fy / height;
+
+        proj[2][0] = 2.0f * (cx / width) - 1.0f;
+        proj[2][1] = 2.0f * (cy / height) - 1.0f;
+        proj[2][2] = -(far_plane + near_plane) / (far_plane - near_plane);
+        proj[2][3] = -1.0f;
+
+        proj[3][2] = -(2.0f * far_plane * near_plane) / (far_plane - near_plane);
+
+        return proj;
     }
 
     void GSViewer::drawFrame() {
@@ -1083,6 +1089,9 @@ namespace gs {
             reso.x,
             reso.y,
             -1);
+
+        auto projection = buildProjectionMatrixFromIntrinsics(fov2focal(fov.x, reso.x), fov2focal(fov.y, reso.y),
+            reso.x / 2.0f, reso.y / 2.0f, reso.x, reso.y, 0 , 1000);
 
         torch::Tensor background = torch::zeros({3});
 
@@ -1155,7 +1164,6 @@ namespace gs {
             }
 
             glm::mat4 view = viewport_.getViewMatrix();    // Replace with actual view matrix
-            glm::mat4 projection = viewport_.getProjectionMatrix(fov, 0.1f, 1000.0f);; // Replace with actual projection matrix
 
             //printMatrix(view);
             GLenum err;

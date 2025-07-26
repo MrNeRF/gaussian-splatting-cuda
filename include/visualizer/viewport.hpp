@@ -134,15 +134,9 @@ public:
         glm::mat4 view(1.0f);
 
         // Set rotation part (top-left 3x3)
-        view[0][0] = R_inv[0][0];
-        R_inv[1][0] = R_inv[1][0];
-        view[2][0] = R_inv[2][0];
-        view[0][1] = R_inv[0][1];
-        R_inv[1][1] = R_inv[1][1];
-        view[2][1] = R_inv[2][1];
-        view[0][2] = R_inv[0][2];
-        R_inv[1][2] = R_inv[1][2];
-        view[2][2] = R_inv[2][2];
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                view[i][j] = R_inv[i][j];
 
         // Set translation part (last column)
         view[3][0] = t_inv.x;

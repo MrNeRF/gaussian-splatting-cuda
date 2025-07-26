@@ -1,4 +1,5 @@
 #include "core/bounding_box.hpp"
+
 // ============================================================================
     // BoundingBox.cpp - Implementation
     // ============================================================================
@@ -74,7 +75,6 @@ namespace gs {
             GLint vao_check, ebo_check;
             glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao_check);
             glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &ebo_check);
-            std::cout << "After rebinding VAO: VAO=" << vao_check << ", EBO=" << ebo_check << std::endl;
             glBindVertexArray(0);
 
 
@@ -182,8 +182,7 @@ namespace gs {
 
         try {
             // Set uniforms
-            glm::mat4 model = transform_;
-            glm::mat4 mvp = projection * view * model;
+            glm::mat4 mvp = projection * view * transform_;
 
             shader_->set_uniform("u_mvp", mvp);
             shader_->set_uniform("u_color", color_);
