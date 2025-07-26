@@ -1024,6 +1024,18 @@ namespace gs {
         ImGui::PopStyleColor(4);
     }
 
+    void printMatrix(const glm::mat4& matrix, const std::string& label = "Matrix") {
+        std::cout << label << ":\n";
+        for (int row = 0; row < 4; ++row) {
+            std::cout << "[ ";
+            for (int col = 0; col < 4; ++col) {
+                std::cout << std::fixed << std::setprecision(3) << std::setw(8)
+                          << matrix[col][row] << " ";
+            }
+            std::cout << "]\n";
+        }
+    }
+
     void GSViewer::drawFrame() {
         // Only render if we have a model to render
         if (!trainer_ && !standalone_model_) {
@@ -1144,6 +1156,8 @@ namespace gs {
 
             glm::mat4 view = viewport_.getViewMatrix();    // Replace with actual view matrix
             glm::mat4 projection = viewport_.getProjectionMatrix(fov, 0.1f, 1000.0f);; // Replace with actual projection matrix
+
+            //printMatrix(view);
             GLenum err;
 
             while (glGetError() != GL_NO_ERROR) {
