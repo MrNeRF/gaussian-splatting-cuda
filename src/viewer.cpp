@@ -330,7 +330,7 @@ namespace gs {
 
     GSViewer::GSViewer(std::string title, int width, int height)
         : ViewerDetail(title, width, height),
-          trainer_(nullptr) {
+          trainer_(nullptr), bounding_box_(std::make_unique<BoundingBox>())  {
 
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
@@ -840,7 +840,7 @@ namespace gs {
             dataset_params.dataset.data_path = path; // Override with the selected path
 
             // Setup training
-            auto setup_result = gs::setupTraining(dataset_params);
+            auto setup_result = gs::setupTraining(params_);
             if (!setup_result) {
                 scripting_console_->addLog("Error: Failed to setup training: %s", setup_result.error().c_str());
                 return;
@@ -1129,6 +1129,24 @@ namespace gs {
         }
 #endif
 
+
+        // Render bounding box if enabled
+        if (show_bounding_box_ && bounding_box_->isVisible()) {
+
+            // Use FOV from your rendering config
+            float fov;
+            {
+                std::lock_guard<std::mutex> lock(config_->mtx);
+                fov = config_->fov;
+            }
+
+            glm::mat4 view = viewport_.getViewMatrix();    // Replace with actual view matrix
+            glm::mat4 projection = viewport_.getProjectionMatrix(fov, 0.1f, 1000.0f);; // Replace with actual projection matrix
+
+            // Render the bounding box
+            bounding_box_->render(view, projection);
+        }
+
         screen_renderer_->render(quadShader_, viewport_);
     }
 
@@ -1199,6 +1217,8 @@ namespace gs {
         ImGui::NewFrame();
 
         any_window_active = ImGui::IsAnyItemActive();
+
+
 
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
         ImGui::Begin("Rendering Setting", nullptr, window_flags);
@@ -1449,6 +1469,8 @@ namespace gs {
         }
         ImGui::PopStyleColor(2);
 
+        renderBoundingBoxControls();
+
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.3f, 1.0f));
         if (ImGui::Button("Open Console", ImVec2(-1, 0))) {
@@ -1483,5 +1505,65 @@ namespace gs {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
+
+    void GSViewer::renderBoundingBoxControls() {
+    if (ImGui::CollapsingHeader("Bounding Box")) {
+        ImGui::Checkbox("Show Bounding Box", &show_bounding_box_);
+        bounding_box_->setVisible(show_bounding_box_);
+
+        if (show_bounding_box_) {
+            // Initialize if not done yet
+            if (!bounding_box_->isVisible()) {
+                bounding_box_->init();
+            }
+
+            // Color picker
+            static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
+            if (ImGui::ColorEdit3("Box Color", bbox_color)) {
+                bounding_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
+            }
+
+            // Line width
+            static float line_width = 2.0f;
+            if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
+                bounding_box_->setLineWidth(line_width);
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Reset to Default")) {
+                bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+            }
+
+            // Manual bounds adjustment
+            if (ImGui::TreeNode("Manual Bounds")) {
+                glm::vec3 current_min = bounding_box_->getMinBounds();
+                glm::vec3 current_max = bounding_box_->getMaxBounds();
+
+                float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
+                float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
+
+                bool bounds_changed = false;
+                bounds_changed |= ImGui::DragFloat3("Min Bounds", min_bounds, 0.01f);
+                bounds_changed |= ImGui::DragFloat3("Max Bounds", max_bounds, 0.01f);
+
+                if (bounds_changed) {
+                    bounding_box_->setBounds(
+                        glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
+                        glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2])
+                    );
+                }
+
+                // Display current info
+                glm::vec3 center = bounding_box_->getCenter();
+                glm::vec3 size = bounding_box_->getSize();
+
+                ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
+                ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
+
+                ImGui::TreePop();
+            }
+        }
+    }
+}
 
 } // namespace gs

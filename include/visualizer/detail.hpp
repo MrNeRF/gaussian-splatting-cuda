@@ -4,6 +4,8 @@
 #include "core/image_io.hpp"
 #include "core/rasterizer.hpp"
 #include "core/trainer.hpp"
+#include "core/bounding_box.hpp"
+
 #include "visualizer/renderer.hpp"
 // clang-format off
 // CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
@@ -317,6 +319,13 @@ namespace gs {
 
         // Training thread
         std::unique_ptr<std::jthread> training_thread_;
+
+        // Bounding box visualization
+        std::unique_ptr<BoundingBox> bounding_box_;
+        bool show_bounding_box_ = false;
+
+        // Add this method declaration
+        void renderBoundingBoxControls();
     };
 
 } // namespace gs
