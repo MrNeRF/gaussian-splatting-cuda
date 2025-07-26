@@ -158,35 +158,6 @@ void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
     }
 }
 
-torch::Tensor quat_to_rotmat(const torch::Tensor& quats) {
-    // Normalize quaternions
-    auto quats_norm = torch::nn::functional::normalize(
-        quats, torch::nn::functional::NormalizeFuncOptions().dim(-1).p(2));
-
-    auto w = quats_norm.select(-1, 0);
-    auto x = quats_norm.select(-1, 1);
-    auto y = quats_norm.select(-1, 2);
-    auto z = quats_norm.select(-1, 3);
-
-    // Build rotation matrix
-    std::vector<torch::Tensor> R_components = {
-        1 - 2 * (y * y + z * z),
-        2 * (x * y - w * z),
-        2 * (x * z + w * y),
-        2 * (x * y + w * z),
-        1 - 2 * (x * x + z * z),
-        2 * (y * z - w * x),
-        2 * (x * z - w * y),
-        2 * (y * z + w * x),
-        1 - 2 * (x * x + y * y)};
-
-    auto R = torch::stack(R_components, -1);
-    auto shape = quats.sizes().vec();
-    shape.back() = 3;
-    shape.push_back(3);
-    return R.reshape(shape);
-}
-
 void DefaultStrategy::split(const torch::Tensor is_split) {
     torch::NoGradGuard no_grad;
 
