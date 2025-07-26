@@ -35,6 +35,7 @@ namespace gs {
             bool enable_save_eval_images = false;             // Save during evaluation images
             bool enable_viz = false;                          // Enable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
+            bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
 
             // Bilateral grid parameters
             bool use_bilateral_grid = false;
