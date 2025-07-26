@@ -10,6 +10,8 @@
 #include <sstream>
 #include <thread>
 
+#include <cuda_runtime.h>
+
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "visualizer/cuda_gl_interop.hpp"
 #endif
