@@ -254,6 +254,18 @@ namespace gs {
                       << " images for training (no evaluation)" << std::endl;
         }
 
+        if (params_.optimization.preload_to_ram) {
+            std::cout << "Preload to RAM enabled. Caching datasets..." << std::endl;
+            if (train_dataset_) {
+                train_dataset_->preload_data();
+            }
+            if (val_dataset_) {
+                val_dataset_->preload_data();
+            }
+        } else {
+            std::cout << "Loading dataset from disk on-the-fly." << std::endl;
+        }
+
         train_dataset_size_ = train_dataset_->size().value();
 
         strategy_->initialize(params.optimization);

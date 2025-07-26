@@ -52,6 +52,26 @@ public:
     CameraDataset& operator=(CameraDataset&&) noexcept = default;
     CameraDataset& operator=(const CameraDataset&) = default;
 
+    void preload_data() {
+        if (!_image_cache.empty()) {
+            std::cout << "Dataset already preloaded." << std::endl;
+            return;
+        }
+
+        std::cout << "Preloading dataset into RAM... This may take a moment." << std::endl;
+        _image_cache.reserve(_indices.size());
+
+        for (size_t i = 0; i < _indices.size(); ++i) {
+            size_t camera_idx = _indices[i];
+            auto& cam = _cameras[camera_idx];
+            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
+            torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resolution);
+            _image_cache.push_back(image.clone());
+            _attention_weights_cache.push_back(attention_weights.clone());
+        }
+        std::cout << "Dataset preloading complete." << std::endl;
+    }
+
     CameraExample get(size_t index) override {
         if (index >= _indices.size()) {
             throw std::out_of_range("Dataset index out of range");
@@ -60,12 +80,15 @@ public:
         size_t camera_idx = _indices[index];
         auto& cam = _cameras[camera_idx];
 
-        // Just load image - no prefetching since indices are random
-        torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
-        torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resolution);
-
-        // Return camera pointer and image
-        return {{cam.get(), std::move(image), std::move(attention_weights)}, torch::empty({})};
+        if (!_image_cache.empty()) {
+            // Get tensors directly from RAM cache
+            return {{cam.get(), _image_cache[index], _attention_weights_cache[index]}, torch::empty({})};
+        } else {
+            // Fallback to loading from disk if not preloaded
+            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
+            torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resolution);
+            return {{cam.get(), std::move(image), std::move(attention_weights)}, torch::empty({})};
+        }
     }
 
     torch::optional<size_t> size() const override {
@@ -83,6 +106,8 @@ private:
     const gs::param::DatasetConfig& _datasetConfig;
     Split _split;
     std::vector<size_t> _indices;
+    std::vector<torch::Tensor> _image_cache;
+    std::vector<torch::Tensor> _attention_weights_cache;
 };
 
 inline std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor> create_dataset_from_colmap(
