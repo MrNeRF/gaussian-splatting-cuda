@@ -177,9 +177,6 @@ namespace gs {
         glEnable(GL_LINE_SMOOTH);
         glLineWidth(line_width_);
 
-        // Disable depth writing but keep depth testing for proper ordering
-        glDepthMask(GL_FALSE);
-
         // Bind shader and setup uniforms
         shader_->bind();
 
