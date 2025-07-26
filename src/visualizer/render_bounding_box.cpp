@@ -78,6 +78,9 @@ namespace gs {
             glDeleteBuffers(1, &EBO_);
             EBO_ = 0;
         }
+
+        shader_.reset();
+        initialized_ = false;
     }
 
     void RenderBoundingBox::createCubeGeometry() {
@@ -115,9 +118,9 @@ namespace gs {
         glBindVertexArray(0); // VAO now remembers VBO + EBO + attributes
     }
 
-
     void RenderBoundingBox::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!visible_ || !initialized_ || !shader_ || VAO_ == 0) return;
+        if (!visible_ || !initialized_ || !shader_ || VAO_ == 0)
+            return;
 
         // Save current OpenGL state
         GLfloat current_line_width;
@@ -137,7 +140,6 @@ namespace gs {
 
             shader_->set_uniform("u_mvp", mvp);
             shader_->set_uniform("u_color", color_);
-
 
             // Bind VAO and draw
             glBindVertexArray(VAO_);
@@ -160,74 +162,6 @@ namespace gs {
             glDisable(GL_LINE_SMOOTH);
         }
     }
-
-    void RenderBoundingBox::updateFromModel(const torch::Tensor& positions) {
-        if (positions.numel() == 0) {
-            std::cerr << "Warning: Empty positions tensor for bounding box update" << std::endl;
-            return;
-        }
-
-        try {
-            // Convert to CPU if needed and ensure contiguous
-            auto pos_cpu = positions.cpu().contiguous();
-
-            // Validate tensor dimensions
-            if (pos_cpu.dim() != 2 || pos_cpu.size(1) != 3) {
-                std::cerr << "Error: Expected positions tensor of shape [N, 3], got "
-                          << pos_cpu.sizes() << std::endl;
-                return;
-            }
-
-            auto pos_accessor = pos_cpu.accessor<float, 2>();
-
-            // Find min/max bounds
-            glm::vec3 min_pos(FLT_MAX);
-            glm::vec3 max_pos(-FLT_MAX);
-
-            for (int64_t i = 0; i < pos_cpu.size(0); ++i) {
-                glm::vec3 pos(pos_accessor[i][0], pos_accessor[i][1], pos_accessor[i][2]);
-
-                // Check for invalid values
-                if (std::isfinite(pos.x) && std::isfinite(pos.y) && std::isfinite(pos.z)) {
-                    min_pos = glm::min(min_pos, pos);
-                    max_pos = glm::max(max_pos, pos);
-                }
-            }
-
-            // Ensure we found valid bounds
-            if (min_pos.x == FLT_MAX || max_pos.x == -FLT_MAX) {
-                std::cerr << "Warning: No valid positions found for bounding box" << std::endl;
-                return;
-            }
-
-            setBounds(min_pos, max_pos);
-
-        } catch (const std::exception& e) {
-            std::cerr << "Error updating bounding box from model: " << e.what() << std::endl;
-        }
-    }
-
-    void RenderBoundingBox::autoFit(const torch::Tensor& positions, float padding) {
-        updateFromModel(positions);
-
-        // Add padding
-        glm::vec3 size = max_bounds_ - min_bounds_;
-        glm::vec3 center = (min_bounds_ + max_bounds_) * 0.5f;
-
-        // Ensure minimum size to avoid degenerate bounding boxes
-        const float min_size = 0.001f;
-        for (int i = 0; i < 3; ++i) {
-            if (size[i] < min_size) {
-                size[i] = min_size;
-            }
-        }
-
-        glm::vec3 pad = size * padding;
-        glm::vec3 half_size = size * 0.5f + pad;
-
-        setBounds(center - half_size, center + half_size);
-    }
-
 
     const unsigned int RenderBoundingBox::cube_line_indices_[24] = {
         // Bottom face edges

@@ -4,12 +4,6 @@
 // ============================================================================
 
 #pragma once
-#include <glad/glad.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <memory>
-#include <torch/torch.h>
 
 #include "core/bounding_box.hpp"
 #include "visualizer/shader.hpp" // Your existing shader class
@@ -26,7 +20,6 @@ namespace gs {
         // Initialize OpenGL resources
         void init();
 
-
         // Enable/disable bounding box rendering
         void setVisible(bool visible) { visible_ = visible; }
         bool isVisible() const { return visible_; }
@@ -39,12 +32,6 @@ namespace gs {
 
         // Render the bounding box
         void render(const glm::mat4& view, const glm::mat4& projection);
-
-        // Update bounds from model data
-        void updateFromModel(const torch::Tensor& positions);
-
-        // Auto-fit to scene
-        void autoFit(const torch::Tensor& positions, float padding = 0.1f);
 
         bool isInitilized() const {return  initialized_;}
 
