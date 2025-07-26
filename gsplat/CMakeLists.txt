@@ -26,6 +26,7 @@ set(GSPLAT_SOURCES
         Null.cpp
         Projection.cpp
         QuatScaleToCovar.cpp
+        QuatToRotmat.cpp
         Rasterization.cpp
         Relocation.cpp
         SphericalHarmonics.cpp
@@ -39,6 +40,7 @@ set(GSPLAT_SOURCES
         ProjectionEWASimple.cu
         ProjectionUT3DGSFused.cu
         QuatScaleToCovarCUDA.cu
+        QuatToRotmatCUDA.cu
         RasterizeToIndices3DGS.cu
         RasterizeToPixels3DGSBwd.cu
         RasterizeToPixels3DGSFwd.cu
