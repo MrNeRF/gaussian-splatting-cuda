@@ -857,7 +857,6 @@ namespace gs {
         return {v_means3D, v_quats, v_scales, v_colors, v_opacities,
                 v_bg_color, torch::Tensor(), torch::Tensor(), torch::Tensor(),
                 torch::Tensor(), torch::Tensor(), torch::Tensor(),
-                torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor(),
-        torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor(),};
+                torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor()};
     }
 } // namespace gs
