@@ -532,20 +532,43 @@ namespace gs {
             ImGui::Text("Training Control");
             ImGui::Separator();
 
-            bool is_training = trainer->is_running();
-            bool is_paused = trainer->is_paused();
-            bool is_complete = trainer->is_training_complete();
-            bool has_stopped = trainer->has_stopped();
+            // Get trainer manager from viewer
+            auto viewer = static_cast<GSViewer*>(ImGui::GetIO().UserData);
+            if (!viewer || !viewer->getTrainerManager())
+                return;
+
+            auto trainer_manager = viewer->getTrainerManager();
+            auto training_state = trainer_manager->getState();
 
             // Show appropriate controls based on state
-            if (!state.training_started && !is_training) {
+            switch (training_state) {
+            case TrainerManager::State::Idle:
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
+                break;
+
+            case TrainerManager::State::Ready:
                 renderStartButton(state);
-            } else if (is_complete || has_stopped) {
-                // Training finished - show status
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f),
-                                   has_stopped ? "Training Stopped!" : "Training Complete!");
-            } else {
+                break;
+
+            case TrainerManager::State::Running:
+            case TrainerManager::State::Paused:
                 renderRunningControls(trainer, state);
+                break;
+
+            case TrainerManager::State::Stopping:
+                ImGui::TextColored(ImVec4(0.7f, 0.5f, 0.1f, 1.0f), "Stopping training...");
+                break;
+
+            case TrainerManager::State::Completed:
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
+                break;
+
+            case TrainerManager::State::Error:
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Training Error!");
+                if (!trainer_manager->getLastError().empty()) {
+                    ImGui::TextWrapped("%s", trainer_manager->getLastError().c_str());
+                }
+                break;
             }
 
             // Show save progress feedback
@@ -573,27 +596,32 @@ namespace gs {
         }
 
         void TrainingControlsPanel::renderRunningControls(Trainer* trainer, State& state) {
-            bool is_paused = trainer->is_paused();
+            auto viewer = static_cast<GSViewer*>(ImGui::GetIO().UserData);
+            if (!viewer || !viewer->getTrainerManager())
+                return;
+
+            auto trainer_manager = viewer->getTrainerManager();
+            bool is_paused = trainer_manager->isPaused();
 
             if (is_paused) {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
                 if (ImGui::Button("Resume", ImVec2(-1, 0))) {
-                    trainer->request_resume();
+                    trainer_manager->resumeTraining();
                 }
                 ImGui::PopStyleColor(2);
 
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
                 if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
-                    trainer->request_stop();
+                    trainer_manager->stopTraining();
                 }
                 ImGui::PopStyleColor(2);
             } else {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
                 if (ImGui::Button("Pause", ImVec2(-1, 0))) {
-                    trainer->request_pause();
+                    trainer_manager->pauseTraining();
                 }
                 ImGui::PopStyleColor(2);
             }
@@ -601,7 +629,7 @@ namespace gs {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
             if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
-                trainer->request_save();
+                trainer_manager->requestSaveCheckpoint();
                 state.save_in_progress = true;
                 state.save_start_time = std::chrono::steady_clock::now();
             }
@@ -610,13 +638,27 @@ namespace gs {
 
         void TrainingControlsPanel::renderStatus(Trainer* trainer, State& state) {
             ImGui::Separator();
-            int current_iter = trainer->get_current_iteration();
-            float current_loss = trainer->get_current_loss();
-            bool is_training = trainer->is_running();
-            bool is_paused = trainer->is_paused();
-            bool is_complete = trainer->is_training_complete();
 
-            ImGui::Text("Status: %s", is_complete ? "Complete" : (is_paused ? "Paused" : (is_training ? "Training" : "Ready")));
+            auto viewer = static_cast<GSViewer*>(ImGui::GetIO().UserData);
+            if (!viewer || !viewer->getTrainerManager())
+                return;
+
+            auto trainer_manager = viewer->getTrainerManager();
+            int current_iter = trainer_manager->getCurrentIteration();
+            float current_loss = trainer_manager->getCurrentLoss();
+
+            const char* status_text = "Unknown";
+            switch (trainer_manager->getState()) {
+            case TrainerManager::State::Idle: status_text = "Idle"; break;
+            case TrainerManager::State::Ready: status_text = "Ready"; break;
+            case TrainerManager::State::Running: status_text = "Training"; break;
+            case TrainerManager::State::Paused: status_text = "Paused"; break;
+            case TrainerManager::State::Stopping: status_text = "Stopping"; break;
+            case TrainerManager::State::Completed: status_text = "Complete"; break;
+            case TrainerManager::State::Error: status_text = "Error"; break;
+            }
+
+            ImGui::Text("Status: %s", status_text);
             ImGui::Text("Iteration: %d", current_iter);
             ImGui::Text("Loss: %.6f", current_loss);
         }
@@ -643,6 +685,9 @@ namespace gs {
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
             io.ConfigWindowsMoveFromTitleBarOnly = true;
             ImGui::StyleColorsLight();
+
+            // Store viewer pointer in IO for access in callbacks
+            io.UserData = viewer_;
 
             // Setup Platform/Renderer backends
             const char* glsl_version = "#version 430";
@@ -727,7 +772,7 @@ namespace gs {
             renderModeStatus();
 
             // Mode-specific controls
-            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainer()) {
+            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainerManager()->hasTrainer()) {
                 training_controls_->render(viewer_->getTrainer(), training_state_, viewer_->getNotifier());
 
                 // Handle the start trigger
@@ -759,7 +804,7 @@ namespace gs {
             }
 
             // Show training progress for training mode
-            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainer()) {
+            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainerManager()->hasTrainer()) {
                 renderProgressInfo();
             }
 
@@ -845,6 +890,8 @@ namespace gs {
 
         void GuiManager::renderProgressInfo() {
             auto info = viewer_->getTrainingInfo();
+            auto trainer_manager = viewer_->getTrainerManager();
+
             int current_iter = info->curr_iterations_.load();
             int total_iter = info->total_iterations_.load();
             int num_splats = info->num_splats_.load();

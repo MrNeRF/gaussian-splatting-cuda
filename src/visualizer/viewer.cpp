@@ -174,14 +174,15 @@ namespace gs {
     }
 
     GSViewer::GSViewer(std::string title, int width, int height)
-        : ViewerDetail(title, width, height),
-          trainer_(nullptr) {
+        : ViewerDetail(title, width, height) {
 
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<ViewerNotifier>();
 
         scene_ = std::make_unique<Scene>();
+        trainer_manager_ = std::make_unique<TrainerManager>();
+        trainer_manager_->setViewer(this);
 
         setFrameRate(30);
 
@@ -215,15 +216,25 @@ namespace gs {
             }
 
             if (command == "status") {
-                if (!trainer_) {
+                if (!trainer_manager_->hasTrainer()) {
                     return "No trainer available (viewer mode)";
                 }
+                auto trainer = trainer_manager_->getTrainer();
                 result << "Training Status:\n";
-                result << "  Running: " << (trainer_->is_running() ? "Yes" : "No") << "\n";
-                result << "  Paused: " << (trainer_->is_paused() ? "Yes" : "No") << "\n";
-                result << "  Complete: " << (trainer_->is_training_complete() ? "Yes" : "No") << "\n";
-                result << "  Current Iteration: " << trainer_->get_current_iteration() << "\n";
-                result << "  Current Loss: " << std::fixed << std::setprecision(6) << trainer_->get_current_loss();
+                result << "  State: " << [this]() {
+                    switch (trainer_manager_->getState()) {
+                    case TrainerManager::State::Idle: return "Idle";
+                    case TrainerManager::State::Ready: return "Ready";
+                    case TrainerManager::State::Running: return "Running";
+                    case TrainerManager::State::Paused: return "Paused";
+                    case TrainerManager::State::Stopping: return "Stopping";
+                    case TrainerManager::State::Completed: return "Completed";
+                    case TrainerManager::State::Error: return "Error";
+                    default: return "Unknown";
+                    }
+                }() << "\n";
+                result << "  Current Iteration: " << trainer->get_current_iteration() << "\n";
+                result << "  Current Loss: " << std::fixed << std::setprecision(6) << trainer->get_current_loss();
                 return result.str();
             }
 
@@ -351,21 +362,8 @@ namespace gs {
     }
 
     GSViewer::~GSViewer() {
-        // Stop training thread if running
-        if (training_thread_ && training_thread_->joinable()) {
-            std::cout << "Viewer closing - stopping training thread..." << std::endl;
-            training_thread_->request_stop();
-            training_thread_->join();
-        }
-
-        // If trainer is still running, request it to stop
-        if (trainer_ && trainer_->is_running()) {
-            std::cout << "Viewer closing - stopping training..." << std::endl;
-            trainer_->request_stop();
-
-            // Give the training thread a moment to acknowledge the stop request
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
+        // TrainerManager handles its own cleanup now
+        trainer_manager_.reset();
 
         // Cleanup GUI
         if (gui_manager_) {
@@ -376,10 +374,8 @@ namespace gs {
     }
 
     void GSViewer::setTrainer(Trainer* trainer) {
-        trainer_ = trainer;
-        if (scene_) {
-            scene_->linkToTrainer(trainer);
-        }
+        // This method is now deprecated - should not be used
+        std::cerr << "Warning: GSViewer::setTrainer is deprecated. Use loadDataset instead." << std::endl;
     }
 
     void GSViewer::setStandaloneModel(std::unique_ptr<SplatData> model) {
@@ -437,24 +433,18 @@ namespace gs {
                 return;
             }
 
-            // Store the trainer (but don't take ownership yet)
-            auto trainer_ptr = setup_result->trainer.get();
-
-            // Link the trainer to this viewer
-            trainer_ptr->setViewer(this);
-
-            // Now take ownership
-            trainer_ = setup_result->trainer.release();
+            // Pass trainer to TrainerManager
+            trainer_manager_->setTrainer(std::move(setup_result->trainer));
 
             // Link scene to trainer
-            scene_->linkToTrainer(trainer_);
+            scene_->linkToTrainer(trainer_manager_->getTrainer());
 
             current_dataset_path_ = path;
             current_mode_ = ViewerMode::Training;
 
             // Get dataset info
             size_t num_images = setup_result->dataset->size().value();
-            size_t num_gaussians = trainer_->get_strategy().get_model().size();
+            size_t num_gaussians = trainer_manager_->getTrainer()->get_strategy().get_model().size();
 
             gui_manager_->addConsoleLog("Info: Loaded dataset with %zu images and %zu initial Gaussians",
                                         num_images, num_gaussians);
@@ -468,25 +458,11 @@ namespace gs {
     }
 
     void GSViewer::clearCurrentData() {
-        // Stop any ongoing training thread
-        if (training_thread_ && training_thread_->joinable()) {
-            std::println("Stopping training thread...");
-            training_thread_->request_stop();
-            training_thread_->join();
-            training_thread_.reset();
-        }
-
-        // Stop any ongoing training via trainer
-        if (trainer_ && trainer_->is_running()) {
-            trainer_->request_stop();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
+        // Clear trainer manager (handles stopping training)
+        trainer_manager_->clearTrainer();
 
         // Clear scene
         scene_->clearModel();
-
-        // Clear data
-        trainer_ = nullptr;
 
         // Reset state
         current_mode_ = ViewerMode::Empty;
@@ -503,27 +479,7 @@ namespace gs {
     }
 
     void GSViewer::startTraining() {
-        if (!trainer_ || training_thread_) {
-            return;
-        }
-
-        // Set the ready flag for trainer to start
-        if (notifier_) {
-            notifier_->ready = true;
-        }
-
-        // Then start training in a separate thread
-        training_thread_ = std::make_unique<std::jthread>(
-            [trainer_ptr = trainer_](std::stop_token stop_token) {
-                std::println("Training thread started");
-                auto train_result = trainer_ptr->train(stop_token);
-                if (!train_result) {
-                    std::println(stderr, "Training error: {}", train_result.error());
-                }
-                std::println("Training thread finished");
-            });
-
-        std::println("Training thread launched");
+        trainer_manager_->startTraining();
     }
 
     bool GSViewer::isGuiActive() const {
@@ -561,8 +517,9 @@ namespace gs {
 
         RenderingPipeline::RenderResult result;
 
-        if (trainer_ && trainer_->is_running()) {
-            std::shared_lock<std::shared_mutex> lock(trainer_->getRenderMutex());
+        auto trainer = trainer_manager_->getTrainer();
+        if (trainer && trainer->is_running()) {
+            std::shared_lock<std::shared_mutex> lock(trainer->getRenderMutex());
             result = scene_->render(request);
         } else {
             result = scene_->render(request);

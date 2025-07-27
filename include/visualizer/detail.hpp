@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/image_io.hpp"
-#include "core/trainer.hpp"
+#include "visualizer/training_manager.hpp"
 #include "visualizer/camera_controller.hpp"
 #include "visualizer/input_handler.hpp"
 #include "visualizer/renderer.hpp"
@@ -13,7 +13,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <thread>
 #include <torch/torch.h>
 
 using uchar = unsigned char;
@@ -144,15 +143,16 @@ namespace gs {
 
         // Getters for GUI
         ViewerMode getCurrentMode() const;
-        Trainer* getTrainer() const { return scene_->getTrainer(); }
+        Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
         SplatData* getStandaloneModel() const { return scene_->getStandaloneModel(); }
         std::shared_ptr<TrainingInfo> getTrainingInfo() const { return info_; }
         std::shared_ptr<RenderingConfig> getRenderingConfig() const { return config_; }
         std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }
         const std::filesystem::path& getCurrentPLYPath() const { return current_ply_path_; }
         const std::filesystem::path& getCurrentDatasetPath() const { return current_dataset_path_; }
+        TrainerManager* getTrainerManager() { return trainer_manager_.get(); }
 
-        // Training control
+        // Training control (delegates to TrainerManager)
         void startTraining();
 
         // GUI access for static callbacks
@@ -170,8 +170,6 @@ namespace gs {
         std::unique_ptr<Scene> scene_;
         std::shared_ptr<RenderingConfig> config_;
 
-        Trainer* trainer_;
-
         bool anti_aliasing_ = false;
 
         param::TrainingParameters params_;
@@ -183,8 +181,8 @@ namespace gs {
         std::filesystem::path current_ply_path_;
         std::filesystem::path current_dataset_path_;
 
-        // Training thread
-        std::unique_ptr<std::jthread> training_thread_;
+        // Training management
+        std::unique_ptr<TrainerManager> trainer_manager_;
 
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
