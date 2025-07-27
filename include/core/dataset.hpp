@@ -77,7 +77,7 @@ public:
         size_t camera_idx = _indices[index];
         auto& cam = _cameras[camera_idx];
 
-        if (!_image_cache.empty()) {
+        if (!_image_cache.empty() && _image_cache.size() > index) {
             // Get tensors directly from RAM cache
             return {{cam.get(), _image_cache[index]}, torch::empty({})};
         } else {
