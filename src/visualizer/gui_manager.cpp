@@ -948,7 +948,7 @@ namespace gs {
                 ImGui::Checkbox("Use Clip Box", &use_crop_box_);
 
                 if (show_crop_box_ && crop_box_) {
-                    if (!crop_box_->isInitilized()) {
+                    if (!crop_box_->isInitialized()) {
                         return; // the manager must init crop box
                     }
 
