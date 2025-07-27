@@ -117,6 +117,7 @@ namespace gs {
             gsplat::CameraModelType::PINHOLE,
             "render_camera",
             "none",
+            "none",
             request.viewport_size.x,
             request.viewport_size.y,
             -1);

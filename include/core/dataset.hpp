@@ -144,6 +144,7 @@ create_dataset_from_colmap(const gs::param::DatasetConfig& datasetConfig) {
                 info._camera_model_type,
                 info._image_name,
                 info._image_path,
+                info._mask_path,
                 info._width,
                 info._height,
                 static_cast<int>(i));
