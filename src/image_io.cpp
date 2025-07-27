@@ -12,13 +12,34 @@
 #include <iostream>
 #include <vector>
 
+unsigned char* strip_image_alpha(unsigned char* img, int width, int height) {
+    unsigned char* new_img = (unsigned char*)malloc(width * height * 3);
+    if (!new_img) {
+        stbi_image_free(img);
+        throw std::runtime_error("failed allocating img in strip_image_alpha");
+    }
+
+    for (int i = 0; i < width * height; ++i) {
+        new_img[i * 3 + 0] = img[i * 4 + 0]; // R
+        new_img[i * 3 + 1] = img[i * 4 + 1]; // G
+        new_img[i * 3 + 2] = img[i * 4 + 2]; // B
+    }
+
+    stbi_image_free(img);
+    return new_img;
+}
+
 // Existing implementations...
-std::tuple<unsigned char*, int, int, int>
-load_image(std::filesystem::path p, int res_div) {
+std::tuple<unsigned char*, int, int, int> load_image(std::filesystem::path p, int res_div) {
     int w, h, c;
     unsigned char* img = stbi_load(p.string().c_str(), &w, &h, &c, 0);
     if (!img)
         throw std::runtime_error("Load failed: " + p.string() + " : " + stbi_failure_reason());
+
+    if (c == 4) {
+        img = strip_image_alpha(img, w, h);
+        c = 3;
+    }
 
     if (res_div == 2 || res_div == 4 || res_div == 8) {
         int nw = w / res_div, nh = h / res_div;

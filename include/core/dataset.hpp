@@ -3,6 +3,9 @@
 #include "core/camera.hpp"
 #include "core/colmap_reader.hpp"
 #include "core/parameters.hpp"
+#include "core/transforms_reader.hpp"
+#include <expected>
+#include <format>
 #include <memory>
 #include <torch/torch.h>
 #include <vector>
@@ -105,48 +108,102 @@ private:
     std::vector<torch::Tensor> _image_cache;
 };
 
-inline std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor> create_dataset_from_colmap(
-    const gs::param::DatasetConfig& datasetConfig) {
+inline std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
+create_dataset_from_colmap(const gs::param::DatasetConfig& datasetConfig) {
 
-    if (!std::filesystem::exists(datasetConfig.data_path)) {
-        throw std::runtime_error("Data path does not exist: " +
-                                 datasetConfig.data_path.string());
+    try {
+        if (!std::filesystem::exists(datasetConfig.data_path)) {
+            return std::unexpected(std::format("Data path does not exist: {}",
+                                               datasetConfig.data_path.string()));
+        }
+
+        // Read COLMAP data with specified images folder
+        auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
+            datasetConfig.data_path, datasetConfig.images);
+
+        std::vector<std::shared_ptr<Camera>> cameras;
+        cameras.reserve(camera_infos.size());
+
+        for (size_t i = 0; i < camera_infos.size(); ++i) {
+            const auto& info = camera_infos[i];
+
+            auto cam = std::make_shared<Camera>(
+                info._R,
+                info._T,
+                info._focal_x,
+                info._focal_y,
+                info._center_x,
+                info._center_y,
+                info._radial_distortion,
+                info._tangential_distortion,
+                info._camera_model_type,
+                info._image_name,
+                info._image_path,
+                info._width,
+                info._height,
+                static_cast<int>(i));
+
+            cameras.push_back(std::move(cam));
+        }
+
+        // Create dataset with ALL images
+        auto dataset = std::make_shared<CameraDataset>(
+            std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
+
+        return std::make_tuple(dataset, scene_center);
+
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Failed to create dataset from COLMAP: {}", e.what()));
     }
+}
 
-    // Read COLMAP data with specified images folder
-    auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
-        datasetConfig.data_path, datasetConfig.images);
+inline std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
+create_dataset_from_transforms(const gs::param::DatasetConfig& datasetConfig) {
 
-    std::vector<std::shared_ptr<Camera>> cameras;
-    cameras.reserve(camera_infos.size());
+    try {
+        if (!std::filesystem::exists(datasetConfig.data_path)) {
+            return std::unexpected(std::format("Data path does not exist: {}",
+                                               datasetConfig.data_path.string()));
+        }
 
-    for (size_t i = 0; i < camera_infos.size(); ++i) {
-        const auto& info = camera_infos[i];
+        // Read COLMAP data with specified images folder
+        auto [camera_infos, scene_center] = read_transforms_cameras_and_images(
+            datasetConfig.data_path);
 
-        auto cam = std::make_shared<Camera>(
-            info._R,
-            info._T,
-            info._focal_x,
-            info._focal_y,
-            info._center_x,
-            info._center_y,
-            info._radial_distortion,
-            info._tangential_distortion,
-            info._camera_model_type,
-            info._image_name,
-            info._image_path,
-            info._width,
-            info._height,
-            static_cast<int>(i));
+        std::vector<std::shared_ptr<Camera>> cameras;
+        cameras.reserve(camera_infos.size());
 
-        cameras.push_back(std::move(cam));
+        for (size_t i = 0; i < camera_infos.size(); ++i) {
+            const auto& info = camera_infos[i];
+
+            auto cam = std::make_shared<Camera>(
+                info._R,
+                info._T,
+                info._focal_x,
+                info._focal_y,
+                info._center_x,
+                info._center_y,
+                info._radial_distortion,
+                info._tangential_distortion,
+                info._camera_model_type,
+                info._image_name,
+                info._image_path,
+                info._width,
+                info._height,
+                static_cast<int>(i));
+
+            cameras.push_back(std::move(cam));
+        }
+
+        // Create dataset with ALL images
+        auto dataset = std::make_shared<CameraDataset>(
+            std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
+
+        return std::make_tuple(dataset, scene_center);
+
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Failed to create dataset from COLMAP: {}", e.what()));
     }
-
-    // Create dataset with ALL images
-    auto dataset = std::make_shared<CameraDataset>(
-        std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
-
-    return {dataset, scene_center};
 }
 
 inline auto create_dataloader_from_dataset(

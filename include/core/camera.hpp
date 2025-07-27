@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/torch_shapes.hpp"
 #include "Common.h"
+#include "core/torch_shapes.hpp"
 #include <filesystem>
 #include <future>
 #include <string>
