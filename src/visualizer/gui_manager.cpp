@@ -1,6 +1,7 @@
 #include "visualizer/gui_manager.hpp"
 #include "config.h"
 #include "visualizer/detail.hpp"
+#include "visualizer/event_response_handler.hpp"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <cstdarg>
@@ -652,31 +653,37 @@ namespace gs {
             ImGui::Separator();
 
             auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
-            if (!gui_manager || !gui_manager->viewer_)
+            if (!gui_manager)
                 return;
 
-            auto viewer = gui_manager->viewer_;
-            if (!viewer || !viewer->getTrainerManager())
+            auto event_bus = gui_manager->getEventBus();
+            if (!event_bus)
                 return;
 
-            auto trainer_manager = viewer->getTrainerManager();
-            int current_iter = trainer_manager->getCurrentIteration();
-            float current_loss = trainer_manager->getCurrentLoss();
+            // Query trainer state via events
+            EventResponseHandler<QueryTrainerStateRequest, QueryTrainerStateResponse> handler(event_bus);
+            auto response = handler.querySync(QueryTrainerStateRequest{});
 
-            const char* status_text = "Unknown";
-            switch (trainer_manager->getState()) {
-            case TrainerManager::State::Idle: status_text = "Idle"; break;
-            case TrainerManager::State::Ready: status_text = "Ready"; break;
-            case TrainerManager::State::Running: status_text = "Training"; break;
-            case TrainerManager::State::Paused: status_text = "Paused"; break;
-            case TrainerManager::State::Stopping: status_text = "Stopping"; break;
-            case TrainerManager::State::Completed: status_text = "Complete"; break;
-            case TrainerManager::State::Error: status_text = "Error"; break;
+            if (response) {
+                const char* status_text = "Unknown";
+                switch (response->state) {
+                case QueryTrainerStateResponse::State::Idle: status_text = "Idle"; break;
+                case QueryTrainerStateResponse::State::Ready: status_text = "Ready"; break;
+                case QueryTrainerStateResponse::State::Running: status_text = "Training"; break;
+                case QueryTrainerStateResponse::State::Paused: status_text = "Paused"; break;
+                case QueryTrainerStateResponse::State::Stopping: status_text = "Stopping"; break;
+                case QueryTrainerStateResponse::State::Completed: status_text = "Complete"; break;
+                case QueryTrainerStateResponse::State::Error: status_text = "Error"; break;
+                }
+
+                ImGui::Text("Status: %s", status_text);
+                ImGui::Text("Iteration: %d", response->current_iteration);
+                ImGui::Text("Loss: %.6f", response->current_loss);
+
+                if (response->error_message) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Error: %s", response->error_message->c_str());
+                }
             }
-
-            ImGui::Text("Status: %s", status_text);
-            ImGui::Text("Iteration: %d", current_iter);
-            ImGui::Text("Loss: %.6f", current_loss);
         }
 
         // ============================================================================
@@ -1089,24 +1096,31 @@ namespace gs {
         }
 
         void GuiManager::renderModeStatus() {
-            // Show current mode status
-            switch (viewer_->getCurrentMode()) {
-            case GSViewer::ViewerMode::Empty:
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No data loaded");
-                ImGui::Text("Use File Browser to load:");
-                ImGui::BulletText("PLY file for viewing");
-                ImGui::BulletText("Dataset for training");
-                break;
+            // Query current scene mode via events
+            if (event_bus_) {
+                EventResponseHandler<QuerySceneModeRequest, QuerySceneModeResponse> handler(event_bus_);
+                auto response = handler.querySync(QuerySceneModeRequest{});
 
-            case GSViewer::ViewerMode::PLYViewer:
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "PLY Viewer Mode");
-                ImGui::Text("File: %s", viewer_->getCurrentPLYPath().filename().string().c_str());
-                break;
+                if (response) {
+                    switch (response->mode) {
+                    case QuerySceneModeResponse::Mode::Empty:
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No data loaded");
+                        ImGui::Text("Use File Browser to load:");
+                        ImGui::BulletText("PLY file for viewing");
+                        ImGui::BulletText("Dataset for training");
+                        break;
 
-            case GSViewer::ViewerMode::Training:
-                ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "Training Mode");
-                ImGui::Text("Dataset: %s", viewer_->getCurrentDatasetPath().filename().string().c_str());
-                break;
+                    case QuerySceneModeResponse::Mode::Viewing:
+                        ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "PLY Viewer Mode");
+                        ImGui::Text("File: %s", viewer_->getCurrentPLYPath().filename().string().c_str());
+                        break;
+
+                    case QuerySceneModeResponse::Mode::Training:
+                        ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "Training Mode");
+                        ImGui::Text("Dataset: %s", viewer_->getCurrentDatasetPath().filename().string().c_str());
+                        break;
+                    }
+                }
             }
         }
 

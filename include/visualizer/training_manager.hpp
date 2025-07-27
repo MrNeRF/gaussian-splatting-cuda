@@ -57,7 +57,7 @@ namespace gs {
         void setViewer(GSViewer* viewer) { viewer_ = viewer; }
 
         // Set event bus for publishing training events
-        void setEventBus(std::shared_ptr<EventBus> event_bus) { event_bus_ = event_bus; }
+        void setEventBus(std::shared_ptr<EventBus> event_bus);
 
         // Training control
         bool startTraining();
@@ -101,6 +101,10 @@ namespace gs {
         // State management
         void setState(State new_state);
         void handleTrainingComplete(bool success, const std::string& error = "");
+
+        // Event handlers
+        void handleStateQueryRequest(const QueryTrainerStateRequest& request);
+        void publishStateChange(State old_state, State new_state, const std::string& reason);
 
         // Publish training events
         void publishTrainingStarted(int total_iterations);

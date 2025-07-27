@@ -50,6 +50,7 @@ namespace gs {
         const SplatData* getModel() const override {
             if (!trainer_)
                 return nullptr;
+            // Assuming get_model() returns SplatData& not gs::SplatData&
             return &trainer_->get_strategy().get_model();
         }
 

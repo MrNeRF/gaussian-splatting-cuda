@@ -150,6 +150,7 @@ set(HOST_SOURCES
         src/visualizer/input_handler.cpp
         src/visualizer/rendering_pipeline.cpp
         src/visualizer/scene.cpp
+        src/visualizer/scene_manager.cpp
         src/visualizer/viewer.cpp
         src/visualizer/training_manager.cpp
         src/visualizer/window_manager.cpp

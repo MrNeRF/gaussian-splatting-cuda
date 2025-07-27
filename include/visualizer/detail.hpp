@@ -10,15 +10,14 @@
 #include "visualizer/render_bounding_box.hpp"
 #include "visualizer/renderer.hpp"
 #include "visualizer/scene.hpp"
+#include "visualizer/scene_manager.hpp"
 #include "visualizer/training_manager.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
 #include <chrono>
 #include <deque>
-#include <functional>
 #include <memory>
 #include <string>
-#include <torch/torch.h>
 
 using uchar = unsigned char;
 
@@ -175,7 +174,7 @@ namespace gs {
 
         // Event system
         std::shared_ptr<EventBus> event_bus_;
-
+        std::unique_ptr<SceneManager> scene_manager_;
         // Event handler IDs for cleanup
         std::vector<size_t> event_handler_ids_;
 

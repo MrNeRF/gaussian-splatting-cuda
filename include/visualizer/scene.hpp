@@ -2,6 +2,8 @@
 
 #include "core/imodel_provider.hpp"
 #include "core/trainer.hpp"
+#include "visualizer/event_bus.hpp"
+#include "visualizer/events.hpp"
 #include "visualizer/rendering_pipeline.hpp"
 #include <memory>
 
@@ -64,10 +66,19 @@ namespace gs {
         // Rendering
         RenderingPipeline::RenderResult render(const RenderingPipeline::RenderRequest& request);
 
+        // Set event bus for publishing scene events
+        void setEventBus(std::shared_ptr<EventBus> event_bus);
+
     private:
         Mode mode_ = Mode::Empty;
         std::shared_ptr<IModelProvider> model_provider_;
         std::unique_ptr<RenderingPipeline> pipeline_;
+        std::shared_ptr<EventBus> event_bus_;
+
+        // Event handlers
+        void handleModelInfoQuery(const QueryModelInfoRequest& request);
+        void handleSceneModeQuery(const QuerySceneModeRequest& request);
+        void publishModeChange(Mode old_mode, Mode new_mode);
     };
 
 } // namespace gs

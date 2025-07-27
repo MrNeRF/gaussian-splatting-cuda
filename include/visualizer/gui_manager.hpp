@@ -132,6 +132,9 @@ namespace gs {
                 }
             }
 
+            // Get event bus for internal components
+            std::shared_ptr<EventBus> getEventBus() const { return event_bus_; }
+
             bool showCropBox() const;
             bool useCropBox() const;
 

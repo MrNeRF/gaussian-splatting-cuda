@@ -1,8 +1,8 @@
 #include "config.h" // Include generated config
 #include "core/ply_loader.hpp"
 #include "core/splat_data.hpp"
-#include "core/training_setup.hpp"
 #include "visualizer/detail.hpp"
+#include "visualizer/event_response_handler.hpp"
 #include "visualizer/gui_manager.hpp"
 #include <algorithm>
 #include <chrono>
@@ -190,10 +190,20 @@ namespace gs {
         notifier_ = std::make_shared<ViewerNotifier>();
         crop_box_ = std::make_shared<RenderBoundingBox>();
 
-        scene_ = std::make_unique<Scene>();
+        // Create scene manager
+        scene_manager_ = std::make_unique<SceneManager>(event_bus_);
+
+        // Create scene and give it to scene manager
+        auto scene = std::make_unique<Scene>();
+        scene_manager_->setScene(std::move(scene));
+
+        // Create trainer manager
         trainer_manager_ = std::make_unique<TrainerManager>();
         trainer_manager_->setViewer(this);
         trainer_manager_->setEventBus(event_bus_);
+
+        // Link trainer manager to scene manager
+        scene_manager_->setTrainerManager(trainer_manager_.get());
 
         setFrameRate(30);
 
@@ -237,48 +247,69 @@ namespace gs {
             }
 
             if (command == "status") {
-                if (!trainer_manager_->hasTrainer()) {
-                    return "No trainer available (viewer mode)";
-                }
-                auto trainer = trainer_manager_->getTrainer();
-                result << "Training Status:\n";
-                result << "  State: " << [this]() {
-                    switch (trainer_manager_->getState()) {
-                    case TrainerManager::State::Idle: return "Idle";
-                    case TrainerManager::State::Ready: return "Ready";
-                    case TrainerManager::State::Running: return "Running";
-                    case TrainerManager::State::Paused: return "Paused";
-                    case TrainerManager::State::Stopping: return "Stopping";
-                    case TrainerManager::State::Completed: return "Completed";
-                    case TrainerManager::State::Error: return "Error";
-                    default: return "Unknown";
+                // Use event query instead of direct access
+                if (event_bus_) {
+                    EventResponseHandler<QueryTrainerStateRequest, QueryTrainerStateResponse> handler(event_bus_);
+                    auto response = handler.querySync(QueryTrainerStateRequest{});
+
+                    if (response) {
+                        result << "Training Status:\n";
+                        result << "  State: " << [](const QueryTrainerStateResponse::State& state) -> const char* {
+                            switch (state) {
+                            case QueryTrainerStateResponse::State::Idle: return "Idle";
+                            case QueryTrainerStateResponse::State::Ready: return "Ready";
+                            case QueryTrainerStateResponse::State::Running: return "Running";
+                            case QueryTrainerStateResponse::State::Paused: return "Paused";
+                            case QueryTrainerStateResponse::State::Stopping: return "Stopping";
+                            case QueryTrainerStateResponse::State::Completed: return "Completed";
+                            case QueryTrainerStateResponse::State::Error: return "Error";
+                            default: return "Unknown";
+                            }
+                        }(response->state) << "\n";
+                        result << "  Current Iteration: " << response->current_iteration << "\n";
+                        result << "  Current Loss: " << std::fixed << std::setprecision(6) << response->current_loss;
+                        if (response->error_message) {
+                            result << "\n  Error: " << *response->error_message;
+                        }
+                    } else {
+                        result << "No trainer available (viewer mode)";
                     }
-                }() << "\n";
-                result << "  Current Iteration: " << trainer->get_current_iteration() << "\n";
-                result << "  Current Loss: " << std::fixed << std::setprecision(6) << trainer->get_current_loss();
+                }
                 return result.str();
             }
 
             if (command == "model_info") {
-                if (!scene_->hasModel()) {
-                    return "No model available";
-                }
+                // First query scene state
+                EventResponseHandler<QuerySceneStateRequest, QuerySceneStateResponse> stateHandler(event_bus_);
+                auto stateResponse = stateHandler.querySync(QuerySceneStateRequest{});
 
-                result << "Model Information:\n";
+                if (stateResponse && stateResponse->has_model) {
+                    result << "Scene Information:\n";
+                    result << "  Type: " << [&]() {
+                        switch (stateResponse->type) {
+                        case QuerySceneStateResponse::SceneType::None: return "None";
+                        case QuerySceneStateResponse::SceneType::PLY: return "PLY";
+                        case QuerySceneStateResponse::SceneType::Dataset: return "Dataset";
+                        default: return "Unknown";
+                        }
+                    }() << "\n";
+                    result << "  Source: " << stateResponse->source_path.filename().string() << "\n";
+                    result << "  Number of Gaussians: " << stateResponse->num_gaussians << "\n";
 
-                const SplatData* model = scene_->getModel();
-                if (model) {
-                    result << "  Number of Gaussians: " << model->size() << "\n";
-                    result << "  Positions shape: [" << model->get_means().size(0) << ", " << model->get_means().size(1) << "]\n";
-                    result << "  Device: " << model->get_means().device() << "\n";
-                    result << "  Dtype: " << model->get_means().dtype() << "\n";
-                    result << "  Active SH degree: " << model->get_active_sh_degree() << "\n";
-                    result << "  Scene scale: " << model->get_scene_scale() << "\n";
-
-                    // Add model source information
-                    if (auto provider = scene_->getModelProvider()) {
-                        result << "  Source: " << provider->getModelSource();
+                    if (stateResponse->is_training) {
+                        result << "  Training Iteration: " << stateResponse->training_iteration.value_or(0) << "\n";
                     }
+
+                    // Then query model details if needed
+                    EventResponseHandler<QueryModelInfoRequest, QueryModelInfoResponse> modelHandler(event_bus_);
+                    auto modelResponse = modelHandler.querySync(QueryModelInfoRequest{});
+
+                    if (modelResponse) {
+                        result << "  SH Degree: " << modelResponse->sh_degree << "\n";
+                        result << "  Scene Scale: " << modelResponse->scene_scale << "\n";
+                    }
+                } else {
+                    result << "No scene loaded";
                 }
 
                 return result.str();
@@ -303,7 +334,7 @@ namespace gs {
 
             // Handle tensor_info command
             if (command.substr(0, 11) == "tensor_info") {
-                if (!scene_->hasModel()) {
+                if (!scene_manager_->hasScene()) {
                     return "No model available";
                 }
 
@@ -317,7 +348,7 @@ namespace gs {
                 }
 
                 std::string tensor_result;
-                SplatData* model = scene_->getMutableModel();
+                SplatData* model = scene_manager_->getScene()->getMutableModel();
                 if (!model) {
                     tensor_result = "Model not available";
                     return tensor_result;
@@ -372,6 +403,7 @@ namespace gs {
 
             return "Unknown command: '" + command + "'. Type 'help' for available commands.";
         });
+
         // Set up file selection callback
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             event_bus_->publish(LoadFileCommand{path, is_dataset});
@@ -567,41 +599,9 @@ namespace gs {
         try {
             std::println("Loading PLY file: {}", path.string());
 
-            // Clear any existing data
-            clearCurrentData();
-
-            // Load the PLY file
-            auto splat_result = gs::load_ply(path);
-            if (!splat_result) {
-                event_bus_->publish(LogMessageEvent{
-                    LogMessageEvent::Level::Error,
-                    std::format("Failed to load PLY: {}", splat_result.error()),
-                    "GSViewer"});
-                return;
-            }
-
-            scene_->setStandaloneModel(std::make_unique<SplatData>(std::move(*splat_result))); // Changed from setModel
+            scene_manager_->loadPLY(path);
             current_ply_path_ = path;
             current_mode_ = ViewerMode::PLYViewer;
-
-            // Get the model through the Scene interface
-            const SplatData* model = scene_->getModel(); // Use getModel() instead of getStandaloneModel()
-            size_t num_gaussians = model ? model->size() : 0;
-
-            // Publish scene loaded event
-            event_bus_->publish(SceneLoadedEvent{
-                scene_.get(),
-                path,
-                SceneLoadedEvent::SourceType::PLY,
-                num_gaussians}); // Use the calculated num_gaussians
-
-            // Publish log message
-            event_bus_->publish(LogMessageEvent{
-                LogMessageEvent::Level::Info,
-                std::format("Loaded PLY with {} Gaussians from {}",
-                            num_gaussians, // Use the calculated num_gaussians
-                            path.filename().string()),
-                "GSViewer"});
 
         } catch (const std::exception& e) {
             event_bus_->publish(LogMessageEvent{
@@ -615,62 +615,9 @@ namespace gs {
         try {
             std::println("Loading dataset from: {}", path.string());
 
-            // Clear any existing data
-            clearCurrentData();
-
-            // Use the parameters that were passed to the viewer
-            param::TrainingParameters dataset_params = params_;
-            dataset_params.dataset.data_path = path; // Override with the selected path
-
-            // Setup training
-            auto setup_result = gs::setupTraining(dataset_params);
-            if (!setup_result) {
-                event_bus_->publish(LogMessageEvent{
-                    LogMessageEvent::Level::Error,
-                    std::format("Failed to setup training: {}", setup_result.error()),
-                    "GSViewer"});
-                return;
-            }
-
-            // Pass trainer to TrainerManager
-            trainer_manager_->setTrainer(std::move(setup_result->trainer));
-
-            // Pass event bus to trainer manager
-            trainer_manager_->setEventBus(event_bus_);
-
-            // Link scene to trainer
-            scene_->linkToTrainer(trainer_manager_->getTrainer());
-
+            scene_manager_->loadDataset(path, params_);
             current_dataset_path_ = path;
             current_mode_ = ViewerMode::Training;
-
-            // Get dataset info
-            size_t num_images = setup_result->dataset->size().value();
-            size_t num_gaussians = trainer_manager_->getTrainer()->get_strategy().get_model().size();
-
-            // Publish scene loaded event
-            event_bus_->publish(SceneLoadedEvent{
-                scene_.get(),
-                path,
-                SceneLoadedEvent::SourceType::Dataset,
-                num_gaussians});
-
-            // Publish log messages
-            event_bus_->publish(LogMessageEvent{
-                LogMessageEvent::Level::Info,
-                std::format("Loaded dataset with {} images and {} initial Gaussians",
-                            num_images, num_gaussians),
-                "GSViewer"});
-
-            event_bus_->publish(LogMessageEvent{
-                LogMessageEvent::Level::Info,
-                std::format("Ready to start training from {}", path.filename().string()),
-                "GSViewer"});
-
-            event_bus_->publish(LogMessageEvent{
-                LogMessageEvent::Level::Info,
-                "Using parameters from command line/config",
-                "GSViewer"});
 
         } catch (const std::exception& e) {
             event_bus_->publish(LogMessageEvent{
@@ -681,13 +628,7 @@ namespace gs {
     }
 
     void GSViewer::clearCurrentData() {
-        // Clear trainer manager (handles stopping training)
-        trainer_manager_->clearTrainer();
-
-        // Clear scene
-        scene_->clearModel();
-
-        // Reset state
+        scene_manager_->clearScene();
         current_mode_ = ViewerMode::Empty;
         current_ply_path_.clear();
         current_dataset_path_.clear();
@@ -699,9 +640,6 @@ namespace gs {
             info_->num_splats_ = 0;
             info_->loss_buffer_.clear();
         }
-
-        // Publish scene cleared event
-        event_bus_->publish(SceneClearedEvent{});
     }
 
     void GSViewer::startTraining() {
@@ -714,12 +652,17 @@ namespace gs {
     }
 
     GSViewer::ViewerMode GSViewer::getCurrentMode() const {
-        switch (scene_->getMode()) {
-        case Scene::Mode::Empty:
+        if (!scene_manager_)
             return ViewerMode::Empty;
-        case Scene::Mode::Viewing:
+
+        auto state = scene_manager_->getCurrentState();
+
+        switch (state.type) {
+        case SceneManager::SceneType::None:
+            return ViewerMode::Empty;
+        case SceneManager::SceneType::PLY:
             return ViewerMode::PLYViewer;
-        case Scene::Mode::Training:
+        case SceneManager::SceneType::Dataset:
             return ViewerMode::Training;
         default:
             return ViewerMode::Empty;
@@ -727,8 +670,8 @@ namespace gs {
     }
 
     void GSViewer::drawFrame() {
-        // Only render if we have a model to render
-        if (!scene_->hasModel()) {
+        // Only render if we have a scene
+        if (!scene_manager_->hasScene()) {
             return;
         }
 
@@ -752,9 +695,9 @@ namespace gs {
         auto trainer = trainer_manager_->getTrainer();
         if (trainer && trainer->is_running()) {
             std::shared_lock<std::shared_mutex> lock(trainer->getRenderMutex());
-            result = scene_->render(request);
+            result = scene_manager_->render(request);
         } else {
-            result = scene_->render(request);
+            result = scene_manager_->render(request);
         }
 
         if (result.valid) {

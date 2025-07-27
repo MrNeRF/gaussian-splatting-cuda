@@ -9,6 +9,7 @@ namespace gs {
 
     class Scene;
     class Camera;
+    class RenderingPipeline;
 
     /**
      * @brief Events use composition - no base class inheritance
@@ -137,6 +138,144 @@ namespace gs {
     struct LoadFileCommand {
         std::filesystem::path path;
         bool is_dataset; // true for dataset, false for PLY
+    };
+
+    // ============================================================================
+    // State Query Events (Request/Response Pattern)
+    // ============================================================================
+
+    struct QueryTrainerStateRequest {
+        // Empty - just requests current state
+    };
+
+    struct QueryTrainerStateResponse {
+        enum class State {
+            Idle,
+            Ready,
+            Running,
+            Paused,
+            Stopping,
+            Completed,
+            Error
+        };
+        State state;
+        int current_iteration;
+        float current_loss;
+        int total_iterations;
+        std::optional<std::string> error_message;
+    };
+
+    struct QueryModelInfoRequest {
+        // Empty - requests model information
+    };
+
+    struct QueryModelInfoResponse {
+        bool has_model;
+        size_t num_gaussians;
+        int sh_degree;
+        float scene_scale;
+        std::string model_source;
+    };
+
+    struct QuerySceneModeRequest {
+        // Empty - requests current scene mode
+    };
+
+    struct QuerySceneModeResponse {
+        enum class Mode {
+            Empty,
+            Viewing,
+            Training
+        };
+        Mode mode;
+        std::optional<std::filesystem::path> current_path;
+    };
+
+    // State change notifications (push-based)
+    struct TrainerStateChangedEvent {
+        QueryTrainerStateResponse::State old_state;
+        QueryTrainerStateResponse::State new_state;
+        std::optional<std::string> reason;
+    };
+
+    struct SceneModeChangedEvent {
+        QuerySceneModeResponse::Mode old_mode;
+        QuerySceneModeResponse::Mode new_mode;
+        std::optional<std::filesystem::path> loaded_path;
+    };
+
+    // ============================================================================
+    // Scene Management Commands
+    // ============================================================================
+
+    struct ClearSceneCommand {
+        // Empty - just clear the current scene
+    };
+
+    struct RenderRequestCommand {
+        glm::mat3 view_rotation;
+        glm::vec3 view_translation;
+        glm::ivec2 viewport_size;
+        float fov = 60.0f;
+        float scaling_modifier = 1.0f;
+        bool antialiasing = false;
+        int render_mode = 0;      // Use int instead of RenderMode enum
+        void* crop_box = nullptr; // Use void* instead of BoundingBox*
+        size_t request_id;        // For async response matching
+    };
+
+    // ============================================================================
+    // Scene State Queries
+    // ============================================================================
+
+    struct QuerySceneStateRequest {
+        // Empty - requests current scene state
+    };
+
+    struct QuerySceneStateResponse {
+        enum class SceneType {
+            None,
+            PLY,
+            Dataset
+        };
+
+        SceneType type;
+        std::filesystem::path source_path;
+        size_t num_gaussians;
+        bool is_training;
+        std::optional<int> training_iteration;
+        bool has_model;
+    };
+
+    struct QueryRenderCapabilitiesRequest {
+        // Empty - asks what render modes are available
+    };
+
+    struct QueryRenderCapabilitiesResponse {
+        std::vector<std::string> supported_render_modes;
+        bool supports_antialiasing;
+        bool supports_depth;
+        int max_viewport_width;
+        int max_viewport_height;
+    };
+
+    // ============================================================================
+    // Scene State Change Events
+    // ============================================================================
+
+    struct SceneStateChangedEvent {
+        QuerySceneStateResponse::SceneType old_type;
+        QuerySceneStateResponse::SceneType new_type;
+        std::filesystem::path source_path;
+        size_t num_gaussians;
+        std::optional<std::string> change_reason;
+    };
+
+    struct RenderCompletedEvent {
+        size_t request_id;
+        bool success;
+        std::optional<std::string> error_message;
+        float render_time_ms;
     };
 
     // ============================================================================
