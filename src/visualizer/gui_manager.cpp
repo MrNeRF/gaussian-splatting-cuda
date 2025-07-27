@@ -630,6 +630,8 @@ namespace gs {
             file_browser_ = std::make_unique<FileBrowser>();
             camera_controls_ = std::make_unique<CameraControlsWindow>();
             training_controls_ = std::make_unique<TrainingControlsPanel>();
+            crop_box_panel_  = std::make_unique<CropBoxPanel>();
+            crop_box_panel_->crop_box_ = viewer->crop_box_;
         }
 
         GuiManager::~GuiManager() = default;
@@ -780,6 +782,11 @@ namespace gs {
             }
             ImGui::PopStyleColor(2);
 
+            if (show_crop_box_panel_) {
+                ImGui::Separator();
+                crop_box_panel_->render();
+            }
+
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.3f, 1.0f));
             if (ImGui::Button("Open Console", ImVec2(-1, 0))) {
@@ -922,6 +929,116 @@ namespace gs {
                 scripting_console_->addLog("%s", buf);
             }
         }
+
+        bool GuiManager::showCropBox() const{
+            if (crop_box_panel_)
+                return crop_box_panel_->show_crop_box_;
+            else
+                return false;
+        }
+
+
+        void CropBoxPanel::render() {
+            if (ImGui::CollapsingHeader("Clip Box")) {
+                ImGui::Checkbox("Show Clip Box", &show_crop_box_);
+                ImGui::Checkbox("Use Clip Box", &use_crop_box_);
+
+                if (show_crop_box_ && crop_box_) {
+                    if (!crop_box_->isInitilized()) {
+                        return;  // the manager must init crop box
+                    }
+
+                    // Color picker
+                    static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
+                    if (ImGui::ColorEdit3("Box Color", bbox_color)) {
+                        crop_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
+                    }
+
+                    // Line width and Reset button aligned
+                    static float line_width = 2.0f;
+                    float available_width = ImGui::GetContentRegionAvail().x;
+                    float button_width = 120.0f; // Adjust this value as needed
+                    float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
+
+                    ImGui::SetNextItemWidth(slider_width);
+                    if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
+                        crop_box_->setLineWidth(line_width);
+                    }
+
+                    // Reset button on next line
+                    if (ImGui::Button("Reset to Default")) {
+                        crop_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+                    }
+
+                    // Manual bounds adjustment
+                    if (ImGui::TreeNode("Manual Bounds")) {
+                        glm::vec3 current_min = crop_box_->getMinBounds();
+                        glm::vec3 current_max = crop_box_->getMaxBounds();
+
+                        float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
+                        float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
+
+                        bool bounds_changed = false;
+
+                        // Define reasonable ranges for the sliders (adjust these values as needed)
+                        const float min_range = -8.0f;
+                        const float max_range = 8.0f;
+
+                        // Min Bounds - each slider on separate line
+                        ImGui::Text("Min Bounds:");
+                        float min_bounds_x = min_bounds[0];
+                        bounds_changed |= ImGui::SliderFloat("Min X", &min_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        min_bounds_x = std::min(min_bounds_x, max_bounds[0]);
+                        min_bounds[0] = min_bounds_x;
+
+                        float min_bounds_y = min_bounds[1];
+                        bounds_changed |= ImGui::SliderFloat("Min Y", &min_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        min_bounds_y = std::min(min_bounds_y, max_bounds[1]);
+                        min_bounds[1] = min_bounds_y;
+
+                        float min_bounds_z = min_bounds[2];
+                        bounds_changed |= ImGui::SliderFloat("Min Z", &min_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        min_bounds_z = std::min(min_bounds_z, max_bounds[2]);
+                        min_bounds[2] = min_bounds_z;
+
+                        // Max Bounds - each slider on separate line
+                        ImGui::Text("Max Bounds:");
+                        float max_bounds_x = max_bounds[0];
+                        bounds_changed |= ImGui::SliderFloat("Max X", &max_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        max_bounds_x = std::max(max_bounds_x, min_bounds[0]);
+                        max_bounds[0] = max_bounds_x;
+
+                        float max_bounds_y = max_bounds[1];
+                        bounds_changed |= ImGui::SliderFloat("Max Y", &max_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        max_bounds_y = std::max(max_bounds_y, min_bounds[1]);
+                        max_bounds[1] = max_bounds_y;
+
+                        float max_bounds_z = max_bounds[2];
+                        bounds_changed |= ImGui::SliderFloat("Max Z", &max_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        max_bounds_z = std::max(max_bounds_z, min_bounds[2]);
+                        max_bounds[2] = max_bounds_z;
+
+                        if (bounds_changed) {
+                            crop_box_->setBounds(
+                                glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
+                                glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
+                        }
+
+                        // Display current info
+                        glm::vec3 center = crop_box_->getCenter();
+                        glm::vec3 size = crop_box_->getSize();
+
+                        ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
+                        ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
+
+                        ImGui::TreePop();
+                    }
+                }
+            }
+        }
+
+
+
 
     } // namespace gui
 } // namespace gs

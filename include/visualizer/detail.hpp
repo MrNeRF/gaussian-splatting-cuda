@@ -8,6 +8,7 @@
 #include "visualizer/scene.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
+#include "visualizer/render_bounding_box.hpp"
 #include <chrono>
 #include <deque>
 #include <functional>
@@ -189,6 +190,9 @@ namespace gs {
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
         friend class gui::GuiManager; // Allow GUI manager to access private members
+    private:
+        // Bounding box visualization
+        std::shared_ptr<RenderBoundingBox> crop_box_;
     };
 
 } // namespace gs
