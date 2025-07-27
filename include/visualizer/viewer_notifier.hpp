@@ -1,15 +1,12 @@
 #pragma once
 
-#include <condition_variable>
-#include <mutex>
+#include <atomic>
 
 namespace gs {
 
-    // Notifier struct for viewer synchronization
+    // Simple notifier for training start synchronization
     struct ViewerNotifier {
-        bool ready = false;
-        std::mutex mtx;
-        std::condition_variable cv;
+        std::atomic<bool> ready{false};
     };
 
 } // namespace gs
