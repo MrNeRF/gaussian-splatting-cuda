@@ -77,15 +77,14 @@ namespace gs {
     public:
         struct TrainingInfo {
 
-            std::mutex mtx;
+            // No mutex needed - use atomics
+            std::atomic<int> curr_iterations_{0};
+            std::atomic<int> total_iterations_{0};
+            std::atomic<int> num_splats_{0};
 
-            int curr_iterations_ = 0;
-            int total_iterations_ = 0;
-
-            int num_splats_ = 0;
             int max_loss_points_ = 200;
-
             std::deque<float> loss_buffer_;
+            std::mutex loss_buffer_mutex_; // Only for loss buffer
 
             void updateProgress(int iter, int total_iterations) {
                 curr_iterations_ = iter;
@@ -97,6 +96,7 @@ namespace gs {
             }
 
             void updateLoss(float loss) {
+                std::lock_guard<std::mutex> lock(loss_buffer_mutex_);
                 loss_buffer_.push_back(loss);
                 while (loss_buffer_.size() > max_loss_points_) {
                     loss_buffer_.pop_front();
