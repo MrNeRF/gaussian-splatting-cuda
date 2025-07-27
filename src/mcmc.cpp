@@ -3,6 +3,7 @@
 #include "core/debug_utils.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/gs_utils.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <exception>
 #include <iostream>
@@ -91,7 +92,7 @@ void MCMC::update_optimizer_for_relocate(torch::optim::Optimizer* optimizer,
     void* param_key = param.unsafeGetTensorImpl();
 
     // Check if optimizer state exists
-    auto state_it = optimizer->state().find(param_key);
+    auto state_it = optimizer->state().find(gs::get_tensor_key(param_key));
     if (state_it == optimizer->state().end()) {
         // No state exists yet - this can happen if optimizer.step() hasn't been called
         // In this case, there's nothing to reset, so we can safely return
@@ -293,7 +294,7 @@ int MCMC::add_new_gs() {
         old_param_keys.push_back(old_param_key);
 
         // Check if state exists
-        auto state_it = _optimizer->state().find(old_param_key);
+        auto state_it = _optimizer->state().find(gs::get_tensor_key(old_param_key));
         if (state_it != _optimizer->state().end()) {
             // Clone the state before modifying - handle both optimizer types
             if (auto* adam_state = dynamic_cast<torch::optim::AdamParamState*>(state_it->second.get())) {
@@ -368,7 +369,7 @@ int MCMC::add_new_gs() {
 
     // Now remove all old states
     for (auto key : old_param_keys) {
-        _optimizer->state().erase(key);
+        _optimizer->state().erase(gs::get_tensor_key(key));
     }
 
     // Update parameters and add new states
@@ -377,7 +378,7 @@ int MCMC::add_new_gs() {
 
         if (saved_states[i]) {
             void* new_param_key = new_params[i]->unsafeGetTensorImpl();
-            _optimizer->state()[new_param_key] = std::move(saved_states[i]);
+            _optimizer->state()[gs::get_tensor_key(new_param_key)] = std::move(saved_states[i]);
         }
     }
 
