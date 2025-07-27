@@ -121,6 +121,7 @@ namespace gs {
                     {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
                     {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
                     {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
+                    {"pose_optimization", defaults.pose_optimization, "Pose optimization type: none, direct, mlp"},
                     {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
                     {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
                     {"skip_intermediate", defaults.skip_intermediate_saving, "Skip saving intermediate results and only save final output"},
@@ -294,6 +295,14 @@ namespace gs {
                         std::println(stderr, "Warning: Invalid render mode '{}' in JSON. Using default 'RGB'", mode);
                     }
                 }
+                if (json.contains("pose_optimization")) {
+                    std::string pose_opt = json["pose_optimization"];
+                    if (pose_opt == "none" || pose_opt == "direct" || pose_opt == "mlp") {
+                        params.pose_optimization = pose_opt;
+                    } else {
+                        std::println(stderr, "Warning: Invalid pose optimization '{}' in JSON. Using default 'none'", pose_opt);
+                    }
+                }
 
                 if (json.contains("eval_steps")) {
                     params.eval_steps.clear();
@@ -400,6 +409,7 @@ namespace gs {
                 opt_json["init_scaling"] = params.optimization.init_scaling;
                 opt_json["max_cap"] = params.optimization.max_cap;
                 opt_json["render_mode"] = params.optimization.render_mode;
+                opt_json["pose_optimization"] = params.optimization.pose_optimization;
                 opt_json["eval_steps"] = params.optimization.eval_steps;
                 opt_json["save_steps"] = params.optimization.save_steps;
                 opt_json["enable_eval"] = params.optimization.enable_eval;

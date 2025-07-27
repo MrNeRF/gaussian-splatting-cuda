@@ -36,6 +36,7 @@ namespace gs {
             bool enable_save_eval_images = true;              // Save during evaluation images
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
+            std::string pose_optimization = "none";           // Pose optimization type: none, direct, mlp
 
             // Bilateral grid parameters
             bool use_bilateral_grid = false;
