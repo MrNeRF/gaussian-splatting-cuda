@@ -38,5 +38,35 @@ namespace gs {
                              delta_translation);
         return torch::matmul(camera_transforms, transform);
     }
+    MLPPoseOptimizationModule::MLPPoseOptimizationModule(int number_of_cameras, int width, int depth)  : camera_embeddings(register_module("camera_embeddings",
+                                            torch::nn::Embedding(number_of_cameras, width))), rot_identity(register_buffer(
+                                                "rot_identity",
+                                                torch::tensor({1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f}))), mlp(register_module("mlp", torch::nn::Sequential())) {
+        torch::nn::init::zeros_(camera_embeddings->weight);
+        for (int i = 0; i < depth; ++i) {
+            mlp->push_back(torch::nn::Linear(width, width));
+            mlp->push_back(torch::nn::ReLU());
+        }
+        auto last_layer = torch::nn::Linear(width, 9);
+        torch::nn::init::zeros_(last_layer->weight);
+        torch::nn::init::zeros_(last_layer->bias);
+        mlp->push_back(last_layer);
 
-}
+    }
+
+    torch::Tensor MLPPoseOptimizationModule::forward(torch::Tensor camera_transforms, torch::Tensor embedding_ids) {
+        auto bs = camera_transforms.size(0);
+        auto camera_embedding = camera_embeddings(embedding_ids);
+        auto delta_transformation = mlp->forward(camera_embedding);
+        auto delta_translation = delta_transformation.index({at::indexing::Ellipsis, at::indexing::Slice(at::indexing::None, 3)});
+        auto delta_rotation = delta_transformation.index({at::indexing::Ellipsis, at::indexing::Slice(3, at::indexing::None)});
+        auto delta_rotation_matrix = rotation_6d_to_matrix(delta_rotation + rot_identity.expand({bs, -1}));
+        auto transform = torch::eye(4, camera_transforms.options()).repeat({bs, 1, 1});
+        transform.index_put_({at::indexing::Ellipsis, at::indexing::Slice(at::indexing::None, 3), at::indexing::Slice(at::indexing::None, 3)},
+                             delta_rotation_matrix);
+        transform.index_put_({at::indexing::Ellipsis, at::indexing::Slice(at::indexing::None, 3), 3},
+                             delta_translation);
+        return torch::matmul(camera_transforms, transform);
+    }
+
+} // namespace gs

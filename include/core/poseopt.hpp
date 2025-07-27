@@ -16,4 +16,11 @@ namespace gs {
         torch::nn::Embedding camera_embeddings; // [C, 9] for camera translation and 6D rotation
         torch::Tensor rot_identity; // [6] identity rotation in 6D representation
     };
+    struct MLPPoseOptimizationModule : PoseOptimizationModule {
+        explicit MLPPoseOptimizationModule(int number_of_cameras, int width = 64, int depth = 2);
+        torch::Tensor forward(torch::Tensor camera_transforms, torch::Tensor embedding_ids) override;
+        torch::nn::Embedding camera_embeddings; // [C, F]
+        torch::Tensor rot_identity; // [6] identity rotation in 6D representation
+        torch::nn::Sequential mlp;
+    };
 }

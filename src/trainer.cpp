@@ -167,7 +167,9 @@ namespace gs {
             if (params.optimization.pose_optimization == "direct") {
                 poseopt_module_ = std::make_unique<gs::DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
             } else if (params.optimization.pose_optimization == "mlp") {
-                // TODO
+                poseopt_module_ = std::make_unique<gs::MLPPoseOptimizationModule>(train_dataset_->get_cameras().size());
+            } else {
+                throw std::runtime_error("Invalid pose optimization type: " + params.optimization.pose_optimization);
             }
             poseopt_optimizer_ = std::make_unique<torch::optim::Adam>(
                 std::vector<torch::Tensor>{poseopt_module_->parameters()},
