@@ -6,6 +6,7 @@
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
 #include "core/training_progress.hpp"
+#include "core/poseopt.hpp"
 #include <atomic>
 #include <expected>
 #include <memory>
@@ -116,6 +117,9 @@ namespace gs {
         // Bilateral grid components
         std::unique_ptr<gs::BilateralGrid> bilateral_grid_;
         std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
+
+        std::unique_ptr<gs::PoseOptimizationModule> poseopt_module_; // Pose optimization module
+        std::unique_ptr<torch::optim::Adam> poseopt_optimizer_; // Optimizer for pose optimization
 
         // Metrics evaluator - handles all evaluation logic
         std::unique_ptr<metrics::MetricsEvaluator> evaluator_;

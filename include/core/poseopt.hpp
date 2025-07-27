@@ -3,9 +3,16 @@
 #include "torch/nn/modules/embedding.h"
 
 namespace gs {
-    struct DirectPoseOptimizationModule : torch::nn::Module {
-        DirectPoseOptimizationModule(int number_of_cameras);
-        torch::Tensor forward(torch::Tensor camera_transforms, torch::Tensor embedding_ids);
+    struct PoseOptimizationModule : torch::nn::Module {
+        PoseOptimizationModule() {}
+        virtual torch::Tensor forward(torch::Tensor camera_transforms, torch::Tensor embedding_ids) {
+            // No operation, just return the input transforms
+            return camera_transforms;
+        }
+    };
+    struct DirectPoseOptimizationModule : PoseOptimizationModule {
+        explicit DirectPoseOptimizationModule(int number_of_cameras);
+        torch::Tensor forward(torch::Tensor camera_transforms, torch::Tensor embedding_ids) override;
         torch::nn::Embedding camera_embeddings; // [C, 9] for camera translation and 6D rotation
         torch::Tensor rot_identity; // [6] identity rotation in 6D representation
     };

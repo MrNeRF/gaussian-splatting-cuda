@@ -23,6 +23,8 @@ public:
            int camera_width, int camera_height,
            int uid);
 
+    Camera(const Camera&, const torch::Tensor& transform);
+
     // Delete copy, allow move
     Camera(const Camera&) = delete;
     Camera& operator=(const Camera&) = delete;
