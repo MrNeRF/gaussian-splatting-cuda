@@ -87,6 +87,7 @@ find_package(glm REQUIRED)
 find_package(imgui REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(args REQUIRED)
+find_package(spdlog REQUIRED)
 
 # Python packages
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -185,6 +186,7 @@ target_link_libraries(gaussian_host
         gsplat_backend  # Link to gsplat
         ${OPENGL_LIBRARIES}
         CUDA::cudart    # Add CUDA runtime for interop
+        spdlog::spdlog
 )
 
 if(UNIX)
@@ -253,6 +255,7 @@ target_link_libraries(gaussian_kernels
         ${TORCH_LIBRARIES}
         glm::glm
         ${OPENGL_LIBRARIES}
+        spdlog::spdlog
 )
 
 target_compile_options(gaussian_kernels PRIVATE
@@ -288,6 +291,7 @@ if(CUDA_GL_INTEROP_FOUND)
             glfw
             glm::glm
             imgui::imgui
+            spdlog::spdlog
     )
 endif()
 
@@ -320,6 +324,7 @@ set(MAIN_LINK_LIBRARIES
         Python3::Python
         ${OPENGL_LIBRARIES}
         CUDA::cudart
+        spdlog::spdlog
 )
 
 if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
@@ -439,6 +444,7 @@ if(BUILD_TESTS)
             Python3::Python
             ${OPENGL_LIBRARIES}
             CUDA::cudart
+            spdlog::spdlog
     )
 
     if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
