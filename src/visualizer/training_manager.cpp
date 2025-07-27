@@ -21,11 +21,7 @@ namespace gs {
             trainer_ = std::move(trainer);
             setState(State::Ready);
 
-            // Link trainer to viewer
-            if (viewer_) {
-                trainer_->setViewer(viewer_);
-            }
-
+            // Just set event bus
             if (event_bus_) {
                 trainer_->setEventBus(event_bus_);
             }
@@ -55,11 +51,6 @@ namespace gs {
         if (!trainer_) {
             std::println("TrainerManager: No trainer available");
             return false;
-        }
-
-        // Set viewer ready flag if available
-        if (viewer_ && viewer_->notifier_) {
-            viewer_->notifier_->ready = true;
         }
 
         // Reset completion state
@@ -242,13 +233,20 @@ namespace gs {
     void TrainerManager::publishTrainingStarted(int total_iterations) {
         if (event_bus_) {
             event_bus_->publish(TrainingStartedEvent{total_iterations});
+
+            // Signal trainer to start
+            event_bus_->publish(TrainingReadyToStartEvent{});
         }
     }
 
     void TrainerManager::publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining) {
         if (event_bus_) {
             event_bus_->publish(TrainingProgressEvent{
-                iteration, loss, num_gaussians, is_refining});
+                iteration,
+                getTotalIterations(),
+                loss,
+                num_gaussians,
+                is_refining});
         }
     }
 

@@ -475,6 +475,27 @@ namespace gs {
                         }
                     }
                 }));
+
+        // Subscribe to training progress events
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<TrainingProgressEvent>(
+                [this](const TrainingProgressEvent& event) {
+                    // Update training info from event
+                    if (info_) {
+                        info_->updateProgress(event.iteration,
+                                              event.total_iterations); // Now using total_iterations from event
+                        info_->updateNumSplats(event.num_gaussians);
+                        info_->updateLoss(event.loss);
+                    }
+                }));
+
+        // Subscribe to trainer ready event
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<TrainerReadyEvent>(
+                [this](const TrainerReadyEvent& event) {
+                    // Trainer is ready, signal it can start
+                    event_bus_->publish(TrainingReadyToStartEvent{});
+                }));
     }
 
     void GSViewer::handleStartTrainingCommand(const StartTrainingCommand& cmd) {

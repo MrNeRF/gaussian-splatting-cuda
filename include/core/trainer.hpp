@@ -19,8 +19,6 @@ class Camera;
 
 namespace gs {
 
-    class GSViewer;
-
     class Trainer {
     public:
         // Constructor that takes ownership of strategy and shares datasets
@@ -58,8 +56,6 @@ namespace gs {
 
         // just for viewer to get model
         const IStrategy& get_strategy() const { return *strategy_; }
-
-        void setViewer(GSViewer* viewer) { viewer_ = viewer; }
 
         // Set event bus for publishing training events
         void setEventBus(std::shared_ptr<EventBus> event_bus) { event_bus_ = event_bus; }
@@ -118,8 +114,6 @@ namespace gs {
         std::shared_ptr<CameraDataset> val_dataset_;
         std::unique_ptr<IStrategy> strategy_;
         param::TrainingParameters params_;
-
-        GSViewer* viewer_ = nullptr;
 
         // Event bus for publishing events
         std::shared_ptr<EventBus> event_bus_;

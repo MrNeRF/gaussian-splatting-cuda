@@ -41,6 +41,7 @@ namespace gs {
 
     struct TrainingProgressEvent {
         int iteration;
+        int total_iterations;
         float loss;
         int num_gaussians;
         bool is_refining;
@@ -64,6 +65,15 @@ namespace gs {
     struct TrainingStoppedEvent {
         int iteration;
         bool user_requested;
+    };
+
+    // New events for trainer synchronization
+    struct TrainerReadyEvent {
+        // Empty - just signals trainer is ready
+    };
+
+    struct TrainingReadyToStartEvent {
+        // Empty - signals trainer can start
     };
 
     // ============================================================================

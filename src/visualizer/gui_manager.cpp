@@ -868,7 +868,7 @@ namespace gs {
         void GuiManager::handleTrainingProgress(const TrainingProgressEvent& event) {
             // Update progress display with throttling
             if (viewer_->info_) {
-                viewer_->info_->updateProgress(event.iteration, event.iteration);
+                viewer_->info_->updateProgress(event.iteration, event.total_iterations);
                 viewer_->info_->updateNumSplats(event.num_gaussians);
                 viewer_->info_->updateLoss(event.loss);
             }

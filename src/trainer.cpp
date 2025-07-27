@@ -1,7 +1,7 @@
 #include "core/trainer.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
-#include "visualizer/detail.hpp"
+#include "visualizer/events.hpp"
 #include <chrono>
 #include <expected>
 #include <numeric>
@@ -164,11 +164,11 @@ namespace gs {
         background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
         background_ = background_.to(torch::kCUDA);
 
-        // Only create progress bar if no viewer
-        if (!viewer_) {
+        // Create progress bar based on headless flag
+        if (!params.optimization.headless) {
             progress_ = std::make_unique<TrainingProgress>(
                 params.optimization.iterations,
-                /*bar_width=*/100);
+                /*update_frequency=*/100);
         }
 
         // Initialize the evaluator - it handles all metrics internally
@@ -194,14 +194,14 @@ namespace gs {
         // Handle pause/resume
         if (pause_requested_.load() && !is_paused_.load()) {
             is_paused_ = true;
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->pause();
             }
             std::println("\nTraining paused at iteration {}", iter);
             std::println("Click 'Resume Training' to continue.");
         } else if (!pause_requested_.load() && is_paused_.load()) {
             is_paused_ = false;
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->resume(iter, current_loss_.load(), static_cast<int>(strategy_->get_model().size()));
             }
             std::println("\nTraining resumed at iteration {}", iter);
@@ -232,7 +232,11 @@ namespace gs {
     void Trainer::publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining) {
         if (event_bus_) {
             event_bus_->publish(TrainingProgressEvent{
-                iteration, loss, num_gaussians, is_refining});
+                iteration,
+                static_cast<int>(params_.optimization.iterations), // Add total iterations
+                loss,
+                num_gaussians,
+                is_refining});
         }
     }
 
@@ -411,19 +415,10 @@ namespace gs {
                 }
             }
 
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->update(iter, current_loss_.load(),
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
-            }
-
-            if (viewer_) {
-                if (viewer_->info_) {
-                    auto& info = viewer_->info_;
-                    info->updateProgress(iter, params_.optimization.iterations);
-                    info->updateNumSplats(static_cast<size_t>(strategy_->get_model().size()));
-                    info->updateLoss(current_loss_.load());
-                }
             }
 
             // Return Continue if we should continue training
@@ -442,11 +437,26 @@ namespace gs {
         is_running_ = false;
         training_complete_ = false;
 
-        if (viewer_ && viewer_->notifier_) {
-            // Simple spin wait with atomic
-            while (!viewer_->notifier_->ready.load() && !stop_token.stop_requested()) {
+        // Event-based ready signaling
+        if (event_bus_ && !params_.optimization.headless) {
+            std::atomic<bool> ready{false};
+
+            // Subscribe temporarily to start signal
+            auto handler_id = event_bus_->subscribe<TrainingReadyToStartEvent>(
+                [&ready](const TrainingReadyToStartEvent&) {
+                    ready = true;
+                });
+
+            // Signal we're ready
+            event_bus_->publish(TrainerReadyEvent{});
+
+            // Wait for start signal
+            while (!ready.load() && !stop_token.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
+
+            // Unsubscribe
+            event_bus_->channel<TrainingReadyToStartEvent>()->unsubscribe(handler_id);
         }
 
         is_running_ = true; // Now we can start
@@ -457,7 +467,7 @@ namespace gs {
             const int num_workers = 4;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->update(iter, current_loss_.load(),
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
@@ -509,11 +519,11 @@ training_complete:
                 }
             }
 
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->complete();
             }
             evaluator_->save_report();
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
             }
 
