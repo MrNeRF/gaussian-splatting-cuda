@@ -176,15 +176,17 @@ gcc --version  # Should be 14+ for full C++23 support
 
 # Install GCC 14 (Ubuntu 24.04+)
 sudo apt update
-sudo apt install gcc-14 g++-14
+sudo apt install gcc-14 g++-14 gfortran-14 # updating gfortran to 14 is not necessary for this project but compilation for other projects could break with gfortran still staying at 13 while gcc/g++ is 14
 
 # Set as default
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 60
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 60
+sudo update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-14 60
 
 # Select the gcc/g++-14
 sudo update-alternatives --config gcc
 sudo update-alternatives --config g++ 
+sudo update-alternatives --config gfortran
 ```
 
 ##### Ubuntu 22.04:

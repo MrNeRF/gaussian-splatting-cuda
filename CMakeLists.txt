@@ -1,4 +1,4 @@
-﻿# windows/linux platform independent
+# windows/linux platform independent
 set(RAW_VCPKG_PATH $ENV{VCPKG_ROOT})
 file(TO_CMAKE_PATH "${RAW_VCPKG_PATH}" VCPKG_ROOT)
 set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
@@ -8,6 +8,8 @@ project(gaussian_splatting_cuda LANGUAGES CUDA CXX C)
 
 # Setup
 get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
+
+option(ENABLE_CUDA_GL_INTEROP "Enable CUDA-OpenGL interoperability" ON)
 
 # Set Torch_DIR based on platform and build type
 if (WIN32)
@@ -85,27 +87,34 @@ find_package(glm REQUIRED)
 find_package(imgui REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(args REQUIRED)
+find_package(spdlog REQUIRED)
 
 # Python packages
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
-# Check for CUDA-OpenGL interop capability
-include(CheckCXXSourceCompiles)
-set(CMAKE_REQUIRED_INCLUDES ${CUDAToolkit_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
-set(CMAKE_REQUIRED_LIBRARIES ${CUDA_LIBRARIES} ${OPENGL_LIBRARIES})
-check_cxx_source_compiles("
-    #include <cuda_gl_interop.h>
-    int main() {
-        cudaGraphicsResource_t resource;
-        return 0;
-    }
-" CUDA_GL_INTEROP_FOUND)
+# Check for CUDA-OpenGL interop capability (only if enabled)
+if(ENABLE_CUDA_GL_INTEROP)
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_INCLUDES ${CUDAToolkit_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
+    set(CMAKE_REQUIRED_LIBRARIES ${CUDA_LIBRARIES} ${OPENGL_LIBRARIES})
+    check_cxx_source_compiles("
+        #include <cuda_gl_interop.h>
+        int main() {
+            cudaGraphicsResource_t resource;
+            return 0;
+        }
+    " CUDA_GL_INTEROP_FOUND)
 
-if(CUDA_GL_INTEROP_FOUND)
-    message(STATUS "CUDA-OpenGL interop support: ENABLED")
-    set(CUDA_GL_INTEROP_ENABLED 1)
+    if(CUDA_GL_INTEROP_FOUND)
+        message(STATUS "CUDA-OpenGL interop support: ENABLED")
+        set(CUDA_GL_INTEROP_ENABLED 1)
+    else()
+        message(WARNING "CUDA-OpenGL interop support: DISABLED (headers not found)")
+        set(CUDA_GL_INTEROP_ENABLED 0)
+    endif()
 else()
-    message(WARNING "CUDA-OpenGL interop support: DISABLED (will use CPU fallback)")
+    message(STATUS "CUDA-OpenGL interop support: DISABLED (by user option)")
+    set(CUDA_GL_INTEROP_FOUND FALSE)
     set(CUDA_GL_INTEROP_ENABLED 0)
 endif()
 
@@ -142,6 +151,8 @@ set(HOST_SOURCES
         src/visualizer/camera_controller.cpp
         src/visualizer/gui_manager.cpp
         src/visualizer/input_handler.cpp
+        src/visualizer/rendering_pipeline.cpp
+        src/visualizer/scene.cpp
         src/visualizer/viewer.cpp
         src/visualizer/window_manager.cpp
         src/external/tinyply.cpp
@@ -149,7 +160,9 @@ set(HOST_SOURCES
         src/selective_adam.cpp
         src/dataset_reader.cpp
         src/training_setup.cpp
-        src/ply_loader.cpp)
+        src/ply_loader.cpp
+        src/bounding_box.cpp
+        src/visualizer/render_bounding_box.cpp)
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
 
@@ -178,6 +191,7 @@ target_link_libraries(gaussian_host
         gsplat_backend  # Link to gsplat
         ${OPENGL_LIBRARIES}
         CUDA::cudart    # Add CUDA runtime for interop
+        spdlog::spdlog
 )
 
 if(UNIX)
@@ -246,6 +260,7 @@ target_link_libraries(gaussian_kernels
         ${TORCH_LIBRARIES}
         glm::glm
         ${OPENGL_LIBRARIES}
+        spdlog::spdlog
 )
 
 target_compile_options(gaussian_kernels PRIVATE
@@ -281,6 +296,7 @@ if(CUDA_GL_INTEROP_FOUND)
             glfw
             glm::glm
             imgui::imgui
+            spdlog::spdlog
     )
 endif()
 
@@ -313,6 +329,7 @@ set(MAIN_LINK_LIBRARIES
         Python3::Python
         ${OPENGL_LIBRARIES}
         CUDA::cudart
+        spdlog::spdlog
 )
 
 if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
@@ -433,6 +450,7 @@ if(BUILD_TESTS)
             Python3::Python
             ${OPENGL_LIBRARIES}
             CUDA::cudart
+            spdlog::spdlog
     )
 
     if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
@@ -485,7 +503,8 @@ message(STATUS "  CUDA Version: ${CUDAToolkit_VERSION}")
 message(STATUS "  Torch Version: ${Torch_VERSION}")
 message(STATUS "  Python Version: ${Python3_VERSION}")
 message(STATUS "  OpenGL Found: ${OPENGL_FOUND}")
-message(STATUS "  CUDA-GL Interop: ${CUDA_GL_INTEROP_FOUND}")
+message(STATUS "  CUDA-GL Interop Option: ${ENABLE_CUDA_GL_INTEROP}")
+message(STATUS "  CUDA-GL Interop Available: ${CUDA_GL_INTEROP_FOUND}")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "  CUDA Standard: ${CMAKE_CUDA_STANDARD}")

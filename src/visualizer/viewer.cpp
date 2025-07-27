@@ -10,6 +10,8 @@
 #include <sstream>
 #include <thread>
 
+#include <cuda_runtime.h>
+
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "visualizer/cuda_gl_interop.hpp"
 #endif
@@ -178,6 +180,9 @@ namespace gs {
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<ViewerNotifier>();
+        crop_box_ = std::make_shared<RenderBoundingBox>();
+
+        scene_ = std::make_unique<Scene>();
 
         setFrameRate(30);
 
@@ -224,30 +229,24 @@ namespace gs {
             }
 
             if (command == "model_info") {
-                if (!trainer_ && !standalone_model_) {
+                if (!scene_->hasModel()) {
                     return "No model available";
                 }
 
                 result << "Model Information:\n";
 
-                if (trainer_) {
-                    std::lock_guard<std::mutex> lock(splat_mtx_);
-                    auto& model = trainer_->get_strategy().get_model();
-                    result << "  Number of Gaussians: " << model.size() << "\n";
-                    result << "  Positions shape: [" << model.get_means().size(0) << ", " << model.get_means().size(1) << "]\n";
-                    result << "  Device: " << model.get_means().device() << "\n";
-                    result << "  Dtype: " << model.get_means().dtype() << "\n";
-                    result << "  Active SH degree: " << model.get_active_sh_degree() << "\n";
-                    result << "  Scene scale: " << model.get_scene_scale();
-                } else if (standalone_model_) {
-                    std::lock_guard<std::mutex> lock(splat_mtx_);
-                    result << "  Number of Gaussians: " << standalone_model_->size() << "\n";
-                    result << "  Positions shape: [" << standalone_model_->get_means().size(0) << ", " << standalone_model_->get_means().size(1) << "]\n";
-                    result << "  Device: " << standalone_model_->get_means().device() << "\n";
-                    result << "  Dtype: " << standalone_model_->get_means().dtype() << "\n";
-                    result << "  Active SH degree: " << standalone_model_->get_active_sh_degree() << "\n";
-                    result << "  Scene scale: " << standalone_model_->get_scene_scale();
-                    result << "\n  Mode: Viewer (no training)";
+                const SplatData* model = scene_->getModel();
+                if (model) {
+                    result << "  Number of Gaussians: " << model->size() << "\n";
+                    result << "  Positions shape: [" << model->get_means().size(0) << ", " << model->get_means().size(1) << "]\n";
+                    result << "  Device: " << model->get_means().device() << "\n";
+                    result << "  Dtype: " << model->get_means().dtype() << "\n";
+                    result << "  Active SH degree: " << model->get_active_sh_degree() << "\n";
+                    result << "  Scene scale: " << model->get_scene_scale();
+
+                    if (scene_->getMode() == Scene::Mode::Viewing) {
+                        result << "\n  Mode: Viewer (no training)";
+                    }
                 }
 
                 return result.str();
@@ -272,7 +271,7 @@ namespace gs {
 
             // Handle tensor_info command
             if (command.substr(0, 11) == "tensor_info") {
-                if (!trainer_ && !standalone_model_) {
+                if (!scene_->hasModel()) {
                     return "No model available";
                 }
 
@@ -285,18 +284,11 @@ namespace gs {
                     return "Usage: tensor_info <tensor_name>\nAvailable: means, scaling, rotation, shs, opacity";
                 }
 
-                std::lock_guard<std::mutex> lock(splat_mtx_);
-
-                // Get model reference
-                SplatData* model = nullptr;
-                if (trainer_) {
-                    model = const_cast<SplatData*>(&trainer_->get_strategy().get_model());
-                } else if (standalone_model_) {
-                    model = standalone_model_.get();
-                }
-
+                std::string tensor_result;
+                SplatData* model = scene_->getMutableModel();
                 if (!model) {
-                    return "Model not available";
+                    tensor_result = "Model not available";
+                    return tensor_result;
                 }
 
                 torch::Tensor tensor;
@@ -311,36 +303,39 @@ namespace gs {
                 } else if (tensor_name == "opacities" || tensor_name == "opacity") {
                     tensor = model->get_opacity();
                 } else {
-                    return "Unknown tensor: " + tensor_name + "\nAvailable: means, scaling, rotation, shs, opacity";
+                    tensor_result = "Unknown tensor: " + tensor_name + "\nAvailable: means, scaling, rotation, shs, opacity";
+                    return tensor_result;
                 }
 
-                result << "Tensor '" << tensor_name << "' info:\n";
-                result << "  Shape: [";
+                std::ostringstream oss;
+                oss << "Tensor '" << tensor_name << "' info:\n";
+                oss << "  Shape: [";
                 for (int i = 0; i < tensor.dim(); i++) {
                     if (i > 0)
-                        result << ", ";
-                    result << tensor.size(i);
+                        oss << ", ";
+                    oss << tensor.size(i);
                 }
-                result << "]\n";
-                result << "  Device: " << tensor.device() << "\n";
-                result << "  Dtype: " << tensor.dtype() << "\n";
-                result << "  Requires grad: " << (tensor.requires_grad() ? "Yes" : "No") << "\n";
+                oss << "]\n";
+                oss << "  Device: " << tensor.device() << "\n";
+                oss << "  Dtype: " << tensor.dtype() << "\n";
+                oss << "  Requires grad: " << (tensor.requires_grad() ? "Yes" : "No") << "\n";
 
                 // Show some statistics if tensor is on CPU or we can move it
                 try {
                     auto cpu_tensor = tensor.cpu();
                     auto flat = cpu_tensor.flatten();
                     if (flat.numel() > 0) {
-                        result << "  Min: " << torch::min(flat).item<float>() << "\n";
-                        result << "  Max: " << torch::max(flat).item<float>() << "\n";
-                        result << "  Mean: " << torch::mean(flat).item<float>() << "\n";
-                        result << "  Std: " << torch::std(flat).item<float>();
+                        oss << "  Min: " << torch::min(flat).item<float>() << "\n";
+                        oss << "  Max: " << torch::max(flat).item<float>() << "\n";
+                        oss << "  Mean: " << torch::mean(flat).item<float>() << "\n";
+                        oss << "  Std: " << torch::std(flat).item<float>();
                     }
                 } catch (...) {
-                    result << "  (Statistics unavailable)";
+                    oss << "  (Statistics unavailable)";
                 }
 
-                return result.str();
+                tensor_result = oss.str();
+                return tensor_result;
             }
 
             return "Unknown command: '" + command + "'. Type 'help' for available commands.";
@@ -383,10 +378,15 @@ namespace gs {
 
     void GSViewer::setTrainer(Trainer* trainer) {
         trainer_ = trainer;
+        if (scene_) {
+            scene_->linkToTrainer(trainer);
+        }
     }
 
     void GSViewer::setStandaloneModel(std::unique_ptr<SplatData> model) {
-        standalone_model_ = std::move(model);
+        if (scene_) {
+            scene_->setModel(std::move(model));
+        }
     }
 
     void GSViewer::setAntiAliasing(bool enable) {
@@ -407,12 +407,12 @@ namespace gs {
                 return;
             }
 
-            standalone_model_ = std::make_unique<SplatData>(std::move(*splat_result));
+            scene_->setModel(std::make_unique<SplatData>(std::move(*splat_result)));
             current_ply_path_ = path;
             current_mode_ = ViewerMode::PLYViewer;
 
             gui_manager_->addConsoleLog("Info: Loaded PLY with %lld Gaussians from %s",
-                                        standalone_model_->size(),
+                                        scene_->getStandaloneModel()->size(),
                                         path.filename().string().c_str());
 
         } catch (const std::exception& e) {
@@ -447,6 +447,9 @@ namespace gs {
             // Now take ownership
             trainer_ = setup_result->trainer.release();
 
+            // Link scene to trainer
+            scene_->linkToTrainer(trainer_);
+
             current_dataset_path_ = path;
             current_mode_ = ViewerMode::Training;
 
@@ -480,9 +483,11 @@ namespace gs {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
+        // Clear scene
+        scene_->clearModel();
+
         // Clear data
         trainer_ = nullptr;
-        standalone_model_.reset();
 
         // Reset state
         current_mode_ = ViewerMode::Empty;
@@ -491,7 +496,6 @@ namespace gs {
 
         // Clear training info
         if (info_) {
-            std::lock_guard<std::mutex> lock(info_->mtx);
             info_->curr_iterations_ = 0;
             info_->total_iterations_ = 0;
             info_->num_splats_ = 0;
@@ -504,11 +508,9 @@ namespace gs {
             return;
         }
 
-        // First notify the trainer that it's ready to start
+        // Set the ready flag for trainer to start
         if (notifier_) {
-            std::lock_guard<std::mutex> lock(notifier_->mtx);
             notifier_->ready = true;
-            notifier_->cv.notify_one();
         }
 
         // Then start training in a separate thread
@@ -529,113 +531,71 @@ namespace gs {
         return gui_manager_ && gui_manager_->isAnyWindowActive();
     }
 
+    GSViewer::ViewerMode GSViewer::getCurrentMode() const {
+        switch (scene_->getMode()) {
+        case Scene::Mode::Empty:
+            return ViewerMode::Empty;
+        case Scene::Mode::Viewing:
+            return ViewerMode::PLYViewer;
+        case Scene::Mode::Training:
+            return ViewerMode::Training;
+        default:
+            return ViewerMode::Empty;
+        }
+    }
+
     void GSViewer::drawFrame() {
         // Only render if we have a model to render
-        if (!trainer_ && !standalone_model_) {
+        if (!scene_->hasModel()) {
             return;
         }
 
-        glm::mat3 R = viewport_.getRotationMatrix();
-        glm::vec3 t = viewport_.getTranslation();
-
-        glm::ivec2& reso = viewport_.windowSize;
-        // Comprehensive dimension validation, prevents crash when minimizing window (see issue 190)
-        if (reso.x <= 0 || reso.y <= 0 || reso.x > 16384 || reso.y > 16384) {
-            return; // Skip rendering for invalid dimensions
+        RenderBoundingBox* render_crop_box = nullptr;
+        if (gui_manager_->useCropBox()) {
+            render_crop_box = crop_box_.get();
         }
+        // Build render request
+        RenderingPipeline::RenderRequest request{
+            .view_rotation = viewport_.getRotationMatrix(),
+            .view_translation = viewport_.getTranslation(),
+            .viewport_size = viewport_.windowSize,
+            .fov = config_->fov,
+            .scaling_modifier = config_->scaling_modifier,
+            .antialiasing = anti_aliasing_,
+            .render_mode = RenderMode::RGB,
+            .crop_box = render_crop_box};
 
-        torch::Tensor R_tensor = torch::tensor({R[0][0], R[1][0], R[2][0],
-                                                R[0][1], R[1][1], R[2][1],
-                                                R[0][2], R[1][2], R[2][2]},
-                                               torch::TensorOptions().dtype(torch::kFloat32))
-                                     .reshape({3, 3});
+        RenderingPipeline::RenderResult result;
 
-        torch::Tensor t_tensor = torch::tensor({t[0],
-                                                t[1],
-                                                t[2]},
-                                               torch::TensorOptions().dtype(torch::kFloat32))
-                                     .reshape({3, 1});
-
-        R_tensor = R_tensor.transpose(0, 1);
-        t_tensor = -R_tensor.mm(t_tensor).squeeze();
-
-        glm::vec2 fov = config_->getFov(reso.x, reso.y);
-
-        Camera cam = Camera(
-            R_tensor,
-            t_tensor,
-            fov2focal(fov.x, reso.x),
-            fov2focal(fov.y, reso.y),
-            reso.x / 2.0f,
-            reso.y / 2.0f,
-            torch::empty({0}, torch::kFloat32),
-            torch::empty({0}, torch::kFloat32),
-            gsplat::CameraModelType::PINHOLE,
-            "online",
-            "none image",
-            reso.x,
-            reso.y,
-            -1);
-
-        torch::Tensor background = torch::zeros({3});
-
-        RenderOutput output;
-        {
-            std::lock_guard<std::mutex> lock(splat_mtx_);
-
-            // Get model from trainer or standalone
-            SplatData* model = nullptr;
-            if (trainer_) {
-                model = const_cast<SplatData*>(&trainer_->get_strategy().get_model());
-            } else if (standalone_model_) {
-                model = standalone_model_.get();
-            }
-
-            if (!model) {
-                return;
-            }
-
-            output = gs::rasterize(
-                cam,
-                *model,
-                background,
-                config_->scaling_modifier,
-                false,
-                anti_aliasing_,
-                RenderMode::RGB);
-        }
-
-        // Before the uploadData call, add another safety check
-#ifdef CUDA_GL_INTEROP_ENABLED
-        // Use interop for direct GPU transfer
-        auto interop_renderer = std::dynamic_pointer_cast<ScreenQuadRendererInterop>(screen_renderer_);
-
-        if (interop_renderer && interop_renderer->isInteropEnabled()) {
-            // Keep data on GPU - convert [C, H, W] to [H, W, C] format
-            auto image_hwc = output.image.permute({1, 2, 0}).contiguous();
-            // Direct CUDA->OpenGL update (no CPU copy!)
-            // Verify tensor dimensions match expected size
-            if (image_hwc.size(0) == reso.y && image_hwc.size(1) == reso.x) {
-                interop_renderer->uploadFromCUDA(image_hwc, reso.x, reso.y);
-            }
+        if (trainer_ && trainer_->is_running()) {
+            std::shared_lock<std::shared_mutex> lock(trainer_->getRenderMutex());
+            result = scene_->render(request);
         } else {
-            // Fallback to CPU copy
-            auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
+            result = scene_->render(request);
+        }
 
-            // Verify tensor dimensions before upload
-            if (image.size(0) == reso.y && image.size(1) == reso.x && image.data_ptr<uchar>()) {
-                screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
+        if (result.valid) {
+            RenderingPipeline::uploadToScreen(result, *screen_renderer_, viewport_.windowSize);
+            screen_renderer_->render(quadShader_, viewport_);
+        }
+        // Render bounding box if enabled
+        if (gui_manager_->showCropBox()) {
+
+            glm::ivec2& reso = viewport_.windowSize;
+            auto fov_rad = glm::radians(config_->fov);
+            auto projection = glm::perspective((float)fov_rad, (float)reso.x / reso.y, .1f, 1000.0f);
+
+            if (!crop_box_->isInitilized()) {
+                crop_box_->init();
+            }
+            // because init can fail
+            if (crop_box_->isInitialized()) {
+                glm::mat4 view = viewport_.getViewMatrix(); // Replace with actual view matrix
+
+                // Render the bounding box
+                crop_box_->render(view, projection);
             }
         }
-#else
-        // Original CPU copy path
-        auto image = (output.image * 255).to(torch::kCPU).to(torch::kU8).permute({1, 2, 0}).contiguous();
-        if (image.size(0) == reso.y && image.size(1) == reso.x && image.data_ptr<uchar>()) {
-            screen_renderer_->uploadData(image.data_ptr<uchar>(), reso.x, reso.y);
-        }
-#endif
-
-        screen_renderer_->render(quadShader_, viewport_);
     }
 
     void GSViewer::draw() {

@@ -4,7 +4,9 @@
 #include "core/trainer.hpp"
 #include "visualizer/camera_controller.hpp"
 #include "visualizer/input_handler.hpp"
+#include "visualizer/render_bounding_box.hpp"
 #include "visualizer/renderer.hpp"
+#include "visualizer/scene.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
 #include <chrono>
@@ -14,7 +16,6 @@
 #include <string>
 #include <thread>
 #include <torch/torch.h>
-#include <vector>
 
 using uchar = unsigned char;
 
@@ -76,15 +77,14 @@ namespace gs {
     public:
         struct TrainingInfo {
 
-            std::mutex mtx;
+            // No mutex needed - use atomics
+            std::atomic<int> curr_iterations_{0};
+            std::atomic<int> total_iterations_{0};
+            std::atomic<int> num_splats_{0};
 
-            int curr_iterations_ = 0;
-            int total_iterations_ = 0;
-
-            int num_splats_ = 0;
             int max_loss_points_ = 200;
-
             std::deque<float> loss_buffer_;
+            std::mutex loss_buffer_mutex_; // Only for loss buffer
 
             void updateProgress(int iter, int total_iterations) {
                 curr_iterations_ = iter;
@@ -96,6 +96,7 @@ namespace gs {
             }
 
             void updateLoss(float loss) {
+                std::lock_guard<std::mutex> lock(loss_buffer_mutex_);
                 loss_buffer_.push_back(loss);
                 while (loss_buffer_.size() > max_loss_points_) {
                     loss_buffer_.pop_front();
@@ -143,9 +144,9 @@ namespace gs {
         void clearCurrentData();
 
         // Getters for GUI
-        ViewerMode getCurrentMode() const { return current_mode_; }
-        Trainer* getTrainer() const { return trainer_; }
-        SplatData* getStandaloneModel() const { return standalone_model_.get(); }
+        ViewerMode getCurrentMode() const;
+        Trainer* getTrainer() const { return scene_->getTrainer(); }
+        SplatData* getStandaloneModel() const { return scene_->getStandaloneModel(); }
         std::shared_ptr<TrainingInfo> getTrainingInfo() const { return info_; }
         std::shared_ptr<RenderingConfig> getRenderingConfig() const { return config_; }
         std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }
@@ -167,13 +168,10 @@ namespace gs {
 
         std::shared_ptr<ViewerNotifier> notifier_;
 
-        std::mutex splat_mtx_;
-
-    private:
+        std::unique_ptr<Scene> scene_;
         std::shared_ptr<RenderingConfig> config_;
 
         Trainer* trainer_;
-        std::unique_ptr<SplatData> standalone_model_;
 
         bool anti_aliasing_ = false;
 
@@ -192,6 +190,10 @@ namespace gs {
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
         friend class gui::GuiManager; // Allow GUI manager to access private members
+
+    private:
+        // Bounding box visualization
+        std::shared_ptr<RenderBoundingBox> crop_box_;
     };
 
 } // namespace gs

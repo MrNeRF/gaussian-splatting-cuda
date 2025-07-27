@@ -144,7 +144,7 @@ namespace gs {
 
         private:
             // Configuration
-            const param::TrainingParameters& _params;
+            const param::TrainingParameters _params;
 
             // Metrics
             std::unique_ptr<PSNR> _psnr_metric;

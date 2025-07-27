@@ -13,6 +13,7 @@
       ]
     },
     "nlohmann-json",
+    "spdlog",
     "tbb"
   ]
 }

@@ -865,10 +865,14 @@ namespace indicators {
         struct if_else;
 
         template <>
-        struct if_else<true> { using type = std::true_type; };
+        struct if_else<true> {
+            using type = std::true_type;
+        };
 
         template <>
-        struct if_else<false> { using type = std::false_type; };
+        struct if_else<false> {
+            using type = std::false_type;
+        };
 
         template <bool condition, typename True, typename False>
         struct if_else_type;
@@ -970,7 +974,9 @@ namespace indicators {
             : if_else<conjuction<is_setting_from_tuple<Settings, Tuple>...>::value>::type {};
 
         template <ProgressBarOption Id>
-        struct always_true { static constexpr auto value = true; };
+        struct always_true {
+            static constexpr auto value = true;
+        };
 
         template <ProgressBarOption Id, typename Default>
         Default&& get_impl(Default&& def) {
