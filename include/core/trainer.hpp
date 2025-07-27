@@ -9,6 +9,7 @@
 #include <atomic>
 #include <expected>
 #include <memory>
+#include <shared_mutex>
 #include <stop_token>
 #include <torch/torch.h>
 
@@ -42,19 +43,22 @@ namespace gs {
         void request_save() { save_requested_ = true; }
         void request_stop() { stop_requested_ = true; } // This will fully stop training
 
-        bool is_paused() const { return is_paused_; }
-        bool is_running() const { return is_running_; }
-        bool is_training_complete() const { return training_complete_; }
-        bool has_stopped() const { return stop_requested_; } // Check if stop was requested
+        bool is_paused() const { return is_paused_.load(); }
+        bool is_running() const { return is_running_.load(); }
+        bool is_training_complete() const { return training_complete_.load(); }
+        bool has_stopped() const { return stop_requested_.load(); } // Check if stop was requested
 
         // Get current training state
-        int get_current_iteration() const { return current_iteration_; }
-        float get_current_loss() const { return current_loss_; }
+        int get_current_iteration() const { return current_iteration_.load(); }
+        float get_current_loss() const { return current_loss_.load(); }
 
         // just for viewer to get model
         const IStrategy& get_strategy() const { return *strategy_; }
 
         void setViewer(GSViewer* viewer) { viewer_ = viewer; }
+
+        // Allow viewer to lock for rendering
+        std::shared_mutex& getRenderMutex() const { return render_mutex_; }
 
     private:
         // Training step result
@@ -115,6 +119,9 @@ namespace gs {
 
         // Metrics evaluator - handles all evaluation logic
         std::unique_ptr<metrics::MetricsEvaluator> evaluator_;
+
+        // Single mutex that protects the model during training
+        mutable std::shared_mutex render_mutex_;
 
         // Control flags for thread communication
         std::atomic<bool> pause_requested_{false};

@@ -48,7 +48,8 @@ namespace gs {
         float scaling_modifier,
         bool packed,
         bool antialiased,
-        RenderMode render_mode) {
+        RenderMode render_mode,
+        const gs::BoundingBox* bounding_box) {
 
         // Ensure we don't use packed mode (not supported in this implementation)
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
@@ -68,14 +69,45 @@ namespace gs {
 
         // Get Gaussian parameters
         auto means3D = gaussian_model.get_means();
+
         auto opacities = gaussian_model.get_opacity();
         if (opacities.dim() == 2 && opacities.size(1) == 1) {
             opacities = opacities.squeeze(-1);
         }
-        const auto scales = gaussian_model.get_scaling();
-        const auto rotations = gaussian_model.get_rotation();
-        const auto sh_coeffs = gaussian_model.get_shs();
+        auto scales = gaussian_model.get_scaling();
+        auto rotations = gaussian_model.get_rotation();
+        auto sh_coeffs = gaussian_model.get_shs();
         const int sh_degree = gaussian_model.get_active_sh_degree();
+
+        // Apply bounding box filtering if provided
+        if (bounding_box != nullptr) {
+            torch::Tensor inside_indices;
+            // Convert GLM vectors to torch tensors
+            auto min_bounds = torch::tensor({bounding_box->getMinBounds().x,
+                                             bounding_box->getMinBounds().y,
+                                             bounding_box->getMinBounds().z},
+                                            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+            auto max_bounds = torch::tensor({bounding_box->getMaxBounds().x,
+                                             bounding_box->getMaxBounds().y,
+                                             bounding_box->getMaxBounds().z},
+                                            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+
+            // Check which points are inside the bounding box
+            // means3D: [N, 3], min_bounds: [3], max_bounds: [3]
+            auto greater_than_min = torch::all(means3D >= min_bounds.unsqueeze(0), /*dim=*/1); // [N]
+            auto less_than_max = torch::all(means3D <= max_bounds.unsqueeze(0), /*dim=*/1);    // [N]
+            auto inside_mask = greater_than_min & less_than_max;                               // [N]
+
+            // Get indices of points inside the bounding box
+            inside_indices = torch::nonzero(inside_mask).squeeze(-1); // [M] where M <= N
+
+            // Filter all Gaussian parameters using the inside indices
+            means3D = means3D.index({inside_indices});
+            opacities = opacities.index({inside_indices});
+            scales = scales.index({inside_indices});
+            rotations = rotations.index({inside_indices});
+            sh_coeffs = sh_coeffs.index({inside_indices});
+        }
 
         // Validate Gaussian parameters
         const int N = static_cast<int>(means3D.size(0));
