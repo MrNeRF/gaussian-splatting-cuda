@@ -143,8 +143,6 @@ namespace gs {
             // Bind VAO and draw
             glBindVertexArray(VAO_);
 
-            glDisable(GL_DEPTH_TEST);
-
             glDrawElements(GL_LINES, static_cast<GLsizei>(indices_.size()), GL_UNSIGNED_INT, 0);
             glBindVertexArray(0);
 
