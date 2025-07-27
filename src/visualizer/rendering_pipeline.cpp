@@ -35,7 +35,8 @@ namespace gs {
             request.scaling_modifier,
             false, // train
             request.antialiasing,
-            request.render_mode);
+            request.render_mode,
+            request.crop_box);
 
         result.image = output.image;
         result.depth = output.depth;

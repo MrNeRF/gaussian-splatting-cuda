@@ -3,7 +3,10 @@
 #include "core/parameters.hpp"
 #include "core/splat_data.hpp"
 #include "core/trainer.hpp"
+
+#include "visualizer/render_bounding_box.hpp"
 #include "visualizer/viewer_notifier.hpp"
+
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -84,6 +87,18 @@ namespace gs {
             void renderStatus(Trainer* trainer, State& state);
         };
 
+        // CropBox panel
+        class CropBoxPanel {
+        public:
+            void render();
+            bool show_crop_box_ = false;
+            bool use_crop_box_ = false;
+            // Add this method declaration
+            void renderBoundingBoxControls();
+            // Bounding box visualization
+            std::shared_ptr<RenderBoundingBox> crop_box_;
+        };
+
         // Main GUI manager
         class GuiManager {
         public:
@@ -111,6 +126,9 @@ namespace gs {
             // Console access
             void addConsoleLog(const char* fmt, ...);
 
+            bool showCropBox() const;
+            bool useCropBox() const;
+
         private:
             void renderMainPanel();
             void renderModeStatus();
@@ -124,13 +142,14 @@ namespace gs {
             std::unique_ptr<FileBrowser> file_browser_;
             std::unique_ptr<CameraControlsWindow> camera_controls_;
             std::unique_ptr<TrainingControlsPanel> training_controls_;
-
+            std::unique_ptr<CropBoxPanel> crop_box_panel_;
             // Window states
             bool show_main_panel_ = true;
             bool show_file_browser_ = false;
             bool show_scripting_console_ = false;
             bool show_camera_controls_ = false;
             bool any_window_active_ = false;
+            bool show_crop_box_panel_ = true;
 
             // ImGui settings
             ImGuiWindowFlags window_flags_ = 0;

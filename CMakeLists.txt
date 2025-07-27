@@ -157,7 +157,9 @@ set(HOST_SOURCES
         src/selective_adam.cpp
         src/dataset_reader.cpp
         src/training_setup.cpp
-        src/ply_loader.cpp)
+        src/ply_loader.cpp
+        src/bounding_box.cpp
+        src/visualizer/render_bounding_box.cpp)
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
 
