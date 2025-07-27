@@ -29,7 +29,7 @@ namespace gs {
         // Bounding box properties
         glm::vec3 min_bounds_;
         glm::vec3 max_bounds_;
-        // relative position of boundin box to world
+        // relative position of bounding box to world
         glm::mat4 world2BBox_;
     };
 } // namespace gs
