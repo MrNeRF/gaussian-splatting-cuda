@@ -291,4 +291,22 @@ namespace gs {
         std::string recovery_action;
     };
 
+    // ============================================================================
+    // Crop Box Events
+    // ============================================================================
+
+    struct CropBoxChangedEvent {
+        glm::vec3 min_bounds;
+        glm::vec3 max_bounds;
+        bool enabled;
+    };
+
+    struct CropBoxVisibilityChangedEvent {
+        bool visible;
+    };
+
+    struct CropBoxResetEvent {
+        // No data needed
+    };
+
 } // namespace gs

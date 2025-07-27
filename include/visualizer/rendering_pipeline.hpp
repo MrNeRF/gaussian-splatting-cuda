@@ -3,6 +3,7 @@
 #include "core/camera.hpp"
 #include "core/rasterizer.hpp"
 #include "core/splat_data.hpp"
+#include "visualizer/render_bounding_box.hpp"
 #include "visualizer/renderer.hpp"
 #include <glm/glm.hpp>
 #include <torch/torch.h>
@@ -19,6 +20,7 @@ namespace gs {
             float scaling_modifier = 1.0f;
             bool antialiasing = false;
             RenderMode render_mode = RenderMode::RGB;
+            const BoundingBox* crop_box = nullptr; // crop box
         };
 
         struct RenderResult {

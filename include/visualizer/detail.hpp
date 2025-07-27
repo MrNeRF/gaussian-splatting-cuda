@@ -7,6 +7,7 @@
 #include "visualizer/event_bus.hpp"
 #include "visualizer/events.hpp"
 #include "visualizer/input_handler.hpp"
+#include "visualizer/render_bounding_box.hpp"
 #include "visualizer/renderer.hpp"
 #include "visualizer/scene.hpp"
 #include "visualizer/training_manager.hpp"
@@ -156,6 +157,9 @@ namespace gs {
         const std::filesystem::path& getCurrentDatasetPath() const { return current_dataset_path_; }
         TrainerManager* getTrainerManager() { return trainer_manager_.get(); }
 
+        // Add getter for crop box
+        std::shared_ptr<RenderBoundingBox> getCropBox() const { return crop_box_; }
+
         // Training control (delegates to TrainerManager)
         void startTraining();
 
@@ -211,12 +215,16 @@ namespace gs {
         std::unique_ptr<gui::GuiManager> gui_manager_;
         friend class gui::GuiManager; // Allow GUI manager to access private members
 
+    private:
         // Error handling and monitoring
         std::unique_ptr<ErrorHandler> error_handler_;
         std::unique_ptr<MemoryMonitor> memory_monitor_;
 
         // Cache for last memory usage
         MemoryUsageEvent last_memory_usage_;
+
+        // Bounding box visualization
+        std::shared_ptr<RenderBoundingBox> crop_box_;
     };
 
 } // namespace gs

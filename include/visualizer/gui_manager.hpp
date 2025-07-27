@@ -3,13 +3,14 @@
 #include "core/trainer.hpp"
 #include "visualizer/event_bus.hpp"
 #include "visualizer/events.hpp"
+#include "visualizer/render_bounding_box.hpp"
 #include "visualizer/viewer_notifier.hpp"
+
 #include <chrono>
 #include <filesystem>
 #include <functional>
 #include <imgui.h>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -84,6 +85,15 @@ namespace gs {
             void renderStatus(Trainer* trainer, State& state);
         };
 
+        // CropBox panel
+        class CropBoxPanel {
+        public:
+            void render();
+            bool show_crop_box_ = false;
+            bool use_crop_box_ = false;
+            std::shared_ptr<RenderBoundingBox> crop_box_;
+        };
+
         // Main GUI manager
         class GuiManager {
         public:
@@ -114,13 +124,16 @@ namespace gs {
             // Get viewer for internal use
             GSViewer* viewer_;
 
-            // Helper to publish events - MOVED TO PUBLIC
+            // Helper to publish events
             template <typename EventType>
             void publish(const EventType& event) {
                 if (event_bus_) {
                     event_bus_->publish(event);
                 }
             }
+
+            bool showCropBox() const;
+            bool useCropBox() const;
 
         private:
             void renderMainPanel();
@@ -148,6 +161,7 @@ namespace gs {
             std::unique_ptr<FileBrowser> file_browser_;
             std::unique_ptr<CameraControlsWindow> camera_controls_;
             std::unique_ptr<TrainingControlsPanel> training_controls_;
+            std::unique_ptr<CropBoxPanel> crop_box_panel_;
 
             // Window states
             bool show_main_panel_ = true;
