@@ -6,6 +6,8 @@
 #pragma once
 
 #include "core/bounding_box.hpp"
+
+#include <memory>
 #include "visualizer/shader.hpp" // Your existing shader class
 
 namespace gs {

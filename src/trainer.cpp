@@ -261,14 +261,8 @@ namespace gs {
                     render_mode);
             };
 
-            RenderOutput r_output;
-
-            if (viewer_) {
-                std::lock_guard<std::mutex> lock(viewer_->splat_mtx_);
-                r_output = render_fn();
-            } else {
-                r_output = render_fn();
-            }
+            // Perform rendering (no mutex needed - Scene handles thread safety)
+            RenderOutput r_output = render_fn();
 
             // Apply bilateral grid if enabled
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
@@ -340,17 +334,9 @@ namespace gs {
                     }
                 }
 
-                auto do_strategy = [&]() {
-                    strategy_->post_backward(iter, r_output);
-                    strategy_->step(iter);
-                };
-
-                if (viewer_) {
-                    std::lock_guard<std::mutex> lock(viewer_->splat_mtx_);
-                    do_strategy();
-                } else {
-                    do_strategy();
-                }
+                // Execute strategy post-backward and step (no mutex needed)
+                strategy_->post_backward(iter, r_output);
+                strategy_->step(iter);
 
                 if (params_.optimization.use_bilateral_grid) {
                     bilateral_grid_optimizer_->step();
