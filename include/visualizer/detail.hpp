@@ -1,6 +1,8 @@
 #pragma once
 
+#include "core/error_handler.hpp"
 #include "core/image_io.hpp"
+#include "core/memory_monitor.hpp"
 #include "visualizer/camera_controller.hpp"
 #include "visualizer/event_bus.hpp"
 #include "visualizer/events.hpp"
@@ -208,6 +210,13 @@ namespace gs {
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
         friend class gui::GuiManager; // Allow GUI manager to access private members
+
+        // Error handling and monitoring
+        std::unique_ptr<ErrorHandler> error_handler_;
+        std::unique_ptr<MemoryMonitor> memory_monitor_;
+
+        // Cache for last memory usage
+        MemoryUsageEvent last_memory_usage_;
     };
 
 } // namespace gs

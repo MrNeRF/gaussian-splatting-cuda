@@ -7,11 +7,8 @@
 
 namespace gs {
 
-    // Forward declarations
     class Scene;
     class Camera;
-
-    // Note: We don't need SplatData forward declaration here since events don't use it directly
 
     /**
      * @brief Events use composition - no base class inheritance
@@ -98,6 +95,11 @@ namespace gs {
         int height;
     };
 
+    struct RenderModeChangedEvent {
+        std::string old_mode;
+        std::string new_mode;
+    };
+
     // ============================================================================
     // UI Events (Commands)
     // ============================================================================
@@ -171,6 +173,122 @@ namespace gs {
 
     struct CameraResetEvent {
         // No data needed
+    };
+
+    // ============================================================================
+    // Data Loading Events
+    // ============================================================================
+
+    struct DatasetLoadStartedEvent {
+        std::filesystem::path path;
+        enum class Type { Colmap,
+                          Blender,
+                          PLY } type;
+    };
+
+    struct DatasetLoadProgressEvent {
+        std::filesystem::path path;
+        float progress;           // 0.0 to 1.0
+        std::string current_step; // "Reading cameras", "Loading images", etc.
+    };
+
+    struct DatasetLoadCompletedEvent {
+        std::filesystem::path path;
+        bool success;
+        std::optional<std::string> error_message;
+        size_t num_images;
+        size_t num_points;
+    };
+
+    // ============================================================================
+    // Evaluation Events
+    // ============================================================================
+
+    struct EvaluationStartedEvent {
+        int iteration;
+        size_t num_images;
+    };
+
+    struct EvaluationProgressEvent {
+        int iteration;
+        size_t current_image;
+        size_t total_images;
+    };
+
+    struct EvaluationCompletedEvent {
+        int iteration;
+        float psnr;
+        float ssim;
+        float lpips;
+        float elapsed_time;
+        int num_gaussians;
+    };
+
+    // ============================================================================
+    // Memory Events
+    // ============================================================================
+
+    struct MemoryUsageEvent {
+        size_t gpu_used_bytes;
+        size_t gpu_total_bytes;
+        float gpu_usage_percent;
+        size_t ram_used_bytes;
+        size_t ram_total_bytes;
+        float ram_usage_percent;
+    };
+
+    struct MemoryWarningEvent {
+        enum class Type { GPU,
+                          RAM };
+        Type type;
+        float usage_percent;
+        std::string message;
+    };
+
+    // ============================================================================
+    // Performance Events
+    // ============================================================================
+
+    struct FrameRenderedEvent {
+        float render_time_ms;
+        float fps;
+        int num_gaussians_rendered;
+    };
+
+    struct PerformanceReportEvent {
+        float avg_fps;
+        float avg_render_time_ms;
+        float avg_training_step_time_ms;
+        int time_window_seconds; // Stats over this time window
+    };
+
+    // ============================================================================
+    // Error Events
+    // ============================================================================
+
+    struct ErrorOccurredEvent {
+        enum class Severity { Warning,
+                              Error,
+                              Critical };
+        enum class Category {
+            Rendering,
+            Training,
+            IO,
+            Memory,
+            CUDA,
+            System,
+            Unknown
+        };
+        Severity severity;
+        Category category;
+        std::string message;
+        std::optional<std::string> details;
+        std::optional<std::string> recovery_suggestion;
+    };
+
+    struct ErrorRecoveredEvent {
+        ErrorOccurredEvent::Category category;
+        std::string recovery_action;
     };
 
 } // namespace gs

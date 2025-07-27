@@ -192,11 +192,19 @@ namespace gs {
         scene_ = std::make_unique<Scene>();
         trainer_manager_ = std::make_unique<TrainerManager>();
         trainer_manager_->setViewer(this);
+        trainer_manager_->setEventBus(event_bus_);
 
         setFrameRate(30);
 
         // Create GUI manager with event bus
         gui_manager_ = std::make_unique<gui::GuiManager>(this, event_bus_);
+
+        // Create error handler
+        error_handler_ = std::make_unique<ErrorHandler>(event_bus_);
+
+        // Create memory monitor and start it
+        memory_monitor_ = std::make_unique<MemoryMonitor>(event_bus_);
+        memory_monitor_->start();
 
         // Setup event handlers
         setupEventHandlers();
@@ -415,6 +423,57 @@ namespace gs {
         event_handler_ids_.push_back(
             event_bus_->subscribe<RenderingSettingsChangedEvent>(
                 [this](const RenderingSettingsChangedEvent& event) { handleRenderingSettingsChanged(event); }));
+
+        // Subscribe to new events
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<CameraMovedEvent>(
+                [this](const CameraMovedEvent& event) {
+                    // Could be used for auto-save camera positions, etc.
+                }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<EvaluationCompletedEvent>(
+                [this](const EvaluationCompletedEvent& event) {
+                    // Update UI with evaluation results
+                    if (gui_manager_) {
+                        gui_manager_->addConsoleLog(
+                            "Evaluation completed - PSNR: %.2f, SSIM: %.3f, LPIPS: %.3f",
+                            event.psnr, event.ssim, event.lpips);
+                    }
+                }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<MemoryUsageEvent>(
+                [this](const MemoryUsageEvent& event) {
+                    // Could update a memory usage display
+                    last_memory_usage_ = event;
+                }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<MemoryWarningEvent>(
+                [this](const MemoryWarningEvent& event) {
+                    if (gui_manager_) {
+                        gui_manager_->addConsoleLog(
+                            "WARNING: %s", event.message.c_str());
+                    }
+                }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<ErrorOccurredEvent>(
+                [this](const ErrorOccurredEvent& event) {
+                    if (gui_manager_) {
+                        const char* level = event.severity == ErrorOccurredEvent::Severity::Critical ? "CRITICAL" : event.severity == ErrorOccurredEvent::Severity::Error ? "ERROR"
+                                                                                                                                                                          : "WARNING";
+
+                        gui_manager_->addConsoleLog(
+                            "%s: %s", level, event.message.c_str());
+
+                        if (event.recovery_suggestion) {
+                            gui_manager_->addConsoleLog(
+                                "Suggestion: %s", event.recovery_suggestion->c_str());
+                        }
+                    }
+                }));
     }
 
     void GSViewer::handleStartTrainingCommand(const StartTrainingCommand& cmd) {
@@ -680,7 +739,8 @@ namespace gs {
             gui_manager_->init();
             gui_initialized = true;
 
-            // Set up input handlers after GUI is initialized
+            // Set event bus for camera controller
+            camera_controller_->setEventBus(event_bus_);
 
             // GUI gets first priority
             input_handler_->addMouseButtonHandler(

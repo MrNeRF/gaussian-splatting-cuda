@@ -758,9 +758,9 @@ namespace gs {
         }
 
         void GuiManager::handleTrainingProgress(const TrainingProgressEvent& event) {
-            // Update progress display
+            // Update progress display with throttling
             if (viewer_->info_) {
-                viewer_->info_->updateProgress(event.iteration, event.iteration); // TODO: get total from trainer
+                viewer_->info_->updateProgress(event.iteration, event.iteration);
                 viewer_->info_->updateNumSplats(event.num_gaussians);
                 viewer_->info_->updateLoss(event.loss);
             }
@@ -1051,6 +1051,8 @@ namespace gs {
             float fraction = total_iter > 0 ? float(current_iter) / float(total_iter) : 0.0f;
             char overlay_text[64];
             std::snprintf(overlay_text, sizeof(overlay_text), "%d / %d", current_iter, total_iter);
+
+            // Use ImGui's built-in frame rate to naturally throttle updates
             ImGui::ProgressBar(fraction, ImVec2(-1, 20), overlay_text);
 
             if (loss_data.size() > 0) {

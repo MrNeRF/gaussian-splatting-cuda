@@ -1,7 +1,9 @@
 #pragma once
 
+#include "visualizer/event_bus.hpp"
 #include "visualizer/input_handler.hpp"
 #include "visualizer/viewport.hpp"
+#include <memory>
 
 namespace gs {
 
@@ -12,6 +14,9 @@ namespace gs {
         // Setup input handlers
         void connectToInputHandler(InputHandler& input_handler);
 
+        // Set event bus for publishing camera events
+        void setEventBus(std::shared_ptr<EventBus> event_bus) { event_bus_ = event_bus; }
+
     private:
         // Input event handlers
         bool handleMouseButton(const InputHandler::MouseButtonEvent& event);
@@ -19,8 +24,12 @@ namespace gs {
         bool handleMouseScroll(const InputHandler::MouseScrollEvent& event);
         bool handleKey(const InputHandler::KeyEvent& event);
 
+        // Publish camera changed event
+        void publishCameraChanged();
+
         Viewport& viewport_;
         InputHandler* input_handler_ = nullptr; // Store reference for key state queries
+        std::shared_ptr<EventBus> event_bus_;
 
         // State
         bool is_panning_ = false;

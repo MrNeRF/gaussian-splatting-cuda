@@ -353,8 +353,8 @@ namespace gs {
 
             current_loss_ = loss_value;
 
-            // Publish training progress event
-            if (event_bus_) {
+            // Publish training progress event (throttled to reduce GUI updates)
+            if (event_bus_ && (iter % 10 == 0 || iter == 1)) { // Only update every 10 iterations
                 publishTrainingProgress(
                     iter,
                     loss_value,
