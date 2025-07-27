@@ -15,7 +15,9 @@ enum class DataReaderType {
 };
 
 // Forward declarations - adjust these includes based on your project structure
-class CameraDataset;
+namespace gs {
+    class CameraDataset;
+}
 class PointCloud;
 
 /**
@@ -47,7 +49,7 @@ public:
      * @return Expected containing tuple of CameraDataset and torch::Tensor on success,
      *         or error string on failure
      */
-    virtual std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
+    virtual std::expected<std::tuple<std::shared_ptr<gs::CameraDataset>, torch::Tensor>, std::string>
     create_dataset() const = 0;
 
     /**
@@ -100,7 +102,7 @@ public:
      * @return Expected containing tuple of CameraDataset and torch::Tensor on success,
      *         or error string on failure
      */
-    std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
+    std::expected<std::tuple<std::shared_ptr<gs::CameraDataset>, torch::Tensor>, std::string>
     create_dataset() const override;
 
     /**
@@ -144,7 +146,7 @@ public:
      * @return Expected containing tuple of CameraDataset and torch::Tensor on success,
      *         or error string on failure
      */
-    std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
+    std::expected<std::tuple<std::shared_ptr<gs::CameraDataset>, torch::Tensor>, std::string>
     create_dataset() const override;
 
     /**

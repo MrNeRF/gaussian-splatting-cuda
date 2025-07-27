@@ -1,6 +1,5 @@
 #pragma once
 
-#include "core/splat_data.hpp"
 #include "core/trainer.hpp"
 #include "visualizer/rendering_pipeline.hpp"
 #include <memory>

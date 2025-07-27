@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/parameters.hpp"
-#include "core/splat_data.hpp"
 #include "core/trainer.hpp"
+#include "visualizer/event_bus.hpp"
+#include "visualizer/events.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include <chrono>
 #include <filesystem>
@@ -87,7 +87,7 @@ namespace gs {
         // Main GUI manager
         class GuiManager {
         public:
-            GuiManager(GSViewer* viewer);
+            GuiManager(GSViewer* viewer, std::shared_ptr<EventBus> event_bus);
             ~GuiManager();
 
             void init();
@@ -111,13 +111,37 @@ namespace gs {
             // Console access
             void addConsoleLog(const char* fmt, ...);
 
+            // Get viewer for internal use
+            GSViewer* viewer_;
+
+            // Helper to publish events - MOVED TO PUBLIC
+            template <typename EventType>
+            void publish(const EventType& event) {
+                if (event_bus_) {
+                    event_bus_->publish(event);
+                }
+            }
+
         private:
             void renderMainPanel();
             void renderModeStatus();
             void renderRenderingSettings();
             void renderProgressInfo();
 
-            GSViewer* viewer_;
+            // Event system
+            std::shared_ptr<EventBus> event_bus_;
+            std::vector<size_t> event_handler_ids_;
+
+            // Event handlers
+            void setupEventHandlers();
+            void handleSceneLoaded(const SceneLoadedEvent& event);
+            void handleSceneCleared(const SceneClearedEvent& event);
+            void handleTrainingStarted(const TrainingStartedEvent& event);
+            void handleTrainingProgress(const TrainingProgressEvent& event);
+            void handleTrainingPaused(const TrainingPausedEvent& event);
+            void handleTrainingResumed(const TrainingResumedEvent& event);
+            void handleTrainingCompleted(const TrainingCompletedEvent& event);
+            void handleLogMessage(const LogMessageEvent& event);
 
             // Components
             std::unique_ptr<ScriptingConsole> scripting_console_;

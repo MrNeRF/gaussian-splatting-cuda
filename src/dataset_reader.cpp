@@ -7,9 +7,9 @@
 #include "core/colmap_reader.hpp"
 #include "core/transforms_reader.hpp"
 
-std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
+std::expected<std::tuple<std::shared_ptr<gs::CameraDataset>, torch::Tensor>, std::string>
 ColmapReader::create_dataset() const {
-    return create_dataset_from_colmap(m_datasetConfig);
+    return gs::create_dataset_from_colmap(m_datasetConfig);
 }
 
 PointCloud ColmapReader::createPointCloud() const {
@@ -63,9 +63,9 @@ void ColmapReader::printValidationInfoMessage() const {
         "        └── points3D.bin\n");
 }
 
-std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
+std::expected<std::tuple<std::shared_ptr<gs::CameraDataset>, torch::Tensor>, std::string>
 BlenderReader::create_dataset() const {
-    return create_dataset_from_transforms(m_datasetConfig);
+    return gs::create_dataset_from_transforms(m_datasetConfig);
 }
 
 PointCloud BlenderReader::createPointCloud() const {

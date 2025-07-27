@@ -2,6 +2,8 @@
 
 #include "core/parameters.hpp"
 #include "core/trainer.hpp"
+#include "visualizer/event_bus.hpp"
+#include "visualizer/events.hpp"
 #include <atomic>
 #include <filesystem>
 #include <memory>
@@ -16,7 +18,7 @@ namespace gs {
 
     /**
      * @brief Manages training lifecycle and thread coordination
-     * 
+     *
      * This class encapsulates all training-related functionality including:
      * - Training thread management
      * - State control (start/pause/resume/stop)
@@ -26,13 +28,13 @@ namespace gs {
     class TrainerManager {
     public:
         enum class State {
-            Idle,        // No trainer loaded
-            Ready,       // Trainer loaded, ready to start
-            Running,     // Training in progress
-            Paused,      // Training paused
-            Stopping,    // Stop requested, waiting for thread
-            Completed,   // Training finished successfully
-            Error        // Training encountered an error
+            Idle,      // No trainer loaded
+            Ready,     // Trainer loaded, ready to start
+            Running,   // Training in progress
+            Paused,    // Training paused
+            Stopping,  // Stop requested, waiting for thread
+            Completed, // Training finished successfully
+            Error      // Training encountered an error
         };
 
         TrainerManager() = default;
@@ -54,6 +56,9 @@ namespace gs {
         // Link to viewer for notifications
         void setViewer(GSViewer* viewer) { viewer_ = viewer; }
 
+        // Set event bus for publishing training events
+        void setEventBus(std::shared_ptr<EventBus> event_bus) { event_bus_ = event_bus; }
+
         // Training control
         bool startTraining();
         void pauseTraining();
@@ -65,7 +70,7 @@ namespace gs {
         State getState() const { return state_.load(); }
         bool isRunning() const { return state_ == State::Running; }
         bool isPaused() const { return state_ == State::Paused; }
-        bool isTrainingActive() const { 
+        bool isTrainingActive() const {
             auto s = state_.load();
             return s == State::Running || s == State::Paused;
         }
@@ -97,10 +102,21 @@ namespace gs {
         void setState(State new_state);
         void handleTrainingComplete(bool success, const std::string& error = "");
 
+        // Publish training events
+        void publishTrainingStarted(int total_iterations);
+        void publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining);
+        void publishTrainingPaused(int iteration);
+        void publishTrainingResumed(int iteration);
+        void publishTrainingCompleted(int iteration, float loss, bool success, const std::string& error = "");
+        void publishTrainingStopped(int iteration, bool user_requested);
+
         // Member variables
         std::unique_ptr<Trainer> trainer_;
         std::unique_ptr<std::jthread> training_thread_;
         GSViewer* viewer_ = nullptr;
+
+        // Event bus for publishing events
+        std::shared_ptr<EventBus> event_bus_;
 
         // State tracking
         std::atomic<State> state_{State::Idle};

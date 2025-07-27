@@ -6,12 +6,16 @@
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
 #include "core/training_progress.hpp"
+#include "visualizer/event_bus.hpp"
 #include <atomic>
 #include <expected>
 #include <memory>
 #include <shared_mutex>
 #include <stop_token>
 #include <torch/torch.h>
+
+// Forward declaration
+class Camera;
 
 namespace gs {
 
@@ -57,6 +61,9 @@ namespace gs {
 
         void setViewer(GSViewer* viewer) { viewer_ = viewer; }
 
+        // Set event bus for publishing training events
+        void setEventBus(std::shared_ptr<EventBus> event_bus) { event_bus_ = event_bus; }
+
         // Allow viewer to lock for rendering
         std::shared_mutex& getRenderMutex() const { return render_mutex_; }
 
@@ -72,7 +79,7 @@ namespace gs {
         // Returns result indicating whether training should continue
         std::expected<StepResult, std::string> train_step(
             int iter,
-            Camera* cam,
+            Camera* cam, // Use global Camera, not gs::Camera
             torch::Tensor gt_image,
             RenderMode render_mode,
             std::stop_token stop_token = {});
@@ -101,6 +108,11 @@ namespace gs {
         // Handle control requests
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
+        // Event publishing methods
+        void publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining);
+        void publishCheckpointSaved(int iteration, const std::filesystem::path& path);
+        void publishModelUpdated(int iteration, size_t num_gaussians);
+
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;
@@ -108,6 +120,9 @@ namespace gs {
         param::TrainingParameters params_;
 
         GSViewer* viewer_ = nullptr;
+
+        // Event bus for publishing events
+        std::shared_ptr<EventBus> event_bus_;
 
         torch::Tensor background_{};
         std::unique_ptr<TrainingProgress> progress_;

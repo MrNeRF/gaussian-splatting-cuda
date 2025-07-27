@@ -1,11 +1,13 @@
 #pragma once
 
 #include "core/image_io.hpp"
-#include "visualizer/training_manager.hpp"
 #include "visualizer/camera_controller.hpp"
+#include "visualizer/event_bus.hpp"
+#include "visualizer/events.hpp"
 #include "visualizer/input_handler.hpp"
 #include "visualizer/renderer.hpp"
 #include "visualizer/scene.hpp"
+#include "visualizer/training_manager.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
 #include <chrono>
@@ -158,9 +160,28 @@ namespace gs {
         // GUI access for static callbacks
         bool isGuiActive() const;
 
+        // Event bus access for components
+        std::shared_ptr<EventBus> getEventBus() const { return event_bus_; }
+
     private:
         // Input handlers
         bool handleFileDrop(const InputHandler::FileDropEvent& event);
+
+        // Event system
+        std::shared_ptr<EventBus> event_bus_;
+
+        // Event handler IDs for cleanup
+        std::vector<size_t> event_handler_ids_;
+
+        // Event handlers
+        void setupEventHandlers();
+        void handleStartTrainingCommand(const StartTrainingCommand& cmd);
+        void handlePauseTrainingCommand(const PauseTrainingCommand& cmd);
+        void handleResumeTrainingCommand(const ResumeTrainingCommand& cmd);
+        void handleStopTrainingCommand(const StopTrainingCommand& cmd);
+        void handleSaveCheckpointCommand(const SaveCheckpointCommand& cmd);
+        void handleLoadFileCommand(const LoadFileCommand& cmd);
+        void handleRenderingSettingsChanged(const RenderingSettingsChangedEvent& event);
 
     public:
         std::shared_ptr<TrainingInfo> info_;

@@ -2,7 +2,6 @@
 
 #include "visualizer/input_handler.hpp"
 #include "visualizer/viewport.hpp"
-#include <glm/glm.hpp>
 
 namespace gs {
 

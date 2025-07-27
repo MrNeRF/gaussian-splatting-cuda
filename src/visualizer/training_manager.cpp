@@ -25,6 +25,10 @@ namespace gs {
             if (viewer_) {
                 trainer_->setViewer(viewer_);
             }
+
+            if (event_bus_) {
+                trainer_->setEventBus(event_bus_);
+            }
         }
     }
 
@@ -64,6 +68,11 @@ namespace gs {
             training_complete_ = false;
         }
 
+        // Publish training started event
+        if (event_bus_) {
+            publishTrainingStarted(getTotalIterations());
+        }
+
         // Start training thread
         setState(State::Running);
         training_thread_ = std::make_unique<std::jthread>(
@@ -83,6 +92,11 @@ namespace gs {
         if (trainer_) {
             trainer_->request_pause();
             setState(State::Paused);
+
+            if (event_bus_) {
+                publishTrainingPaused(getCurrentIteration());
+            }
+
             std::println("TrainerManager: Training paused");
         }
     }
@@ -95,6 +109,11 @@ namespace gs {
         if (trainer_) {
             trainer_->request_resume();
             setState(State::Running);
+
+            if (event_bus_) {
+                publishTrainingResumed(getCurrentIteration());
+            }
+
             std::println("TrainerManager: Training resumed");
         }
     }
@@ -114,12 +133,25 @@ namespace gs {
             std::println("TrainerManager: Requesting training thread to stop...");
             training_thread_->request_stop();
         }
+
+        if (event_bus_) {
+            publishTrainingStopped(getCurrentIteration(), true);
+        }
     }
 
     void TrainerManager::requestSaveCheckpoint() {
         if (trainer_ && isTrainingActive()) {
             trainer_->request_save();
             std::println("TrainerManager: Checkpoint save requested");
+
+            if (event_bus_) {
+                // This will be handled by the trainer when it actually saves
+                // For now, just log it
+                event_bus_->publish(LogMessageEvent{
+                    LogMessageEvent::Level::Info,
+                    "Checkpoint save requested",
+                    "TrainerManager"});
+            }
         }
     }
 
@@ -156,6 +188,11 @@ namespace gs {
         std::println("TrainerManager: Training thread started");
 
         try {
+            // Set up progress callback for the trainer
+            if (trainer_ && event_bus_) {
+                // Note: The trainer now has the event bus and will publish progress events
+            }
+
             auto train_result = trainer_->train(stop_token);
 
             if (!train_result) {
@@ -185,12 +222,62 @@ namespace gs {
 
         setState(success ? State::Completed : State::Error);
 
+        if (event_bus_) {
+            publishTrainingCompleted(
+                getCurrentIteration(),
+                getCurrentLoss(),
+                success,
+                error);
+        }
+
         // Notify completion
         {
             std::lock_guard<std::mutex> lock(completion_mutex_);
             training_complete_ = true;
         }
         completion_cv_.notify_all();
+    }
+
+    // Event publishing methods
+    void TrainerManager::publishTrainingStarted(int total_iterations) {
+        if (event_bus_) {
+            event_bus_->publish(TrainingStartedEvent{total_iterations});
+        }
+    }
+
+    void TrainerManager::publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining) {
+        if (event_bus_) {
+            event_bus_->publish(TrainingProgressEvent{
+                iteration, loss, num_gaussians, is_refining});
+        }
+    }
+
+    void TrainerManager::publishTrainingPaused(int iteration) {
+        if (event_bus_) {
+            event_bus_->publish(TrainingPausedEvent{iteration});
+        }
+    }
+
+    void TrainerManager::publishTrainingResumed(int iteration) {
+        if (event_bus_) {
+            event_bus_->publish(TrainingResumedEvent{iteration});
+        }
+    }
+
+    void TrainerManager::publishTrainingCompleted(int iteration, float loss, bool success, const std::string& error) {
+        if (event_bus_) {
+            event_bus_->publish(TrainingCompletedEvent{
+                iteration,
+                loss,
+                success,
+                error.empty() ? std::nullopt : std::optional<std::string>(error)});
+        }
+    }
+
+    void TrainerManager::publishTrainingStopped(int iteration, bool user_requested) {
+        if (event_bus_) {
+            event_bus_->publish(TrainingStoppedEvent{iteration, user_requested});
+        }
     }
 
 } // namespace gs

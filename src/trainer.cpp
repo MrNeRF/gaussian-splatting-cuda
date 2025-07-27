@@ -210,8 +210,14 @@ namespace gs {
         // Handle save request
         if (save_requested_.exchange(false)) {
             std::println("\nSaving checkpoint at iteration {}...", iter);
-            strategy_->get_model().save_ply(params_.dataset.output_path / "checkpoints", iter, /*join=*/true);
-            std::println("Checkpoint saved to {}", (params_.dataset.output_path / "checkpoints").string());
+            auto checkpoint_path = params_.dataset.output_path / "checkpoints";
+            strategy_->get_model().save_ply(checkpoint_path, iter, /*join=*/true);
+            std::println("Checkpoint saved to {}", checkpoint_path.string());
+
+            // Publish checkpoint saved event
+            if (event_bus_) {
+                publishCheckpointSaved(iter, checkpoint_path);
+            }
         }
 
         // Handle stop request - this permanently stops training
@@ -220,6 +226,32 @@ namespace gs {
             std::println("Saving final model...");
             strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
             is_running_ = false;
+        }
+    }
+
+    void Trainer::publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining) {
+        if (event_bus_) {
+            event_bus_->publish(TrainingProgressEvent{
+                iteration, loss, num_gaussians, is_refining});
+        }
+    }
+
+    void Trainer::publishCheckpointSaved(int iteration, const std::filesystem::path& path) {
+        if (event_bus_) {
+            event_bus_->publish(CheckpointSavedEvent{
+                iteration, path});
+
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Info,
+                std::format("Checkpoint saved at iteration {}", iteration),
+                "Trainer"});
+        }
+    }
+
+    void Trainer::publishModelUpdated(int iteration, size_t num_gaussians) {
+        if (event_bus_) {
+            event_bus_->publish(ModelUpdatedEvent{
+                iteration, num_gaussians});
         }
     }
 
@@ -321,6 +353,15 @@ namespace gs {
 
             current_loss_ = loss_value;
 
+            // Publish training progress event
+            if (event_bus_) {
+                publishTrainingProgress(
+                    iter,
+                    loss_value,
+                    static_cast<int>(strategy_->get_model().size()),
+                    strategy_->is_refining(iter));
+            }
+
             {
                 torch::NoGradGuard no_grad;
 
@@ -335,6 +376,11 @@ namespace gs {
                     if (params_.optimization.use_bilateral_grid) {
                         bilateral_grid_optimizer_->step();
                         bilateral_grid_optimizer_->zero_grad(true);
+                    }
+
+                    // Publish model updated event
+                    if (event_bus_) {
+                        publishModelUpdated(iter, strategy_->get_model().size());
                     }
                 }
 
@@ -353,7 +399,13 @@ namespace gs {
                     for (size_t save_step : params_.optimization.save_steps) {
                         if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
                             const bool join_threads = (iter == params_.optimization.save_steps.back());
-                            strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/join_threads);
+                            auto save_path = params_.dataset.output_path;
+                            strategy_->get_model().save_ply(save_path, iter, /*join=*/join_threads);
+
+                            // Publish checkpoint saved event
+                            if (event_bus_) {
+                                publishCheckpointSaved(iter, save_path);
+                            }
                         }
                     }
                 }
@@ -410,6 +462,7 @@ namespace gs {
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
             }
+
             for (int epoch = 0; epoch < epochs_needed; ++epoch) {
                 if (stop_token.stop_requested() || stop_requested_.load()) {
                     break;
@@ -442,7 +495,18 @@ namespace gs {
 training_complete:
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
-                strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
+                auto final_path = params_.dataset.output_path;
+                strategy_->get_model().save_ply(final_path, iter, /*join=*/true);
+
+                // Publish final checkpoint saved event
+                if (event_bus_) {
+                    publishCheckpointSaved(iter, final_path);
+
+                    event_bus_->publish(LogMessageEvent{
+                        LogMessageEvent::Level::Info,
+                        std::format("Training completed. Final model saved at iteration {}", iter),
+                        "Trainer"});
+                }
             }
 
             if (!viewer_ && progress_) {

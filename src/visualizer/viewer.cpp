@@ -1,5 +1,6 @@
 #include "config.h" // Include generated config
 #include "core/ply_loader.hpp"
+#include "core/splat_data.hpp"
 #include "core/training_setup.hpp"
 #include "visualizer/detail.hpp"
 #include "visualizer/gui_manager.hpp"
@@ -127,8 +128,10 @@ namespace gs {
                 // Log the action
                 if (gui_manager_) {
                     gui_manager_->showScriptingConsole(true);
-                    gui_manager_->addConsoleLog("Info: Loaded PLY file via drag-and-drop: %s",
-                                                filepath.filename().string().c_str());
+                    event_bus_->publish(LogMessageEvent{
+                        LogMessageEvent::Level::Info,
+                        std::format("Loaded PLY file via drag-and-drop: {}", filepath.filename().string()),
+                        "GSViewer"});
                 }
 
                 // Only process the first PLY file if multiple files were dropped
@@ -160,9 +163,12 @@ namespace gs {
                     // Log the action
                     if (gui_manager_) {
                         gui_manager_->showScriptingConsole(true);
-                        gui_manager_->addConsoleLog("Info: Loaded %s dataset via drag-and-drop: %s",
-                                                    is_colmap_dataset ? "COLMAP" : "Transforms",
-                                                    filepath.filename().string().c_str());
+                        event_bus_->publish(LogMessageEvent{
+                            LogMessageEvent::Level::Info,
+                            std::format("Loaded {} dataset via drag-and-drop: {}",
+                                        is_colmap_dataset ? "COLMAP" : "Transforms",
+                                        filepath.filename().string()),
+                            "GSViewer"});
                     }
 
                     // Only process the first valid dataset if multiple were dropped
@@ -176,6 +182,9 @@ namespace gs {
     GSViewer::GSViewer(std::string title, int width, int height)
         : ViewerDetail(title, width, height) {
 
+        // Initialize event bus first
+        event_bus_ = std::make_shared<EventBus>();
+
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<ViewerNotifier>();
@@ -186,8 +195,11 @@ namespace gs {
 
         setFrameRate(30);
 
-        // Create GUI manager
-        gui_manager_ = std::make_unique<gui::GuiManager>(this);
+        // Create GUI manager with event bus
+        gui_manager_ = std::make_unique<gui::GuiManager>(this, event_bus_);
+
+        // Setup event handlers
+        setupEventHandlers();
 
         // Set up default script executor with basic functionality
         gui_manager_->setScriptExecutor([this](const std::string& command) -> std::string {
@@ -353,15 +365,16 @@ namespace gs {
 
         // Set up file selection callback
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
-            if (is_dataset) {
-                loadDataset(path);
-            } else {
-                loadPLYFile(path);
-            }
+            event_bus_->publish(LoadFileCommand{path, is_dataset});
         });
     }
 
     GSViewer::~GSViewer() {
+        // Unsubscribe from all events
+        for (auto id : event_handler_ids_) {
+            // Note: Channels clean up automatically when EventBus is destroyed
+        }
+
         // TrainerManager handles its own cleanup now
         trainer_manager_.reset();
 
@@ -371,6 +384,87 @@ namespace gs {
         }
 
         std::cout << "GSViewer destroyed." << std::endl;
+    }
+
+    void GSViewer::setupEventHandlers() {
+        // Subscribe to command events
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<StartTrainingCommand>(
+                [this](const StartTrainingCommand& cmd) { handleStartTrainingCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<PauseTrainingCommand>(
+                [this](const PauseTrainingCommand& cmd) { handlePauseTrainingCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<ResumeTrainingCommand>(
+                [this](const ResumeTrainingCommand& cmd) { handleResumeTrainingCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<StopTrainingCommand>(
+                [this](const StopTrainingCommand& cmd) { handleStopTrainingCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<SaveCheckpointCommand>(
+                [this](const SaveCheckpointCommand& cmd) { handleSaveCheckpointCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<LoadFileCommand>(
+                [this](const LoadFileCommand& cmd) { handleLoadFileCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<RenderingSettingsChangedEvent>(
+                [this](const RenderingSettingsChangedEvent& event) { handleRenderingSettingsChanged(event); }));
+    }
+
+    void GSViewer::handleStartTrainingCommand(const StartTrainingCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->startTraining();
+        }
+    }
+
+    void GSViewer::handlePauseTrainingCommand(const PauseTrainingCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->pauseTraining();
+        }
+    }
+
+    void GSViewer::handleResumeTrainingCommand(const ResumeTrainingCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->resumeTraining();
+        }
+    }
+
+    void GSViewer::handleStopTrainingCommand(const StopTrainingCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->stopTraining();
+        }
+    }
+
+    void GSViewer::handleSaveCheckpointCommand(const SaveCheckpointCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->requestSaveCheckpoint();
+        }
+    }
+
+    void GSViewer::handleLoadFileCommand(const LoadFileCommand& cmd) {
+        if (cmd.is_dataset) {
+            loadDataset(cmd.path);
+        } else {
+            loadPLYFile(cmd.path);
+        }
+    }
+
+    void GSViewer::handleRenderingSettingsChanged(const RenderingSettingsChangedEvent& event) {
+        if (event.fov) {
+            config_->fov = *event.fov;
+        }
+        if (event.scaling_modifier) {
+            config_->scaling_modifier = *event.scaling_modifier;
+        }
+        if (event.antialiasing) {
+            anti_aliasing_ = *event.antialiasing;
+        }
     }
 
     void GSViewer::setTrainer(Trainer* trainer) {
@@ -398,7 +492,10 @@ namespace gs {
             // Load the PLY file
             auto splat_result = gs::load_ply(path);
             if (!splat_result) {
-                gui_manager_->addConsoleLog("Error: Failed to load PLY: %s", splat_result.error().c_str());
+                event_bus_->publish(LogMessageEvent{
+                    LogMessageEvent::Level::Error,
+                    std::format("Failed to load PLY: {}", splat_result.error()),
+                    "GSViewer"});
                 return;
             }
 
@@ -406,12 +503,26 @@ namespace gs {
             current_ply_path_ = path;
             current_mode_ = ViewerMode::PLYViewer;
 
-            gui_manager_->addConsoleLog("Info: Loaded PLY with %lld Gaussians from %s",
-                                        scene_->getStandaloneModel()->size(),
-                                        path.filename().string().c_str());
+            // Publish scene loaded event
+            event_bus_->publish(SceneLoadedEvent{
+                scene_.get(),
+                path,
+                SceneLoadedEvent::SourceType::PLY,
+                static_cast<size_t>(scene_->getStandaloneModel()->size())});
+
+            // Publish log message
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Info,
+                std::format("Loaded PLY with {} Gaussians from {}",
+                            static_cast<size_t>(scene_->getStandaloneModel()->size()),
+                            path.filename().string()),
+                "GSViewer"});
 
         } catch (const std::exception& e) {
-            gui_manager_->addConsoleLog("Error: Exception loading PLY: %s", e.what());
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Error,
+                std::format("Exception loading PLY: {}", e.what()),
+                "GSViewer"});
         }
     }
 
@@ -429,12 +540,18 @@ namespace gs {
             // Setup training
             auto setup_result = gs::setupTraining(dataset_params);
             if (!setup_result) {
-                gui_manager_->addConsoleLog("Error: Failed to setup training: %s", setup_result.error().c_str());
+                event_bus_->publish(LogMessageEvent{
+                    LogMessageEvent::Level::Error,
+                    std::format("Failed to setup training: {}", setup_result.error()),
+                    "GSViewer"});
                 return;
             }
 
             // Pass trainer to TrainerManager
             trainer_manager_->setTrainer(std::move(setup_result->trainer));
+
+            // Pass event bus to trainer manager
+            trainer_manager_->setEventBus(event_bus_);
 
             // Link scene to trainer
             scene_->linkToTrainer(trainer_manager_->getTrainer());
@@ -446,14 +563,35 @@ namespace gs {
             size_t num_images = setup_result->dataset->size().value();
             size_t num_gaussians = trainer_manager_->getTrainer()->get_strategy().get_model().size();
 
-            gui_manager_->addConsoleLog("Info: Loaded dataset with %zu images and %zu initial Gaussians",
-                                        num_images, num_gaussians);
-            gui_manager_->addConsoleLog("Info: Ready to start training from %s",
-                                        path.filename().string().c_str());
-            gui_manager_->addConsoleLog("Info: Using parameters from command line/config");
+            // Publish scene loaded event
+            event_bus_->publish(SceneLoadedEvent{
+                scene_.get(),
+                path,
+                SceneLoadedEvent::SourceType::Dataset,
+                num_gaussians});
+
+            // Publish log messages
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Info,
+                std::format("Loaded dataset with {} images and {} initial Gaussians",
+                            num_images, num_gaussians),
+                "GSViewer"});
+
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Info,
+                std::format("Ready to start training from {}", path.filename().string()),
+                "GSViewer"});
+
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Info,
+                "Using parameters from command line/config",
+                "GSViewer"});
 
         } catch (const std::exception& e) {
-            gui_manager_->addConsoleLog("Error: Exception loading dataset: %s", e.what());
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Error,
+                std::format("Exception loading dataset: {}", e.what()),
+                "GSViewer"});
         }
     }
 
@@ -476,10 +614,14 @@ namespace gs {
             info_->num_splats_ = 0;
             info_->loss_buffer_.clear();
         }
+
+        // Publish scene cleared event
+        event_bus_->publish(SceneClearedEvent{});
     }
 
     void GSViewer::startTraining() {
-        trainer_manager_->startTraining();
+        // This method is now deprecated - use event bus
+        event_bus_->publish(StartTrainingCommand{});
     }
 
     bool GSViewer::isGuiActive() const {

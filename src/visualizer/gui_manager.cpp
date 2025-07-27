@@ -533,7 +533,11 @@ namespace gs {
             ImGui::Separator();
 
             // Get trainer manager from viewer
-            auto viewer = static_cast<GSViewer*>(ImGui::GetIO().UserData);
+            auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
+            if (!gui_manager || !gui_manager->viewer_)
+                return;
+
+            auto viewer = gui_manager->viewer_;
             if (!viewer || !viewer->getTrainerManager())
                 return;
 
@@ -589,14 +593,22 @@ namespace gs {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             if (ImGui::Button("Start Training", ImVec2(-1, 0))) {
-                state.manual_start_triggered = true;
+                // Use event bus from parent GuiManager
+                auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
+                if (gui_manager) {
+                    gui_manager->publish(StartTrainingCommand{});
+                }
                 state.training_started = true;
             }
             ImGui::PopStyleColor(2);
         }
 
         void TrainingControlsPanel::renderRunningControls(Trainer* trainer, State& state) {
-            auto viewer = static_cast<GSViewer*>(ImGui::GetIO().UserData);
+            auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
+            if (!gui_manager || !gui_manager->viewer_)
+                return;
+
+            auto viewer = gui_manager->viewer_;
             if (!viewer || !viewer->getTrainerManager())
                 return;
 
@@ -607,21 +619,21 @@ namespace gs {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
                 if (ImGui::Button("Resume", ImVec2(-1, 0))) {
-                    trainer_manager->resumeTraining();
+                    gui_manager->publish(ResumeTrainingCommand{});
                 }
                 ImGui::PopStyleColor(2);
 
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
                 if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
-                    trainer_manager->stopTraining();
+                    gui_manager->publish(StopTrainingCommand{});
                 }
                 ImGui::PopStyleColor(2);
             } else {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
                 if (ImGui::Button("Pause", ImVec2(-1, 0))) {
-                    trainer_manager->pauseTraining();
+                    gui_manager->publish(PauseTrainingCommand{});
                 }
                 ImGui::PopStyleColor(2);
             }
@@ -629,7 +641,7 @@ namespace gs {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
             if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
-                trainer_manager->requestSaveCheckpoint();
+                gui_manager->publish(SaveCheckpointCommand{});
                 state.save_in_progress = true;
                 state.save_start_time = std::chrono::steady_clock::now();
             }
@@ -639,7 +651,11 @@ namespace gs {
         void TrainingControlsPanel::renderStatus(Trainer* trainer, State& state) {
             ImGui::Separator();
 
-            auto viewer = static_cast<GSViewer*>(ImGui::GetIO().UserData);
+            auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
+            if (!gui_manager || !gui_manager->viewer_)
+                return;
+
+            auto viewer = gui_manager->viewer_;
             if (!viewer || !viewer->getTrainerManager())
                 return;
 
@@ -667,14 +683,127 @@ namespace gs {
         // GuiManager Implementation
         // ============================================================================
 
-        GuiManager::GuiManager(GSViewer* viewer) : viewer_(viewer) {
+        GuiManager::GuiManager(GSViewer* viewer, std::shared_ptr<EventBus> event_bus)
+            : viewer_(viewer),
+              event_bus_(event_bus) {
+
             scripting_console_ = std::make_unique<ScriptingConsole>();
             file_browser_ = std::make_unique<FileBrowser>();
             camera_controls_ = std::make_unique<CameraControlsWindow>();
             training_controls_ = std::make_unique<TrainingControlsPanel>();
+
+            // Setup event handlers
+            setupEventHandlers();
         }
 
-        GuiManager::~GuiManager() = default;
+        GuiManager::~GuiManager() {
+            // Event handlers are automatically cleaned up when event bus is destroyed
+        }
+
+        void GuiManager::setupEventHandlers() {
+            // Subscribe to events
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<SceneLoadedEvent>(
+                    [this](const SceneLoadedEvent& e) { handleSceneLoaded(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<SceneClearedEvent>(
+                    [this](const SceneClearedEvent& e) { handleSceneCleared(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingStartedEvent>(
+                    [this](const TrainingStartedEvent& e) { handleTrainingStarted(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingProgressEvent>(
+                    [this](const TrainingProgressEvent& e) { handleTrainingProgress(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingPausedEvent>(
+                    [this](const TrainingPausedEvent& e) { handleTrainingPaused(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingResumedEvent>(
+                    [this](const TrainingResumedEvent& e) { handleTrainingResumed(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingCompletedEvent>(
+                    [this](const TrainingCompletedEvent& e) { handleTrainingCompleted(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<LogMessageEvent>(
+                    [this](const LogMessageEvent& e) { handleLogMessage(e); }));
+        }
+
+        void GuiManager::handleSceneLoaded(const SceneLoadedEvent& event) {
+            show_scripting_console_ = true;
+
+            const char* type_str = (event.source_type == SceneLoadedEvent::SourceType::PLY)
+                                       ? "PLY file"
+                                       : "dataset";
+
+            scripting_console_->addLog("Info: Loaded %s with %zu Gaussians from %s",
+                                       type_str,
+                                       event.num_gaussians,
+                                       event.source_path.filename().string().c_str());
+        }
+
+        void GuiManager::handleSceneCleared(const SceneClearedEvent& event) {
+            // Update UI state if needed
+        }
+
+        void GuiManager::handleTrainingStarted(const TrainingStartedEvent& event) {
+            training_state_.training_started = true;
+            scripting_console_->addLog("Info: Training started (%d iterations)", event.total_iterations);
+        }
+
+        void GuiManager::handleTrainingProgress(const TrainingProgressEvent& event) {
+            // Update progress display
+            if (viewer_->info_) {
+                viewer_->info_->updateProgress(event.iteration, event.iteration); // TODO: get total from trainer
+                viewer_->info_->updateNumSplats(event.num_gaussians);
+                viewer_->info_->updateLoss(event.loss);
+            }
+        }
+
+        void GuiManager::handleTrainingPaused(const TrainingPausedEvent& event) {
+            scripting_console_->addLog("Info: Training paused at iteration %d", event.iteration);
+        }
+
+        void GuiManager::handleTrainingResumed(const TrainingResumedEvent& event) {
+            scripting_console_->addLog("Info: Training resumed at iteration %d", event.iteration);
+        }
+
+        void GuiManager::handleTrainingCompleted(const TrainingCompletedEvent& event) {
+            if (event.success) {
+                scripting_console_->addLog("Info: Training completed successfully at iteration %d",
+                                           event.final_iteration);
+            } else {
+                scripting_console_->addLog("Error: Training failed at iteration %d: %s",
+                                           event.final_iteration,
+                                           event.error_message.value_or("Unknown error").c_str());
+            }
+            training_state_.training_started = false;
+        }
+
+        void GuiManager::handleLogMessage(const LogMessageEvent& event) {
+            const char* level_str = "";
+            switch (event.level) {
+            case LogMessageEvent::Level::Info: level_str = "Info"; break;
+            case LogMessageEvent::Level::Warning: level_str = "Warning"; break;
+            case LogMessageEvent::Level::Error: level_str = "Error"; break;
+            case LogMessageEvent::Level::Debug: level_str = "Debug"; break;
+            }
+
+            if (event.source) {
+                scripting_console_->addLog("%s [%s]: %s",
+                                           level_str,
+                                           event.source->c_str(),
+                                           event.message.c_str());
+            } else {
+                scripting_console_->addLog("%s: %s", level_str, event.message.c_str());
+            }
+        }
 
         void GuiManager::init() {
             // Setup Dear ImGui context
@@ -686,8 +815,8 @@ namespace gs {
             io.ConfigWindowsMoveFromTitleBarOnly = true;
             ImGui::StyleColorsLight();
 
-            // Store viewer pointer in IO for access in callbacks
-            io.UserData = viewer_;
+            // Store GUI manager pointer in IO for access in callbacks
+            io.UserData = this;
 
             // Setup Platform/Renderer backends
             const char* glsl_version = "#version 430";
@@ -777,7 +906,8 @@ namespace gs {
 
                 // Handle the start trigger
                 if (training_state_.manual_start_triggered) {
-                    viewer_->startTraining();
+                    // Use event instead of direct call
+                    publish(StartTrainingCommand{});
                     training_state_.manual_start_triggered = false;
                 }
             } else if (viewer_->getCurrentMode() == GSViewer::ViewerMode::PLYViewer && viewer_->getStandaloneModel()) {
@@ -866,18 +996,34 @@ namespace gs {
             ImGui::Text("Rendering Settings");
             ImGui::Separator();
 
+            float old_scale = config->scaling_modifier;
             ImGui::SetNextItemWidth(200);
             ImGui::SliderFloat("##scale_slider", &config->scaling_modifier, 0.01f, 3.0f, "Scale=%.2f");
+            if (old_scale != config->scaling_modifier) {
+                publish(RenderingSettingsChangedEvent{
+                    std::nullopt, config->scaling_modifier, std::nullopt});
+            }
+
             ImGui::SameLine();
             if (ImGui::Button("Reset##scale", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
                 config->scaling_modifier = 1.0f;
+                publish(RenderingSettingsChangedEvent{
+                    std::nullopt, config->scaling_modifier, std::nullopt});
             }
 
+            float old_fov = config->fov;
             ImGui::SetNextItemWidth(200);
             ImGui::SliderFloat("##fov_slider", &config->fov, 45.0f, 120.0f, "FoV=%.2f");
+            if (old_fov != config->fov) {
+                publish(RenderingSettingsChangedEvent{
+                    config->fov, std::nullopt, std::nullopt});
+            }
+
             ImGui::SameLine();
             if (ImGui::Button("Reset##fov", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
                 config->fov = 75.0f;
+                publish(RenderingSettingsChangedEvent{
+                    config->fov, std::nullopt, std::nullopt});
             }
 
             // Show render mode
@@ -954,7 +1100,9 @@ namespace gs {
         }
 
         void GuiManager::setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback) {
-            file_browser_->setOnFileSelected(callback);
+            file_browser_->setOnFileSelected([this](const std::filesystem::path& path, bool is_dataset) {
+                publish(LoadFileCommand{path, is_dataset});
+            });
         }
 
         void GuiManager::addConsoleLog(const char* fmt, ...) {
