@@ -127,6 +127,7 @@ namespace gs {
             void addConsoleLog(const char* fmt, ...);
 
             bool showCropBox() const;
+            bool useCropBox() const;
 
         private:
             void renderMainPanel();

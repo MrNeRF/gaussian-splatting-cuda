@@ -124,12 +124,11 @@ public:
             0, -1, 0,
             0, 0, -1);
 
-
         glm::mat3 R_inv = glm::transpose(camera.R); // Inverse of rotation matrix
         glm::vec3 t_inv = -R_inv * camera.t;        // Inverse translation
 
-        R_inv = flip_yz*R_inv;
-        t_inv = flip_yz*t_inv;
+        R_inv = flip_yz * R_inv;
+        t_inv = flip_yz * t_inv;
 
         glm::mat4 view(1.0f);
 

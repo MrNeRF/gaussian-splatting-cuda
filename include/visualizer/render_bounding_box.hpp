@@ -7,11 +7,11 @@
 
 #include "core/bounding_box.hpp"
 
-#include <memory>
 #include "visualizer/shader.hpp" // Your existing shader class
+#include <memory>
 
 namespace gs {
-    class RenderBoundingBox : public BoundingBox{
+    class RenderBoundingBox : public BoundingBox {
     public:
         RenderBoundingBox();
         ~RenderBoundingBox();
@@ -37,7 +37,7 @@ namespace gs {
         // Render the bounding box
         void render(const glm::mat4& view, const glm::mat4& projection);
 
-        bool isInitilized() const {return  initialized_;}
+        bool isInitilized() const { return initialized_; }
 
     private:
         void createCubeGeometry();
@@ -60,4 +60,4 @@ namespace gs {
         // Line indices for wireframe cube (12 edges, 24 indices)
         static const unsigned int cube_line_indices_[24];
     };
-}
+} // namespace gs

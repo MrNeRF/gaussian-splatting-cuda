@@ -630,7 +630,7 @@ namespace gs {
             file_browser_ = std::make_unique<FileBrowser>();
             camera_controls_ = std::make_unique<CameraControlsWindow>();
             training_controls_ = std::make_unique<TrainingControlsPanel>();
-            crop_box_panel_  = std::make_unique<CropBoxPanel>();
+            crop_box_panel_ = std::make_unique<CropBoxPanel>();
             crop_box_panel_->crop_box_ = viewer->crop_box_;
         }
 
@@ -930,13 +930,19 @@ namespace gs {
             }
         }
 
-        bool GuiManager::showCropBox() const{
+        bool GuiManager::showCropBox() const {
             if (crop_box_panel_)
                 return crop_box_panel_->show_crop_box_;
             else
                 return false;
         }
 
+        bool GuiManager::useCropBox() const {
+            if (crop_box_panel_)
+                return crop_box_panel_->use_crop_box_;
+            else
+                return false;
+        }
 
         void CropBoxPanel::render() {
             if (ImGui::CollapsingHeader("Clip Box")) {
@@ -945,7 +951,7 @@ namespace gs {
 
                 if (show_crop_box_ && crop_box_) {
                     if (!crop_box_->isInitilized()) {
-                        return;  // the manager must init crop box
+                        return; // the manager must init crop box
                     }
 
                     // Color picker
@@ -1036,9 +1042,6 @@ namespace gs {
                 }
             }
         }
-
-
-
 
     } // namespace gui
 } // namespace gs

@@ -558,6 +558,10 @@ namespace gs {
             return;
         }
 
+        RenderBoundingBox* render_crop_box = nullptr;
+        if (gui_manager_->useCropBox()) {
+            render_crop_box = crop_box_.get();
+        }
         // Build render request
         RenderingPipeline::RenderRequest request{
             .view_rotation = viewport_.getRotationMatrix(),
@@ -566,7 +570,8 @@ namespace gs {
             .fov = config_->fov,
             .scaling_modifier = config_->scaling_modifier,
             .antialiasing = anti_aliasing_,
-            .render_mode = RenderMode::RGB};
+            .render_mode = RenderMode::RGB,
+            .crop_box = render_crop_box};
 
         // Render through scene
         auto result = scene_->render(request);
@@ -581,22 +586,19 @@ namespace gs {
 
             glm::ivec2& reso = viewport_.windowSize;
             auto fov_rad = glm::radians(config_->fov);
-            auto projection = glm::perspective((float)fov_rad, (float)reso.x/reso.y , .1f, 1000.0f);
+            auto projection = glm::perspective((float)fov_rad, (float)reso.x / reso.y, .1f, 1000.0f);
 
-            if (!crop_box_->isInitilized())
-            {
+            if (!crop_box_->isInitilized()) {
                 crop_box_->init();
             }
             // because init can fail
-            if (crop_box_->isInitialized())
-            {
+            if (crop_box_->isInitialized()) {
                 glm::mat4 view = viewport_.getViewMatrix(); // Replace with actual view matrix
 
                 // Render the bounding box
                 crop_box_->render(view, projection);
             }
         }
-
     }
 
     void GSViewer::draw() {
