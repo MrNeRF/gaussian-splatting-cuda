@@ -24,13 +24,13 @@ namespace gs {
         BoundingBox::setBounds(min, max);
         createCubeGeometry();
 
-        if (initialized_) {
+        if (isInitialized()) {
             setupVertexData();
         }
     }
 
     void RenderBoundingBox::init() {
-        if (initialized_)
+        if (isInitialized())
             return;
 
         try {
