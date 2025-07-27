@@ -180,6 +180,7 @@ namespace gs {
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<ViewerNotifier>();
+        crop_box_ = std::make_shared<RenderBoundingBox>();
 
         scene_ = std::make_unique<Scene>();
 
@@ -549,6 +550,10 @@ namespace gs {
             return;
         }
 
+        RenderBoundingBox* render_crop_box = nullptr;
+        if (gui_manager_->useCropBox()) {
+            render_crop_box = crop_box_.get();
+        }
         // Build render request
         RenderingPipeline::RenderRequest request{
             .view_rotation = viewport_.getRotationMatrix(),
@@ -557,7 +562,8 @@ namespace gs {
             .fov = config_->fov,
             .scaling_modifier = config_->scaling_modifier,
             .antialiasing = anti_aliasing_,
-            .render_mode = RenderMode::RGB};
+            .render_mode = RenderMode::RGB,
+            .crop_box = render_crop_box};
 
         RenderingPipeline::RenderResult result;
 
@@ -571,6 +577,24 @@ namespace gs {
         if (result.valid) {
             RenderingPipeline::uploadToScreen(result, *screen_renderer_, viewport_.windowSize);
             screen_renderer_->render(quadShader_, viewport_);
+        }
+        // Render bounding box if enabled
+        if (gui_manager_->showCropBox()) {
+
+            glm::ivec2& reso = viewport_.windowSize;
+            auto fov_rad = glm::radians(config_->fov);
+            auto projection = glm::perspective((float)fov_rad, (float)reso.x / reso.y, .1f, 1000.0f);
+
+            if (!crop_box_->isInitilized()) {
+                crop_box_->init();
+            }
+            // because init can fail
+            if (crop_box_->isInitialized()) {
+                glm::mat4 view = viewport_.getViewMatrix(); // Replace with actual view matrix
+
+                // Render the bounding box
+                crop_box_->render(view, projection);
+            }
         }
     }
 

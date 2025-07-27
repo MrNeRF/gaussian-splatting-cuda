@@ -69,6 +69,7 @@ class Viewport {
         }
 
         void advance_forward(float deltaTime) {
+
             t += R * glm::vec3(0, 0, 1) * deltaTime * wasdSpeed;
         }
         void advance_backward(float deltaTime) {
@@ -109,5 +110,47 @@ public:
 
     glm::vec3 getTranslation() const {
         return camera.t;
+    }
+
+    glm::mat4 getViewMatrix() const {
+        // Convert R (3x3) and t (3x1) to a 4x4 view matrix
+        // The view matrix transforms world coordinates to camera coordinates
+
+        // In your system: camera.R is rotation, camera.t is translation
+        // View matrix is the inverse of the camera transform
+
+        glm::mat3 flip_yz = glm::mat3(
+            1, 0, 0,
+            0, -1, 0,
+            0, 0, -1);
+
+        glm::mat3 R_inv = glm::transpose(camera.R); // Inverse of rotation matrix
+        glm::vec3 t_inv = -R_inv * camera.t;        // Inverse translation
+
+        R_inv = flip_yz * R_inv;
+        t_inv = flip_yz * t_inv;
+
+        glm::mat4 view(1.0f);
+
+        // Set rotation part (top-left 3x3)
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                view[i][j] = R_inv[i][j];
+
+        // Set translation part (last column)
+        view[3][0] = t_inv.x;
+        view[3][1] = t_inv.y;
+        view[3][2] = t_inv.z;
+        view[3][3] = 1.0f;
+
+        return view;
+    }
+
+    glm::mat4 getProjectionMatrix(float fov_degrees = 60.0f, float near_plane = 0.1f, float far_plane = 1000.0f) const {
+        // Create perspective projection matrix
+        float aspect_ratio = static_cast<float>(windowSize.x) / static_cast<float>(windowSize.y);
+        float fov_radians = glm::radians(fov_degrees);
+
+        return glm::perspective(fov_radians, aspect_ratio, near_plane, far_plane);
     }
 };
