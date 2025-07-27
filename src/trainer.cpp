@@ -140,6 +140,18 @@ namespace gs {
                          train_dataset_->size().value());
         }
 
+        if (params_.optimization.preload_to_ram) {
+            std::cout << "Preload to RAM enabled. Caching datasets..." << std::endl;
+            if (train_dataset_) {
+                train_dataset_->preload_data();
+            }
+            if (val_dataset_) {
+                val_dataset_->preload_data();
+            }
+        } else {
+            std::cout << "Loading dataset from disk on-the-fly." << std::endl;
+        }
+
         train_dataset_size_ = train_dataset_->size().value();
 
         strategy_->initialize(params.optimization);
@@ -190,14 +202,13 @@ namespace gs {
         } else if (!pause_requested_.load() && is_paused_.load()) {
             is_paused_ = false;
             if (!viewer_ && progress_) {
-                progress_->resume(iter, current_loss_, static_cast<int>(strategy_->get_model().size()));
+                progress_->resume(iter, current_loss_.load(), static_cast<int>(strategy_->get_model().size()));
             }
             std::println("\nTraining resumed at iteration {}", iter);
         }
 
         // Handle save request
-        if (save_requested_.load()) {
-            save_requested_ = false;
+        if (save_requested_.exchange(false)) {
             std::println("\nSaving checkpoint at iteration {}...", iter);
             strategy_->get_model().save_ply(params_.dataset.output_path / "checkpoints", iter, /*join=*/true);
             std::println("Checkpoint saved to {}", (params_.dataset.output_path / "checkpoints").string());
@@ -234,18 +245,18 @@ namespace gs {
             handle_control_requests(iter, stop_token);
 
             // If stop requested, return Stop
-            if (stop_requested_ || stop_token.stop_requested()) {
+            if (stop_requested_.load() || stop_token.stop_requested()) {
                 return StepResult::Stop;
             }
 
             // If paused, wait
-            while (is_paused_ && !stop_requested_ && !stop_token.stop_requested()) {
+            while (is_paused_.load() && !stop_requested_.load() && !stop_token.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 handle_control_requests(iter, stop_token);
             }
 
             // Check stop again after potential pause
-            if (stop_requested_ || stop_token.stop_requested()) {
+            if (stop_requested_.load() || stop_token.stop_requested()) {
                 return StepResult::Stop;
             }
 
@@ -261,7 +272,6 @@ namespace gs {
                     render_mode);
             };
 
-            // Perform rendering (no mutex needed - Scene handles thread safety)
             RenderOutput r_output = render_fn();
 
             // Apply bilateral grid if enabled
@@ -314,6 +324,20 @@ namespace gs {
             {
                 torch::NoGradGuard no_grad;
 
+                // Lock for writing during parameter updates
+                {
+                    std::unique_lock<std::shared_mutex> lock(render_mutex_);
+
+                    // Execute strategy post-backward and step
+                    strategy_->post_backward(iter, r_output);
+                    strategy_->step(iter);
+
+                    if (params_.optimization.use_bilateral_grid) {
+                        bilateral_grid_optimizer_->step();
+                        bilateral_grid_optimizer_->zero_grad(true);
+                    }
+                }
+
                 // Clean evaluation - let the evaluator handle everything
                 if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
                     evaluator_->print_evaluation_header(iter);
@@ -333,19 +357,10 @@ namespace gs {
                         }
                     }
                 }
-
-                // Execute strategy post-backward and step (no mutex needed)
-                strategy_->post_backward(iter, r_output);
-                strategy_->step(iter);
-
-                if (params_.optimization.use_bilateral_grid) {
-                    bilateral_grid_optimizer_->step();
-                    bilateral_grid_optimizer_->zero_grad(true);
-                }
             }
 
             if (!viewer_ && progress_) {
-                progress_->update(iter, current_loss_,
+                progress_->update(iter, current_loss_.load(),
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
             }
@@ -353,21 +368,14 @@ namespace gs {
             if (viewer_) {
                 if (viewer_->info_) {
                     auto& info = viewer_->info_;
-                    std::lock_guard<std::mutex> lock(viewer_->info_->mtx);
                     info->updateProgress(iter, params_.optimization.iterations);
                     info->updateNumSplats(static_cast<size_t>(strategy_->get_model().size()));
-                    info->updateLoss(current_loss_);
-                }
-
-                if (viewer_->notifier_) {
-                    auto& notifier = viewer_->notifier_;
-                    std::unique_lock<std::mutex> lock(notifier->mtx);
-                    notifier->cv.wait(lock, [&notifier] { return notifier->ready; });
+                    info->updateLoss(current_loss_.load());
                 }
             }
 
             // Return Continue if we should continue training
-            if (iter < params_.optimization.iterations && !stop_requested_ && !stop_token.stop_requested()) {
+            if (iter < params_.optimization.iterations && !stop_requested_.load() && !stop_token.stop_requested()) {
                 return StepResult::Continue;
             } else {
                 return StepResult::Stop;
@@ -379,14 +387,14 @@ namespace gs {
     }
 
     std::expected<void, std::string> Trainer::train(std::stop_token stop_token) {
-        is_running_ = false; // Don't start running until notified
+        is_running_ = false;
         training_complete_ = false;
 
-        // Wait for the start signal from GUI if visualization is enabled
         if (viewer_ && viewer_->notifier_) {
-            auto& notifier = viewer_->notifier_;
-            std::unique_lock<std::mutex> lock(notifier->mtx);
-            notifier->cv.wait(lock, [&notifier] { return notifier->ready; });
+            // Simple spin wait with atomic
+            while (!viewer_->notifier_->ready.load() && !stop_token.stop_requested()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
         }
 
         is_running_ = true; // Now we can start
@@ -398,19 +406,19 @@ namespace gs {
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
             if (!viewer_ && progress_) {
-                progress_->update(iter, current_loss_,
+                progress_->update(iter, current_loss_.load(),
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
             }
             for (int epoch = 0; epoch < epochs_needed; ++epoch) {
-                if (stop_token.stop_requested() || stop_requested_) {
+                if (stop_token.stop_requested() || stop_requested_.load()) {
                     break;
                 }
 
                 auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
 
                 for (auto& batch : *train_dataloader) {
-                    if (stop_token.stop_requested() || stop_requested_) {
+                    if (stop_token.stop_requested() || stop_requested_.load()) {
                         break;
                     }
 
@@ -433,7 +441,7 @@ namespace gs {
 
 training_complete:
             // Final save if not already saved by stop request
-            if (!stop_requested_ && !stop_token.stop_requested()) {
+            if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
             }
 

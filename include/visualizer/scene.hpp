@@ -4,7 +4,6 @@
 #include "core/trainer.hpp"
 #include "visualizer/rendering_pipeline.hpp"
 #include <memory>
-#include <mutex>
 
 namespace gs {
 
@@ -36,29 +35,24 @@ namespace gs {
         void clearModel();
         bool hasModel() const;
 
-        // Thread-safe model access for rendering
-        template <typename Func>
-        auto withModel(Func&& func) const -> decltype(func(std::declval<const SplatData*>())) {
-            std::lock_guard<std::mutex> lock(model_mutex_);
+        // Get model for rendering
+        const SplatData* getModel() const {
             if (mode_ == Mode::Viewing && model_) {
-                return func(model_.get());
+                return model_.get();
             } else if (mode_ == Mode::Training && trainer_) {
-                return func(&trainer_->get_strategy().get_model());
+                return &trainer_->get_strategy().get_model();
             }
-            return func(nullptr);
+            return nullptr;
         }
 
-        // Thread-safe mutable model access
-        template <typename Func>
-        auto withMutableModel(Func&& func) -> decltype(func(std::declval<SplatData*>())) {
-            std::lock_guard<std::mutex> lock(model_mutex_);
+        // Get mutable model (no lock needed - caller handles locking)
+        SplatData* getMutableModel() {
             if (mode_ == Mode::Viewing && model_) {
-                return func(model_.get());
+                return model_.get();
             } else if (mode_ == Mode::Training && trainer_) {
-                // Cast away const for training mode (trainer owns the model)
-                return func(const_cast<SplatData*>(&trainer_->get_strategy().get_model()));
+                return const_cast<SplatData*>(&trainer_->get_strategy().get_model());
             }
-            return func(nullptr);
+            return nullptr;
         }
 
         // Rendering
@@ -84,9 +78,6 @@ namespace gs {
 
         // Reference for training mode
         Trainer* trainer_ = nullptr;
-
-        // Thread safety
-        mutable std::mutex model_mutex_;
 
         // Rendering
         std::unique_ptr<RenderingPipeline> pipeline_;

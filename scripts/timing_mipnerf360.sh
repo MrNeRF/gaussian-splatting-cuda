@@ -32,6 +32,7 @@ do
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
         --iter 30000 \
+	--preload-to-ram \
         --headless
 
     # End timer for this scene
