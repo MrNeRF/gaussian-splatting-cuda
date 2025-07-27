@@ -1,6 +1,7 @@
 #include "core/selective_adam.hpp"
 #include "Ops.h"
 #include <torch/torch.h>
+#include "core/gs_utils.hpp"
 
 namespace gs {
 
@@ -46,15 +47,15 @@ namespace gs {
                             ") must match visibility mask size (", N, ")");
 
                 // Lazy state initialization
-                auto state_ptr = state_.find(param.unsafeGetTensorImpl());
+                auto state_ptr = state_.find(gs::get_tensor_key(param.unsafeGetTensorImpl()));
                 if (state_ptr == state_.end()) {
                     auto new_state = std::make_unique<AdamParamState>();
                     new_state->step_count = 0;
                     new_state->exp_avg = torch::zeros_like(param, torch::MemoryFormat::Preserve);
                     new_state->exp_avg_sq = torch::zeros_like(param, torch::MemoryFormat::Preserve);
 
-                    state_[param.unsafeGetTensorImpl()] = std::move(new_state);
-                    state_ptr = state_.find(param.unsafeGetTensorImpl());
+                    state_[gs::get_tensor_key(param.unsafeGetTensorImpl())] = std::move(new_state);
+                    state_ptr = state_.find(gs::get_tensor_key(param.unsafeGetTensorImpl()));
                 }
 
                 auto& state = static_cast<AdamParamState&>(*state_ptr->second);
