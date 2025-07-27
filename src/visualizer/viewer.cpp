@@ -234,21 +234,19 @@ namespace gs {
 
                 result << "Model Information:\n";
 
-                scene_->withModel([&](const SplatData* model) {
-                    if (model) {
-                        result << "  Number of Gaussians: " << model->size() << "\n";
-                        result << "  Positions shape: [" << model->get_means().size(0) << ", " << model->get_means().size(1) << "]\n";
-                        result << "  Device: " << model->get_means().device() << "\n";
-                        result << "  Dtype: " << model->get_means().dtype() << "\n";
-                        result << "  Active SH degree: " << model->get_active_sh_degree() << "\n";
-                        result << "  Scene scale: " << model->get_scene_scale();
+                const SplatData* model = scene_->getModel();
+                if (model) {
+                    result << "  Number of Gaussians: " << model->size() << "\n";
+                    result << "  Positions shape: [" << model->get_means().size(0) << ", " << model->get_means().size(1) << "]\n";
+                    result << "  Device: " << model->get_means().device() << "\n";
+                    result << "  Dtype: " << model->get_means().dtype() << "\n";
+                    result << "  Active SH degree: " << model->get_active_sh_degree() << "\n";
+                    result << "  Scene scale: " << model->get_scene_scale();
 
-                        if (scene_->getMode() == Scene::Mode::Viewing) {
-                            result << "\n  Mode: Viewer (no training)";
-                        }
+                    if (scene_->getMode() == Scene::Mode::Viewing) {
+                        result << "\n  Mode: Viewer (no training)";
                     }
-                    return 0;
-                });
+                }
 
                 return result.str();
             }
@@ -286,59 +284,56 @@ namespace gs {
                 }
 
                 std::string tensor_result;
-                scene_->withMutableModel([&](SplatData* model) {
-                    if (!model) {
-                        tensor_result = "Model not available";
-                        return 0;
+                SplatData* model = scene_->getMutableModel();
+                if (!model) {
+                    tensor_result = "Model not available";
+                    return tensor_result;
+                }
+
+                torch::Tensor tensor;
+                if (tensor_name == "means" || tensor_name == "positions") {
+                    tensor = model->get_means();
+                } else if (tensor_name == "scales" || tensor_name == "scaling") {
+                    tensor = model->get_scaling();
+                } else if (tensor_name == "rotations" || tensor_name == "rotation" || tensor_name == "quats") {
+                    tensor = model->get_rotation();
+                } else if (tensor_name == "features" || tensor_name == "colors" || tensor_name == "shs") {
+                    tensor = model->get_shs();
+                } else if (tensor_name == "opacities" || tensor_name == "opacity") {
+                    tensor = model->get_opacity();
+                } else {
+                    tensor_result = "Unknown tensor: " + tensor_name + "\nAvailable: means, scaling, rotation, shs, opacity";
+                    return tensor_result;
+                }
+
+                std::ostringstream oss;
+                oss << "Tensor '" << tensor_name << "' info:\n";
+                oss << "  Shape: [";
+                for (int i = 0; i < tensor.dim(); i++) {
+                    if (i > 0)
+                        oss << ", ";
+                    oss << tensor.size(i);
+                }
+                oss << "]\n";
+                oss << "  Device: " << tensor.device() << "\n";
+                oss << "  Dtype: " << tensor.dtype() << "\n";
+                oss << "  Requires grad: " << (tensor.requires_grad() ? "Yes" : "No") << "\n";
+
+                // Show some statistics if tensor is on CPU or we can move it
+                try {
+                    auto cpu_tensor = tensor.cpu();
+                    auto flat = cpu_tensor.flatten();
+                    if (flat.numel() > 0) {
+                        oss << "  Min: " << torch::min(flat).item<float>() << "\n";
+                        oss << "  Max: " << torch::max(flat).item<float>() << "\n";
+                        oss << "  Mean: " << torch::mean(flat).item<float>() << "\n";
+                        oss << "  Std: " << torch::std(flat).item<float>();
                     }
+                } catch (...) {
+                    oss << "  (Statistics unavailable)";
+                }
 
-                    torch::Tensor tensor;
-                    if (tensor_name == "means" || tensor_name == "positions") {
-                        tensor = model->get_means();
-                    } else if (tensor_name == "scales" || tensor_name == "scaling") {
-                        tensor = model->get_scaling();
-                    } else if (tensor_name == "rotations" || tensor_name == "rotation" || tensor_name == "quats") {
-                        tensor = model->get_rotation();
-                    } else if (tensor_name == "features" || tensor_name == "colors" || tensor_name == "shs") {
-                        tensor = model->get_shs();
-                    } else if (tensor_name == "opacities" || tensor_name == "opacity") {
-                        tensor = model->get_opacity();
-                    } else {
-                        tensor_result = "Unknown tensor: " + tensor_name + "\nAvailable: means, scaling, rotation, shs, opacity";
-                        return 0;
-                    }
-
-                    std::ostringstream oss;
-                    oss << "Tensor '" << tensor_name << "' info:\n";
-                    oss << "  Shape: [";
-                    for (int i = 0; i < tensor.dim(); i++) {
-                        if (i > 0)
-                            oss << ", ";
-                        oss << tensor.size(i);
-                    }
-                    oss << "]\n";
-                    oss << "  Device: " << tensor.device() << "\n";
-                    oss << "  Dtype: " << tensor.dtype() << "\n";
-                    oss << "  Requires grad: " << (tensor.requires_grad() ? "Yes" : "No") << "\n";
-
-                    // Show some statistics if tensor is on CPU or we can move it
-                    try {
-                        auto cpu_tensor = tensor.cpu();
-                        auto flat = cpu_tensor.flatten();
-                        if (flat.numel() > 0) {
-                            oss << "  Min: " << torch::min(flat).item<float>() << "\n";
-                            oss << "  Max: " << torch::max(flat).item<float>() << "\n";
-                            oss << "  Mean: " << torch::mean(flat).item<float>() << "\n";
-                            oss << "  Std: " << torch::std(flat).item<float>();
-                        }
-                    } catch (...) {
-                        oss << "  (Statistics unavailable)";
-                    }
-
-                    tensor_result = oss.str();
-                    return 0;
-                });
-
+                tensor_result = oss.str();
                 return tensor_result;
             }
 
@@ -500,7 +495,6 @@ namespace gs {
 
         // Clear training info
         if (info_) {
-            std::lock_guard<std::mutex> lock(info_->mtx);
             info_->curr_iterations_ = 0;
             info_->total_iterations_ = 0;
             info_->num_splats_ = 0;
@@ -513,11 +507,9 @@ namespace gs {
             return;
         }
 
-        // First notify the trainer that it's ready to start
+        // Set the ready flag for trainer to start
         if (notifier_) {
-            std::lock_guard<std::mutex> lock(notifier_->mtx);
             notifier_->ready = true;
-            notifier_->cv.notify_one();
         }
 
         // Then start training in a separate thread
@@ -567,10 +559,15 @@ namespace gs {
             .antialiasing = anti_aliasing_,
             .render_mode = RenderMode::RGB};
 
-        // Render through scene
-        auto result = scene_->render(request);
+        RenderingPipeline::RenderResult result;
 
-        // Upload to screen
+        if (trainer_ && trainer_->is_running()) {
+            std::shared_lock<std::shared_mutex> lock(trainer_->getRenderMutex());
+            result = scene_->render(request);
+        } else {
+            result = scene_->render(request);
+        }
+
         if (result.valid) {
             RenderingPipeline::uploadToScreen(result, *screen_renderer_, viewport_.windowSize);
             screen_renderer_->render(quadShader_, viewport_);

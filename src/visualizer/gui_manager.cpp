@@ -845,15 +845,13 @@ namespace gs {
 
         void GuiManager::renderProgressInfo() {
             auto info = viewer_->getTrainingInfo();
-            int current_iter;
-            int total_iter;
-            int num_splats;
+            int current_iter = info->curr_iterations_.load();
+            int total_iter = info->total_iterations_.load();
+            int num_splats = info->num_splats_.load();
+
             std::vector<float> loss_data;
             {
-                std::lock_guard<std::mutex> lock(info->mtx);
-                current_iter = info->curr_iterations_;
-                total_iter = info->total_iterations_;
-                num_splats = info->num_splats_;
+                std::lock_guard<std::mutex> lock(info->loss_buffer_mutex_);
                 loss_data.assign(info->loss_buffer_.begin(), info->loss_buffer_.end());
             }
 
