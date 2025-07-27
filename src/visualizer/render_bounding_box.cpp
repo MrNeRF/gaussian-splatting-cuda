@@ -155,7 +155,6 @@ namespace gs {
         shader_->unbind();
 
         // Restore OpenGL state
-        glDepthMask(GL_TRUE);
         glLineWidth(current_line_width);
         if (!line_smooth_enabled) {
             glDisable(GL_LINE_SMOOTH);
