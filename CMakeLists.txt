@@ -1,4 +1,4 @@
-# windows/linux platform independent
+﻿# windows/linux platform independent
 set(RAW_VCPKG_PATH $ENV{VCPKG_ROOT})
 file(TO_CMAKE_PATH "${RAW_VCPKG_PATH}" VCPKG_ROOT)
 set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
@@ -156,7 +156,8 @@ set(HOST_SOURCES
         src/selective_adam.cpp
         src/dataset_reader.cpp
         src/training_setup.cpp
-        src/ply_loader.cpp)
+        src/ply_loader.cpp
+        src/poseopt.cpp)
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
 
