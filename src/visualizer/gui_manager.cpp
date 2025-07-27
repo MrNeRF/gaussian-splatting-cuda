@@ -1018,15 +1018,22 @@ namespace gs {
                     publish(StartTrainingCommand{});
                     training_state_.manual_start_triggered = false;
                 }
-            } else if (viewer_->getCurrentMode() == GSViewer::ViewerMode::PLYViewer && viewer_->getStandaloneModel()) {
+            } else if (viewer_->getCurrentMode() == GSViewer::ViewerMode::PLYViewer) {
                 // PLY viewer info
                 ImGui::Separator();
                 ImGui::Text("Model Information");
                 ImGui::Separator();
-                auto model = viewer_->getStandaloneModel();
-                ImGui::Text("Gaussians: %lld", model->size());
-                ImGui::Text("SH Degree: %d", model->get_active_sh_degree());
-                ImGui::Text("Scene Scale: %.3f", model->get_scene_scale());
+
+                // Get model through scene
+                auto scene = viewer_->scene_.get();
+                if (scene && scene->hasModel()) {
+                    const SplatData* model = scene->getModel();
+                    if (model) {
+                        ImGui::Text("Gaussians: %lld", model->size());
+                        ImGui::Text("SH Degree: %d", model->get_active_sh_degree());
+                        ImGui::Text("Scene Scale: %.3f", model->get_scene_scale());
+                    }
+                }
 
                 // Disabled training button for PLY mode
                 ImGui::Separator();

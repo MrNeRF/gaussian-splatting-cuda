@@ -273,10 +273,11 @@ namespace gs {
                     result << "  Device: " << model->get_means().device() << "\n";
                     result << "  Dtype: " << model->get_means().dtype() << "\n";
                     result << "  Active SH degree: " << model->get_active_sh_degree() << "\n";
-                    result << "  Scene scale: " << model->get_scene_scale();
+                    result << "  Scene scale: " << model->get_scene_scale() << "\n";
 
-                    if (scene_->getMode() == Scene::Mode::Viewing) {
-                        result << "\n  Mode: Viewer (no training)";
+                    // Add model source information
+                    if (auto provider = scene_->getModelProvider()) {
+                        result << "  Source: " << provider->getModelSource();
                     }
                 }
 
@@ -371,7 +372,6 @@ namespace gs {
 
             return "Unknown command: '" + command + "'. Type 'help' for available commands.";
         });
-
         // Set up file selection callback
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             event_bus_->publish(LoadFileCommand{path, is_dataset});
@@ -555,7 +555,7 @@ namespace gs {
 
     void GSViewer::setStandaloneModel(std::unique_ptr<SplatData> model) {
         if (scene_) {
-            scene_->setModel(std::move(model));
+            scene_->setStandaloneModel(std::move(model));
         }
     }
 
@@ -580,22 +580,26 @@ namespace gs {
                 return;
             }
 
-            scene_->setModel(std::make_unique<SplatData>(std::move(*splat_result)));
+            scene_->setStandaloneModel(std::make_unique<SplatData>(std::move(*splat_result))); // Changed from setModel
             current_ply_path_ = path;
             current_mode_ = ViewerMode::PLYViewer;
+
+            // Get the model through the Scene interface
+            const SplatData* model = scene_->getModel(); // Use getModel() instead of getStandaloneModel()
+            size_t num_gaussians = model ? model->size() : 0;
 
             // Publish scene loaded event
             event_bus_->publish(SceneLoadedEvent{
                 scene_.get(),
                 path,
                 SceneLoadedEvent::SourceType::PLY,
-                static_cast<size_t>(scene_->getStandaloneModel()->size())});
+                num_gaussians}); // Use the calculated num_gaussians
 
             // Publish log message
             event_bus_->publish(LogMessageEvent{
                 LogMessageEvent::Level::Info,
                 std::format("Loaded PLY with {} Gaussians from {}",
-                            static_cast<size_t>(scene_->getStandaloneModel()->size()),
+                            num_gaussians, // Use the calculated num_gaussians
                             path.filename().string()),
                 "GSViewer"});
 

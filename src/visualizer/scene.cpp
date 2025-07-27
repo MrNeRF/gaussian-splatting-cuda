@@ -1,4 +1,5 @@
 #include "visualizer/scene.hpp"
+#include "core/model_providers.hpp"
 
 namespace gs {
 
@@ -6,39 +7,40 @@ namespace gs {
         : pipeline_(std::make_unique<RenderingPipeline>()) {
     }
 
-    void Scene::setModel(std::unique_ptr<SplatData> model) {
-        // Clear any training link
-        trainer_ = nullptr;
+    void Scene::setModelProvider(std::shared_ptr<IModelProvider> provider) {
+        model_provider_ = provider;
 
-        // Set the new model
-        model_ = std::move(model);
-        mode_ = model_ ? Mode::Viewing : Mode::Empty;
+        // Determine mode based on provider type
+        if (!provider || !provider->hasModel()) {
+            mode_ = Mode::Empty;
+        } else if (provider->getModelSource() == "Training") {
+            mode_ = Mode::Training;
+        } else {
+            mode_ = Mode::Viewing;
+        }
+    }
+
+    void Scene::setStandaloneModel(std::unique_ptr<SplatData> model) {
+        auto provider = std::make_shared<StandaloneModelProvider>(std::move(model));
+        setModelProvider(provider);
+    }
+
+    void Scene::linkToTrainer(Trainer* trainer) {
+        auto provider = std::make_shared<TrainerModelProvider>(trainer);
+        setModelProvider(provider);
+    }
+
+    void Scene::unlinkFromTrainer() {
+        clearModel();
     }
 
     void Scene::clearModel() {
-        model_.reset();
-        trainer_ = nullptr;
+        model_provider_.reset();
         mode_ = Mode::Empty;
     }
 
     bool Scene::hasModel() const {
-        return (mode_ != Mode::Empty);
-    }
-
-    void Scene::linkToTrainer(Trainer* trainer) {
-        // Clear any viewing model
-        model_.reset();
-
-        // Link to trainer
-        trainer_ = trainer;
-        mode_ = trainer ? Mode::Training : Mode::Empty;
-    }
-
-    void Scene::unlinkFromTrainer() {
-        trainer_ = nullptr;
-        if (!model_) {
-            mode_ = Mode::Empty;
-        }
+        return model_provider_ && model_provider_->hasModel();
     }
 
     RenderingPipeline::RenderResult Scene::render(const RenderingPipeline::RenderRequest& request) {

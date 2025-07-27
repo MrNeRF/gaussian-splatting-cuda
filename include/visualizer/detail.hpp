@@ -28,6 +28,7 @@ namespace gs {
     namespace gui {
         class GuiManager;
     }
+    class StandaloneModelProvider;
 
     class ViewerDetail {
 
@@ -149,7 +150,6 @@ namespace gs {
         // Getters for GUI
         ViewerMode getCurrentMode() const;
         Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
-        SplatData* getStandaloneModel() const { return scene_->getStandaloneModel(); }
         std::shared_ptr<TrainingInfo> getTrainingInfo() const { return info_; }
         std::shared_ptr<RenderingConfig> getRenderingConfig() const { return config_; }
         std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/imodel_provider.hpp"
 #include "core/trainer.hpp"
 #include "visualizer/rendering_pipeline.hpp"
 #include <memory>
@@ -29,56 +30,43 @@ namespace gs {
         // Mode management
         Mode getMode() const { return mode_; }
 
-        // Model management
-        void setModel(std::unique_ptr<SplatData> model);
+        // Model management via providers
+        void setModelProvider(std::shared_ptr<IModelProvider> provider);
         void clearModel();
         bool hasModel() const;
 
         // Get model for rendering
         const SplatData* getModel() const {
-            if (mode_ == Mode::Viewing && model_) {
-                return model_.get();
-            } else if (mode_ == Mode::Training && trainer_) {
-                return &trainer_->get_strategy().get_model();
+            if (model_provider_) {
+                return model_provider_->getModel();
             }
             return nullptr;
         }
 
         // Get mutable model (no lock needed - caller handles locking)
         SplatData* getMutableModel() {
-            if (mode_ == Mode::Viewing && model_) {
-                return model_.get();
-            } else if (mode_ == Mode::Training && trainer_) {
-                return const_cast<SplatData*>(&trainer_->get_strategy().get_model());
+            if (model_provider_) {
+                return model_provider_->getMutableModel();
             }
             return nullptr;
+        }
+
+        // Convenience methods for setting specific types
+        void setStandaloneModel(std::unique_ptr<SplatData> model);
+        void linkToTrainer(Trainer* trainer);
+        void unlinkFromTrainer();
+
+        // Get model provider for type checking
+        std::shared_ptr<IModelProvider> getModelProvider() const {
+            return model_provider_;
         }
 
         // Rendering
         RenderingPipeline::RenderResult render(const RenderingPipeline::RenderRequest& request);
 
-        // For training mode - just store a reference
-        void linkToTrainer(Trainer* trainer);
-        void unlinkFromTrainer();
-
-        // Get trainer (for GUI access)
-        Trainer* getTrainer() const { return trainer_; }
-
-        // Get standalone model (for GUI access)
-        SplatData* getStandaloneModel() const {
-            return (mode_ == Mode::Viewing) ? model_.get() : nullptr;
-        }
-
     private:
         Mode mode_ = Mode::Empty;
-
-        // Model ownership for viewing mode
-        std::unique_ptr<SplatData> model_;
-
-        // Reference for training mode
-        Trainer* trainer_ = nullptr;
-
-        // Rendering
+        std::shared_ptr<IModelProvider> model_provider_;
         std::unique_ptr<RenderingPipeline> pipeline_;
     };
 
