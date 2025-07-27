@@ -60,7 +60,7 @@ namespace {
         ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
         ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
         ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
-        ::args::Flag preload_to_ram(parser, "preload_to_ram", "Load the entire dataset into RAM at startup maximum performance uses more RAM", {"preload-to-ram"});
+        ::args::Flag preload_to_ram(parser, "preload_to_ram", "Load the entire dataset into RAM at startup for maximum performance (uses more RAM)", {"preload-to-ram"});
 
         // Parse arguments
         try {
