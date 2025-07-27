@@ -1,32 +1,29 @@
 #pragma once
 
-#include "core/camera.hpp"
 #include "core/image_io.hpp"
-#include "core/rasterizer.hpp"
 #include "core/trainer.hpp"
+#include "visualizer/camera_controller.hpp"
+#include "visualizer/input_handler.hpp"
 #include "visualizer/renderer.hpp"
-// clang-format off
-// CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-// clang-format on
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
+#include "visualizer/scene.hpp"
+#include "visualizer/viewer_notifier.hpp"
+#include "visualizer/window_manager.hpp"
 #include <chrono>
-#include <condition_variable>
-#include <cuda_runtime.h>
 #include <deque>
-#include <glm/glm.hpp>
-#include <imgui.h>
-#include <iostream>
+#include <functional>
 #include <memory>
+#include <string>
 #include <thread>
 #include <torch/torch.h>
-#include <vector>
 
 using uchar = unsigned char;
 
 namespace gs {
+
+    // Forward declarations
+    namespace gui {
+        class GuiManager;
+    }
 
     class ViewerDetail {
 
@@ -45,33 +42,27 @@ namespace gs {
 
         void controlFrameRate();
 
-        static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-
-        static void cursorPosCallback(GLFWwindow* window, double x, double y);
-
-        static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-
         void run();
 
         virtual void draw() = 0;
 
+        GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
+
     protected:
-        ImGuiWindowFlags window_flags = 0;
-
-        bool any_window_active = false;
-
         Viewport viewport_;
 
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
 
         std::shared_ptr<Shader> quadShader_;
 
+        std::unique_ptr<WindowManager> window_manager_;
+
+        std::unique_ptr<InputHandler> input_handler_;
+
+        std::unique_ptr<CameraController> camera_controller_;
+
     private:
         std::string title_;
-
-        GLFWwindow* window_;
-
-        static ViewerDetail* detail_;
 
         int targetFPS = 30;
 
@@ -82,24 +73,17 @@ namespace gs {
 
     class GSViewer : public ViewerDetail {
 
-        struct Notifier {
-        public:
-            bool ready = false;
-            std::mutex mtx;
-            std::condition_variable cv;
-        };
-
+    public:
         struct TrainingInfo {
 
-            std::mutex mtx;
+            // No mutex needed - use atomics
+            std::atomic<int> curr_iterations_{0};
+            std::atomic<int> total_iterations_{0};
+            std::atomic<int> num_splats_{0};
 
-            int curr_iterations_ = 0;
-            int total_iterations_ = 0;
-
-            int num_splats_ = 0;
             int max_loss_points_ = 200;
-
             std::deque<float> loss_buffer_;
+            std::mutex loss_buffer_mutex_; // Only for loss buffer
 
             void updateProgress(int iter, int total_iterations) {
                 curr_iterations_ = iter;
@@ -111,6 +95,7 @@ namespace gs {
             }
 
             void updateLoss(float loss) {
+                std::lock_guard<std::mutex> lock(loss_buffer_mutex_);
                 loss_buffer_.push_back(loss);
                 while (loss_buffer_.size() > max_loss_points_) {
                     loss_buffer_.pop_front();
@@ -132,36 +117,78 @@ namespace gs {
             }
         };
 
+        // Add mode enum
+        enum class ViewerMode {
+            Empty,     // No data loaded
+            PLYViewer, // Viewing a PLY file
+            Training   // Ready to train or training
+        };
+
     public:
         GSViewer(std::string title, int width, int height);
         ~GSViewer();
 
         void setTrainer(Trainer* trainer);
+        void setStandaloneModel(std::unique_ptr<SplatData> model);
+        void setAntiAliasing(bool enable);
+        void setParameters(const gs::param::TrainingParameters& params) { params_ = params; }
 
         void drawFrame();
 
-        void configuration();
-
         void draw() override;
+
+        // Data loading methods
+        void loadPLYFile(const std::filesystem::path& path);
+        void loadDataset(const std::filesystem::path& path);
+        void clearCurrentData();
+
+        // Getters for GUI
+        ViewerMode getCurrentMode() const;
+        Trainer* getTrainer() const { return scene_->getTrainer(); }
+        SplatData* getStandaloneModel() const { return scene_->getStandaloneModel(); }
+        std::shared_ptr<TrainingInfo> getTrainingInfo() const { return info_; }
+        std::shared_ptr<RenderingConfig> getRenderingConfig() const { return config_; }
+        std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }
+        const std::filesystem::path& getCurrentPLYPath() const { return current_ply_path_; }
+        const std::filesystem::path& getCurrentDatasetPath() const { return current_dataset_path_; }
+
+        // Training control
+        void startTraining();
+
+        // GUI access for static callbacks
+        bool isGuiActive() const;
+
+    private:
+        // Input handlers
+        bool handleFileDrop(const InputHandler::FileDropEvent& event);
 
     public:
         std::shared_ptr<TrainingInfo> info_;
 
-        std::shared_ptr<Notifier> notifier_;
+        std::shared_ptr<ViewerNotifier> notifier_;
 
-        std::mutex splat_mtx_;
-
-    private:
+        std::unique_ptr<Scene> scene_;
         std::shared_ptr<RenderingConfig> config_;
 
         Trainer* trainer_;
 
-        // Control button states
-        bool show_control_panel_ = true;
-        bool save_in_progress_ = false;
-        std::chrono::steady_clock::time_point save_start_time_;
-        bool manual_start_triggered_ = false;
-        bool training_started_ = false;
+        bool anti_aliasing_ = false;
+
+        param::TrainingParameters params_;
+
+        // Current mode
+        ViewerMode current_mode_ = ViewerMode::Empty;
+
+        // Store paths for current data
+        std::filesystem::path current_ply_path_;
+        std::filesystem::path current_dataset_path_;
+
+        // Training thread
+        std::unique_ptr<std::jthread> training_thread_;
+
+        // GUI manager
+        std::unique_ptr<gui::GuiManager> gui_manager_;
+        friend class gui::GuiManager; // Allow GUI manager to access private members
     };
 
 } // namespace gs

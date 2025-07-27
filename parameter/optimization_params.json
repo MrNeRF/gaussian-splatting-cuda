@@ -23,15 +23,15 @@
   "save_steps": [7000, 30000],
   "enable_eval": false,
   "enable_save_eval_images": false,
-  "skip_intermediate": false,
   "use_bilateral_grid": false,
-  "skip_intermediate": false,
   "preload_to_ram": false,
   "bilateral_grid_X": 16,
   "bilateral_grid_Y": 16,
   "bilateral_grid_W": 8,
   "bilateral_grid_lr": 0.002,
   "tv_loss_weight": 10.0,
-  "steps_scaler": -1,
+  "steps_scaler": 0,
+  "skip_intermediate": false,
+  "antialiasing": false,
   "selective_adam": false
 }
