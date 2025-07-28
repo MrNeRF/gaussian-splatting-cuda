@@ -1,5 +1,4 @@
 #pragma once
-#include "Common.h"
 #include "core/camera.hpp"
 #include "core/colmap_reader.hpp"
 #include "core/point_cloud.hpp"
@@ -10,4 +9,4 @@
 std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
     const std::filesystem::path& transPath);
 
-PointCloud generate_random_point_cloud();
+gs::PointCloud generate_random_point_cloud();

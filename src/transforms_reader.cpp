@@ -222,7 +222,7 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
     return {camerasdata, center};
 }
 
-PointCloud generate_random_point_cloud() {
+gs::PointCloud generate_random_point_cloud() {
     int numInitGaussian = 10000;
 
     uint64_t seed = 8128;
@@ -234,5 +234,5 @@ PointCloud generate_random_point_cloud() {
     // Random RGB colors
     torch::Tensor colors = torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
 
-    return PointCloud(positions, colors);
+    return gs::PointCloud(positions, colors);
 }

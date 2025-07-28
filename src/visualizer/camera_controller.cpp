@@ -1,4 +1,5 @@
 #include "visualizer/camera_controller.hpp"
+#include "visualizer/events.hpp"
 
 // clang-format off
 // CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
@@ -36,6 +37,18 @@ namespace gs {
             });
     }
 
+    void CameraController::publishCameraChanged() {
+        if (event_bus_) {
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_camera_publish_time_) >= camera_publish_interval_ms_) {
+                event_bus_->publish(CameraMovedEvent{
+                    viewport_.getRotationMatrix(),
+                    viewport_.getTranslation()});
+                last_camera_publish_time_ = now;
+            }
+        }
+    }
+
     bool CameraController::handleMouseButton(const InputHandler::MouseButtonEvent& event) {
         if (!is_enabled_)
             return false;
@@ -56,12 +69,30 @@ namespace gs {
         } else if (event.action == GLFW_RELEASE) {
             if (event.button == GLFW_MOUSE_BUTTON_LEFT && is_panning_) {
                 is_panning_ = false;
+                // Force publish on mouse release to ensure final position is sent
+                if (event_bus_) {
+                    event_bus_->publish(CameraMovedEvent{
+                        viewport_.getRotationMatrix(),
+                        viewport_.getTranslation()});
+                }
                 return true;
             } else if (event.button == GLFW_MOUSE_BUTTON_RIGHT && is_rotating_) {
                 is_rotating_ = false;
+                // Force publish on mouse release
+                if (event_bus_) {
+                    event_bus_->publish(CameraMovedEvent{
+                        viewport_.getRotationMatrix(),
+                        viewport_.getTranslation()});
+                }
                 return true;
             } else if (event.button == GLFW_MOUSE_BUTTON_MIDDLE && is_orbiting_) {
                 is_orbiting_ = false;
+                // Force publish on mouse release
+                if (event_bus_) {
+                    event_bus_->publish(CameraMovedEvent{
+                        viewport_.getRotationMatrix(),
+                        viewport_.getTranslation()});
+                }
                 return true;
             }
         }
@@ -74,15 +105,21 @@ namespace gs {
             return false;
 
         glm::vec2 current_pos(event.position);
+        bool camera_changed = false;
 
         if (is_panning_) {
             viewport_.camera.translate(current_pos);
-            return true;
+            camera_changed = true;
         } else if (is_rotating_) {
             viewport_.camera.rotate(current_pos);
-            return true;
+            camera_changed = true;
         } else if (is_orbiting_) {
             viewport_.camera.rotate_around_center(current_pos);
+            camera_changed = true;
+        }
+
+        if (camera_changed) {
+            publishCameraChanged();
             return true;
         }
 
@@ -104,6 +141,7 @@ namespace gs {
             viewport_.camera.zoom(delta);
         }
 
+        publishCameraChanged();
         return true;
     }
 
@@ -123,22 +161,34 @@ namespace gs {
             return false;
         }
 
+        bool camera_changed = false;
         switch (event.key) {
         case GLFW_KEY_W:
             viewport_.camera.advance_forward(advance_rate);
-            return true;
+            camera_changed = true;
+            break;
         case GLFW_KEY_S:
             viewport_.camera.advance_backward(advance_rate);
-            return true;
+            camera_changed = true;
+            break;
         case GLFW_KEY_A:
             viewport_.camera.advance_left(advance_rate);
-            return true;
+            camera_changed = true;
+            break;
         case GLFW_KEY_D:
             viewport_.camera.advance_right(advance_rate);
-            return true;
+            camera_changed = true;
+            break;
         default:
             return false;
         }
+
+        if (camera_changed) {
+            publishCameraChanged();
+            return true;
+        }
+
+        return false;
     }
 
 } // namespace gs

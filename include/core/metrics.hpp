@@ -3,6 +3,7 @@
 #include "core/dataset.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "visualizer/event_bus.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -142,6 +143,8 @@ namespace gs {
                 std::cout << "[Evaluation at step " << iteration << "]" << std::endl;
             }
 
+            void setEventBus(std::shared_ptr<EventBus> event_bus) { event_bus_ = event_bus; }
+
         private:
             // Configuration
             const param::TrainingParameters _params;
@@ -151,6 +154,9 @@ namespace gs {
             std::unique_ptr<SSIM> _ssim_metric;
             std::unique_ptr<LPIPS> _lpips_metric;
             std::unique_ptr<MetricsReporter> _reporter;
+
+            // Event bus
+            std::shared_ptr<EventBus> event_bus_;
 
             // Helper functions
             torch::Tensor apply_depth_colormap(const torch::Tensor& depth_normalized) const;
