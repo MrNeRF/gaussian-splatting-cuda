@@ -185,7 +185,7 @@ namespace gs {
             return 0;
 
         // This is a bit of a hack - we'd need to expose this from Trainer
-        return 30000; // Default iterations
+        return trainer_->getParams().optimization.iterations;
     }
 
     void TrainerManager::trainingThreadFunc(std::stop_token stop_token) {

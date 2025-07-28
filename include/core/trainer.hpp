@@ -63,6 +63,8 @@ namespace gs {
         // Allow viewer to lock for rendering
         std::shared_mutex& getRenderMutex() const { return render_mutex_; }
 
+        const param::TrainingParameters& getParams() const { return params_; }
+
     private:
         // Training step result
         enum class StepResult {

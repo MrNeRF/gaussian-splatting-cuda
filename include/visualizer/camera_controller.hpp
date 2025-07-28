@@ -3,6 +3,7 @@
 #include "visualizer/event_bus.hpp"
 #include "visualizer/input_handler.hpp"
 #include "visualizer/viewport.hpp"
+#include <chrono>
 #include <memory>
 
 namespace gs {
@@ -36,6 +37,10 @@ namespace gs {
         bool is_rotating_ = false;
         bool is_orbiting_ = false;
         bool is_enabled_ = true;
+
+        // Throttling for camera events
+        std::chrono::steady_clock::time_point last_camera_publish_time_;
+        static constexpr std::chrono::milliseconds camera_publish_interval_ms_{100};
     };
 
 } // namespace gs
