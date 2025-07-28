@@ -177,6 +177,7 @@ target_include_directories(gaussian_host
 target_link_libraries(gaussian_host
         PUBLIC
         ${TORCH_LIBRARIES}
+        TBB::tbb
         nlohmann_json::nlohmann_json
         glm::glm
         glfw
@@ -200,6 +201,36 @@ target_compile_options(gaussian_host PRIVATE
         $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer -DDEBUG>
         $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
 )
+
+# =============================================================================
+# AVX2 SUPPORT FOR HOST LIBRARY
+# =============================================================================
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+
+    if(COMPILER_SUPPORTS_AVX2)
+        # Add AVX2 compilation flags
+        target_compile_options(gaussian_host PRIVATE
+                $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma>
+        )
+
+        # Define the macros that the code checks for
+        target_compile_definitions(gaussian_host PRIVATE
+                HAS_AVX2_SUPPORT
+        )
+
+        message(STATUS "✓ AVX2 support enabled for gaussian_host")
+
+        # Verify the flags are set
+        get_target_property(HOST_COMPILE_OPTIONS gaussian_host COMPILE_OPTIONS)
+        get_target_property(HOST_COMPILE_DEFINITIONS gaussian_host COMPILE_DEFINITIONS)
+        message(STATUS "  Compile options: ${HOST_COMPILE_OPTIONS}")
+        message(STATUS "  Compile definitions: ${HOST_COMPILE_DEFINITIONS}")
+    else()
+        message(WARNING "✗ Compiler does not support AVX2")
+    endif()
+endif()
 
 # Ensure debug symbols in debug builds
 set_target_properties(gaussian_host PROPERTIES

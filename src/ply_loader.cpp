@@ -1,256 +1,559 @@
 #include "core/ply_loader.hpp"
-#include "external/tinyply.hpp"
+#include <algorithm>
+#include <charconv>
+#include <chrono>
+#include <cstring>
 #include <format>
 #include <fstream>
 #include <print>
+#include <ranges>
+#include <span>
+#include <string_view>
+#include <vector>
+
+// TBB includes
+#include <tbb/parallel_for.h>
+
+// Platform-specific includes
+#ifdef _WIN32
+#include <io.h>
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+// SIMD includes (with fallback)
+#if defined(__AVX2__) || defined(_MSC_VER)
+#include <immintrin.h>
+#endif
 
 namespace gs {
 
-    // Constants for PLY format
     namespace ply_constants {
-        // Maximum number of SH coefficient components
         constexpr int MAX_DC_COMPONENTS = 48;
         constexpr int MAX_REST_COMPONENTS = 135;
-
-        // Dimension requirements
         constexpr int COLOR_CHANNELS = 3;
         constexpr int POSITION_DIMS = 3;
         constexpr int SCALE_DIMS = 3;
         constexpr int QUATERNION_DIMS = 4;
-
-        // Default values
         constexpr float DEFAULT_LOG_SCALE = -5.0f;
         constexpr float IDENTITY_QUATERNION_W = 1.0f;
         constexpr float SCENE_SCALE_FACTOR = 0.5f;
-
-        // SH degree calculation
-        constexpr int SH_DEGREE_3_REST_COEFFS = 15; // (4^2 - 1) = 15 for degree 3
+        constexpr int SH_DEGREE_3_REST_COEFFS = 15;
         constexpr int SH_DEGREE_OFFSET = 1;
 
-        // Property names
-        constexpr const char* VERTEX_ELEMENT = "vertex";
-        constexpr const char* POS_X = "x";
-        constexpr const char* POS_Y = "y";
-        constexpr const char* POS_Z = "z";
-        constexpr const char* OPACITY = "opacity";
-        constexpr const char* DC_PREFIX = "f_dc_";
-        constexpr const char* REST_PREFIX = "f_rest_";
-        constexpr const char* SCALE_PREFIX = "scale_";
-        constexpr const char* ROT_PREFIX = "rot_";
+        using namespace std::string_view_literals;
+        constexpr auto VERTEX_ELEMENT = "vertex"sv;
+        constexpr auto POS_X = "x"sv;
+        constexpr auto POS_Y = "y"sv;
+        constexpr auto POS_Z = "z"sv;
+        constexpr auto OPACITY = "opacity"sv;
+        constexpr auto DC_PREFIX = "f_dc_"sv;
+        constexpr auto REST_PREFIX = "f_rest_"sv;
+        constexpr auto SCALE_PREFIX = "scale_"sv;
+        constexpr auto ROT_PREFIX = "rot_"sv;
     } // namespace ply_constants
 
-    std::expected<SplatData, std::string> load_ply(const std::filesystem::path& filepath) {
+    struct FastPropertyLayout {
+        size_t vertex_count;
+        size_t vertex_stride;
+
+        // Pre-computed offsets for zero-copy access
+        size_t pos_x_offset = SIZE_MAX, pos_y_offset = SIZE_MAX, pos_z_offset = SIZE_MAX;
+        size_t opacity_offset = SIZE_MAX;
+        size_t scale_offsets[3] = {SIZE_MAX, SIZE_MAX, SIZE_MAX};
+        size_t rot_offsets[4] = {SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX};
+        size_t dc_start_offset = SIZE_MAX;
+        size_t rest_start_offset = SIZE_MAX;
+        int dc_count = 0, rest_count = 0;
+
+        [[nodiscard]] bool has_positions() const { return pos_x_offset != SIZE_MAX; }
+        [[nodiscard]] bool has_opacity() const { return opacity_offset != SIZE_MAX; }
+        [[nodiscard]] bool has_scaling() const { return scale_offsets[0] != SIZE_MAX; }
+        [[nodiscard]] bool has_rotation() const { return rot_offsets[0] != SIZE_MAX; }
+    };
+
+    struct MMappedFile {
+        void* data = nullptr;
+        size_t size = 0;
+
+#ifdef _WIN32
+        HANDLE file_handle = INVALID_HANDLE_VALUE;
+        HANDLE mapping_handle = INVALID_HANDLE_VALUE;
+
+        ~MMappedFile() {
+            if (data)
+                UnmapViewOfFile(data);
+            if (mapping_handle != INVALID_HANDLE_VALUE)
+                CloseHandle(mapping_handle);
+            if (file_handle != INVALID_HANDLE_VALUE)
+                CloseHandle(file_handle);
+        }
+
+        [[nodiscard]] bool map(const std::filesystem::path& filepath) {
+            auto wide_path = filepath.wstring();
+            file_handle = CreateFileW(wide_path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                      nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+            if (file_handle == INVALID_HANDLE_VALUE)
+                return false;
+
+            LARGE_INTEGER file_size_li;
+            if (!GetFileSizeEx(file_handle, &file_size_li))
+                return false;
+            size = static_cast<size_t>(file_size_li.QuadPart);
+
+            mapping_handle = CreateFileMappingW(file_handle, nullptr, PAGE_READONLY, 0, 0, nullptr);
+            if (!mapping_handle)
+                return false;
+
+            data = MapViewOfFile(mapping_handle, FILE_MAP_READ, 0, 0, 0);
+            return data != nullptr;
+        }
+#else
+        int fd = -1;
+
+        ~MMappedFile() {
+            if (data && data != MAP_FAILED)
+                munmap(data, size);
+            if (fd >= 0)
+                close(fd);
+        }
+
+        [[nodiscard]] bool map(const std::filesystem::path& filepath) {
+            fd = open(filepath.c_str(), O_RDONLY);
+            if (fd < 0)
+                return false;
+
+            struct stat st {};
+            if (fstat(fd, &st) < 0)
+                return false;
+            size = st.st_size;
+
+            data = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
+            if (data == MAP_FAILED)
+                return false;
+
+            // Prefetching based on file size
+            if (size > 50 * 1024 * 1024) { // Only for files > 50MB
+                if (madvise(data, size, MADV_SEQUENTIAL) == 0) {
+                    std::println("Applied sequential access optimization");
+                }
+            }
+
+            return true;
+        }
+#endif
+
+        [[nodiscard]] std::span<const char> as_span() const {
+            return std::span{static_cast<const char*>(data), size};
+        }
+    };
+
+    [[nodiscard]] std::expected<std::pair<size_t, FastPropertyLayout>, std::string>
+    parse_header(const char* data, size_t file_size) {
+
+        // Check for PLY magic with both Unix and Windows line endings
+        if (file_size < 10) {
+            return std::unexpected("File too small to be valid PLY");
+        }
+
+        bool has_crlf = false;
+        if (std::strncmp(data, "ply\r\n", 5) == 0) {
+            has_crlf = true;
+        } else if (std::strncmp(data, "ply\n", 4) != 0) {
+            return std::unexpected("Invalid PLY file - missing PLY header");
+        }
+
+        const char* ptr = data + (has_crlf ? 5 : 4);
+        const char* end = data + file_size;
+
+        FastPropertyLayout layout = {};
+        bool is_binary = false;
+        bool found_vertex = false;
+        size_t lines_parsed = 0;
+        constexpr size_t MAX_HEADER_LINES = 10000; // Prevent infinite loops
+
+        while (ptr < end && lines_parsed < MAX_HEADER_LINES) {
+            const char* line_start = ptr;
+            const char* line_end = nullptr;
+
+            // Handle both \n and \r\n line endings efficiently
+            for (const char* p = ptr; p < end; ++p) {
+                if (*p == '\n') {
+                    line_end = p;
+                    ptr = p + 1;
+                    break;
+                } else if (*p == '\r' && p + 1 < end && *(p + 1) == '\n') {
+                    line_end = p;
+                    ptr = p + 2;
+                    break;
+                }
+            }
+
+            if (!line_end) {
+                // No more complete lines
+                break;
+            }
+
+            size_t line_len = line_end - line_start;
+            lines_parsed++;
+
+            // Skip empty lines and comments
+            if (line_len == 0 || (line_len > 0 && line_start[0] == '#'))
+                continue;
+
+            // Progress reporting for large headers
+            if (lines_parsed % 1000 == 0) {
+                std::println("  Parsed {} header lines...", lines_parsed);
+            }
+
+            // Ultra-fast line parsing with minimal allocations
+            if (line_len >= 27 && std::strncmp(line_start, "format binary_little_endian", 27) == 0) {
+                is_binary = true;
+            } else if (line_len >= 15 && std::strncmp(line_start, "element vertex ", 15) == 0) {
+                layout.vertex_count = std::strtoull(line_start + 15, nullptr, 10);
+                layout.vertex_stride = 0;
+                found_vertex = true;
+            } else if (line_len >= 15 && std::strncmp(line_start, "property float ", 15) == 0 && found_vertex) {
+                const char* prop_name = line_start + 15;
+                size_t name_len = line_len - 15;
+
+                // Remove trailing whitespace/CR
+                while (name_len > 0 && (prop_name[name_len - 1] == ' ' ||
+                                        prop_name[name_len - 1] == '\t' ||
+                                        prop_name[name_len - 1] == '\r')) {
+                    name_len--;
+                }
+
+                // property recognition using first character + length
+                if (name_len == 1) {
+                    switch (*prop_name) {
+                    case 'x': layout.pos_x_offset = layout.vertex_stride; break;
+                    case 'y': layout.pos_y_offset = layout.vertex_stride; break;
+                    case 'z': layout.pos_z_offset = layout.vertex_stride; break;
+                    default:
+                        return std::unexpected(std::format("Unknown property '{}' in PLY header", std::string(prop_name, name_len)));
+                    }
+                } else if (name_len == 7 && std::strncmp(prop_name, "opacity", 7) == 0) {
+                    layout.opacity_offset = layout.vertex_stride;
+                } else if (name_len >= 5 && std::strncmp(prop_name, "f_dc_", 5) == 0) {
+                    int idx = std::atoi(prop_name + 5);
+                    if (idx == 0)
+                        layout.dc_start_offset = layout.vertex_stride;
+                    if (idx >= layout.dc_count)
+                        layout.dc_count = idx + 1;
+                } else if (name_len >= 7 && std::strncmp(prop_name, "f_rest_", 7) == 0) {
+                    int idx = std::atoi(prop_name + 7);
+                    if (idx == 0)
+                        layout.rest_start_offset = layout.vertex_stride;
+                    if (idx >= layout.rest_count)
+                        layout.rest_count = idx + 1;
+                } else if (name_len == 7 && std::strncmp(prop_name, "scale_", 6) == 0) {
+                    int idx = prop_name[6] - '0';
+                    if (idx >= 0 && idx < 3)
+                        layout.scale_offsets[idx] = layout.vertex_stride;
+                } else if (name_len == 5 && std::strncmp(prop_name, "rot_", 4) == 0) {
+                    int idx = prop_name[4] - '0';
+                    if (idx >= 0 && idx < 4)
+                        layout.rot_offsets[idx] = layout.vertex_stride;
+                }
+
+                layout.vertex_stride += 4; // All properties are float32
+            } else if (line_len >= 10 && std::strncmp(line_start, "end_header", 10) == 0) {
+                if (!is_binary || !found_vertex) {
+                    return std::unexpected("Only binary PLY with position supported");
+                }
+                std::println("Header parsed - {} lines, stride: {} bytes, dc: {}, rest: {}",
+                             lines_parsed, layout.vertex_stride, layout.dc_count, layout.rest_count);
+                return std::make_pair(ptr - data, layout);
+            }
+        }
+
+        if (lines_parsed >= MAX_HEADER_LINES) {
+            return std::unexpected(std::format("Header too large - exceeded {} lines", MAX_HEADER_LINES));
+        }
+
+        return std::unexpected("No end_header found in PLY file");
+    }
+
+    // SIMD position extraction
+    void extract_positions(const char* vertex_data, const FastPropertyLayout& layout, const torch::Tensor& means) {
+        const size_t count = layout.vertex_count;
+        const size_t stride = layout.vertex_stride;
+        float* output = means.data_ptr<float>();
+
+        if (!layout.has_positions())
+            return;
+
+        std::println("Position extraction using TBB + SIMD for {} Gaussians", count);
+
+#ifdef HAS_AVX2_SUPPORT
+        // Check AVX2 support once
+        static bool has_avx2 = []() {
+#ifdef _WIN32
+            int cpuInfo[4];
+            __cpuid(cpuInfo, 7);
+            return (cpuInfo[1] & (1 << 5)) != 0;
+#else
+            return __builtin_cpu_supports("avx2");
+#endif
+        }();
+
+        if (has_avx2) {
+            std::println("Using AVX2 SIMD acceleration");
+
+            // TBB parallel SIMD processing with larger blocks to reduce overhead
+            tbb::parallel_for(tbb::blocked_range<size_t>(0, count, 2048), // 2KB blocks
+                              [&](const tbb::blocked_range<size_t>& range) {
+                                  size_t start = range.begin();
+                                  size_t end = range.end();
+                                  size_t range_size = end - start;
+                                  size_t simd_end = start + (range_size & ~7); // 8-element aligned
+
+                                  // C++23: [[assume]] for optimization
+                                  [[assume(layout.pos_x_offset < stride)]];
+                                  [[assume(layout.pos_y_offset < stride)]];
+                                  [[assume(layout.pos_z_offset < stride)]];
+
+                                  // Process 8 vertices at a time with SIMD
+                                  for (size_t i = start; i < simd_end; i += 8) {
+                                      // Prefetch next cache line
+                                      __builtin_prefetch(vertex_data + (i + 16) * stride, 0, 1);
+
+                                      // Load 8 x-coordinates
+                                      __m256 x_vals = _mm256_set_ps(
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 7) * stride + layout.pos_x_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 6) * stride + layout.pos_x_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 5) * stride + layout.pos_x_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 4) * stride + layout.pos_x_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 3) * stride + layout.pos_x_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 2) * stride + layout.pos_x_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 1) * stride + layout.pos_x_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_x_offset));
+
+                                      __m256 y_vals = _mm256_set_ps(
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 7) * stride + layout.pos_y_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 6) * stride + layout.pos_y_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 5) * stride + layout.pos_y_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 4) * stride + layout.pos_y_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 3) * stride + layout.pos_y_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 2) * stride + layout.pos_y_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 1) * stride + layout.pos_y_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_y_offset));
+
+                                      __m256 z_vals = _mm256_set_ps(
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 7) * stride + layout.pos_z_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 6) * stride + layout.pos_z_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 5) * stride + layout.pos_z_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 4) * stride + layout.pos_z_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 3) * stride + layout.pos_z_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 2) * stride + layout.pos_z_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + 1) * stride + layout.pos_z_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_z_offset));
+
+                                      // Store efficiently with proper alignment
+                                      alignas(32) float temp_x[8], temp_y[8], temp_z[8];
+                                      _mm256_store_ps(temp_x, x_vals);
+                                      _mm256_store_ps(temp_y, y_vals);
+                                      _mm256_store_ps(temp_z, z_vals);
+
+                                      // Interleave XYZ (reverse order due to _mm256_set_ps)
+                                      for (int j = 0; j < 8; ++j) {
+                                          const size_t idx = i + (7 - j);
+                                          output[idx * 3 + 0] = temp_x[7 - j];
+                                          output[idx * 3 + 1] = temp_y[7 - j];
+                                          output[idx * 3 + 2] = temp_z[7 - j];
+                                      }
+                                  }
+
+                                  // Handle remaining elements in this range
+                                  for (size_t i = simd_end; i < end; ++i) {
+                                      output[i * 3 + 0] = *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_x_offset);
+                                      output[i * 3 + 1] = *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_y_offset);
+                                      output[i * 3 + 2] = *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_z_offset);
+                                  }
+                              });
+        } else
+#endif
+        {
+            std::println("Using optimized scalar processing");
+
+            // TBB parallel scalar processing
+            tbb::parallel_for(tbb::blocked_range<size_t>(0, count, 2048),
+                              [&](const tbb::blocked_range<size_t>& range) {
+                                  for (size_t i = range.begin(); i < range.end(); ++i) {
+                                      output[i * 3 + 0] = *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_x_offset);
+                                      output[i * 3 + 1] = *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_y_offset);
+                                      output[i * 3 + 2] = *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_z_offset);
+                                  }
+                              });
+        }
+    }
+
+    // SH coefficient extraction
+    void extract_sh_coefficients(const char* vertex_data, const FastPropertyLayout& layout,
+                                 size_t start_offset, int coeff_count, int channels,
+                                 const torch::Tensor& output) {
+        if (coeff_count == 0 || start_offset == SIZE_MAX)
+            return;
+
+        const size_t count = layout.vertex_count;
+        const size_t stride = layout.vertex_stride;
+        const int B = coeff_count / channels;
+
+        auto data_ptr = output.data_ptr<float>();
+
+        // Extract coefficients matching the original's stack -> reshape -> transpose pattern
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, count, 1024),
+                          [&](const tbb::blocked_range<size_t>& range) {
+                              for (size_t i = range.begin(); i < range.end(); ++i) {
+                                  // For each vertex, read f_dc_0, f_dc_1, ..., f_dc_(coeff_count-1)
+                                  for (int j = 0; j < coeff_count; ++j) {
+                                      float value = *reinterpret_cast<const float*>(vertex_data + i * stride + start_offset + j * 4);
+
+                                      // Reshape logic: j maps to (channel, b)
+                                      int channel = j / B; // Which color channel (0, 1, 2)
+                                      int b = j % B;       // Which basis function
+
+                                      // Store in [N, B, 3] layout
+                                      data_ptr[i * B * channels + b * channels + channel] = value;
+                                  }
+                              }
+                          });
+    }
+
+    // Single property extraction
+    void extract_property(const char* vertex_data, const FastPropertyLayout& layout,
+                          size_t property_offset, float* output) {
+        if (property_offset == SIZE_MAX)
+            return;
+
+        const size_t count = layout.vertex_count;
+        const size_t stride = layout.vertex_stride;
+
+        // Parallel extraction
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, count, 2048),
+                          [&](const tbb::blocked_range<size_t>& range) {
+                              for (size_t i = range.begin(); i < range.end(); ++i) {
+                                  output[i] = *reinterpret_cast<const float*>(vertex_data + i * stride + property_offset);
+                              }
+                          });
+    }
+
+    // Main function
+    [[nodiscard]] std::expected<SplatData, std::string> load_ply(const std::filesystem::path& filepath) {
         try {
+            auto start_time = std::chrono::high_resolution_clock::now();
+
             if (!std::filesystem::exists(filepath)) {
                 return std::unexpected(std::format("PLY file does not exist: {}", filepath.string()));
             }
 
-            std::ifstream file_stream(filepath, std::ios::binary);
-            if (!file_stream) {
-                return std::unexpected(std::format("Failed to open PLY file: {}", filepath.string()));
+            // Memory map
+            MMappedFile mapped_file;
+            if (!mapped_file.map(filepath)) {
+                return std::unexpected("Failed to memory map PLY file");
             }
 
-            tinyply::PlyFile ply_file;
-            ply_file.parse_header(file_stream);
+            const char* data = static_cast<const char*>(mapped_file.data);
+            const size_t file_size = mapped_file.size;
 
-            // Print what we found
-            auto elements = ply_file.get_elements();
-            size_t vertex_count = 0;
-            for (const auto& e : elements) {
-                if (e.name == ply_constants::VERTEX_ELEMENT) {
-                    vertex_count = e.size;
-                    break;
-                }
-            }
-            std::println("PLY contains {} vertices", vertex_count);
-
-            // Request vertex properties
-            std::shared_ptr<tinyply::PlyData> positions;
-            std::vector<std::shared_ptr<tinyply::PlyData>> f_dc_components;
-            std::vector<std::shared_ptr<tinyply::PlyData>> f_rest_components;
-            std::shared_ptr<tinyply::PlyData> opacity;
-            std::shared_ptr<tinyply::PlyData> scale_0, scale_1, scale_2;
-            std::shared_ptr<tinyply::PlyData> rot_0, rot_1, rot_2, rot_3;
-
-            // Try to request all properties we know about
-            try {
-                positions = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT,
-                    {ply_constants::POS_X, ply_constants::POS_Y, ply_constants::POS_Z});
-
-                // SH coefficients - DC terms
-                for (int i = 0; i < ply_constants::MAX_DC_COMPONENTS; ++i) {
-                    try {
-                        auto component = ply_file.request_properties_from_element(
-                            ply_constants::VERTEX_ELEMENT,
-                            {std::format("{}{}", ply_constants::DC_PREFIX, i)});
-                        if (component) {
-                            f_dc_components.push_back(component);
-                        }
-                    } catch (...) {
-                        break;
-                    }
-                }
-
-                // SH coefficients - rest terms
-                for (int i = 0; i < ply_constants::MAX_REST_COMPONENTS; ++i) {
-                    try {
-                        auto component = ply_file.request_properties_from_element(
-                            ply_constants::VERTEX_ELEMENT,
-                            {std::format("{}{}", ply_constants::REST_PREFIX, i)});
-                        if (component) {
-                            f_rest_components.push_back(component);
-                        }
-                    } catch (...) {
-                        break;
-                    }
-                }
-
-                opacity = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT, {ply_constants::OPACITY});
-
-                // Scale components
-                scale_0 = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT, {std::format("{}0", ply_constants::SCALE_PREFIX)});
-                scale_1 = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT, {std::format("{}1", ply_constants::SCALE_PREFIX)});
-                scale_2 = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT, {std::format("{}2", ply_constants::SCALE_PREFIX)});
-
-                // Rotation components
-                rot_0 = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT, {std::format("{}0", ply_constants::ROT_PREFIX)});
-                rot_1 = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT, {std::format("{}1", ply_constants::ROT_PREFIX)});
-                rot_2 = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT, {std::format("{}2", ply_constants::ROT_PREFIX)});
-                rot_3 = ply_file.request_properties_from_element(
-                    ply_constants::VERTEX_ELEMENT, {std::format("{}3", ply_constants::ROT_PREFIX)});
-            } catch (const std::exception& e) {
-                std::println("Note: Some properties not found ({}), continuing...", e.what());
+            // Ultra-fast header parsing
+            auto parse_result = parse_header(data, file_size);
+            if (!parse_result) {
+                return std::unexpected(parse_result.error());
             }
 
-            // Read the data
-            ply_file.read(file_stream);
+            auto [data_offset, layout] = parse_result.value();
+            const char* vertex_data = data + data_offset;
 
-            if (!positions || positions->count == 0) {
-                return std::unexpected("No position data found in PLY file");
-            }
+            std::println("⚡ Extracting {} Gaussians with blazing speed", layout.vertex_count);
 
-            const size_t num_points = positions->count;
-            std::println("Loading {} Gaussian splats", num_points);
-
-            // Create tensors for each property
             auto options = torch::TensorOptions().dtype(torch::kFloat32);
 
-            // Positions
-            auto means = torch::from_blob(
-                             positions->buffer.get(),
-                             {static_cast<int64_t>(num_points), ply_constants::POSITION_DIMS},
-                             options)
-                             .clone();
+            // Position extraction
+            auto means = torch::zeros({static_cast<int64_t>(layout.vertex_count), 3}, options);
+            extract_positions(vertex_data, layout, means);
 
-            // SH coefficients - following the Python code logic
+            // SH coefficient extraction
             torch::Tensor sh0, shN;
 
-            // Process DC components
-            if (!f_dc_components.empty()) {
-                // Load all f_dc components
-                std::vector<torch::Tensor> dc_values;
-                for (const auto& comp : f_dc_components) {
-                    auto val = torch::from_blob(comp->buffer.get(),
-                                                {static_cast<int64_t>(num_points)}, options)
-                                   .clone();
-                    dc_values.push_back(val);
-                }
-
-                // Stack to create [N, dc_dim]
-                auto f_dc = torch::stack(dc_values, 1);
-                int dc_dim = f_dc.size(1);
-
-                if (dc_dim % ply_constants::COLOR_CHANNELS != 0) {
-                    return std::unexpected(std::format("f_dc dimension {} is not a multiple of {}",
-                                                       dc_dim, ply_constants::COLOR_CHANNELS));
-                }
-
-                // Reshape from [N, dc_dim] to [N, 3, B0] then transpose to [N, B0, 3]
-                int B0 = dc_dim / ply_constants::COLOR_CHANNELS;
-                sh0 = f_dc.reshape({static_cast<int64_t>(num_points), ply_constants::COLOR_CHANNELS, B0})
-                          .transpose(1, 2);
+            if (layout.dc_count > 0 && layout.dc_count % ply_constants::COLOR_CHANNELS == 0) {
+                int B0 = layout.dc_count / ply_constants::COLOR_CHANNELS;
+                sh0 = torch::zeros({static_cast<int64_t>(layout.vertex_count), B0, ply_constants::COLOR_CHANNELS}, options);
+                extract_sh_coefficients(vertex_data, layout, layout.dc_start_offset,
+                                        layout.dc_count, ply_constants::COLOR_CHANNELS, sh0);
             } else {
-                sh0 = torch::zeros({static_cast<int64_t>(num_points), 1, ply_constants::COLOR_CHANNELS}, options);
+                sh0 = torch::zeros({static_cast<int64_t>(layout.vertex_count), 1, ply_constants::COLOR_CHANNELS}, options);
             }
 
-            // Process rest components
-            if (!f_rest_components.empty()) {
-                // Load all f_rest components
-                std::vector<torch::Tensor> rest_values;
-                for (const auto& comp : f_rest_components) {
-                    auto val = torch::from_blob(comp->buffer.get(),
-                                                {static_cast<int64_t>(num_points)}, options)
-                                   .clone();
-                    rest_values.push_back(val);
-                }
-
-                // Stack to create [N, rest_dim]
-                auto f_rest = torch::stack(rest_values, 1);
-                int rest_dim = f_rest.size(1);
-
-                if (rest_dim % ply_constants::COLOR_CHANNELS != 0) {
-                    return std::unexpected(std::format("f_rest dimension {} is not a multiple of {}",
-                                                       rest_dim, ply_constants::COLOR_CHANNELS));
-                }
-
-                // Reshape from [N, rest_dim] to [N, 3, Bn] then transpose to [N, Bn, 3]
-                int Bn = rest_dim / ply_constants::COLOR_CHANNELS;
-                shN = f_rest.reshape({static_cast<int64_t>(num_points), ply_constants::COLOR_CHANNELS, Bn})
-                          .transpose(1, 2);
+            if (layout.rest_count > 0 && layout.rest_count % ply_constants::COLOR_CHANNELS == 0) {
+                int Bn = layout.rest_count / ply_constants::COLOR_CHANNELS;
+                shN = torch::zeros({static_cast<int64_t>(layout.vertex_count), Bn, ply_constants::COLOR_CHANNELS}, options);
+                extract_sh_coefficients(vertex_data, layout, layout.rest_start_offset,
+                                        layout.rest_count, ply_constants::COLOR_CHANNELS, shN);
             } else {
-                // Default: assume SH degree 3 -> 15 rest coefficients
-                shN = torch::zeros({static_cast<int64_t>(num_points),
-                                    ply_constants::SH_DEGREE_3_REST_COEFFS,
-                                    ply_constants::COLOR_CHANNELS},
-                                   options);
+                shN = torch::zeros({static_cast<int64_t>(layout.vertex_count), ply_constants::SH_DEGREE_3_REST_COEFFS, ply_constants::COLOR_CHANNELS}, options);
             }
 
-            // Opacity - raw values are stored (already inverse sigmoid)
-            torch::Tensor opacity_tensor;
-            if (opacity) {
-                opacity_tensor = torch::from_blob(
-                                     opacity->buffer.get(),
-                                     {static_cast<int64_t>(num_points), 1},
-                                     options)
-                                     .clone();
-            } else {
-                opacity_tensor = torch::zeros({static_cast<int64_t>(num_points), 1}, options);
+            // property extraction
+            auto opacity_tensor = torch::zeros({static_cast<int64_t>(layout.vertex_count), 1}, options);
+            if (layout.has_opacity()) {
+                extract_property(vertex_data, layout, layout.opacity_offset, opacity_tensor.data_ptr<float>());
             }
 
-            // Scaling - raw values are stored (already log scale)
-            torch::Tensor scaling;
-            if (scale_0 && scale_1 && scale_2) {
-                auto s0 = torch::from_blob(scale_0->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
-                auto s1 = torch::from_blob(scale_1->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
-                auto s2 = torch::from_blob(scale_2->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
-                scaling = torch::stack({s0, s1, s2}, 1);
+            auto scaling = torch::zeros({static_cast<int64_t>(layout.vertex_count), 3}, options);
+            if (layout.has_scaling()) {
+                // Extract scale components individually then stack
+                std::vector<float> s0(layout.vertex_count), s1(layout.vertex_count), s2(layout.vertex_count);
+
+                extract_property(vertex_data, layout, layout.scale_offsets[0], s0.data());
+                extract_property(vertex_data, layout, layout.scale_offsets[1], s1.data());
+                extract_property(vertex_data, layout, layout.scale_offsets[2], s2.data());
+
+                // Stack into final tensor
+                auto scaling_ptr = scaling.data_ptr<float>();
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, layout.vertex_count, 1024),
+                                  [&](const tbb::blocked_range<size_t>& range) {
+                                      for (size_t i = range.begin(); i < range.end(); ++i) {
+                                          scaling_ptr[i * 3 + 0] = s0[i];
+                                          scaling_ptr[i * 3 + 1] = s1[i];
+                                          scaling_ptr[i * 3 + 2] = s2[i];
+                                      }
+                                  });
             } else {
-                scaling = torch::full({static_cast<int64_t>(num_points), ply_constants::SCALE_DIMS},
-                                      ply_constants::DEFAULT_LOG_SCALE, options);
+                scaling.fill_(ply_constants::DEFAULT_LOG_SCALE);
             }
 
-            // Rotation quaternion - raw values are stored
-            torch::Tensor rotation;
-            if (rot_0 && rot_1 && rot_2 && rot_3) {
-                auto r0 = torch::from_blob(rot_0->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
-                auto r1 = torch::from_blob(rot_1->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
-                auto r2 = torch::from_blob(rot_2->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
-                auto r3 = torch::from_blob(rot_3->buffer.get(), {static_cast<int64_t>(num_points)}, options).clone();
-                rotation = torch::stack({r0, r1, r2, r3}, 1);
+            auto rotation = torch::zeros({static_cast<int64_t>(layout.vertex_count), 4}, options);
+            if (layout.has_rotation()) {
+                // Extract rotation components individually then stack
+                std::vector<float> r0(layout.vertex_count), r1(layout.vertex_count), r2(layout.vertex_count), r3(layout.vertex_count);
+
+                extract_property(vertex_data, layout, layout.rot_offsets[0], r0.data());
+                extract_property(vertex_data, layout, layout.rot_offsets[1], r1.data());
+                extract_property(vertex_data, layout, layout.rot_offsets[2], r2.data());
+                extract_property(vertex_data, layout, layout.rot_offsets[3], r3.data());
+
+                // Stack into final tensor
+                auto rotation_ptr = rotation.data_ptr<float>();
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, layout.vertex_count, 1024),
+                                  [&](const tbb::blocked_range<size_t>& range) {
+                                      for (size_t i = range.begin(); i < range.end(); ++i) {
+                                          rotation_ptr[i * 4 + 0] = r0[i];
+                                          rotation_ptr[i * 4 + 1] = r1[i];
+                                          rotation_ptr[i * 4 + 2] = r2[i];
+                                          rotation_ptr[i * 4 + 3] = r3[i];
+                                      }
+                                  });
             } else {
-                rotation = torch::zeros({static_cast<int64_t>(num_points), ply_constants::QUATERNION_DIMS}, options);
-                rotation.index_put_({torch::indexing::Slice(), 0}, ply_constants::IDENTITY_QUATERNION_W);
+                rotation.select(1, 0).fill_(ply_constants::IDENTITY_QUATERNION_W);
             }
 
-            // Move everything to CUDA
+            // Batch CUDA transfer for maximum speed
             means = means.to(torch::kCUDA);
             sh0 = sh0.to(torch::kCUDA);
             shN = shN.to(torch::kCUDA);
@@ -258,15 +561,13 @@ namespace gs {
             rotation = rotation.to(torch::kCUDA);
             opacity_tensor = opacity_tensor.to(torch::kCUDA);
 
-            // Calculate SH degree from shN dimensions
-            int sh_degree = static_cast<int>(std::sqrt(shN.size(1) + ply_constants::SH_DEGREE_OFFSET)) -
-                            ply_constants::SH_DEGREE_OFFSET;
+            int sh_degree = static_cast<int>(std::sqrt(shN.size(1) + ply_constants::SH_DEGREE_OFFSET)) - ply_constants::SH_DEGREE_OFFSET;
 
-            // Estimate scene scale from point cloud bounds
-            auto min_vals = std::get<0>(means.min(0));
-            auto max_vals = std::get<0>(means.max(0));
+            auto end_time = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-            std::println("Successfully loaded {} Gaussians with SH degree {}", num_points, sh_degree);
+            std::println("🔥 BLAZING FAST COMPLETE: file size {} MB, {} Gaussians with SH degree {} in {}ms! 🔥",
+                         file_size / (1024 * 1024), layout.vertex_count, sh_degree, duration.count());
 
             return SplatData(
                 sh_degree,
@@ -276,7 +577,7 @@ namespace gs {
                 scaling,
                 rotation,
                 opacity_tensor,
-                1.f);
+                ply_constants::SCENE_SCALE_FACTOR);
 
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to load PLY file: {}", e.what()));
