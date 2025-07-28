@@ -169,6 +169,7 @@ namespace {
                                         min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
                                         // Capture flag states
+                                        preload_to_ram_flag = bool(preload_to_ram),
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         use_attention_mask_flag = bool(use_attention_mask),
                                         preload_to_ram_flag = bool(preload_to_ram),

@@ -1,9 +1,7 @@
 #include "core/splat_data.hpp"
-#include "core/colmap_reader.hpp"
 #include "core/dataset_reader.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
-#include "core/transforms_reader.hpp"
 
 #include "external/nanoflann.hpp"
 #include "external/tinyply.hpp"
@@ -104,7 +102,7 @@ namespace {
         return result.to(points.device());
     }
 
-    void write_ply_impl(const PointCloud& pc,
+    void write_ply_impl(const gs::PointCloud& pc,
                         const std::filesystem::path& root,
                         int iteration) {
         namespace fs = std::filesystem;
@@ -159,274 +157,276 @@ namespace {
     }
 } // namespace
 
-SplatData::~SplatData() {
-    // Wait for all save threads to complete
-    std::lock_guard<std::mutex> lock(_threads_mutex);
-    for (auto& t : _save_threads) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
-}
-
-// Move constructor
-SplatData::SplatData(SplatData&& other) noexcept
-    : _active_sh_degree(other._active_sh_degree),
-      _max_sh_degree(other._max_sh_degree),
-      _scene_scale(other._scene_scale),
-      _means(std::move(other._means)),
-      _sh0(std::move(other._sh0)),
-      _shN(std::move(other._shN)),
-      _scaling(std::move(other._scaling)),
-      _rotation(std::move(other._rotation)),
-      _opacity(std::move(other._opacity)),
-      _max_radii2D(std::move(other._max_radii2D)) {
-    // Move threads under lock
-    std::lock_guard<std::mutex> lock(other._threads_mutex);
-    _save_threads = std::move(other._save_threads);
-}
-
-// Move assignment operator
-SplatData& SplatData::operator=(SplatData&& other) noexcept {
-    if (this != &other) {
-        // First, wait for our own threads to complete
-        {
-            std::lock_guard<std::mutex> lock(_threads_mutex);
-            for (auto& t : _save_threads) {
-                if (t.joinable()) {
-                    t.join();
-                }
+namespace gs {
+    SplatData::~SplatData() {
+        // Wait for all save threads to complete
+        std::lock_guard<std::mutex> lock(_threads_mutex);
+        for (auto& t : _save_threads) {
+            if (t.joinable()) {
+                t.join();
             }
         }
+    }
 
-        // Move scalar members
-        _active_sh_degree = other._active_sh_degree;
-        _max_sh_degree = other._max_sh_degree;
-        _scene_scale = other._scene_scale;
-
-        // Move tensors
-        _means = std::move(other._means);
-        _sh0 = std::move(other._sh0);
-        _shN = std::move(other._shN);
-        _scaling = std::move(other._scaling);
-        _rotation = std::move(other._rotation);
-        _opacity = std::move(other._opacity);
-        _max_radii2D = std::move(other._max_radii2D);
-
+    // Move constructor
+    SplatData::SplatData(SplatData&& other) noexcept
+        : _active_sh_degree(other._active_sh_degree),
+          _max_sh_degree(other._max_sh_degree),
+          _scene_scale(other._scene_scale),
+          _means(std::move(other._means)),
+          _sh0(std::move(other._sh0)),
+          _shN(std::move(other._shN)),
+          _scaling(std::move(other._scaling)),
+          _rotation(std::move(other._rotation)),
+          _opacity(std::move(other._opacity)),
+          _max_radii2D(std::move(other._max_radii2D)) {
         // Move threads under lock
         std::lock_guard<std::mutex> lock(other._threads_mutex);
         _save_threads = std::move(other._save_threads);
     }
-    return *this;
-}
 
-// Constructor from tensors
-SplatData::SplatData(int sh_degree,
-                     torch::Tensor means,
-                     torch::Tensor sh0,
-                     torch::Tensor shN,
-                     torch::Tensor scaling,
-                     torch::Tensor rotation,
-                     torch::Tensor opacity,
-                     float scene_scale)
-    : _max_sh_degree{sh_degree},
-      _active_sh_degree{0},
-      _scene_scale{scene_scale},
-      _means{std::move(means)},
-      _sh0{std::move(sh0)},
-      _shN{std::move(shN)},
-      _scaling{std::move(scaling)},
-      _rotation{std::move(rotation)},
-      _opacity{std::move(opacity)},
-      _max_radii2D{torch::zeros({_means.size(0)}).to(torch::kCUDA)} {}
+    // Move assignment operator
+    SplatData& SplatData::operator=(SplatData&& other) noexcept {
+        if (this != &other) {
+            // First, wait for our own threads to complete
+            {
+                std::lock_guard<std::mutex> lock(_threads_mutex);
+                for (auto& t : _save_threads) {
+                    if (t.joinable()) {
+                        t.join();
+                    }
+                }
+            }
 
-// Computed getters
-torch::Tensor SplatData::get_means() const {
-    return _means;
-}
+            // Move scalar members
+            _active_sh_degree = other._active_sh_degree;
+            _max_sh_degree = other._max_sh_degree;
+            _scene_scale = other._scene_scale;
 
-torch::Tensor SplatData::get_opacity() const {
-    return torch::sigmoid(_opacity).squeeze(-1);
-}
+            // Move tensors
+            _means = std::move(other._means);
+            _sh0 = std::move(other._sh0);
+            _shN = std::move(other._shN);
+            _scaling = std::move(other._scaling);
+            _rotation = std::move(other._rotation);
+            _opacity = std::move(other._opacity);
+            _max_radii2D = std::move(other._max_radii2D);
 
-torch::Tensor SplatData::get_rotation() const {
-    return torch::nn::functional::normalize(_rotation,
-                                            torch::nn::functional::NormalizeFuncOptions().dim(-1));
-}
-
-torch::Tensor SplatData::get_scaling() const {
-    return torch::exp(_scaling);
-}
-
-torch::Tensor SplatData::get_shs() const {
-    return torch::cat({_sh0, _shN}, 1);
-}
-
-// Utility method
-void SplatData::increment_sh_degree() {
-    if (_active_sh_degree < _max_sh_degree) {
-        _active_sh_degree++;
+            // Move threads under lock
+            std::lock_guard<std::mutex> lock(other._threads_mutex);
+            _save_threads = std::move(other._save_threads);
+        }
+        return *this;
     }
-}
 
-// Get attribute names for PLY format
-std::vector<std::string> SplatData::get_attribute_names() const {
-    std::vector<std::string> a{"x", "y", "z", "nx", "ny", "nz"};
+    // Constructor from tensors
+    SplatData::SplatData(int sh_degree,
+                         torch::Tensor means,
+                         torch::Tensor sh0,
+                         torch::Tensor shN,
+                         torch::Tensor scaling,
+                         torch::Tensor rotation,
+                         torch::Tensor opacity,
+                         float scene_scale)
+        : _max_sh_degree{sh_degree},
+          _active_sh_degree{0},
+          _scene_scale{scene_scale},
+          _means{std::move(means)},
+          _sh0{std::move(sh0)},
+          _shN{std::move(shN)},
+          _scaling{std::move(scaling)},
+          _rotation{std::move(rotation)},
+          _opacity{std::move(opacity)},
+          _max_radii2D{torch::zeros({_means.size(0)}).to(torch::kCUDA)} {}
 
-    for (int i = 0; i < _sh0.size(1) * _sh0.size(2); ++i)
-        a.emplace_back("f_dc_" + std::to_string(i));
-    for (int i = 0; i < _shN.size(1) * _shN.size(2); ++i)
-        a.emplace_back("f_rest_" + std::to_string(i));
+    // Computed getters
+    torch::Tensor SplatData::get_means() const {
+        return _means;
+    }
 
-    a.emplace_back("opacity");
+    torch::Tensor SplatData::get_opacity() const {
+        return torch::sigmoid(_opacity).squeeze(-1);
+    }
 
-    for (int i = 0; i < _scaling.size(1); ++i)
-        a.emplace_back("scale_" + std::to_string(i));
-    for (int i = 0; i < _rotation.size(1); ++i)
-        a.emplace_back("rot_" + std::to_string(i));
+    torch::Tensor SplatData::get_rotation() const {
+        return torch::nn::functional::normalize(_rotation,
+                                                torch::nn::functional::NormalizeFuncOptions().dim(-1));
+    }
 
-    return a;
-}
+    torch::Tensor SplatData::get_scaling() const {
+        return torch::exp(_scaling);
+    }
 
-void SplatData::cleanup_finished_threads() const {
-    std::lock_guard<std::mutex> lock(_threads_mutex);
+    torch::Tensor SplatData::get_shs() const {
+        return torch::cat({_sh0, _shN}, 1);
+    }
 
-    // Remove threads that have finished
-    _save_threads.erase(
-        std::remove_if(_save_threads.begin(), _save_threads.end(),
-                       [](std::thread& t) {
-                           if (t.joinable()) {
-                               // Try to join with zero timeout to check if finished
-                               // Since C++11 doesn't have try_join, we'll keep all threads
-                               return false;
-                           }
-                           return true;
-                       }),
-        _save_threads.end());
-}
+    // Utility method
+    void SplatData::increment_sh_degree() {
+        if (_active_sh_degree < _max_sh_degree) {
+            _active_sh_degree++;
+        }
+    }
 
-// Export to PLY
-void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_thread) const {
-    auto pc = to_point_cloud();
+    // Get attribute names for PLY format
+    std::vector<std::string> SplatData::get_attribute_names() const {
+        std::vector<std::string> a{"x", "y", "z", "nx", "ny", "nz"};
 
-    if (join_thread) {
-        // Synchronous save
-        write_ply_impl(pc, root, iteration);
-    } else {
-        // Clean up any finished threads first
-        cleanup_finished_threads();
+        for (int i = 0; i < _sh0.size(1) * _sh0.size(2); ++i)
+            a.emplace_back("f_dc_" + std::to_string(i));
+        for (int i = 0; i < _shN.size(1) * _shN.size(2); ++i)
+            a.emplace_back("f_rest_" + std::to_string(i));
 
-        // Asynchronous save with thread tracking
+        a.emplace_back("opacity");
+
+        for (int i = 0; i < _scaling.size(1); ++i)
+            a.emplace_back("scale_" + std::to_string(i));
+        for (int i = 0; i < _rotation.size(1); ++i)
+            a.emplace_back("rot_" + std::to_string(i));
+
+        return a;
+    }
+
+    void SplatData::cleanup_finished_threads() const {
         std::lock_guard<std::mutex> lock(_threads_mutex);
-        _save_threads.emplace_back([pc = std::move(pc), root, iteration]() {
-            write_ply_impl(pc, root, iteration);
-        });
+
+        // Remove threads that have finished
+        _save_threads.erase(
+            std::remove_if(_save_threads.begin(), _save_threads.end(),
+                           [](std::thread& t) {
+                               if (t.joinable()) {
+                                   // Try to join with zero timeout to check if finished
+                                   // Since C++11 doesn't have try_join, we'll keep all threads
+                                   return false;
+                               }
+                               return true;
+                           }),
+            _save_threads.end());
     }
-}
 
-PointCloud SplatData::to_point_cloud() const {
-    PointCloud pc;
+    // Export to PLY
+    void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_thread) const {
+        auto pc = to_point_cloud();
 
-    // Basic attributes
-    pc.means = _means.cpu().contiguous();
-    pc.normals = torch::zeros_like(pc.means);
+        if (join_thread) {
+            // Synchronous save
+            write_ply_impl(pc, root, iteration);
+        } else {
+            // Clean up any finished threads first
+            cleanup_finished_threads();
 
-    // Gaussian attributes
-    pc.sh0 = _sh0.transpose(1, 2).flatten(1).cpu();
-    pc.shN = _shN.transpose(1, 2).flatten(1).cpu();
-    pc.opacity = _opacity.cpu();
-    pc.scaling = _scaling.cpu();
-    pc.rotation = _rotation.cpu();
+            // Asynchronous save with thread tracking
+            std::lock_guard<std::mutex> lock(_threads_mutex);
+            _save_threads.emplace_back([pc = std::move(pc), root, iteration]() {
+                write_ply_impl(pc, root, iteration);
+            });
+        }
+    }
 
-    // Set attribute names for PLY export
-    pc.attribute_names = get_attribute_names();
+    PointCloud SplatData::to_point_cloud() const {
+        PointCloud pc;
 
-    return pc;
-}
+        // Basic attributes
+        pc.means = _means.cpu().contiguous();
+        pc.normals = torch::zeros_like(pc.means);
 
-std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
-    const gs::param::TrainingParameters& params,
-    torch::Tensor scene_center,
-    std::unique_ptr<IDataReader> dataSetReader) {
+        // Gaussian attributes
+        pc.sh0 = _sh0.transpose(1, 2).flatten(1).cpu();
+        pc.shN = _shN.transpose(1, 2).flatten(1).cpu();
+        pc.opacity = _opacity.cpu();
+        pc.scaling = _scaling.cpu();
+        pc.rotation = _rotation.cpu();
 
-    try {
-        // Helper lambdas
-        auto pcd = dataSetReader->createPointCloud();
+        // Set attribute names for PLY export
+        pc.attribute_names = get_attribute_names();
 
-        const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
-        const auto scene_scale = dists.median().item<float>();
+        return pc;
+    }
 
-        auto rgb_to_sh = [](const torch::Tensor& rgb) {
-            constexpr float kInvSH = 0.28209479177387814f; // 1 / √(4π)
-            return (rgb - 0.5f) / kInvSH;
-        };
+    std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
+        const gs::param::TrainingParameters& params,
+        torch::Tensor scene_center,
+        std::unique_ptr<IDataReader> dataSetReader) {
 
-        const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
-        const auto f32_cuda = f32.device(torch::kCUDA);
+        try {
+            // Helper lambdas
+            auto pcd = dataSetReader->createPointCloud();
 
-        // Ensure colors are normalized floats
-        pcd.normalize_colors();
+            const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
+            const auto scene_scale = dists.median().item<float>();
 
-        // 1. means - already a tensor, just move to CUDA and set requires_grad
-        auto means = pcd.means.to(torch::kCUDA).set_requires_grad(true);
+            auto rgb_to_sh = [](const torch::Tensor& rgb) {
+                constexpr float kInvSH = 0.28209479177387814f; // 1 / √(4π)
+                return (rgb - 0.5f) / kInvSH;
+            };
 
-        // 2. scaling (log(σ)) - compute nearest neighbor distances
-        auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
-        auto scaling = torch::log(torch::sqrt(nn_dist) * params.optimization.init_scaling)
-                           .unsqueeze(-1)
-                           .repeat({1, 3})
-                           .to(f32_cuda)
+            const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
+            const auto f32_cuda = f32.device(torch::kCUDA);
+
+            // Ensure colors are normalized floats
+            pcd.normalize_colors();
+
+            // 1. means - already a tensor, just move to CUDA and set requires_grad
+            auto means = pcd.means.to(torch::kCUDA).set_requires_grad(true);
+
+            // 2. scaling (log(σ)) - compute nearest neighbor distances
+            auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
+            auto scaling = torch::log(torch::sqrt(nn_dist) * params.optimization.init_scaling)
+                               .unsqueeze(-1)
+                               .repeat({1, 3})
+                               .to(f32_cuda)
+                               .set_requires_grad(true);
+
+            // 3. rotation (quaternion, identity) - split into multiple lines to avoid compilation error
+            auto rotation = torch::zeros({means.size(0), 4}, f32_cuda);
+            rotation.index_put_({torch::indexing::Slice(), 0}, 1);
+            rotation = rotation.set_requires_grad(true);
+
+            // 4. opacity (inverse sigmoid of 0.5)
+            auto opacity = torch::logit(params.optimization.init_opacity * torch::ones({means.size(0), 1}, f32_cuda))
+                               .set_requires_grad(true);
+
+            // 5. shs (SH coefficients)
+            // Colors are already normalized to float by pcd.normalize_colors()
+            auto colors_float = pcd.colors.to(torch::kCUDA);
+            auto fused_color = rgb_to_sh(colors_float);
+
+            const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));
+            auto shs = torch::zeros({fused_color.size(0), 3, feature_shape}, f32_cuda);
+
+            // Set DC coefficients
+            shs.index_put_({torch::indexing::Slice(),
+                            torch::indexing::Slice(),
+                            0},
+                           fused_color);
+
+            auto sh0 = shs.index({torch::indexing::Slice(),
+                                  torch::indexing::Slice(),
+                                  torch::indexing::Slice(0, 1)})
+                           .transpose(1, 2)
+                           .contiguous()
                            .set_requires_grad(true);
 
-        // 3. rotation (quaternion, identity) - split into multiple lines to avoid compilation error
-        auto rotation = torch::zeros({means.size(0), 4}, f32_cuda);
-        rotation.index_put_({torch::indexing::Slice(), 0}, 1);
-        rotation = rotation.set_requires_grad(true);
-
-        // 4. opacity (inverse sigmoid of 0.5)
-        auto opacity = torch::logit(params.optimization.init_opacity * torch::ones({means.size(0), 1}, f32_cuda))
+            auto shN = shs.index({torch::indexing::Slice(),
+                                  torch::indexing::Slice(),
+                                  torch::indexing::Slice(1, torch::indexing::None)})
+                           .transpose(1, 2)
+                           .contiguous()
                            .set_requires_grad(true);
 
-        // 5. shs (SH coefficients)
-        // Colors are already normalized to float by pcd.normalize_colors()
-        auto colors_float = pcd.colors.to(torch::kCUDA);
-        auto fused_color = rgb_to_sh(colors_float);
+            std::println("Scene scale: {}", scene_scale);
+            std::println("Initialized SplatData with:");
+            std::println("  - {} points", means.size(0));
+            std::println("  - Max SH degree: {}", params.optimization.sh_degree);
+            std::println("  - Total SH coefficients: {}", feature_shape);
+            std::cout << std::format("  - sh0 shape: {}\n", tensor_sizes_to_string(sh0.sizes()));
+            std::cout << std::format("  - shN shape: {}\n", tensor_sizes_to_string(shN.sizes()));
 
-        const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));
-        auto shs = torch::zeros({fused_color.size(0), 3, feature_shape}, f32_cuda);
+            return SplatData(params.optimization.sh_degree, means, sh0, shN, scaling, rotation, opacity, scene_scale);
 
-        // Set DC coefficients
-        shs.index_put_({torch::indexing::Slice(),
-                        torch::indexing::Slice(),
-                        0},
-                       fused_color);
-
-        auto sh0 = shs.index({torch::indexing::Slice(),
-                              torch::indexing::Slice(),
-                              torch::indexing::Slice(0, 1)})
-                       .transpose(1, 2)
-                       .contiguous()
-                       .set_requires_grad(true);
-
-        auto shN = shs.index({torch::indexing::Slice(),
-                              torch::indexing::Slice(),
-                              torch::indexing::Slice(1, torch::indexing::None)})
-                       .transpose(1, 2)
-                       .contiguous()
-                       .set_requires_grad(true);
-
-        std::println("Scene scale: {}", scene_scale);
-        std::println("Initialized SplatData with:");
-        std::println("  - {} points", means.size(0));
-        std::println("  - Max SH degree: {}", params.optimization.sh_degree);
-        std::println("  - Total SH coefficients: {}", feature_shape);
-        std::cout << std::format("  - sh0 shape: {}\n", tensor_sizes_to_string(sh0.sizes()));
-        std::cout << std::format("  - shN shape: {}\n", tensor_sizes_to_string(shN.sizes()));
-
-        return SplatData(params.optimization.sh_degree, means, sh0, shN, scaling, rotation, opacity, scene_scale);
-
-    } catch (const std::exception& e) {
-        return std::unexpected(std::format("Failed to initialize SplatData: {}", e.what()));
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Failed to initialize SplatData: {}", e.what()));
+        }
     }
 }
 

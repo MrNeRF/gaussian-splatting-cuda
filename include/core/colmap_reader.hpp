@@ -1,6 +1,5 @@
 #pragma once
 #include "Common.h"
-#include "core/camera.hpp"
 #include "core/point_cloud.hpp"
 #include <filesystem>
 #include <vector>
@@ -53,4 +52,4 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_image
     const std::string& masks_folder = "masks");
 
 // Read COLMAP point cloud
-PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath);
+gs::PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath);
