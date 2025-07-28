@@ -1,7 +1,8 @@
 #include "config.h" // Include generated config
 #include "core/ply_loader.hpp"
-#include "core/training_setup.hpp"
+#include "core/splat_data.hpp"
 #include "visualizer/detail.hpp"
+#include "visualizer/event_response_handler.hpp"
 #include "visualizer/gui_manager.hpp"
 #include <algorithm>
 #include <chrono>
@@ -127,8 +128,10 @@ namespace gs {
                 // Log the action
                 if (gui_manager_) {
                     gui_manager_->showScriptingConsole(true);
-                    gui_manager_->addConsoleLog("Info: Loaded PLY file via drag-and-drop: %s",
-                                                filepath.filename().string().c_str());
+                    event_bus_->publish(LogMessageEvent{
+                        LogMessageEvent::Level::Info,
+                        std::format("Loaded PLY file via drag-and-drop: {}", filepath.filename().string()),
+                        "GSViewer"});
                 }
 
                 // Only process the first PLY file if multiple files were dropped
@@ -160,9 +163,12 @@ namespace gs {
                     // Log the action
                     if (gui_manager_) {
                         gui_manager_->showScriptingConsole(true);
-                        gui_manager_->addConsoleLog("Info: Loaded %s dataset via drag-and-drop: %s",
-                                                    is_colmap_dataset ? "COLMAP" : "Transforms",
-                                                    filepath.filename().string().c_str());
+                        event_bus_->publish(LogMessageEvent{
+                            LogMessageEvent::Level::Info,
+                            std::format("Loaded {} dataset via drag-and-drop: {}",
+                                        is_colmap_dataset ? "COLMAP" : "Transforms",
+                                        filepath.filename().string()),
+                            "GSViewer"});
                     }
 
                     // Only process the first valid dataset if multiple were dropped
@@ -174,20 +180,45 @@ namespace gs {
     }
 
     GSViewer::GSViewer(std::string title, int width, int height)
-        : ViewerDetail(title, width, height),
-          trainer_(nullptr) {
+        : ViewerDetail(title, width, height) {
+
+        // Initialize event bus first
+        event_bus_ = std::make_shared<EventBus>();
 
         config_ = std::make_shared<RenderingConfig>();
         info_ = std::make_shared<TrainingInfo>();
         notifier_ = std::make_shared<ViewerNotifier>();
         crop_box_ = std::make_shared<RenderBoundingBox>();
 
-        scene_ = std::make_unique<Scene>();
+        // Create scene manager
+        scene_manager_ = std::make_unique<SceneManager>(event_bus_);
+
+        // Create scene and give it to scene manager
+        auto scene = std::make_unique<Scene>();
+        scene_manager_->setScene(std::move(scene));
+
+        // Create trainer manager
+        trainer_manager_ = std::make_unique<TrainerManager>();
+        trainer_manager_->setViewer(this);
+        trainer_manager_->setEventBus(event_bus_);
+
+        // Link trainer manager to scene manager
+        scene_manager_->setTrainerManager(trainer_manager_.get());
 
         setFrameRate(30);
 
-        // Create GUI manager
-        gui_manager_ = std::make_unique<gui::GuiManager>(this);
+        // Create GUI manager with event bus
+        gui_manager_ = std::make_unique<gui::GuiManager>(this, event_bus_);
+
+        // Create error handler
+        error_handler_ = std::make_unique<ErrorHandler>(event_bus_);
+
+        // Create memory monitor and start it
+        memory_monitor_ = std::make_unique<MemoryMonitor>(event_bus_);
+        memory_monitor_->start();
+
+        // Setup event handlers
+        setupEventHandlers();
 
         // Set up default script executor with basic functionality
         gui_manager_->setScriptExecutor([this](const std::string& command) -> std::string {
@@ -216,37 +247,69 @@ namespace gs {
             }
 
             if (command == "status") {
-                if (!trainer_) {
-                    return "No trainer available (viewer mode)";
+                // Use event query instead of direct access
+                if (event_bus_) {
+                    EventResponseHandler<QueryTrainerStateRequest, QueryTrainerStateResponse> handler(event_bus_);
+                    auto response = handler.querySync(QueryTrainerStateRequest{});
+
+                    if (response) {
+                        result << "Training Status:\n";
+                        result << "  State: " << [](const QueryTrainerStateResponse::State& state) -> const char* {
+                            switch (state) {
+                            case QueryTrainerStateResponse::State::Idle: return "Idle";
+                            case QueryTrainerStateResponse::State::Ready: return "Ready";
+                            case QueryTrainerStateResponse::State::Running: return "Running";
+                            case QueryTrainerStateResponse::State::Paused: return "Paused";
+                            case QueryTrainerStateResponse::State::Stopping: return "Stopping";
+                            case QueryTrainerStateResponse::State::Completed: return "Completed";
+                            case QueryTrainerStateResponse::State::Error: return "Error";
+                            default: return "Unknown";
+                            }
+                        }(response->state) << "\n";
+                        result << "  Current Iteration: " << response->current_iteration << "\n";
+                        result << "  Current Loss: " << std::fixed << std::setprecision(6) << response->current_loss;
+                        if (response->error_message) {
+                            result << "\n  Error: " << *response->error_message;
+                        }
+                    } else {
+                        result << "No trainer available (viewer mode)";
+                    }
                 }
-                result << "Training Status:\n";
-                result << "  Running: " << (trainer_->is_running() ? "Yes" : "No") << "\n";
-                result << "  Paused: " << (trainer_->is_paused() ? "Yes" : "No") << "\n";
-                result << "  Complete: " << (trainer_->is_training_complete() ? "Yes" : "No") << "\n";
-                result << "  Current Iteration: " << trainer_->get_current_iteration() << "\n";
-                result << "  Current Loss: " << std::fixed << std::setprecision(6) << trainer_->get_current_loss();
                 return result.str();
             }
 
             if (command == "model_info") {
-                if (!scene_->hasModel()) {
-                    return "No model available";
-                }
+                // First query scene state
+                EventResponseHandler<QuerySceneStateRequest, QuerySceneStateResponse> stateHandler(event_bus_);
+                auto stateResponse = stateHandler.querySync(QuerySceneStateRequest{});
 
-                result << "Model Information:\n";
+                if (stateResponse && stateResponse->has_model) {
+                    result << "Scene Information:\n";
+                    result << "  Type: " << [&]() {
+                        switch (stateResponse->type) {
+                        case QuerySceneStateResponse::SceneType::None: return "None";
+                        case QuerySceneStateResponse::SceneType::PLY: return "PLY";
+                        case QuerySceneStateResponse::SceneType::Dataset: return "Dataset";
+                        default: return "Unknown";
+                        }
+                    }() << "\n";
+                    result << "  Source: " << stateResponse->source_path.filename().string() << "\n";
+                    result << "  Number of Gaussians: " << stateResponse->num_gaussians << "\n";
 
-                const SplatData* model = scene_->getModel();
-                if (model) {
-                    result << "  Number of Gaussians: " << model->size() << "\n";
-                    result << "  Positions shape: [" << model->get_means().size(0) << ", " << model->get_means().size(1) << "]\n";
-                    result << "  Device: " << model->get_means().device() << "\n";
-                    result << "  Dtype: " << model->get_means().dtype() << "\n";
-                    result << "  Active SH degree: " << model->get_active_sh_degree() << "\n";
-                    result << "  Scene scale: " << model->get_scene_scale();
-
-                    if (scene_->getMode() == Scene::Mode::Viewing) {
-                        result << "\n  Mode: Viewer (no training)";
+                    if (stateResponse->is_training) {
+                        result << "  Training Iteration: " << stateResponse->training_iteration.value_or(0) << "\n";
                     }
+
+                    // Then query model details if needed
+                    EventResponseHandler<QueryModelInfoRequest, QueryModelInfoResponse> modelHandler(event_bus_);
+                    auto modelResponse = modelHandler.querySync(QueryModelInfoRequest{});
+
+                    if (modelResponse) {
+                        result << "  SH Degree: " << modelResponse->sh_degree << "\n";
+                        result << "  Scene Scale: " << modelResponse->scene_scale << "\n";
+                    }
+                } else {
+                    result << "No scene loaded";
                 }
 
                 return result.str();
@@ -271,7 +334,7 @@ namespace gs {
 
             // Handle tensor_info command
             if (command.substr(0, 11) == "tensor_info") {
-                if (!scene_->hasModel()) {
+                if (!scene_manager_->hasScene()) {
                     return "No model available";
                 }
 
@@ -285,7 +348,7 @@ namespace gs {
                 }
 
                 std::string tensor_result;
-                SplatData* model = scene_->getMutableModel();
+                SplatData* model = scene_manager_->getScene()->getMutableModel();
                 if (!model) {
                     tensor_result = "Model not available";
                     return tensor_result;
@@ -343,30 +406,18 @@ namespace gs {
 
         // Set up file selection callback
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
-            if (is_dataset) {
-                loadDataset(path);
-            } else {
-                loadPLYFile(path);
-            }
+            event_bus_->publish(LoadFileCommand{path, is_dataset});
         });
     }
 
     GSViewer::~GSViewer() {
-        // Stop training thread if running
-        if (training_thread_ && training_thread_->joinable()) {
-            std::cout << "Viewer closing - stopping training thread..." << std::endl;
-            training_thread_->request_stop();
-            training_thread_->join();
+        // Unsubscribe from all events
+        for (auto id : event_handler_ids_) {
+            // Note: Channels clean up automatically when EventBus is destroyed
         }
 
-        // If trainer is still running, request it to stop
-        if (trainer_ && trainer_->is_running()) {
-            std::cout << "Viewer closing - stopping training..." << std::endl;
-            trainer_->request_stop();
-
-            // Give the training thread a moment to acknowledge the stop request
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
+        // TrainerManager handles its own cleanup now
+        trainer_manager_.reset();
 
         // Cleanup GUI
         if (gui_manager_) {
@@ -376,16 +427,167 @@ namespace gs {
         std::cout << "GSViewer destroyed." << std::endl;
     }
 
-    void GSViewer::setTrainer(Trainer* trainer) {
-        trainer_ = trainer;
-        if (scene_) {
-            scene_->linkToTrainer(trainer);
+    void GSViewer::setupEventHandlers() {
+        // Subscribe to command events
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<StartTrainingCommand>(
+                [this](const StartTrainingCommand& cmd) { handleStartTrainingCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<PauseTrainingCommand>(
+                [this](const PauseTrainingCommand& cmd) { handlePauseTrainingCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<ResumeTrainingCommand>(
+                [this](const ResumeTrainingCommand& cmd) { handleResumeTrainingCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<StopTrainingCommand>(
+                [this](const StopTrainingCommand& cmd) { handleStopTrainingCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<SaveCheckpointCommand>(
+                [this](const SaveCheckpointCommand& cmd) { handleSaveCheckpointCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<LoadFileCommand>(
+                [this](const LoadFileCommand& cmd) { handleLoadFileCommand(cmd); }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<RenderingSettingsChangedEvent>(
+                [this](const RenderingSettingsChangedEvent& event) { handleRenderingSettingsChanged(event); }));
+
+        // Subscribe to new events
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<CameraMovedEvent>(
+                [this](const CameraMovedEvent& event) {
+                    // Could be used for auto-save camera positions, etc.
+                }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<EvaluationCompletedEvent>(
+                [this](const EvaluationCompletedEvent& event) {
+                    // Update UI with evaluation results
+                    if (gui_manager_) {
+                        gui_manager_->addConsoleLog(
+                            "Evaluation completed - PSNR: %.2f, SSIM: %.3f, LPIPS: %.3f",
+                            event.psnr, event.ssim, event.lpips);
+                    }
+                }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<MemoryUsageEvent>(
+                [this](const MemoryUsageEvent& event) {
+                    // Could update a memory usage display
+                    last_memory_usage_ = event;
+                }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<MemoryWarningEvent>(
+                [this](const MemoryWarningEvent& event) {
+                    if (gui_manager_) {
+                        gui_manager_->addConsoleLog(
+                            "WARNING: %s", event.message.c_str());
+                    }
+                }));
+
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<ErrorOccurredEvent>(
+                [this](const ErrorOccurredEvent& event) {
+                    if (gui_manager_) {
+                        const char* level = event.severity == ErrorOccurredEvent::Severity::Critical ? "CRITICAL" : event.severity == ErrorOccurredEvent::Severity::Error ? "ERROR"
+                                                                                                                                                                          : "WARNING";
+
+                        gui_manager_->addConsoleLog(
+                            "%s: %s", level, event.message.c_str());
+
+                        if (event.recovery_suggestion) {
+                            gui_manager_->addConsoleLog(
+                                "Suggestion: %s", event.recovery_suggestion->c_str());
+                        }
+                    }
+                }));
+
+        // Subscribe to training progress events
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<TrainingProgressEvent>(
+                [this](const TrainingProgressEvent& event) {
+                    // Update training info from event
+                    if (info_) {
+                        info_->updateProgress(event.iteration,
+                                              event.total_iterations); // Now using total_iterations from event
+                        info_->updateNumSplats(event.num_gaussians);
+                        info_->updateLoss(event.loss);
+                    }
+                }));
+
+        // Subscribe to trainer ready event
+        event_handler_ids_.push_back(
+            event_bus_->subscribe<TrainerReadyEvent>(
+                [this](const TrainerReadyEvent& event) {
+                    // Trainer is ready, signal it can start
+                    event_bus_->publish(TrainingReadyToStartEvent{});
+                }));
+    }
+
+    void GSViewer::handleStartTrainingCommand(const StartTrainingCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->startTraining();
         }
+    }
+
+    void GSViewer::handlePauseTrainingCommand(const PauseTrainingCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->pauseTraining();
+        }
+    }
+
+    void GSViewer::handleResumeTrainingCommand(const ResumeTrainingCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->resumeTraining();
+        }
+    }
+
+    void GSViewer::handleStopTrainingCommand(const StopTrainingCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->stopTraining();
+        }
+    }
+
+    void GSViewer::handleSaveCheckpointCommand(const SaveCheckpointCommand& cmd) {
+        if (trainer_manager_) {
+            trainer_manager_->requestSaveCheckpoint();
+        }
+    }
+
+    void GSViewer::handleLoadFileCommand(const LoadFileCommand& cmd) {
+        if (cmd.is_dataset) {
+            loadDataset(cmd.path);
+        } else {
+            loadPLYFile(cmd.path);
+        }
+    }
+
+    void GSViewer::handleRenderingSettingsChanged(const RenderingSettingsChangedEvent& event) {
+        if (event.fov) {
+            config_->fov = *event.fov;
+        }
+        if (event.scaling_modifier) {
+            config_->scaling_modifier = *event.scaling_modifier;
+        }
+        if (event.antialiasing) {
+            anti_aliasing_ = *event.antialiasing;
+        }
+    }
+
+    void GSViewer::setTrainer(Trainer* trainer) {
+        // This method is now deprecated - should not be used
+        std::cerr << "Warning: GSViewer::setTrainer is deprecated. Use loadDataset instead." << std::endl;
     }
 
     void GSViewer::setStandaloneModel(std::unique_ptr<SplatData> model) {
         if (scene_) {
-            scene_->setModel(std::move(model));
+            scene_->setStandaloneModel(std::move(model));
         }
     }
 
@@ -397,26 +599,15 @@ namespace gs {
         try {
             std::println("Loading PLY file: {}", path.string());
 
-            // Clear any existing data
-            clearCurrentData();
-
-            // Load the PLY file
-            auto splat_result = gs::load_ply(path);
-            if (!splat_result) {
-                gui_manager_->addConsoleLog("Error: Failed to load PLY: %s", splat_result.error().c_str());
-                return;
-            }
-
-            scene_->setModel(std::make_unique<SplatData>(std::move(*splat_result)));
+            scene_manager_->loadPLY(path);
             current_ply_path_ = path;
             current_mode_ = ViewerMode::PLYViewer;
 
-            gui_manager_->addConsoleLog("Info: Loaded PLY with %lld Gaussians from %s",
-                                        scene_->getStandaloneModel()->size(),
-                                        path.filename().string().c_str());
-
         } catch (const std::exception& e) {
-            gui_manager_->addConsoleLog("Error: Exception loading PLY: %s", e.what());
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Error,
+                std::format("Exception loading PLY: {}", e.what()),
+                "GSViewer"});
         }
     }
 
@@ -424,72 +615,20 @@ namespace gs {
         try {
             std::println("Loading dataset from: {}", path.string());
 
-            // Clear any existing data
-            clearCurrentData();
-
-            // Use the parameters that were passed to the viewer
-            param::TrainingParameters dataset_params = params_;
-            dataset_params.dataset.data_path = path; // Override with the selected path
-
-            // Setup training
-            auto setup_result = gs::setupTraining(dataset_params);
-            if (!setup_result) {
-                gui_manager_->addConsoleLog("Error: Failed to setup training: %s", setup_result.error().c_str());
-                return;
-            }
-
-            // Store the trainer (but don't take ownership yet)
-            auto trainer_ptr = setup_result->trainer.get();
-
-            // Link the trainer to this viewer
-            trainer_ptr->setViewer(this);
-
-            // Now take ownership
-            trainer_ = setup_result->trainer.release();
-
-            // Link scene to trainer
-            scene_->linkToTrainer(trainer_);
-
+            scene_manager_->loadDataset(path, params_);
             current_dataset_path_ = path;
             current_mode_ = ViewerMode::Training;
 
-            // Get dataset info
-            size_t num_images = setup_result->dataset->size().value();
-            size_t num_gaussians = trainer_->get_strategy().get_model().size();
-
-            gui_manager_->addConsoleLog("Info: Loaded dataset with %zu images and %zu initial Gaussians",
-                                        num_images, num_gaussians);
-            gui_manager_->addConsoleLog("Info: Ready to start training from %s",
-                                        path.filename().string().c_str());
-            gui_manager_->addConsoleLog("Info: Using parameters from command line/config");
-
         } catch (const std::exception& e) {
-            gui_manager_->addConsoleLog("Error: Exception loading dataset: %s", e.what());
+            event_bus_->publish(LogMessageEvent{
+                LogMessageEvent::Level::Error,
+                std::format("Exception loading dataset: {}", e.what()),
+                "GSViewer"});
         }
     }
 
     void GSViewer::clearCurrentData() {
-        // Stop any ongoing training thread
-        if (training_thread_ && training_thread_->joinable()) {
-            std::println("Stopping training thread...");
-            training_thread_->request_stop();
-            training_thread_->join();
-            training_thread_.reset();
-        }
-
-        // Stop any ongoing training via trainer
-        if (trainer_ && trainer_->is_running()) {
-            trainer_->request_stop();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-
-        // Clear scene
-        scene_->clearModel();
-
-        // Clear data
-        trainer_ = nullptr;
-
-        // Reset state
+        scene_manager_->clearScene();
         current_mode_ = ViewerMode::Empty;
         current_ply_path_.clear();
         current_dataset_path_.clear();
@@ -504,27 +643,8 @@ namespace gs {
     }
 
     void GSViewer::startTraining() {
-        if (!trainer_ || training_thread_) {
-            return;
-        }
-
-        // Set the ready flag for trainer to start
-        if (notifier_) {
-            notifier_->ready = true;
-        }
-
-        // Then start training in a separate thread
-        training_thread_ = std::make_unique<std::jthread>(
-            [trainer_ptr = trainer_](std::stop_token stop_token) {
-                std::println("Training thread started");
-                auto train_result = trainer_ptr->train(stop_token);
-                if (!train_result) {
-                    std::println(stderr, "Training error: {}", train_result.error());
-                }
-                std::println("Training thread finished");
-            });
-
-        std::println("Training thread launched");
+        // This method is now deprecated - use event bus
+        event_bus_->publish(StartTrainingCommand{});
     }
 
     bool GSViewer::isGuiActive() const {
@@ -532,12 +652,17 @@ namespace gs {
     }
 
     GSViewer::ViewerMode GSViewer::getCurrentMode() const {
-        switch (scene_->getMode()) {
-        case Scene::Mode::Empty:
+        if (!scene_manager_)
             return ViewerMode::Empty;
-        case Scene::Mode::Viewing:
+
+        auto state = scene_manager_->getCurrentState();
+
+        switch (state.type) {
+        case SceneManager::SceneType::None:
+            return ViewerMode::Empty;
+        case SceneManager::SceneType::PLY:
             return ViewerMode::PLYViewer;
-        case Scene::Mode::Training:
+        case SceneManager::SceneType::Dataset:
             return ViewerMode::Training;
         default:
             return ViewerMode::Empty;
@@ -545,8 +670,8 @@ namespace gs {
     }
 
     void GSViewer::drawFrame() {
-        // Only render if we have a model to render
-        if (!scene_->hasModel()) {
+        // Only render if we have a scene
+        if (!scene_manager_->hasScene()) {
             return;
         }
 
@@ -567,11 +692,12 @@ namespace gs {
 
         RenderingPipeline::RenderResult result;
 
-        if (trainer_ && trainer_->is_running()) {
-            std::shared_lock<std::shared_mutex> lock(trainer_->getRenderMutex());
-            result = scene_->render(request);
+        auto trainer = trainer_manager_->getTrainer();
+        if (trainer && trainer->is_running()) {
+            std::shared_lock<std::shared_mutex> lock(trainer->getRenderMutex());
+            result = scene_manager_->render(request);
         } else {
-            result = scene_->render(request);
+            result = scene_manager_->render(request);
         }
 
         if (result.valid) {
@@ -605,7 +731,8 @@ namespace gs {
             gui_manager_->init();
             gui_initialized = true;
 
-            // Set up input handlers after GUI is initialized
+            // Set event bus for camera controller
+            camera_controller_->setEventBus(event_bus_);
 
             // GUI gets first priority
             input_handler_->addMouseButtonHandler(
