@@ -1,9 +1,8 @@
 #pragma once
 
-#include "core/parameters.hpp"
-#include "core/splat_data.hpp"
 #include "core/trainer.hpp"
-
+#include "visualizer/event_bus.hpp"
+#include "visualizer/events.hpp"
 #include "visualizer/render_bounding_box.hpp"
 #include "visualizer/viewer_notifier.hpp"
 
@@ -12,7 +11,6 @@
 #include <functional>
 #include <imgui.h>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -93,16 +91,13 @@ namespace gs {
             void render();
             bool show_crop_box_ = false;
             bool use_crop_box_ = false;
-            // Add this method declaration
-            void renderBoundingBoxControls();
-            // Bounding box visualization
             std::shared_ptr<RenderBoundingBox> crop_box_;
         };
 
         // Main GUI manager
         class GuiManager {
         public:
-            GuiManager(GSViewer* viewer);
+            GuiManager(GSViewer* viewer, std::shared_ptr<EventBus> event_bus);
             ~GuiManager();
 
             void init();
@@ -126,6 +121,20 @@ namespace gs {
             // Console access
             void addConsoleLog(const char* fmt, ...);
 
+            // Get viewer for internal use
+            GSViewer* viewer_;
+
+            // Helper to publish events
+            template <typename EventType>
+            void publish(const EventType& event) {
+                if (event_bus_) {
+                    event_bus_->publish(event);
+                }
+            }
+
+            // Get event bus for internal components
+            std::shared_ptr<EventBus> getEventBus() const { return event_bus_; }
+
             bool showCropBox() const;
             bool useCropBox() const;
 
@@ -135,7 +144,20 @@ namespace gs {
             void renderRenderingSettings();
             void renderProgressInfo();
 
-            GSViewer* viewer_;
+            // Event system
+            std::shared_ptr<EventBus> event_bus_;
+            std::vector<size_t> event_handler_ids_;
+
+            // Event handlers
+            void setupEventHandlers();
+            void handleSceneLoaded(const SceneLoadedEvent& event);
+            void handleSceneCleared(const SceneClearedEvent& event);
+            void handleTrainingStarted(const TrainingStartedEvent& event);
+            void handleTrainingProgress(const TrainingProgressEvent& event);
+            void handleTrainingPaused(const TrainingPausedEvent& event);
+            void handleTrainingResumed(const TrainingResumedEvent& event);
+            void handleTrainingCompleted(const TrainingCompletedEvent& event);
+            void handleLogMessage(const LogMessageEvent& event);
 
             // Components
             std::unique_ptr<ScriptingConsole> scripting_console_;
@@ -143,13 +165,13 @@ namespace gs {
             std::unique_ptr<CameraControlsWindow> camera_controls_;
             std::unique_ptr<TrainingControlsPanel> training_controls_;
             std::unique_ptr<CropBoxPanel> crop_box_panel_;
+
             // Window states
             bool show_main_panel_ = true;
             bool show_file_browser_ = false;
             bool show_scripting_console_ = false;
             bool show_camera_controls_ = false;
             bool any_window_active_ = false;
-            bool show_crop_box_panel_ = true;
 
             // ImGui settings
             ImGuiWindowFlags window_flags_ = 0;

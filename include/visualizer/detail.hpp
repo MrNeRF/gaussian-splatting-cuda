@@ -1,21 +1,23 @@
 #pragma once
 
+#include "core/error_handler.hpp"
 #include "core/image_io.hpp"
-#include "core/trainer.hpp"
+#include "core/memory_monitor.hpp"
 #include "visualizer/camera_controller.hpp"
+#include "visualizer/event_bus.hpp"
+#include "visualizer/events.hpp"
 #include "visualizer/input_handler.hpp"
 #include "visualizer/render_bounding_box.hpp"
 #include "visualizer/renderer.hpp"
 #include "visualizer/scene.hpp"
+#include "visualizer/scene_manager.hpp"
+#include "visualizer/training_manager.hpp"
 #include "visualizer/viewer_notifier.hpp"
 #include "visualizer/window_manager.hpp"
 #include <chrono>
 #include <deque>
-#include <functional>
 #include <memory>
 #include <string>
-#include <thread>
-#include <torch/torch.h>
 
 using uchar = unsigned char;
 
@@ -25,6 +27,7 @@ namespace gs {
     namespace gui {
         class GuiManager;
     }
+    class StandaloneModelProvider;
 
     class ViewerDetail {
 
@@ -145,23 +148,45 @@ namespace gs {
 
         // Getters for GUI
         ViewerMode getCurrentMode() const;
-        Trainer* getTrainer() const { return scene_->getTrainer(); }
-        SplatData* getStandaloneModel() const { return scene_->getStandaloneModel(); }
+        Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
         std::shared_ptr<TrainingInfo> getTrainingInfo() const { return info_; }
         std::shared_ptr<RenderingConfig> getRenderingConfig() const { return config_; }
         std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }
         const std::filesystem::path& getCurrentPLYPath() const { return current_ply_path_; }
         const std::filesystem::path& getCurrentDatasetPath() const { return current_dataset_path_; }
+        TrainerManager* getTrainerManager() { return trainer_manager_.get(); }
 
-        // Training control
+        // Add getter for crop box
+        std::shared_ptr<RenderBoundingBox> getCropBox() const { return crop_box_; }
+
+        // Training control (delegates to TrainerManager)
         void startTraining();
 
         // GUI access for static callbacks
         bool isGuiActive() const;
 
+        // Event bus access for components
+        std::shared_ptr<EventBus> getEventBus() const { return event_bus_; }
+
     private:
         // Input handlers
         bool handleFileDrop(const InputHandler::FileDropEvent& event);
+
+        // Event system
+        std::shared_ptr<EventBus> event_bus_;
+        std::unique_ptr<SceneManager> scene_manager_;
+        // Event handler IDs for cleanup
+        std::vector<size_t> event_handler_ids_;
+
+        // Event handlers
+        void setupEventHandlers();
+        void handleStartTrainingCommand(const StartTrainingCommand& cmd);
+        void handlePauseTrainingCommand(const PauseTrainingCommand& cmd);
+        void handleResumeTrainingCommand(const ResumeTrainingCommand& cmd);
+        void handleStopTrainingCommand(const StopTrainingCommand& cmd);
+        void handleSaveCheckpointCommand(const SaveCheckpointCommand& cmd);
+        void handleLoadFileCommand(const LoadFileCommand& cmd);
+        void handleRenderingSettingsChanged(const RenderingSettingsChangedEvent& event);
 
     public:
         std::shared_ptr<TrainingInfo> info_;
@@ -170,8 +195,6 @@ namespace gs {
 
         std::unique_ptr<Scene> scene_;
         std::shared_ptr<RenderingConfig> config_;
-
-        Trainer* trainer_;
 
         bool anti_aliasing_ = false;
 
@@ -184,14 +207,21 @@ namespace gs {
         std::filesystem::path current_ply_path_;
         std::filesystem::path current_dataset_path_;
 
-        // Training thread
-        std::unique_ptr<std::jthread> training_thread_;
+        // Training management
+        std::unique_ptr<TrainerManager> trainer_manager_;
 
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
         friend class gui::GuiManager; // Allow GUI manager to access private members
 
     private:
+        // Error handling and monitoring
+        std::unique_ptr<ErrorHandler> error_handler_;
+        std::unique_ptr<MemoryMonitor> memory_monitor_;
+
+        // Cache for last memory usage
+        MemoryUsageEvent last_memory_usage_;
+
         // Bounding box visualization
         std::shared_ptr<RenderBoundingBox> crop_box_;
     };
