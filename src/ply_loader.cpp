@@ -5,6 +5,7 @@
 #include <cstring>
 #include <format>
 #include <fstream>
+#include <mutex>
 #include <print>
 #include <ranges>
 #include <span>
@@ -44,6 +45,12 @@ namespace gs {
         constexpr float SCENE_SCALE_FACTOR = 0.5f;
         constexpr int SH_DEGREE_3_REST_COEFFS = 15;
         constexpr int SH_DEGREE_OFFSET = 1;
+
+        // Block sizes for parallel processing
+        constexpr size_t BLOCK_SIZE_SMALL = 1024;
+        constexpr size_t BLOCK_SIZE_LARGE = 2048;
+        constexpr size_t PLY_MIN_SIZE = 10;
+        constexpr size_t FILE_SIZE_THRESHOLD_MB = 50;
 
         using namespace std::string_view_literals;
         constexpr auto VERTEX_ELEMENT = "vertex"sv;
@@ -137,7 +144,7 @@ namespace gs {
                 return false;
 
             // Prefetching based on file size
-            if (size > 50 * 1024 * 1024) { // Only for files > 50MB
+            if (size > ply_constants::FILE_SIZE_THRESHOLD_MB * 1024 * 1024) { // Only for files > 50MB
                 if (madvise(data, size, MADV_SEQUENTIAL) == 0) {
                     std::println("Applied sequential access optimization");
                 }
@@ -156,7 +163,7 @@ namespace gs {
     parse_header(const char* data, size_t file_size) {
 
         // Check for PLY magic with both Unix and Windows line endings
-        if (file_size < 10) {
+        if (file_size < ply_constants::PLY_MIN_SIZE) {
             return std::unexpected("File too small to be valid PLY");
         }
 
@@ -235,7 +242,8 @@ namespace gs {
                     case 'y': layout.pos_y_offset = layout.vertex_stride; break;
                     case 'z': layout.pos_z_offset = layout.vertex_stride; break;
                     default:
-                        return std::unexpected(std::format("Unknown property '{}' in PLY header", std::string(prop_name, name_len)));
+                        return std::unexpected(std::format("Unknown property '{}' in PLY header",
+                                                           std::string_view(prop_name, name_len)));
                     }
                 } else if (name_len == 7 && std::strncmp(prop_name, "opacity", 7) == 0) {
                     layout.opacity_offset = layout.vertex_stride;
@@ -291,22 +299,27 @@ namespace gs {
         std::println("Position extraction using TBB + SIMD for {} Gaussians", count);
 
 #ifdef HAS_AVX2_SUPPORT
-        // Check AVX2 support once
-        static bool has_avx2 = []() {
+        // Thread-safe AVX2 detection using std::once_flag
+        static std::once_flag avx2_flag;
+        static bool has_avx2 = false;
+
+        std::call_once(avx2_flag, []() {
 #ifdef _WIN32
             int cpuInfo[4];
             __cpuid(cpuInfo, 7);
-            return (cpuInfo[1] & (1 << 5)) != 0;
+            has_avx2 = (cpuInfo[1] & (1 << 5)) != 0;
+#elif defined(__GNUC__) || defined(__clang__)
+                has_avx2 = __builtin_cpu_supports("avx2");
 #else
-            return __builtin_cpu_supports("avx2");
+                has_avx2 = false; // Fallback for other compilers
 #endif
-        }();
+        });
 
         if (has_avx2) {
             std::println("Using AVX2 SIMD acceleration");
 
             // TBB parallel SIMD processing with larger blocks to reduce overhead
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, count, 2048), // 2KB blocks
+            tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_LARGE),
                               [&](const tbb::blocked_range<size_t>& range) {
                                   size_t start = range.begin();
                                   size_t end = range.end();
@@ -320,8 +333,12 @@ namespace gs {
 
                                   // Process 8 vertices at a time with SIMD
                                   for (size_t i = start; i < simd_end; i += 8) {
-                                      // Prefetch next cache line
-                                      __builtin_prefetch(vertex_data + (i + 16) * stride, 0, 1);
+                    // Portable prefetch
+#ifdef _MSC_VER
+                                      _mm_prefetch((const char*)(vertex_data + (i + 16) * stride), _MM_HINT_T0);
+#elif defined(__GNUC__) || defined(__clang__)
+                        __builtin_prefetch(vertex_data + (i + 16) * stride, 0, 1);
+#endif
 
                                       // Load 8 x-coordinates
                                       __m256 x_vals = _mm256_set_ps(
@@ -382,7 +399,7 @@ namespace gs {
             std::println("Using optimized scalar processing");
 
             // TBB parallel scalar processing
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, count, 2048),
+            tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_LARGE),
                               [&](const tbb::blocked_range<size_t>& range) {
                                   for (size_t i = range.begin(); i < range.end(); ++i) {
                                       output[i * 3 + 0] = *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_x_offset);
@@ -407,7 +424,7 @@ namespace gs {
         auto data_ptr = output.data_ptr<float>();
 
         // Extract coefficients matching the original's stack -> reshape -> transpose pattern
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, count, 1024),
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_SMALL),
                           [&](const tbb::blocked_range<size_t>& range) {
                               for (size_t i = range.begin(); i < range.end(); ++i) {
                                   // For each vertex, read f_dc_0, f_dc_1, ..., f_dc_(coeff_count-1)
@@ -435,7 +452,7 @@ namespace gs {
         const size_t stride = layout.vertex_stride;
 
         // Parallel extraction
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, count, 2048),
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_LARGE),
                           [&](const tbb::blocked_range<size_t>& range) {
                               for (size_t i = range.begin(); i < range.end(); ++i) {
                                   output[i] = *reinterpret_cast<const float*>(vertex_data + i * stride + property_offset);
@@ -516,7 +533,7 @@ namespace gs {
 
                 // Stack into final tensor
                 auto scaling_ptr = scaling.data_ptr<float>();
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, layout.vertex_count, 1024),
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, layout.vertex_count, ply_constants::BLOCK_SIZE_SMALL),
                                   [&](const tbb::blocked_range<size_t>& range) {
                                       for (size_t i = range.begin(); i < range.end(); ++i) {
                                           scaling_ptr[i * 3 + 0] = s0[i];
@@ -540,7 +557,7 @@ namespace gs {
 
                 // Stack into final tensor
                 auto rotation_ptr = rotation.data_ptr<float>();
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, layout.vertex_count, 1024),
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, layout.vertex_count, ply_constants::BLOCK_SIZE_SMALL),
                                   [&](const tbb::blocked_range<size_t>& range) {
                                       for (size_t i = range.begin(); i < range.end(); ++i) {
                                           rotation_ptr[i * 4 + 0] = r0[i];
