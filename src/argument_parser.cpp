@@ -170,6 +170,8 @@ namespace {
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
+                                        use_attention_mask_flag = bool(use_attention_mask),
+                                        preload_to_ram_flag = bool(preload_to_ram),
                                         enable_eval_flag = bool(enable_eval),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
@@ -202,7 +204,9 @@ namespace {
                 setVal(min_opacity_val, opt.min_opacity);
                 setVal(render_mode_val, opt.render_mode);
 
+                setFlag(use_attention_mask_flag, opt.use_attention_mask);
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
+                setFlag(preload_to_ram_flag, opt.preload_to_ram);
                 setFlag(enable_eval_flag, opt.enable_eval);
                 setFlag(headless_flag, opt.headless);
                 setFlag(antialiasing_flag, opt.antialiasing);

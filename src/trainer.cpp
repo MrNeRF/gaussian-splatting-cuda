@@ -430,7 +430,7 @@ namespace gs {
             }
 
             // Compute loss using the factored-out function
-            torch::Tensor loss_result;
+            std::expected<torch::Tensor, std::string> loss_result;
             if (!weights.defined() || params_.optimization.iterations * 0.1 > iter) {
                 loss_result = compute_photometric_loss( r_output,
                                                         gt_image,
@@ -587,11 +587,11 @@ namespace gs {
 
                     auto camera_with_image = batch[0].data;
                     Camera* cam = camera_with_image.camera;
-                    torch::Tensor gt_image = std::move(camera_with_image.image);
+                    torch::Tensor gt_image = std::move(camera_with_image.imageTensor);
 
                      std::expected<Trainer::StepResult, std::string> step_result;
                     if (!params_.optimization.use_attention_mask || !camera_with_image.attentionMaskTensor.defined()) {
-                        step_result = train_step(iter, cam, gt_image, torch::Tensor() render_mode, 0.0f, stop_token);
+                        step_result = train_step(iter, cam, gt_image, torch::Tensor(), render_mode, 0.0f, stop_token);
                     } else {
                         torch::Tensor attention_image = std::move(camera_with_image.attentionMaskTensor);
                         float out_of_mask_penalty = 1.0f;
