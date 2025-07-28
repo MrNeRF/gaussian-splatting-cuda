@@ -1,6 +1,7 @@
 #include "visualizer/gui_manager.hpp"
 #include "config.h"
 #include "visualizer/detail.hpp"
+#include "visualizer/event_response_handler.hpp"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <cstdarg>
@@ -532,20 +533,47 @@ namespace gs {
             ImGui::Text("Training Control");
             ImGui::Separator();
 
-            bool is_training = trainer->is_running();
-            bool is_paused = trainer->is_paused();
-            bool is_complete = trainer->is_training_complete();
-            bool has_stopped = trainer->has_stopped();
+            // Get trainer manager from viewer
+            auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
+            if (!gui_manager || !gui_manager->viewer_)
+                return;
+
+            auto viewer = gui_manager->viewer_;
+            if (!viewer || !viewer->getTrainerManager())
+                return;
+
+            auto trainer_manager = viewer->getTrainerManager();
+            auto training_state = trainer_manager->getState();
 
             // Show appropriate controls based on state
-            if (!state.training_started && !is_training) {
+            switch (training_state) {
+            case TrainerManager::State::Idle:
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
+                break;
+
+            case TrainerManager::State::Ready:
                 renderStartButton(state);
-            } else if (is_complete || has_stopped) {
-                // Training finished - show status
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f),
-                                   has_stopped ? "Training Stopped!" : "Training Complete!");
-            } else {
+                break;
+
+            case TrainerManager::State::Running:
+            case TrainerManager::State::Paused:
                 renderRunningControls(trainer, state);
+                break;
+
+            case TrainerManager::State::Stopping:
+                ImGui::TextColored(ImVec4(0.7f, 0.5f, 0.1f, 1.0f), "Stopping training...");
+                break;
+
+            case TrainerManager::State::Completed:
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
+                break;
+
+            case TrainerManager::State::Error:
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Training Error!");
+                if (!trainer_manager->getLastError().empty()) {
+                    ImGui::TextWrapped("%s", trainer_manager->getLastError().c_str());
+                }
+                break;
             }
 
             // Show save progress feedback
@@ -566,34 +594,47 @@ namespace gs {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             if (ImGui::Button("Start Training", ImVec2(-1, 0))) {
-                state.manual_start_triggered = true;
+                // Use event bus from parent GuiManager
+                auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
+                if (gui_manager) {
+                    gui_manager->publish(StartTrainingCommand{});
+                }
                 state.training_started = true;
             }
             ImGui::PopStyleColor(2);
         }
 
         void TrainingControlsPanel::renderRunningControls(Trainer* trainer, State& state) {
-            bool is_paused = trainer->is_paused();
+            auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
+            if (!gui_manager || !gui_manager->viewer_)
+                return;
+
+            auto viewer = gui_manager->viewer_;
+            if (!viewer || !viewer->getTrainerManager())
+                return;
+
+            auto trainer_manager = viewer->getTrainerManager();
+            bool is_paused = trainer_manager->isPaused();
 
             if (is_paused) {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
                 if (ImGui::Button("Resume", ImVec2(-1, 0))) {
-                    trainer->request_resume();
+                    gui_manager->publish(ResumeTrainingCommand{});
                 }
                 ImGui::PopStyleColor(2);
 
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
                 if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
-                    trainer->request_stop();
+                    gui_manager->publish(StopTrainingCommand{});
                 }
                 ImGui::PopStyleColor(2);
             } else {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
                 if (ImGui::Button("Pause", ImVec2(-1, 0))) {
-                    trainer->request_pause();
+                    gui_manager->publish(PauseTrainingCommand{});
                 }
                 ImGui::PopStyleColor(2);
             }
@@ -601,7 +642,7 @@ namespace gs {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
             if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
-                trainer->request_save();
+                gui_manager->publish(SaveCheckpointCommand{});
                 state.save_in_progress = true;
                 state.save_start_time = std::chrono::steady_clock::now();
             }
@@ -610,31 +651,274 @@ namespace gs {
 
         void TrainingControlsPanel::renderStatus(Trainer* trainer, State& state) {
             ImGui::Separator();
-            int current_iter = trainer->get_current_iteration();
-            float current_loss = trainer->get_current_loss();
-            bool is_training = trainer->is_running();
-            bool is_paused = trainer->is_paused();
-            bool is_complete = trainer->is_training_complete();
 
-            ImGui::Text("Status: %s", is_complete ? "Complete" : (is_paused ? "Paused" : (is_training ? "Training" : "Ready")));
-            ImGui::Text("Iteration: %d", current_iter);
-            ImGui::Text("Loss: %.6f", current_loss);
+            auto gui_manager = static_cast<GuiManager*>(ImGui::GetIO().UserData);
+            if (!gui_manager)
+                return;
+
+            auto event_bus = gui_manager->getEventBus();
+            if (!event_bus)
+                return;
+
+            // Query trainer state via events
+            EventResponseHandler<QueryTrainerStateRequest, QueryTrainerStateResponse> handler(event_bus);
+            auto response = handler.querySync(QueryTrainerStateRequest{});
+
+            if (response) {
+                const char* status_text = "Unknown";
+                switch (response->state) {
+                case QueryTrainerStateResponse::State::Idle: status_text = "Idle"; break;
+                case QueryTrainerStateResponse::State::Ready: status_text = "Ready"; break;
+                case QueryTrainerStateResponse::State::Running: status_text = "Training"; break;
+                case QueryTrainerStateResponse::State::Paused: status_text = "Paused"; break;
+                case QueryTrainerStateResponse::State::Stopping: status_text = "Stopping"; break;
+                case QueryTrainerStateResponse::State::Completed: status_text = "Complete"; break;
+                case QueryTrainerStateResponse::State::Error: status_text = "Error"; break;
+                }
+
+                ImGui::Text("Status: %s", status_text);
+                ImGui::Text("Iteration: %d", response->current_iteration);
+                ImGui::Text("Loss: %.6f", response->current_loss);
+
+                if (response->error_message) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Error: %s", response->error_message->c_str());
+                }
+            }
+        }
+
+        // ============================================================================
+        // CropBoxPanel Implementation
+        // ============================================================================
+
+        void CropBoxPanel::render() {
+            if (ImGui::CollapsingHeader("Clip Box")) {
+                ImGui::Checkbox("Show Clip Box", &show_crop_box_);
+                ImGui::Checkbox("Use Clip Box", &use_crop_box_);
+
+                if (show_crop_box_ && crop_box_) {
+                    if (!crop_box_->isInitialized()) {
+                        return; // the manager must init crop box
+                    }
+
+                    // Color picker
+                    static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
+                    if (ImGui::ColorEdit3("Box Color", bbox_color)) {
+                        crop_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
+                    }
+
+                    // Line width
+                    static float line_width = 2.0f;
+                    float available_width = ImGui::GetContentRegionAvail().x;
+                    float button_width = 120.0f;
+                    float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
+
+                    ImGui::SetNextItemWidth(slider_width);
+                    if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
+                        crop_box_->setLineWidth(line_width);
+                    }
+
+                    // Reset button
+                    if (ImGui::Button("Reset to Default")) {
+                        crop_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+                    }
+
+                    // Manual bounds adjustment
+                    if (ImGui::TreeNode("Manual Bounds")) {
+                        glm::vec3 current_min = crop_box_->getMinBounds();
+                        glm::vec3 current_max = crop_box_->getMaxBounds();
+
+                        float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
+                        float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
+
+                        bool bounds_changed = false;
+
+                        const float min_range = -8.0f;
+                        const float max_range = 8.0f;
+
+                        // Min Bounds
+                        ImGui::Text("Min Bounds:");
+                        float min_bounds_x = min_bounds[0];
+                        bounds_changed |= ImGui::SliderFloat("Min X", &min_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        min_bounds_x = std::min(min_bounds_x, max_bounds[0]);
+                        min_bounds[0] = min_bounds_x;
+
+                        float min_bounds_y = min_bounds[1];
+                        bounds_changed |= ImGui::SliderFloat("Min Y", &min_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        min_bounds_y = std::min(min_bounds_y, max_bounds[1]);
+                        min_bounds[1] = min_bounds_y;
+
+                        float min_bounds_z = min_bounds[2];
+                        bounds_changed |= ImGui::SliderFloat("Min Z", &min_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        min_bounds_z = std::min(min_bounds_z, max_bounds[2]);
+                        min_bounds[2] = min_bounds_z;
+
+                        // Max Bounds
+                        ImGui::Text("Max Bounds:");
+                        float max_bounds_x = max_bounds[0];
+                        bounds_changed |= ImGui::SliderFloat("Max X", &max_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        max_bounds_x = std::max(max_bounds_x, min_bounds[0]);
+                        max_bounds[0] = max_bounds_x;
+
+                        float max_bounds_y = max_bounds[1];
+                        bounds_changed |= ImGui::SliderFloat("Max Y", &max_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        max_bounds_y = std::max(max_bounds_y, min_bounds[1]);
+                        max_bounds[1] = max_bounds_y;
+
+                        float max_bounds_z = max_bounds[2];
+                        bounds_changed |= ImGui::SliderFloat("Max Z", &max_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        max_bounds_z = std::max(max_bounds_z, min_bounds[2]);
+                        max_bounds[2] = max_bounds_z;
+
+                        if (bounds_changed) {
+                            crop_box_->setBounds(
+                                glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
+                                glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
+                        }
+
+                        // Display current info
+                        glm::vec3 center = crop_box_->getCenter();
+                        glm::vec3 size = crop_box_->getSize();
+
+                        ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
+                        ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
+
+                        ImGui::TreePop();
+                    }
+                }
+            }
         }
 
         // ============================================================================
         // GuiManager Implementation
         // ============================================================================
 
-        GuiManager::GuiManager(GSViewer* viewer) : viewer_(viewer) {
+        GuiManager::GuiManager(GSViewer* viewer, std::shared_ptr<EventBus> event_bus)
+            : viewer_(viewer),
+              event_bus_(event_bus) {
+
             scripting_console_ = std::make_unique<ScriptingConsole>();
             file_browser_ = std::make_unique<FileBrowser>();
             camera_controls_ = std::make_unique<CameraControlsWindow>();
             training_controls_ = std::make_unique<TrainingControlsPanel>();
             crop_box_panel_ = std::make_unique<CropBoxPanel>();
-            crop_box_panel_->crop_box_ = viewer->crop_box_;
+
+            // Link crop box from viewer to panel
+            if (viewer_) {
+                crop_box_panel_->crop_box_ = viewer_->getCropBox();
+            }
+
+            // Setup event handlers
+            setupEventHandlers();
         }
 
-        GuiManager::~GuiManager() = default;
+        GuiManager::~GuiManager() {
+            // Event handlers are automatically cleaned up when event bus is destroyed
+        }
+
+        void GuiManager::setupEventHandlers() {
+            // Subscribe to events
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<SceneLoadedEvent>(
+                    [this](const SceneLoadedEvent& e) { handleSceneLoaded(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<SceneClearedEvent>(
+                    [this](const SceneClearedEvent& e) { handleSceneCleared(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingStartedEvent>(
+                    [this](const TrainingStartedEvent& e) { handleTrainingStarted(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingProgressEvent>(
+                    [this](const TrainingProgressEvent& e) { handleTrainingProgress(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingPausedEvent>(
+                    [this](const TrainingPausedEvent& e) { handleTrainingPaused(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingResumedEvent>(
+                    [this](const TrainingResumedEvent& e) { handleTrainingResumed(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<TrainingCompletedEvent>(
+                    [this](const TrainingCompletedEvent& e) { handleTrainingCompleted(e); }));
+
+            event_handler_ids_.push_back(
+                event_bus_->subscribe<LogMessageEvent>(
+                    [this](const LogMessageEvent& e) { handleLogMessage(e); }));
+        }
+
+        void GuiManager::handleSceneLoaded(const SceneLoadedEvent& event) {
+            show_scripting_console_ = true;
+
+            const char* type_str = (event.source_type == SceneLoadedEvent::SourceType::PLY)
+                                       ? "PLY file"
+                                       : "dataset";
+
+            scripting_console_->addLog("Info: Loaded %s with %zu Gaussians from %s",
+                                       type_str,
+                                       event.num_gaussians,
+                                       event.source_path.filename().string().c_str());
+        }
+
+        void GuiManager::handleSceneCleared(const SceneClearedEvent& event) {
+            // Update UI state if needed
+        }
+
+        void GuiManager::handleTrainingStarted(const TrainingStartedEvent& event) {
+            training_state_.training_started = true;
+            scripting_console_->addLog("Info: Training started (%d iterations)", event.total_iterations);
+        }
+
+        void GuiManager::handleTrainingProgress(const TrainingProgressEvent& event) {
+            // Update progress display with throttling
+            if (viewer_->info_) {
+                viewer_->info_->updateProgress(event.iteration, event.total_iterations);
+                viewer_->info_->updateNumSplats(event.num_gaussians);
+                viewer_->info_->updateLoss(event.loss);
+            }
+        }
+
+        void GuiManager::handleTrainingPaused(const TrainingPausedEvent& event) {
+            scripting_console_->addLog("Info: Training paused at iteration %d", event.iteration);
+        }
+
+        void GuiManager::handleTrainingResumed(const TrainingResumedEvent& event) {
+            scripting_console_->addLog("Info: Training resumed at iteration %d", event.iteration);
+        }
+
+        void GuiManager::handleTrainingCompleted(const TrainingCompletedEvent& event) {
+            if (event.success) {
+                scripting_console_->addLog("Info: Training completed successfully at iteration %d",
+                                           event.final_iteration);
+            } else {
+                scripting_console_->addLog("Error: Training failed at iteration %d: %s",
+                                           event.final_iteration,
+                                           event.error_message.value_or("Unknown error").c_str());
+            }
+            training_state_.training_started = false;
+        }
+
+        void GuiManager::handleLogMessage(const LogMessageEvent& event) {
+            const char* level_str = "";
+            switch (event.level) {
+            case LogMessageEvent::Level::Info: level_str = "Info"; break;
+            case LogMessageEvent::Level::Warning: level_str = "Warning"; break;
+            case LogMessageEvent::Level::Error: level_str = "Error"; break;
+            case LogMessageEvent::Level::Debug: level_str = "Debug"; break;
+            }
+
+            if (event.source) {
+                scripting_console_->addLog("%s [%s]: %s",
+                                           level_str,
+                                           event.source->c_str(),
+                                           event.message.c_str());
+            } else {
+                scripting_console_->addLog("%s: %s", level_str, event.message.c_str());
+            }
+        }
 
         void GuiManager::init() {
             // Setup Dear ImGui context
@@ -645,6 +929,9 @@ namespace gs {
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
             io.ConfigWindowsMoveFromTitleBarOnly = true;
             ImGui::StyleColorsLight();
+
+            // Store GUI manager pointer in IO for access in callbacks
+            io.UserData = this;
 
             // Setup Platform/Renderer backends
             const char* glsl_version = "#version 430";
@@ -729,23 +1016,31 @@ namespace gs {
             renderModeStatus();
 
             // Mode-specific controls
-            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainer()) {
+            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainerManager()->hasTrainer()) {
                 training_controls_->render(viewer_->getTrainer(), training_state_, viewer_->getNotifier());
 
                 // Handle the start trigger
                 if (training_state_.manual_start_triggered) {
-                    viewer_->startTraining();
+                    // Use event instead of direct call
+                    publish(StartTrainingCommand{});
                     training_state_.manual_start_triggered = false;
                 }
-            } else if (viewer_->getCurrentMode() == GSViewer::ViewerMode::PLYViewer && viewer_->getStandaloneModel()) {
+            } else if (viewer_->getCurrentMode() == GSViewer::ViewerMode::PLYViewer) {
                 // PLY viewer info
                 ImGui::Separator();
                 ImGui::Text("Model Information");
                 ImGui::Separator();
-                auto model = viewer_->getStandaloneModel();
-                ImGui::Text("Gaussians: %lld", model->size());
-                ImGui::Text("SH Degree: %d", model->get_active_sh_degree());
-                ImGui::Text("Scene Scale: %.3f", model->get_scene_scale());
+
+                // Get model through scene
+                auto scene = viewer_->scene_.get();
+                if (scene && scene->hasModel()) {
+                    const SplatData* model = scene->getModel();
+                    if (model) {
+                        ImGui::Text("Gaussians: %lld", model->size());
+                        ImGui::Text("SH Degree: %d", model->get_active_sh_degree());
+                        ImGui::Text("Scene Scale: %.3f", model->get_scene_scale());
+                    }
+                }
 
                 // Disabled training button for PLY mode
                 ImGui::Separator();
@@ -761,7 +1056,7 @@ namespace gs {
             }
 
             // Show training progress for training mode
-            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainer()) {
+            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainerManager()->hasTrainer()) {
                 renderProgressInfo();
             }
 
@@ -773,6 +1068,12 @@ namespace gs {
                 ImGui::ProgressBar(gpuUsage / 100.0f, ImVec2(-1, 20), gpuText);
             }
 
+            // Add crop box controls before the bottom buttons
+            if (viewer_->getCurrentMode() != GSViewer::ViewerMode::Empty) {
+                ImGui::Separator();
+                crop_box_panel_->render();
+            }
+
             // Bottom buttons
             ImGui::Separator();
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.7f, 1.0f));
@@ -781,11 +1082,6 @@ namespace gs {
                 show_camera_controls_ = true;
             }
             ImGui::PopStyleColor(2);
-
-            if (show_crop_box_panel_) {
-                ImGui::Separator();
-                crop_box_panel_->render();
-            }
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.3f, 1.0f));
@@ -800,24 +1096,31 @@ namespace gs {
         }
 
         void GuiManager::renderModeStatus() {
-            // Show current mode status
-            switch (viewer_->getCurrentMode()) {
-            case GSViewer::ViewerMode::Empty:
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No data loaded");
-                ImGui::Text("Use File Browser to load:");
-                ImGui::BulletText("PLY file for viewing");
-                ImGui::BulletText("Dataset for training");
-                break;
+            // Query current scene mode via events
+            if (event_bus_) {
+                EventResponseHandler<QuerySceneModeRequest, QuerySceneModeResponse> handler(event_bus_);
+                auto response = handler.querySync(QuerySceneModeRequest{});
 
-            case GSViewer::ViewerMode::PLYViewer:
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "PLY Viewer Mode");
-                ImGui::Text("File: %s", viewer_->getCurrentPLYPath().filename().string().c_str());
-                break;
+                if (response) {
+                    switch (response->mode) {
+                    case QuerySceneModeResponse::Mode::Empty:
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No data loaded");
+                        ImGui::Text("Use File Browser to load:");
+                        ImGui::BulletText("PLY file for viewing");
+                        ImGui::BulletText("Dataset for training");
+                        break;
 
-            case GSViewer::ViewerMode::Training:
-                ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "Training Mode");
-                ImGui::Text("Dataset: %s", viewer_->getCurrentDatasetPath().filename().string().c_str());
-                break;
+                    case QuerySceneModeResponse::Mode::Viewing:
+                        ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "PLY Viewer Mode");
+                        ImGui::Text("File: %s", viewer_->getCurrentPLYPath().filename().string().c_str());
+                        break;
+
+                    case QuerySceneModeResponse::Mode::Training:
+                        ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "Training Mode");
+                        ImGui::Text("Dataset: %s", viewer_->getCurrentDatasetPath().filename().string().c_str());
+                        break;
+                    }
+                }
             }
         }
 
@@ -828,18 +1131,34 @@ namespace gs {
             ImGui::Text("Rendering Settings");
             ImGui::Separator();
 
+            float old_scale = config->scaling_modifier;
             ImGui::SetNextItemWidth(200);
             ImGui::SliderFloat("##scale_slider", &config->scaling_modifier, 0.01f, 3.0f, "Scale=%.2f");
+            if (old_scale != config->scaling_modifier) {
+                publish(RenderingSettingsChangedEvent{
+                    std::nullopt, config->scaling_modifier, std::nullopt});
+            }
+
             ImGui::SameLine();
             if (ImGui::Button("Reset##scale", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
                 config->scaling_modifier = 1.0f;
+                publish(RenderingSettingsChangedEvent{
+                    std::nullopt, config->scaling_modifier, std::nullopt});
             }
 
+            float old_fov = config->fov;
             ImGui::SetNextItemWidth(200);
             ImGui::SliderFloat("##fov_slider", &config->fov, 45.0f, 120.0f, "FoV=%.2f");
+            if (old_fov != config->fov) {
+                publish(RenderingSettingsChangedEvent{
+                    config->fov, std::nullopt, std::nullopt});
+            }
+
             ImGui::SameLine();
             if (ImGui::Button("Reset##fov", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f))) {
                 config->fov = 75.0f;
+                publish(RenderingSettingsChangedEvent{
+                    config->fov, std::nullopt, std::nullopt});
             }
 
             // Show render mode
@@ -852,6 +1171,8 @@ namespace gs {
 
         void GuiManager::renderProgressInfo() {
             auto info = viewer_->getTrainingInfo();
+            auto trainer_manager = viewer_->getTrainerManager();
+
             int current_iter = info->curr_iterations_.load();
             int total_iter = info->total_iterations_.load();
             int num_splats = info->num_splats_.load();
@@ -865,6 +1186,8 @@ namespace gs {
             float fraction = total_iter > 0 ? float(current_iter) / float(total_iter) : 0.0f;
             char overlay_text[64];
             std::snprintf(overlay_text, sizeof(overlay_text), "%d / %d", current_iter, total_iter);
+
+            // Use ImGui's built-in frame rate to naturally throttle updates
             ImGui::ProgressBar(fraction, ImVec2(-1, 20), overlay_text);
 
             if (loss_data.size() > 0) {
@@ -914,7 +1237,9 @@ namespace gs {
         }
 
         void GuiManager::setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback) {
-            file_browser_->setOnFileSelected(callback);
+            file_browser_->setOnFileSelected([this](const std::filesystem::path& path, bool is_dataset) {
+                publish(LoadFileCommand{path, is_dataset});
+            });
         }
 
         void GuiManager::addConsoleLog(const char* fmt, ...) {
@@ -940,105 +1265,6 @@ namespace gs {
                 return crop_box_panel_->use_crop_box_;
             else
                 return false;
-        }
-
-        void CropBoxPanel::render() {
-            if (ImGui::CollapsingHeader("Clip Box")) {
-                ImGui::Checkbox("Show Clip Box", &show_crop_box_);
-                ImGui::Checkbox("Use Clip Box", &use_crop_box_);
-
-                if (show_crop_box_ && crop_box_) {
-                    if (!crop_box_->isInitialized()) {
-                        return; // the manager must init crop box
-                    }
-
-                    // Color picker
-                    static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
-                    if (ImGui::ColorEdit3("Box Color", bbox_color)) {
-                        crop_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
-                    }
-
-                    // Line width and Reset button aligned
-                    static float line_width = 2.0f;
-                    float available_width = ImGui::GetContentRegionAvail().x;
-                    float button_width = 120.0f; // Adjust this value as needed
-                    float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
-
-                    ImGui::SetNextItemWidth(slider_width);
-                    if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
-                        crop_box_->setLineWidth(line_width);
-                    }
-
-                    // Reset button on next line
-                    if (ImGui::Button("Reset to Default")) {
-                        crop_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
-                    }
-
-                    // Manual bounds adjustment
-                    if (ImGui::TreeNode("Manual Bounds")) {
-                        glm::vec3 current_min = crop_box_->getMinBounds();
-                        glm::vec3 current_max = crop_box_->getMaxBounds();
-
-                        float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
-                        float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
-
-                        bool bounds_changed = false;
-
-                        // Define reasonable ranges for the sliders (adjust these values as needed)
-                        const float min_range = -8.0f;
-                        const float max_range = 8.0f;
-
-                        // Min Bounds - each slider on separate line
-                        ImGui::Text("Min Bounds:");
-                        float min_bounds_x = min_bounds[0];
-                        bounds_changed |= ImGui::SliderFloat("Min X", &min_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        min_bounds_x = std::min(min_bounds_x, max_bounds[0]);
-                        min_bounds[0] = min_bounds_x;
-
-                        float min_bounds_y = min_bounds[1];
-                        bounds_changed |= ImGui::SliderFloat("Min Y", &min_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        min_bounds_y = std::min(min_bounds_y, max_bounds[1]);
-                        min_bounds[1] = min_bounds_y;
-
-                        float min_bounds_z = min_bounds[2];
-                        bounds_changed |= ImGui::SliderFloat("Min Z", &min_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        min_bounds_z = std::min(min_bounds_z, max_bounds[2]);
-                        min_bounds[2] = min_bounds_z;
-
-                        // Max Bounds - each slider on separate line
-                        ImGui::Text("Max Bounds:");
-                        float max_bounds_x = max_bounds[0];
-                        bounds_changed |= ImGui::SliderFloat("Max X", &max_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        max_bounds_x = std::max(max_bounds_x, min_bounds[0]);
-                        max_bounds[0] = max_bounds_x;
-
-                        float max_bounds_y = max_bounds[1];
-                        bounds_changed |= ImGui::SliderFloat("Max Y", &max_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        max_bounds_y = std::max(max_bounds_y, min_bounds[1]);
-                        max_bounds[1] = max_bounds_y;
-
-                        float max_bounds_z = max_bounds[2];
-                        bounds_changed |= ImGui::SliderFloat("Max Z", &max_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        max_bounds_z = std::max(max_bounds_z, min_bounds[2]);
-                        max_bounds[2] = max_bounds_z;
-
-                        if (bounds_changed) {
-                            crop_box_->setBounds(
-                                glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
-                                glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
-                        }
-
-                        // Display current info
-                        glm::vec3 center = crop_box_->getCenter();
-                        glm::vec3 size = crop_box_->getSize();
-
-                        ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
-                        ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
-
-                        ImGui::TreePop();
-                    }
-                }
-            }
         }
 
     } // namespace gui

@@ -222,7 +222,7 @@ read_cameras_binary(const std::filesystem::path& file_path) {
 // -----------------------------------------------------------------------------
 //  points3D.bin
 // -----------------------------------------------------------------------------
-PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
+gs::PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
     auto buf_owner = read_binary(file_path);
     const char* cur = buf_owner->data();
     const char* end = cur + buf_owner->size();
@@ -257,7 +257,7 @@ PointCloud read_point3D_binary(const std::filesystem::path& file_path) {
     if (cur != end)
         throw std::runtime_error("points3D.bin: trailing bytes");
 
-    return PointCloud(positions, colors);
+    return gs::PointCloud(positions, colors);
 }
 
 // -----------------------------------------------------------------------------
@@ -438,7 +438,7 @@ static fs::path get_sparse_file_path(const fs::path& base, const std::string& fi
                                                                              "Expected directory structure: 'sparse/0/' or 'sparse/'.");
 }
 
-PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
+gs::PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
     fs::path points3d_file = get_sparse_file_path(filepath, "points3D.bin");
     return read_point3D_binary(points3d_file);
 }
