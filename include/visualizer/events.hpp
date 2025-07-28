@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <optional>
 #include <string>
+#include <unordered_map> // ADDED for NodeSelectedEvent
 
 namespace gs {
 
@@ -75,6 +76,168 @@ namespace gs {
 
     struct TrainingReadyToStartEvent {
         // Empty - signals trainer can start
+    };
+
+    // ============================================================================
+    // Console/Log Events
+    // ============================================================================
+
+    struct LogMessageEvent {
+        enum class Level { Info,
+                           Warning,
+                           Error,
+                           Debug };
+        Level level;
+        std::string message;
+        std::optional<std::string> source; // Which component logged this
+    };
+
+    struct ConsoleCommandEvent {
+        std::string command;
+        std::optional<std::string> result;
+    };
+
+    // ============================================================================
+    // Notification Events
+    // ============================================================================
+
+    struct NotificationEvent {
+        enum class Type { Info,
+                          Success,
+                          Warning,
+                          Error };
+        Type type;
+        std::string message;
+        int duration_ms = 3000; // How long to show
+    };
+
+    // ============================================================================
+    // Camera Events
+    // ============================================================================
+
+    struct CameraMovedEvent {
+        glm::mat3 rotation;
+        glm::vec3 translation;
+    };
+
+    struct CameraResetEvent {
+        // No data needed
+    };
+
+    // ============================================================================
+    // Data Loading Events
+    // ============================================================================
+
+    struct DatasetLoadStartedEvent {
+        std::filesystem::path path;
+        enum class Type { Colmap,
+                          Blender,
+                          PLY } type;
+    };
+
+    struct DatasetLoadProgressEvent {
+        std::filesystem::path path;
+        float progress;           // 0.0 to 1.0
+        std::string current_step; // "Reading cameras", "Loading images", etc.
+    };
+
+    struct DatasetLoadCompletedEvent {
+        std::filesystem::path path;
+        bool success;
+        std::optional<std::string> error_message;
+        size_t num_images;
+        size_t num_points;
+    };
+
+    // ============================================================================
+    // Evaluation Events
+    // ============================================================================
+
+    struct EvaluationStartedEvent {
+        int iteration;
+        size_t num_images;
+    };
+
+    struct EvaluationProgressEvent {
+        int iteration;
+        size_t current_image;
+        size_t total_images;
+    };
+
+    struct EvaluationCompletedEvent {
+        int iteration;
+        float psnr;
+        float ssim;
+        float lpips;
+        float elapsed_time;
+        int num_gaussians;
+    };
+
+    // ============================================================================
+    // Memory Events
+    // ============================================================================
+
+    struct MemoryUsageEvent {
+        size_t gpu_used_bytes;
+        size_t gpu_total_bytes;
+        float gpu_usage_percent;
+        size_t ram_used_bytes;
+        size_t ram_total_bytes;
+        float ram_usage_percent;
+    };
+
+    struct MemoryWarningEvent {
+        enum class Type { GPU,
+                          RAM };
+        Type type;
+        float usage_percent;
+        std::string message;
+    };
+
+    // ============================================================================
+    // Performance Events
+    // ============================================================================
+
+    struct FrameRenderedEvent {
+        float render_time_ms;
+        float fps;
+        int num_gaussians_rendered;
+    };
+
+    struct PerformanceReportEvent {
+        float avg_fps;
+        float avg_render_time_ms;
+        float avg_training_step_time_ms;
+        int time_window_seconds; // Stats over this time window
+    };
+
+    // ============================================================================
+    // Error Events
+    // ============================================================================
+
+    struct ErrorOccurredEvent {
+        enum class Severity { Warning,
+                              Error,
+                              Critical };
+        enum class Category {
+            Rendering,
+            Training,
+            IO,
+            Memory,
+            CUDA,
+            System,
+            Unknown
+        };
+        Severity severity;
+        Category category;
+        std::string message;
+        std::optional<std::string> details;
+        std::optional<std::string> recovery_suggestion;
+    };
+
+    struct ErrorRecoveredEvent {
+        ErrorOccurredEvent::Category category;
+        std::string recovery_action;
     };
 
     // ============================================================================
@@ -279,168 +442,6 @@ namespace gs {
     };
 
     // ============================================================================
-    // Console/Log Events
-    // ============================================================================
-
-    struct LogMessageEvent {
-        enum class Level { Info,
-                           Warning,
-                           Error,
-                           Debug };
-        Level level;
-        std::string message;
-        std::optional<std::string> source; // Which component logged this
-    };
-
-    struct ConsoleCommandEvent {
-        std::string command;
-        std::optional<std::string> result;
-    };
-
-    // ============================================================================
-    // Notification Events
-    // ============================================================================
-
-    struct NotificationEvent {
-        enum class Type { Info,
-                          Success,
-                          Warning,
-                          Error };
-        Type type;
-        std::string message;
-        int duration_ms = 3000; // How long to show
-    };
-
-    // ============================================================================
-    // Camera Events
-    // ============================================================================
-
-    struct CameraMovedEvent {
-        glm::mat3 rotation;
-        glm::vec3 translation;
-    };
-
-    struct CameraResetEvent {
-        // No data needed
-    };
-
-    // ============================================================================
-    // Data Loading Events
-    // ============================================================================
-
-    struct DatasetLoadStartedEvent {
-        std::filesystem::path path;
-        enum class Type { Colmap,
-                          Blender,
-                          PLY } type;
-    };
-
-    struct DatasetLoadProgressEvent {
-        std::filesystem::path path;
-        float progress;           // 0.0 to 1.0
-        std::string current_step; // "Reading cameras", "Loading images", etc.
-    };
-
-    struct DatasetLoadCompletedEvent {
-        std::filesystem::path path;
-        bool success;
-        std::optional<std::string> error_message;
-        size_t num_images;
-        size_t num_points;
-    };
-
-    // ============================================================================
-    // Evaluation Events
-    // ============================================================================
-
-    struct EvaluationStartedEvent {
-        int iteration;
-        size_t num_images;
-    };
-
-    struct EvaluationProgressEvent {
-        int iteration;
-        size_t current_image;
-        size_t total_images;
-    };
-
-    struct EvaluationCompletedEvent {
-        int iteration;
-        float psnr;
-        float ssim;
-        float lpips;
-        float elapsed_time;
-        int num_gaussians;
-    };
-
-    // ============================================================================
-    // Memory Events
-    // ============================================================================
-
-    struct MemoryUsageEvent {
-        size_t gpu_used_bytes;
-        size_t gpu_total_bytes;
-        float gpu_usage_percent;
-        size_t ram_used_bytes;
-        size_t ram_total_bytes;
-        float ram_usage_percent;
-    };
-
-    struct MemoryWarningEvent {
-        enum class Type { GPU,
-                          RAM };
-        Type type;
-        float usage_percent;
-        std::string message;
-    };
-
-    // ============================================================================
-    // Performance Events
-    // ============================================================================
-
-    struct FrameRenderedEvent {
-        float render_time_ms;
-        float fps;
-        int num_gaussians_rendered;
-    };
-
-    struct PerformanceReportEvent {
-        float avg_fps;
-        float avg_render_time_ms;
-        float avg_training_step_time_ms;
-        int time_window_seconds; // Stats over this time window
-    };
-
-    // ============================================================================
-    // Error Events
-    // ============================================================================
-
-    struct ErrorOccurredEvent {
-        enum class Severity { Warning,
-                              Error,
-                              Critical };
-        enum class Category {
-            Rendering,
-            Training,
-            IO,
-            Memory,
-            CUDA,
-            System,
-            Unknown
-        };
-        Severity severity;
-        Category category;
-        std::string message;
-        std::optional<std::string> details;
-        std::optional<std::string> recovery_suggestion;
-    };
-
-    struct ErrorRecoveredEvent {
-        ErrorOccurredEvent::Category category;
-        std::string recovery_action;
-    };
-
-    // ============================================================================
     // Crop Box Events
     // ============================================================================
 
@@ -456,6 +457,16 @@ namespace gs {
 
     struct CropBoxResetEvent {
         // No data needed
+    };
+
+    // ============================================================================
+    // Selection Events - ADDED for ScenePanel
+    // ============================================================================
+
+    struct NodeSelectedEvent {
+        std::string path;
+        std::string type;
+        std::unordered_map<std::string, std::string> metadata;
     };
 
 } // namespace gs

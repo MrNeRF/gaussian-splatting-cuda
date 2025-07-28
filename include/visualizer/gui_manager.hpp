@@ -4,6 +4,7 @@
 #include "visualizer/event_bus.hpp"
 #include "visualizer/events.hpp"
 #include "visualizer/render_bounding_box.hpp"
+#include "visualizer/scene_panel.hpp"
 #include "visualizer/viewer_notifier.hpp"
 
 #include <chrono>
@@ -54,6 +55,7 @@ namespace gs {
             void render(bool* p_open);
             void setOnFileSelected(std::function<void(const std::filesystem::path&, bool)> callback);
             void setCurrentPath(const std::filesystem::path& path);
+            void setSelectedPath(const std::filesystem::path& path);
 
         private:
             std::string current_path_;
@@ -110,6 +112,7 @@ namespace gs {
             void showFileBrowser(bool show = true);
             void showScriptingConsole(bool show = true);
             void showCameraControls(bool show = true);
+            void showScenePanel(bool show = true); // ADDED
 
             // GUI state
             bool isAnyWindowActive() const { return any_window_active_; }
@@ -165,12 +168,14 @@ namespace gs {
             std::unique_ptr<CameraControlsWindow> camera_controls_;
             std::unique_ptr<TrainingControlsPanel> training_controls_;
             std::unique_ptr<CropBoxPanel> crop_box_panel_;
+            std::unique_ptr<ScenePanel> scene_panel_;
 
             // Window states
             bool show_main_panel_ = true;
             bool show_file_browser_ = false;
             bool show_scripting_console_ = false;
             bool show_camera_controls_ = false;
+            bool show_scene_panel_ = true;
             bool any_window_active_ = false;
 
             // ImGui settings

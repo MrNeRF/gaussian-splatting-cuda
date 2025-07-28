@@ -456,6 +456,15 @@ namespace gs {
             current_path_ = path.string();
         }
 
+        void FileBrowser::setSelectedPath(const std::filesystem::path& path) {
+            selected_file_ = path.string();
+            if (std::filesystem::is_directory(path)) {
+                current_path_ = path.string();
+            } else {
+                current_path_ = path.parent_path().string();
+            }
+        }
+
         // ============================================================================
         // CameraControlsWindow Implementation
         // ============================================================================
@@ -796,21 +805,38 @@ namespace gs {
             : viewer_(viewer),
               event_bus_(event_bus) {
 
+            // Initialize components
             scripting_console_ = std::make_unique<ScriptingConsole>();
             file_browser_ = std::make_unique<FileBrowser>();
             camera_controls_ = std::make_unique<CameraControlsWindow>();
             training_controls_ = std::make_unique<TrainingControlsPanel>();
             crop_box_panel_ = std::make_unique<CropBoxPanel>();
+            scene_panel_ = std::make_unique<ScenePanel>(*event_bus);
 
-            // Link crop box from viewer to panel
-            if (viewer_) {
+            // Set crop box reference
+            if (viewer_ && viewer_->getCropBox()) {
                 crop_box_panel_->crop_box_ = viewer_->getCropBox();
             }
 
-            // Setup event handlers
+            // Set up scene panel callbacks
+            scene_panel_->setOnDatasetLoad([this](const std::filesystem::path& path) {
+                if (path.empty()) {
+                    // Empty path means open file browser
+                    show_file_browser_ = true;
+                } else {
+                    // Non-empty path means load the dataset
+                    file_browser_->setSelectedPath(path);
+                    event_bus_->publish(LogMessageEvent{
+                        LogMessageEvent::Level::Info,
+                        std::format("Loading dataset from Scene Panel: {}", path.string()),
+                        std::string("GuiManager")});
+                    event_bus_->publish(LoadFileCommand{path, true});
+                }
+            });
+
+            // Set up event handlers
             setupEventHandlers();
         }
-
         GuiManager::~GuiManager() {
             // Event handlers are automatically cleaned up when event bus is destroyed
         }
@@ -851,20 +877,19 @@ namespace gs {
         }
 
         void GuiManager::handleSceneLoaded(const SceneLoadedEvent& event) {
-            show_scripting_console_ = true;
+            scripting_console_->addLog("Info: Scene loaded from %s", event.source_path.string().c_str());
+            scripting_console_->addLog("Info: Number of gaussians: %zu", event.num_gaussians);
+            scripting_console_->addLog("Info: Source type: %s",
+                                       event.source_type == SceneLoadedEvent::SourceType::PLY ? "PLY" : "Dataset");
 
-            const char* type_str = (event.source_type == SceneLoadedEvent::SourceType::PLY)
-                                       ? "PLY file"
-                                       : "dataset";
-
-            scripting_console_->addLog("Info: Loaded %s with %zu Gaussians from %s",
-                                       type_str,
-                                       event.num_gaussians,
-                                       event.source_path.filename().string().c_str());
+            training_state_.training_started = false;
+            training_state_.save_in_progress = false;
         }
 
         void GuiManager::handleSceneCleared(const SceneClearedEvent& event) {
-            // Update UI state if needed
+            scripting_console_->addLog("Info: Scene cleared");
+            training_state_.training_started = false;
+            training_state_.save_in_progress = false;
         }
 
         void GuiManager::handleTrainingStarted(const TrainingStartedEvent& event) {
@@ -995,6 +1020,10 @@ namespace gs {
                 camera_controls_->render(&show_camera_controls_);
             }
 
+            if (show_scene_panel_) { // ADDED
+                scene_panel_->render(&show_scene_panel_);
+            }
+
             endFrame();
         }
 
@@ -1003,93 +1032,50 @@ namespace gs {
             ImGui::Begin("Rendering Setting", nullptr, window_flags_);
             ImGui::SetWindowSize(ImVec2(300, 0));
 
-            // File Browser button - always visible
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.6f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.7f, 1.0f));
-            if (ImGui::Button("Open File Browser", ImVec2(-1, 0))) {
-                show_file_browser_ = true;
-            }
-            ImGui::PopStyleColor(2);
-
-            ImGui::Separator();
-
-            renderModeStatus();
-
-            // Mode-specific controls
-            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainerManager()->hasTrainer()) {
-                training_controls_->render(viewer_->getTrainer(), training_state_, viewer_->getNotifier());
-
-                // Handle the start trigger
-                if (training_state_.manual_start_triggered) {
-                    // Use event instead of direct call
-                    publish(StartTrainingCommand{});
-                    training_state_.manual_start_triggered = false;
-                }
-            } else if (viewer_->getCurrentMode() == GSViewer::ViewerMode::PLYViewer) {
-                // PLY viewer info
-                ImGui::Separator();
-                ImGui::Text("Model Information");
-                ImGui::Separator();
-
-                // Get model through scene
-                auto scene = viewer_->scene_.get();
-                if (scene && scene->hasModel()) {
-                    const SplatData* model = scene->getModel();
-                    if (model) {
-                        ImGui::Text("Gaussians: %lld", model->size());
-                        ImGui::Text("SH Degree: %d", model->get_active_sh_degree());
-                        ImGui::Text("Scene Scale: %.3f", model->get_scene_scale());
-                    }
-                }
-
-                // Disabled training button for PLY mode
-                ImGui::Separator();
-                ImGui::BeginDisabled(true);
-                ImGui::Button("Start Training", ImVec2(-1, 0));
-                ImGui::EndDisabled();
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Training not available for PLY files");
+            // Scripting Console Button
+            if (ImGui::Button("Open Scripting Console", ImVec2(-1, 0))) {
+                show_scripting_console_ = true;
             }
 
-            // Only show these settings if we have data loaded
-            if (viewer_->getCurrentMode() != GSViewer::ViewerMode::Empty) {
-                renderRenderingSettings();
-            }
-
-            // Show training progress for training mode
-            if (viewer_->getCurrentMode() == GSViewer::ViewerMode::Training && viewer_->getTrainerManager()->hasTrainer()) {
-                renderProgressInfo();
-            }
-
-            // GPU usage - always show if we have data
-            if (viewer_->getCurrentMode() != GSViewer::ViewerMode::Empty) {
-                float gpuUsage = viewer_->getGPUUsage();
-                char gpuText[64];
-                std::snprintf(gpuText, sizeof(gpuText), "GPU Usage: %.1f%%", gpuUsage);
-                ImGui::ProgressBar(gpuUsage / 100.0f, ImVec2(-1, 20), gpuText);
-            }
-
-            // Add crop box controls before the bottom buttons
-            if (viewer_->getCurrentMode() != GSViewer::ViewerMode::Empty) {
-                ImGui::Separator();
-                crop_box_panel_->render();
-            }
-
-            // Bottom buttons
-            ImGui::Separator();
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.4f, 0.7f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.5f, 0.8f, 1.0f));
-            if (ImGui::Button("Show Camera Controls", ImVec2(-1, 0))) {
+            // Camera Controls Button
+            if (ImGui::Button("Open Camera Controls", ImVec2(-1, 0))) {
                 show_camera_controls_ = true;
             }
-            ImGui::PopStyleColor(2);
 
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.2f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.3f, 1.0f));
-            if (ImGui::Button("Open Console", ImVec2(-1, 0))) {
-                show_scripting_console_ = true;
-                scripting_console_->addLog("Console opened. Type 'help' for available commands.");
+            ImGui::Separator();
+
+            // Window toggles
+            ImGui::Text("Windows");
+            ImGui::Checkbox("Scripting Console", &show_scripting_console_);
+            ImGui::Checkbox("Camera Controls", &show_camera_controls_);
+            ImGui::Checkbox("Scene Panel", &show_scene_panel_);
+
+            ImGui::Separator();
+
+            // Mode status
+            renderModeStatus();
+
+            ImGui::Separator();
+
+            // Rendering settings
+            renderRenderingSettings();
+
+            ImGui::Separator();
+
+            // Training controls
+            if (viewer_->getTrainer()) {
+                training_controls_->render(viewer_->getTrainer(), training_state_, viewer_->notifier_);
             }
-            ImGui::PopStyleColor(2);
+
+            ImGui::Separator();
+
+            // Progress info
+            renderProgressInfo();
+
+            ImGui::Separator();
+
+            // Crop box controls
+            crop_box_panel_->render();
 
             ImGui::End();
             ImGui::PopStyleColor();
@@ -1230,6 +1216,10 @@ namespace gs {
 
         void GuiManager::showCameraControls(bool show) {
             show_camera_controls_ = show;
+        }
+
+        void GuiManager::showScenePanel(bool show) {
+            show_scene_panel_ = show;
         }
 
         void GuiManager::setScriptExecutor(std::function<std::string(const std::string&)> executor) {
