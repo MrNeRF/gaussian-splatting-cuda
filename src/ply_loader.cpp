@@ -27,7 +27,7 @@
 #endif
 
 // SIMD includes (with fallback)
-#if defined(__AVX2__) || defined(_MSC_VER)
+#if defined(__AVX2__)
 #include <immintrin.h>
 #endif
 
@@ -51,6 +51,10 @@ namespace gs {
         constexpr size_t BLOCK_SIZE_LARGE = 2048;
         constexpr size_t PLY_MIN_SIZE = 10;
         constexpr size_t FILE_SIZE_THRESHOLD_MB = 50;
+
+        // SIMD constants
+        constexpr int SIMD_WIDTH = 8;
+        constexpr int SIMD_WIDTH_MINUS_1 = SIMD_WIDTH - 1;
 
         using namespace std::string_view_literals;
         constexpr auto VERTEX_ELEMENT = "vertex"sv;
@@ -242,8 +246,8 @@ namespace gs {
                     case 'y': layout.pos_y_offset = layout.vertex_stride; break;
                     case 'z': layout.pos_z_offset = layout.vertex_stride; break;
                     default:
-                        return std::unexpected(std::format("Unknown property '{}' in PLY header",
-                                                           std::string_view(prop_name, name_len)));
+                        // Ignore unknown single-character properties
+                        break;
                     }
                 } else if (name_len == 7 && std::strncmp(prop_name, "opacity", 7) == 0) {
                     layout.opacity_offset = layout.vertex_stride;
@@ -309,6 +313,7 @@ namespace gs {
             __cpuid(cpuInfo, 7);
             has_avx2 = (cpuInfo[1] & (1 << 5)) != 0;
 #elif defined(__GNUC__) || defined(__clang__)
+                __builtin_cpu_init();
                 has_avx2 = __builtin_cpu_supports("avx2");
 #else
                 has_avx2 = false; // Fallback for other compilers
@@ -324,7 +329,7 @@ namespace gs {
                                   size_t start = range.begin();
                                   size_t end = range.end();
                                   size_t range_size = end - start;
-                                  size_t simd_end = start + (range_size & ~7); // 8-element aligned
+                                  size_t simd_end = start + (range_size & ~ply_constants::SIMD_WIDTH_MINUS_1); // 8-element aligned
 
                                   // C++23: [[assume]] for optimization
                                   [[assume(layout.pos_x_offset < stride)]];
@@ -332,7 +337,7 @@ namespace gs {
                                   [[assume(layout.pos_z_offset < stride)]];
 
                                   // Process 8 vertices at a time with SIMD
-                                  for (size_t i = start; i < simd_end; i += 8) {
+                                  for (size_t i = start; i < simd_end; i += ply_constants::SIMD_WIDTH) {
                     // Portable prefetch
 #ifdef _MSC_VER
                                       _mm_prefetch((const char*)(vertex_data + (i + 16) * stride), _MM_HINT_T0);
@@ -342,7 +347,7 @@ namespace gs {
 
                                       // Load 8 x-coordinates
                                       __m256 x_vals = _mm256_set_ps(
-                                          *reinterpret_cast<const float*>(vertex_data + (i + 7) * stride + layout.pos_x_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + ply_constants::SIMD_WIDTH_MINUS_1) * stride + layout.pos_x_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 6) * stride + layout.pos_x_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 5) * stride + layout.pos_x_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 4) * stride + layout.pos_x_offset),
@@ -352,7 +357,7 @@ namespace gs {
                                           *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_x_offset));
 
                                       __m256 y_vals = _mm256_set_ps(
-                                          *reinterpret_cast<const float*>(vertex_data + (i + 7) * stride + layout.pos_y_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + ply_constants::SIMD_WIDTH_MINUS_1) * stride + layout.pos_y_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 6) * stride + layout.pos_y_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 5) * stride + layout.pos_y_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 4) * stride + layout.pos_y_offset),
@@ -362,7 +367,7 @@ namespace gs {
                                           *reinterpret_cast<const float*>(vertex_data + i * stride + layout.pos_y_offset));
 
                                       __m256 z_vals = _mm256_set_ps(
-                                          *reinterpret_cast<const float*>(vertex_data + (i + 7) * stride + layout.pos_z_offset),
+                                          *reinterpret_cast<const float*>(vertex_data + (i + ply_constants::SIMD_WIDTH_MINUS_1) * stride + layout.pos_z_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 6) * stride + layout.pos_z_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 5) * stride + layout.pos_z_offset),
                                           *reinterpret_cast<const float*>(vertex_data + (i + 4) * stride + layout.pos_z_offset),
@@ -378,11 +383,11 @@ namespace gs {
                                       _mm256_store_ps(temp_z, z_vals);
 
                                       // Interleave XYZ (reverse order due to _mm256_set_ps)
-                                      for (int j = 0; j < 8; ++j) {
-                                          const size_t idx = i + (7 - j);
-                                          output[idx * 3 + 0] = temp_x[7 - j];
-                                          output[idx * 3 + 1] = temp_y[7 - j];
-                                          output[idx * 3 + 2] = temp_z[7 - j];
+                                      for (int j = 0; j < ply_constants::SIMD_WIDTH; ++j) {
+                                          const size_t idx = i + (ply_constants::SIMD_WIDTH_MINUS_1 - j);
+                                          output[idx * 3 + 0] = temp_x[ply_constants::SIMD_WIDTH_MINUS_1 - j];
+                                          output[idx * 3 + 1] = temp_y[ply_constants::SIMD_WIDTH_MINUS_1 - j];
+                                          output[idx * 3 + 2] = temp_z[ply_constants::SIMD_WIDTH_MINUS_1 - j];
                                       }
                                   }
 
