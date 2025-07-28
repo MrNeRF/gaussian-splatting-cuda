@@ -743,41 +743,86 @@ namespace gs {
 
                         const float min_range = -8.0f;
                         const float max_range = 8.0f;
+                        // Replace the slider code with this improved version
+
+                        const float bound_text_width = 110.0f;
+                        const float bound_step = 0.01f;
+                        const float bound_step_fast = 0.1f;
 
                         // Min Bounds
+                        ImGui::Text("Ctrl+click for faster steps");
                         ImGui::Text("Min Bounds:");
+
+                        // Min X
+                        ImGui::Text("X:");
+                        ImGui::SameLine();
+                        ImGui::SetNextItemWidth(bound_text_width);
                         float min_bounds_x = min_bounds[0];
-                        bounds_changed |= ImGui::SliderFloat("Min X", &min_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        bounds_changed |= ImGui::InputFloat("##MinX", &min_bounds_x, bound_step, bound_step_fast, "%.3f");
+                        // Clamp and ensure min <= max
+                        min_bounds_x = std::clamp(min_bounds_x, min_range, max_range);
                         min_bounds_x = std::min(min_bounds_x, max_bounds[0]);
                         min_bounds[0] = min_bounds_x;
 
+                        // Min Y
+                        ImGui::Text("Y:");
+                        ImGui::SameLine();
+                        ImGui::SetNextItemWidth(bound_text_width);
                         float min_bounds_y = min_bounds[1];
-                        bounds_changed |= ImGui::SliderFloat("Min Y", &min_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        bounds_changed |= ImGui::InputFloat("##MinY", &min_bounds_y, bound_step, bound_step_fast, "%.3f");
+                        // Clamp and ensure min <= max
+                        min_bounds_y = std::clamp(min_bounds_y, min_range, max_range);
                         min_bounds_y = std::min(min_bounds_y, max_bounds[1]);
                         min_bounds[1] = min_bounds_y;
 
+                        // Min Z
+                        ImGui::Text("Z:");
+                        ImGui::SameLine();
+                        ImGui::SetNextItemWidth(bound_text_width);
                         float min_bounds_z = min_bounds[2];
-                        bounds_changed |= ImGui::SliderFloat("Min Z", &min_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        bounds_changed |= ImGui::InputFloat("##MinZ", &min_bounds_z, bound_step, bound_step_fast, "%.3f");
+                        // Clamp and ensure min <= max
+                        min_bounds_z = std::clamp(min_bounds_z, min_range, max_range);
                         min_bounds_z = std::min(min_bounds_z, max_bounds[2]);
                         min_bounds[2] = min_bounds_z;
 
+                        ImGui::Separator();
+
                         // Max Bounds
                         ImGui::Text("Max Bounds:");
+
+                        // Max X
+                        ImGui::Text("X:");
+                        ImGui::SameLine();
+                        ImGui::SetNextItemWidth(bound_text_width);
                         float max_bounds_x = max_bounds[0];
-                        bounds_changed |= ImGui::SliderFloat("Max X", &max_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        bounds_changed |= ImGui::InputFloat("##MaxX", &max_bounds_x, bound_step, bound_step_fast, "%.3f");
+                        // Clamp and ensure max >= min
+                        max_bounds_x = std::clamp(max_bounds_x, min_range, max_range);
                         max_bounds_x = std::max(max_bounds_x, min_bounds[0]);
                         max_bounds[0] = max_bounds_x;
 
+                        // Max Y
+                        ImGui::Text("Y:");
+                        ImGui::SameLine();
+                        ImGui::SetNextItemWidth(bound_text_width);
                         float max_bounds_y = max_bounds[1];
-                        bounds_changed |= ImGui::SliderFloat("Max Y", &max_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        bounds_changed |= ImGui::InputFloat("##MaxY", &max_bounds_y, bound_step, bound_step_fast, "%.3f");
+                        // Clamp and ensure max >= min
+                        max_bounds_y = std::clamp(max_bounds_y, min_range, max_range);
                         max_bounds_y = std::max(max_bounds_y, min_bounds[1]);
                         max_bounds[1] = max_bounds_y;
 
+                        // Max Z
+                        ImGui::Text("Z:");
+                        ImGui::SameLine();
+                        ImGui::SetNextItemWidth(bound_text_width);
                         float max_bounds_z = max_bounds[2];
-                        bounds_changed |= ImGui::SliderFloat("Max Z", &max_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                        bounds_changed |= ImGui::InputFloat("##MaxZ", &max_bounds_z, bound_step, bound_step_fast, "%.3f");
+                        // Clamp and ensure max >= min
+                        max_bounds_z = std::clamp(max_bounds_z, min_range, max_range);
                         max_bounds_z = std::max(max_bounds_z, min_bounds[2]);
                         max_bounds[2] = max_bounds_z;
-
                         if (bounds_changed) {
                             crop_box_->setBounds(
                                 glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
