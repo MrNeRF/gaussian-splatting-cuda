@@ -19,7 +19,7 @@ namespace gs {
         // Set custom transform matrix for the bounding box
         void setworld2BBox(const glm::mat4& transform);
         // getter
-        const glm::mat4& getworld2BBox() const {return world2BBox_;}
+        const glm::mat4& getworld2BBox() const { return world2BBox_; }
 
         // Get current bounds
         glm::vec3 getMinBounds() const { return min_bounds_; }
