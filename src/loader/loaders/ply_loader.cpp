@@ -1,6 +1,6 @@
 #include "ply_loader.hpp"
-#include "formats/ply.hpp"
 #include "core/splat_data.hpp"
+#include "formats/ply.hpp"
 #include <chrono>
 #include <filesystem>
 #include <format>

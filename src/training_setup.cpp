@@ -1,14 +1,15 @@
 #include "core/training_setup.hpp"
 #include "core/mcmc.hpp"
-#include "loader/loader_service.hpp"
+#include "core/point_cloud.hpp"
+#include "loader/loader.hpp"
 #include <format>
 #include <print>
 
 namespace gs {
 
     std::expected<TrainingSetup, std::string> setupTraining(const param::TrainingParameters& params) {
-        // 1. Create loader service
-        loader::LoaderService loader_service;
+        // 1. Create loader
+        auto loader = loader::Loader::create();
 
         // 2. Set up load options
         loader::LoadOptions load_options{
@@ -20,7 +21,7 @@ namespace gs {
             }};
 
         // 3. Load the dataset
-        auto load_result = loader_service.load(params.dataset.data_path, load_options);
+        auto load_result = loader->load(params.dataset.data_path, load_options);
         if (!load_result) {
             return std::unexpected(std::format("Failed to load dataset: {}", load_result.error()));
         }
@@ -35,7 +36,7 @@ namespace gs {
                 // Direct PLY load - not supported for training
                 return std::unexpected("Direct PLY loading is not supported for training. Please use a dataset format (COLMAP or Blender).");
 
-            } else if constexpr (std::is_same_v<T, loader::SceneData>) {
+            } else if constexpr (std::is_same_v<T, loader::LoadedScene>) {
                 // Full scene data - set up training
 
                 // Get point cloud or generate random one
@@ -46,7 +47,16 @@ namespace gs {
                 } else {
                     // Generate random point cloud if needed
                     std::println("No point cloud provided, using random initialization");
-                    point_cloud_to_use = generate_random_point_cloud();
+                    // Need to generate random point cloud - this should be provided by the loader or a utility
+                    int numInitGaussian = 10000;
+                    uint64_t seed = 8128;
+                    torch::manual_seed(seed);
+
+                    torch::Tensor positions = torch::rand({numInitGaussian, 3}); // in [0, 1]
+                    positions = positions * 2.0 - 1.0;                           // now in [-1, 1]
+                    torch::Tensor colors = torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
+
+                    point_cloud_to_use = PointCloud(positions, colors);
                 }
 
                 // Initialize model directly with point cloud
@@ -72,6 +82,8 @@ namespace gs {
                     .trainer = std::move(trainer),
                     .dataset = data.cameras,
                     .scene_center = load_result->scene_center};
+            } else {
+                return std::unexpected("Unknown data type returned from loader");
             }
         },
                           load_result->data);

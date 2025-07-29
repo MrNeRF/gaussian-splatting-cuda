@@ -1,13 +1,13 @@
+#include "transforms.hpp"
+#include "core/image_io.hpp"
+#include "formats/colmap.hpp"
 #include <filesystem>
 #include <format>
-#include "transforms.hpp"
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <numbers>
 #include <print>
 #include <torch/torch.h>
-#include "formats/colmap.hpp"
-#include "core/image_io.hpp"
 
 namespace F = torch::nn::functional;
 
@@ -154,7 +154,7 @@ std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_i
     std::vector<CameraData> camerasdata;
     if (transforms.contains("frames") && transforms["frames"].is_array()) {
         uint64_t counter = 0;
-        for (int frameInd = 0; frameInd < transforms["frames"].size(); ++frameInd) {
+        for (size_t frameInd = 0; frameInd < transforms["frames"].size(); ++frameInd) {
             CameraData camdata;
             auto& frame = transforms["frames"][frameInd];
             if (!frame.contains("transform_matrix")) {

@@ -1,4 +1,4 @@
-#include "blender_loader.hpp"
+#include "loader/loaders/blender_loader.hpp"
 #include "core/camera.hpp"
 #include "core/dataset.hpp"
 #include "core/point_cloud.hpp"
@@ -74,7 +74,7 @@ namespace gs::loader {
 
             auto end_time = std::chrono::high_resolution_clock::now();
             return LoadResult{
-                .data = SceneData{
+                .data = LoadedScene{
                     .cameras = nullptr,
                     .point_cloud = nullptr},
                 .scene_center = torch::zeros({3}),
@@ -151,7 +151,7 @@ namespace gs::loader {
 
             // Create result with shared_ptr
             LoadResult result{
-                .data = SceneData{
+                .data = LoadedScene{
                     .cameras = std::move(dataset),
                     .point_cloud = std::move(point_cloud)},
                 .scene_center = scene_center,

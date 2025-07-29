@@ -1,10 +1,8 @@
 #pragma once
 
 #include "core/camera.hpp"
-#include "loader/loaders/colmap_loader.hpp"
 #include "core/parameters.hpp"
-#include "loader/formats/colmap.hpp"
-#include "loader/formats/transforms.hpp"
+#include "loader/loader.hpp"
 #include <expected>
 #include <format>
 #include <memory>
@@ -119,40 +117,38 @@ namespace gs {
                                                    datasetConfig.data_path.string()));
             }
 
-            // Read COLMAP data with specified images folder
-            auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
-                datasetConfig.data_path, datasetConfig.images);
+            // Create loader
+            auto loader = gs::loader::Loader::create();
 
-            std::vector<std::shared_ptr<Camera>> cameras;
-            cameras.reserve(camera_infos.size());
+            // Set up load options
+            gs::loader::LoadOptions options{
+                .resolution = datasetConfig.resolution,
+                .images_folder = datasetConfig.images,
+                .validate_only = false};
 
-            for (size_t i = 0; i < camera_infos.size(); ++i) {
-                const auto& info = camera_infos[i];
-
-                auto cam = std::make_shared<Camera>(
-                    info._R,
-                    info._T,
-                    info._focal_x,
-                    info._focal_y,
-                    info._center_x,
-                    info._center_y,
-                    info._radial_distortion,
-                    info._tangential_distortion,
-                    info._camera_model_type,
-                    info._image_name,
-                    info._image_path,
-                    info._width,
-                    info._height,
-                    static_cast<int>(i));
-
-                cameras.push_back(std::move(cam));
+            // Load the data
+            auto result = loader->load(datasetConfig.data_path, options);
+            if (!result) {
+                return std::unexpected(std::format("Failed to load COLMAP dataset: {}", result.error()));
             }
 
-            // Create dataset with ALL images
-            auto dataset = std::make_shared<CameraDataset>(
-                std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
+            // Handle the result
+            return std::visit([&datasetConfig, &result](auto&& data) -> std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string> {
+                using T = std::decay_t<decltype(data)>;
 
-            return std::make_tuple(dataset, scene_center);
+                if constexpr (std::is_same_v<T, std::shared_ptr<gs::SplatData>>) {
+                    return std::unexpected("Expected COLMAP dataset but got PLY file");
+                } else if constexpr (std::is_same_v<T, gs::loader::LoadedScene>) {
+                    if (!data.cameras) {
+                        return std::unexpected("Loaded scene has no cameras");
+                    }
+                    // Return the cameras that were already loaded
+                    return std::make_tuple(data.cameras, result->scene_center);
+                } else {
+                    return std::unexpected("Unknown data type returned from loader");
+                }
+            },
+                              result->data);
 
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to create dataset from COLMAP: {}", e.what()));
@@ -168,43 +164,41 @@ namespace gs {
                                                    datasetConfig.data_path.string()));
             }
 
-            // Read COLMAP data with specified images folder
-            auto [camera_infos, scene_center] = read_transforms_cameras_and_images(
-                datasetConfig.data_path);
+            // Create loader
+            auto loader = gs::loader::Loader::create();
 
-            std::vector<std::shared_ptr<Camera>> cameras;
-            cameras.reserve(camera_infos.size());
+            // Set up load options
+            gs::loader::LoadOptions options{
+                .resolution = datasetConfig.resolution,
+                .images_folder = datasetConfig.images,
+                .validate_only = false};
 
-            for (size_t i = 0; i < camera_infos.size(); ++i) {
-                const auto& info = camera_infos[i];
-
-                auto cam = std::make_shared<Camera>(
-                    info._R,
-                    info._T,
-                    info._focal_x,
-                    info._focal_y,
-                    info._center_x,
-                    info._center_y,
-                    info._radial_distortion,
-                    info._tangential_distortion,
-                    info._camera_model_type,
-                    info._image_name,
-                    info._image_path,
-                    info._width,
-                    info._height,
-                    static_cast<int>(i));
-
-                cameras.push_back(std::move(cam));
+            // Load the data
+            auto result = loader->load(datasetConfig.data_path, options);
+            if (!result) {
+                return std::unexpected(std::format("Failed to load transforms dataset: {}", result.error()));
             }
 
-            // Create dataset with ALL images
-            auto dataset = std::make_shared<CameraDataset>(
-                std::move(cameras), datasetConfig, CameraDataset::Split::ALL);
+            // Handle the result
+            return std::visit([&datasetConfig, &result](auto&& data) -> std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string> {
+                using T = std::decay_t<decltype(data)>;
 
-            return std::make_tuple(dataset, scene_center);
+                if constexpr (std::is_same_v<T, std::shared_ptr<gs::SplatData>>) {
+                    return std::unexpected("Expected transforms.json dataset but got PLY file");
+                } else if constexpr (std::is_same_v<T, gs::loader::LoadedScene>) {
+                    if (!data.cameras) {
+                        return std::unexpected("Loaded scene has no cameras");
+                    }
+                    // Return the cameras that were already loaded
+                    return std::make_tuple(data.cameras, result->scene_center);
+                } else {
+                    return std::unexpected("Unknown data type returned from loader");
+                }
+            },
+                              result->data);
 
         } catch (const std::exception& e) {
-            return std::unexpected(std::format("Failed to create dataset from COLMAP: {}", e.what()));
+            return std::unexpected(std::format("Failed to create dataset from transforms: {}", e.what()));
         }
     }
 
