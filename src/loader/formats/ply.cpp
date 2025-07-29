@@ -1,4 +1,4 @@
-#include "core/ply_loader.hpp"
+#include "ply.hpp"
 #include <algorithm>
 #include <charconv>
 #include <chrono>
@@ -31,7 +31,7 @@
 #include <immintrin.h>
 #endif
 
-namespace gs {
+namespace gs::loader {
 
     namespace ply_constants {
         constexpr int MAX_DC_COMPONENTS = 48;
@@ -606,4 +606,4 @@ namespace gs {
         }
     }
 
-} // namespace gs
+} // namespace gs::loader

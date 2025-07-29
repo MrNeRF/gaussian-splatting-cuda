@@ -1,5 +1,4 @@
 #include "config.h" // Include generated config
-#include "core/ply_loader.hpp"
 #include "core/splat_data.hpp"
 #include "visualizer/detail.hpp"
 #include "visualizer/event_response_handler.hpp"

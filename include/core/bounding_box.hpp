@@ -18,11 +18,13 @@ namespace gs {
 
         // Set custom transform matrix for the bounding box
         void setworld2BBox(const glm::mat4& transform);
+        // getter
+        const glm::mat4& getworld2BBox() const { return world2BBox_; }
 
         // Get current bounds
         glm::vec3 getMinBounds() const { return min_bounds_; }
         glm::vec3 getMaxBounds() const { return max_bounds_; }
-        glm::vec3 getCenter() const { return (min_bounds_ + max_bounds_) * 0.5f; }
+        glm::vec3 getCenter() const;
         glm::vec3 getSize() const { return max_bounds_ - min_bounds_; }
 
     protected:
