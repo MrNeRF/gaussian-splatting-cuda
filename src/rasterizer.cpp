@@ -100,7 +100,7 @@ namespace gs {
             auto world2bbox_tensor = torch::zeros({4, 4}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
             for (int i = 0; i < 4; ++i) {
                 for (int j = 0; j < 4; ++j) {
-                    world2bbox_tensor[i][j] = world2bbox[i][j]; // GLM is column-major, but we're copying element by element
+                    world2bbox_tensor[i][j] = world2bbox[j][i]; // GLM is column-major!
                 }
             }
 
