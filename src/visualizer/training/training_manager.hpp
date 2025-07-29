@@ -14,7 +14,9 @@
 namespace gs {
 
     // Forward declarations
-    class GSViewer;
+    namespace visualizer {
+        class VisualizerImpl;
+    }
 
     /**
      * @brief Manages training lifecycle and thread coordination
@@ -54,7 +56,7 @@ namespace gs {
         bool hasTrainer() const { return trainer_ != nullptr; }
 
         // Link to viewer for notifications
-        void setViewer(GSViewer* viewer) { viewer_ = viewer; }
+        void setViewer(visualizer::VisualizerImpl* viewer) { viewer_ = viewer; }
 
         // Set event bus for publishing training events
         void setEventBus(std::shared_ptr<EventBus> event_bus);
@@ -117,7 +119,7 @@ namespace gs {
         // Member variables
         std::unique_ptr<Trainer> trainer_;
         std::unique_ptr<std::jthread> training_thread_;
-        GSViewer* viewer_ = nullptr;
+        visualizer::VisualizerImpl* viewer_ = nullptr;
 
         // Event bus for publishing events
         std::shared_ptr<EventBus> event_bus_;

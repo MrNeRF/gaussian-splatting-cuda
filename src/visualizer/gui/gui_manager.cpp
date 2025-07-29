@@ -1,7 +1,8 @@
 #include "gui_manager.hpp"
 #include "config.h"
 #include "core/event_response_handler.hpp"
-#include "legacy/detail.hpp"
+#include "training/training_manager.hpp"
+#include "visualizer_impl.hpp"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <cstdarg>
@@ -1089,7 +1090,7 @@ namespace gs {
         // GuiManager Implementation
         // ============================================================================
 
-        GuiManager::GuiManager(GSViewer* viewer, std::shared_ptr<EventBus> event_bus)
+        GuiManager::GuiManager(visualizer::VisualizerImpl* viewer, std::shared_ptr<EventBus> event_bus)
             : viewer_(viewer),
               event_bus_(event_bus) {
 

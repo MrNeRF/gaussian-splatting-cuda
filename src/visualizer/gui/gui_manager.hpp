@@ -20,6 +20,10 @@ namespace gs {
     // Forward declarations
     class GSViewer;
 
+    namespace visualizer {
+        class VisualizerImpl; // Forward declaration of VisualizerImpl
+    }
+
     namespace gui {
 
         // Scripting console component
@@ -113,7 +117,7 @@ namespace gs {
         // Main GUI manager
         class GuiManager {
         public:
-            GuiManager(GSViewer* viewer, std::shared_ptr<EventBus> event_bus);
+            GuiManager(visualizer::VisualizerImpl* viewer, std::shared_ptr<EventBus> event_bus);
             ~GuiManager();
 
             void init();
@@ -126,7 +130,7 @@ namespace gs {
             void showFileBrowser(bool show = true);
             void showScriptingConsole(bool show = true);
             void showCameraControls(bool show = true);
-            void showScenePanel(bool show = true); // ADDED
+            void showScenePanel(bool show = true);
 
             // GUI state
             bool isAnyWindowActive() const { return any_window_active_; }
@@ -139,7 +143,7 @@ namespace gs {
             void addConsoleLog(const char* fmt, ...);
 
             // Get viewer for internal use
-            GSViewer* viewer_;
+            visualizer::VisualizerImpl* viewer_;
 
             // Helper to publish events
             template <typename EventType>

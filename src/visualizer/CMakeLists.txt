@@ -1,37 +1,31 @@
-# src/visualizer/CMakeLists.txt
 add_library(gs_visualizer OBJECT
-    # Public API implementation
-    visualizer.cpp
-    
-    # Internal implementation
-    internal/viewer_impl.cpp
-    internal/viewer_service.cpp
-    
-    # Legacy files
-    legacy/viewer.cpp
-    
-    # Rendering subsystem
-    rendering/rendering_pipeline.cpp
-    rendering/render_bounding_box.cpp
-    
-    # GUI subsystem
-    gui/gui_manager.cpp
-    gui/scene_panel.cpp
-    
-    # Scene management
-    scene/scene.cpp
-    scene/scene_manager.cpp
-    
-    # Input handling
-    input/input_handler.cpp
-    input/camera_controller.cpp
-    
-    # Training integration
-    training/training_manager.cpp
-    
-    # Window management
-    window/window_manager.cpp
+        # Public API implementation
+        visualizer.cpp
+        visualizer_impl.cpp
+
+        # Window management
+        window/window_manager.cpp
+
+        # Rendering subsystem
+        rendering/rendering_pipeline.cpp
+        rendering/render_bounding_box.cpp
+
+        # GUI subsystem
+        gui/gui_manager.cpp
+        gui/scene_panel.cpp
+
+        # Scene management
+        scene/scene.cpp
+        scene/scene_manager.cpp
+
+        # Input handling
+        input/input_handler.cpp
+        input/camera_controller.cpp
+
+        # Training integration
+        training/training_manager.cpp
 )
+
 
 # CUDA-OpenGL interop support
 if(CUDA_GL_INTEROP_ENABLED)

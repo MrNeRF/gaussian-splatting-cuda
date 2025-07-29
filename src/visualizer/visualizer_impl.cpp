@@ -1,9 +1,10 @@
+#include "visualizer_impl.hpp"
 #include "config.h" // Include generated config
 #include "core/event_response_handler.hpp"
+#include "core/model_providers.hpp"
 #include "core/splat_data.hpp"
-#include "gui/gui_manager.hpp"
+#include "core/training_setup.hpp"
 #include "internal/resource_paths.hpp"
-#include "legacy/detail.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
@@ -17,170 +18,13 @@
 #include "rendering/cuda_gl_interop.hpp"
 #endif
 
-namespace gs {
+namespace gs::visualizer {
 
-    ViewerDetail::ViewerDetail(std::string title, int width, int height)
-        : title_(title),
-          viewport_(width, height),
-          window_manager_(std::make_unique<WindowManager>(title, width, height)) {
-    }
-
-    ViewerDetail::~ViewerDetail() {
-        std::cout << "Viewer destroyed." << std::endl;
-    }
-
-    bool ViewerDetail::init() {
-        if (!window_manager_->init()) {
-            return false;
-        }
-
-        // Create input handler
-        input_handler_ = std::make_unique<InputHandler>(window_manager_->getWindow());
-
-        // Create camera controller
-        camera_controller_ = std::make_unique<CameraController>(viewport_);
-        camera_controller_->connectToInputHandler(*input_handler_);
-
-        return true;
-    }
-
-    void ViewerDetail::updateWindowSize() {
-        window_manager_->updateWindowSize();
-        viewport_.windowSize = window_manager_->getWindowSize();
-        viewport_.frameBufferSize = window_manager_->getFramebufferSize();
-    }
-
-    float ViewerDetail::getGPUUsage() {
-        size_t free_byte, total_byte;
-        cudaDeviceSynchronize();
-        cudaMemGetInfo(&free_byte, &total_byte);
-        size_t used_byte = total_byte - free_byte;
-        float gpuUsage = used_byte / (float)total_byte * 100;
-
-        return gpuUsage;
-    }
-
-    void ViewerDetail::setFrameRate(const int fps) {
-        targetFPS = fps;
-        frameTime = 1000 / targetFPS;
-    }
-
-    void ViewerDetail::controlFrameRate() {
-        auto now = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTime).count();
-        if (duration < frameTime) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(frameTime - duration));
-        }
-        lastTime = std::chrono::high_resolution_clock::now();
-    }
-
-    void ViewerDetail::run() {
-
-        if (!init()) {
-            std::cerr << "Viewer initialization failed!" << std::endl;
-            return;
-        }
-
-        std::string shader_path = std::string(PROJECT_ROOT_PATH) + "/src/visualizer/rendering/shaders/";
-        quadShader_ = std::make_shared<Shader>(
-            (gs::visualizer::getShaderPath("screen_quad.vert")).c_str(),
-            (gs::visualizer::getShaderPath("screen_quad.frag")).c_str(),
-            true);
-
-        // Initialize screen renderer with interop support if available
-#ifdef CUDA_GL_INTEROP_ENABLED
-        screen_renderer_ = std::make_shared<ScreenQuadRendererInterop>(true);
-        std::cout << "CUDA-OpenGL interop enabled for rendering" << std::endl;
-#else
-        screen_renderer_ = std::make_shared<ScreenQuadRenderer>();
-        std::cout << "Using CPU copy for rendering (interop not available)" << std::endl;
-#endif
-
-        while (!window_manager_->shouldClose()) {
-
-            // Clear with a dark background
-            glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-            controlFrameRate();
-
-            updateWindowSize();
-
-            draw();
-
-            window_manager_->swapBuffers();
-            window_manager_->pollEvents();
-        }
-    }
-
-    bool GSViewer::handleFileDrop(const InputHandler::FileDropEvent& event) {
-        // Process each dropped file
-        for (const auto& path_str : event.paths) {
-            std::filesystem::path filepath(path_str);
-
-            // Check if it's a PLY file
-            if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
-                std::println("Dropped PLY file: {}", filepath.string());
-
-                // Load the PLY file
-                loadPLYFile(filepath);
-
-                // Log the action
-                if (gui_manager_) {
-                    gui_manager_->showScriptingConsole(true);
-                    event_bus_->publish(LogMessageEvent{
-                        LogMessageEvent::Level::Info,
-                        std::format("Loaded PLY file via drag-and-drop: {}", filepath.filename().string()),
-                        "GSViewer"});
-                }
-
-                // Only process the first PLY file if multiple files were dropped
-                return true;
-            }
-            if (std::filesystem::is_directory(filepath)) {
-                // Check if it's a dataset directory
-                bool is_colmap_dataset = false;
-                bool is_transforms_dataset = false;
-
-                // Check for COLMAP dataset structure
-                if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
-                    std::filesystem::exists(filepath / "sparse" / "cameras.bin")) {
-                    is_colmap_dataset = true;
-                }
-
-                // Check for transforms dataset
-                if (std::filesystem::exists(filepath / "transforms.json") ||
-                    std::filesystem::exists(filepath / "transforms_train.json")) {
-                    is_transforms_dataset = true;
-                }
-
-                if (is_colmap_dataset || is_transforms_dataset) {
-                    std::println("Dropped dataset directory: {}", filepath.string());
-
-                    // Load the dataset
-                    loadDataset(filepath);
-
-                    // Log the action
-                    if (gui_manager_) {
-                        gui_manager_->showScriptingConsole(true);
-                        event_bus_->publish(LogMessageEvent{
-                            LogMessageEvent::Level::Info,
-                            std::format("Loaded {} dataset via drag-and-drop: {}",
-                                        is_colmap_dataset ? "COLMAP" : "Transforms",
-                                        filepath.filename().string()),
-                            "GSViewer"});
-                    }
-
-                    // Only process the first valid dataset if multiple were dropped
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    GSViewer::GSViewer(std::string title, int width, int height)
-        : ViewerDetail(title, width, height) {
+    VisualizerImpl::VisualizerImpl(const ViewerOptions& options)
+        : options_(options),
+          title_(options.title),
+          viewport_(options.width, options.height),
+          window_manager_(std::make_unique<WindowManager>(options.title, options.width, options.height)) {
 
         // Initialize event bus first
         event_bus_ = std::make_shared<EventBus>();
@@ -205,7 +49,8 @@ namespace gs {
         // Link trainer manager to scene manager
         scene_manager_->setTrainerManager(trainer_manager_.get());
 
-        setFrameRate(30);
+        setFrameRate(options.target_fps);
+        anti_aliasing_ = options.antialiasing;
 
         // Create GUI manager with event bus
         gui_manager_ = std::make_unique<gui::GuiManager>(this, event_bus_);
@@ -410,7 +255,7 @@ namespace gs {
         });
     }
 
-    GSViewer::~GSViewer() {
+    VisualizerImpl::~VisualizerImpl() {
         // Unsubscribe from all events
         for (auto id : event_handler_ids_) {
             // Note: Channels clean up automatically when EventBus is destroyed
@@ -424,10 +269,10 @@ namespace gs {
             gui_manager_->shutdown();
         }
 
-        std::cout << "GSViewer destroyed." << std::endl;
+        std::cout << "Visualizer destroyed." << std::endl;
     }
 
-    void GSViewer::setupEventHandlers() {
+    void VisualizerImpl::setupEventHandlers() {
         // Subscribe to command events
         event_handler_ids_.push_back(
             event_bus_->subscribe<StartTrainingCommand>(
@@ -530,45 +375,45 @@ namespace gs {
                 }));
     }
 
-    void GSViewer::handleStartTrainingCommand(const StartTrainingCommand& cmd) {
+    void VisualizerImpl::handleStartTrainingCommand(const StartTrainingCommand& cmd) {
         if (trainer_manager_) {
             trainer_manager_->startTraining();
         }
     }
 
-    void GSViewer::handlePauseTrainingCommand(const PauseTrainingCommand& cmd) {
+    void VisualizerImpl::handlePauseTrainingCommand(const PauseTrainingCommand& cmd) {
         if (trainer_manager_) {
             trainer_manager_->pauseTraining();
         }
     }
 
-    void GSViewer::handleResumeTrainingCommand(const ResumeTrainingCommand& cmd) {
+    void VisualizerImpl::handleResumeTrainingCommand(const ResumeTrainingCommand& cmd) {
         if (trainer_manager_) {
             trainer_manager_->resumeTraining();
         }
     }
 
-    void GSViewer::handleStopTrainingCommand(const StopTrainingCommand& cmd) {
+    void VisualizerImpl::handleStopTrainingCommand(const StopTrainingCommand& cmd) {
         if (trainer_manager_) {
             trainer_manager_->stopTraining();
         }
     }
 
-    void GSViewer::handleSaveCheckpointCommand(const SaveCheckpointCommand& cmd) {
+    void VisualizerImpl::handleSaveCheckpointCommand(const SaveCheckpointCommand& cmd) {
         if (trainer_manager_) {
             trainer_manager_->requestSaveCheckpoint();
         }
     }
 
-    void GSViewer::handleLoadFileCommand(const LoadFileCommand& cmd) {
+    void VisualizerImpl::handleLoadFileCommand(const LoadFileCommand& cmd) {
         if (cmd.is_dataset) {
-            loadDataset(cmd.path);
+            loadDatasetInternal(cmd.path);
         } else {
             loadPLYFile(cmd.path);
         }
     }
 
-    void GSViewer::handleRenderingSettingsChanged(const RenderingSettingsChangedEvent& event) {
+    void VisualizerImpl::handleRenderingSettingsChanged(const RenderingSettingsChangedEvent& event) {
         if (event.fov) {
             config_->fov = *event.fov;
         }
@@ -580,22 +425,7 @@ namespace gs {
         }
     }
 
-    void GSViewer::setTrainer(Trainer* trainer) {
-        // This method is now deprecated - should not be used
-        std::cerr << "Warning: GSViewer::setTrainer is deprecated. Use loadDataset instead." << std::endl;
-    }
-
-    void GSViewer::setStandaloneModel(std::unique_ptr<SplatData> model) {
-        if (scene_) {
-            scene_->setStandaloneModel(std::move(model));
-        }
-    }
-
-    void GSViewer::setAntiAliasing(bool enable) {
-        anti_aliasing_ = enable;
-    }
-
-    void GSViewer::loadPLYFile(const std::filesystem::path& path) {
+    void VisualizerImpl::loadPLYFile(const std::filesystem::path& path) {
         try {
             std::println("Loading PLY file: {}", path.string());
 
@@ -607,11 +437,11 @@ namespace gs {
             event_bus_->publish(LogMessageEvent{
                 LogMessageEvent::Level::Error,
                 std::format("Exception loading PLY: {}", e.what()),
-                "GSViewer"});
+                "VisualizerImpl"});
         }
     }
 
-    void GSViewer::loadDataset(const std::filesystem::path& path) {
+    void VisualizerImpl::loadDatasetInternal(const std::filesystem::path& path) {
         try {
             std::println("Loading dataset from: {}", path.string());
 
@@ -623,11 +453,11 @@ namespace gs {
             event_bus_->publish(LogMessageEvent{
                 LogMessageEvent::Level::Error,
                 std::format("Exception loading dataset: {}", e.what()),
-                "GSViewer"});
+                "VisualizerImpl"});
         }
     }
 
-    void GSViewer::clearCurrentData() {
+    void VisualizerImpl::clearCurrentData() {
         scene_manager_->clearScene();
         current_mode_ = ViewerMode::Empty;
         current_ply_path_.clear();
@@ -642,16 +472,16 @@ namespace gs {
         }
     }
 
-    void GSViewer::startTraining() {
+    void VisualizerImpl::startTraining() {
         // This method is now deprecated - use event bus
         event_bus_->publish(StartTrainingCommand{});
     }
 
-    bool GSViewer::isGuiActive() const {
+    bool VisualizerImpl::isGuiActive() const {
         return gui_manager_ && gui_manager_->isAnyWindowActive();
     }
 
-    GSViewer::ViewerMode GSViewer::getCurrentMode() const {
+    VisualizerImpl::ViewerMode VisualizerImpl::getCurrentMode() const {
         if (!scene_manager_)
             return ViewerMode::Empty;
 
@@ -669,7 +499,118 @@ namespace gs {
         }
     }
 
-    void GSViewer::drawFrame() {
+    bool VisualizerImpl::handleFileDrop(const InputHandler::FileDropEvent& event) {
+        // Process each dropped file
+        for (const auto& path_str : event.paths) {
+            std::filesystem::path filepath(path_str);
+
+            // Check if it's a PLY file
+            if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
+                std::println("Dropped PLY file: {}", filepath.string());
+
+                // Load the PLY file
+                loadPLYFile(filepath);
+
+                // Log the action
+                if (gui_manager_) {
+                    gui_manager_->showScriptingConsole(true);
+                    event_bus_->publish(LogMessageEvent{
+                        LogMessageEvent::Level::Info,
+                        std::format("Loaded PLY file via drag-and-drop: {}", filepath.filename().string()),
+                        "VisualizerImpl"});
+                }
+
+                // Only process the first PLY file if multiple files were dropped
+                return true;
+            }
+            if (std::filesystem::is_directory(filepath)) {
+                // Check if it's a dataset directory
+                bool is_colmap_dataset = false;
+                bool is_transforms_dataset = false;
+
+                // Check for COLMAP dataset structure
+                if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
+                    std::filesystem::exists(filepath / "sparse" / "cameras.bin")) {
+                    is_colmap_dataset = true;
+                }
+
+                // Check for transforms dataset
+                if (std::filesystem::exists(filepath / "transforms.json") ||
+                    std::filesystem::exists(filepath / "transforms_train.json")) {
+                    is_transforms_dataset = true;
+                }
+
+                if (is_colmap_dataset || is_transforms_dataset) {
+                    std::println("Dropped dataset directory: {}", filepath.string());
+
+                    // Load the dataset
+                    loadDatasetInternal(filepath);
+
+                    // Log the action
+                    if (gui_manager_) {
+                        gui_manager_->showScriptingConsole(true);
+                        event_bus_->publish(LogMessageEvent{
+                            LogMessageEvent::Level::Info,
+                            std::format("Loaded {} dataset via drag-and-drop: {}",
+                                        is_colmap_dataset ? "COLMAP" : "Transforms",
+                                        filepath.filename().string()),
+                            "VisualizerImpl"});
+                    }
+
+                    // Only process the first valid dataset if multiple were dropped
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool VisualizerImpl::init() {
+        if (!window_manager_->init()) {
+            return false;
+        }
+
+        // Create input handler
+        input_handler_ = std::make_unique<InputHandler>(window_manager_->getWindow());
+
+        // Create camera controller
+        camera_controller_ = std::make_unique<CameraController>(viewport_);
+        camera_controller_->connectToInputHandler(*input_handler_);
+
+        return true;
+    }
+
+    void VisualizerImpl::updateWindowSize() {
+        window_manager_->updateWindowSize();
+        viewport_.windowSize = window_manager_->getWindowSize();
+        viewport_.frameBufferSize = window_manager_->getFramebufferSize();
+    }
+
+    float VisualizerImpl::getGPUUsage() {
+        size_t free_byte, total_byte;
+        cudaDeviceSynchronize();
+        cudaMemGetInfo(&free_byte, &total_byte);
+        size_t used_byte = total_byte - free_byte;
+        float gpuUsage = used_byte / (float)total_byte * 100;
+
+        return gpuUsage;
+    }
+
+    void VisualizerImpl::setFrameRate(const int fps) {
+        target_fps_ = fps;
+        frame_time_ = 1000 / target_fps_;
+    }
+
+    void VisualizerImpl::controlFrameRate() {
+        auto now = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time_).count();
+        if (duration < frame_time_) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(frame_time_ - duration));
+        }
+        last_time_ = std::chrono::high_resolution_clock::now();
+    }
+
+    void VisualizerImpl::drawFrame() {
         // Only render if we have a scene
         if (!scene_manager_->hasScene()) {
             return;
@@ -702,7 +643,7 @@ namespace gs {
 
         if (result.valid) {
             RenderingPipeline::uploadToScreen(result, *screen_renderer_, viewport_.windowSize);
-            screen_renderer_->render(quadShader_, viewport_);
+            screen_renderer_->render(quad_shader_, viewport_);
         }
         // Render bounding box if enabled
         if (gui_manager_->showCropBox()) {
@@ -724,7 +665,7 @@ namespace gs {
         }
     }
 
-    void GSViewer::draw() {
+    void VisualizerImpl::draw() {
         // Initialize GUI on first draw
         static bool gui_initialized = false;
         if (!gui_initialized) {
@@ -764,4 +705,68 @@ namespace gs {
         gui_manager_->render();
     }
 
-} // namespace gs
+    void VisualizerImpl::run() {
+        if (!init()) {
+            std::cerr << "Viewer initialization failed!" << std::endl;
+            return;
+        }
+
+        std::string shader_path = std::string(PROJECT_ROOT_PATH) + "/src/visualizer/rendering/shaders/";
+        quad_shader_ = std::make_shared<Shader>(
+            (gs::visualizer::getShaderPath("screen_quad.vert")).c_str(),
+            (gs::visualizer::getShaderPath("screen_quad.frag")).c_str(),
+            true);
+
+        // Initialize screen renderer with interop support if available
+#ifdef CUDA_GL_INTEROP_ENABLED
+        screen_renderer_ = std::make_shared<ScreenQuadRendererInterop>(true);
+        std::cout << "CUDA-OpenGL interop enabled for rendering" << std::endl;
+#else
+        screen_renderer_ = std::make_shared<ScreenQuadRenderer>();
+        std::cout << "Using CPU copy for rendering (interop not available)" << std::endl;
+#endif
+
+        while (!window_manager_->shouldClose()) {
+
+            // Clear with a dark background
+            glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            controlFrameRate();
+
+            updateWindowSize();
+
+            draw();
+
+            window_manager_->swapBuffers();
+            window_manager_->pollEvents();
+        }
+    }
+
+    void VisualizerImpl::setParameters(const param::TrainingParameters& params) {
+        params_ = params;
+    }
+
+    std::expected<void, std::string> VisualizerImpl::loadPLY(const std::filesystem::path& path) {
+        try {
+            loadPLYFile(path);
+            return {};
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Failed to load PLY: {}", e.what()));
+        }
+    }
+
+    std::expected<void, std::string> VisualizerImpl::loadDataset(const std::filesystem::path& path) {
+        try {
+            loadDatasetInternal(path);
+            return {};
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Failed to load dataset: {}", e.what()));
+        }
+    }
+
+    void VisualizerImpl::clearScene() {
+        clearCurrentData();
+    }
+
+} // namespace gs::visualizer

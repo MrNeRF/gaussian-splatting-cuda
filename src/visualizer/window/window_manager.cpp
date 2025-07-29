@@ -1,5 +1,4 @@
 #include "window_manager.hpp"
-#include "legacy/detail.hpp"
 // clang-format off
 // CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
 #include <glad/glad.h>

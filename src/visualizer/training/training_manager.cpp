@@ -1,5 +1,4 @@
 #include "training/training_manager.hpp"
-#include "legacy/detail.hpp"
 #include <print>
 
 namespace gs {
