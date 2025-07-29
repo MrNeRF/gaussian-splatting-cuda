@@ -94,6 +94,7 @@ namespace gs::visualizer {
         const std::filesystem::path& getCurrentPLYPath() const { return current_ply_path_; }
         const std::filesystem::path& getCurrentDatasetPath() const { return current_dataset_path_; }
         TrainerManager* getTrainerManager() { return trainer_manager_.get(); } // MOVED TO PUBLIC
+        SceneManager* getSceneManager() { return scene_manager_.get(); }
         GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
         std::shared_ptr<EventBus> getEventBus() const { return event_bus_; }
         std::shared_ptr<RenderBoundingBox> getCropBox() const { return crop_box_; }

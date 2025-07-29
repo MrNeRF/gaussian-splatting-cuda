@@ -1,207 +1,69 @@
 #pragma once
 
 #include "core/event_bus.hpp"
-#include "core/events.hpp"
-#include "core/trainer.hpp"
-#include "gui/scene_panel.hpp"
-#include "internal/viewer_notifier.hpp"
-#include "rendering/render_bounding_box.hpp"
-
-#include <chrono>
+#include "gui/ui_context.hpp"
 #include <filesystem>
-#include <functional>
 #include <imgui.h>
 #include <memory>
 #include <string>
-#include <vector>
+#include <unordered_map>
 
 namespace gs {
-
-    // Forward declarations
-    class GSViewer;
-
     namespace visualizer {
-        class VisualizerImpl; // Forward declaration of VisualizerImpl
+        class VisualizerImpl;
     }
 
     namespace gui {
+        class ScriptingConsole;
+        class FileBrowser;
+        class ScenePanel;
 
-        // Scripting console component
-        class ScriptingConsole {
-        public:
-            ScriptingConsole();
-
-            void clearLog();
-            void addLog(const char* fmt, ...);
-            void executeCommand(const std::string& command);
-            void render(bool* p_open);
-            void setExecutor(std::function<std::string(const std::string&)> executor);
-
-        private:
-            static int textEditCallbackStub(ImGuiInputTextCallbackData* data);
-            int textEditCallback(ImGuiInputTextCallbackData* data);
-
-            std::vector<std::string> history_;
-            std::vector<std::string> output_buffer_;
-            char input_buffer_[1024] = "";
-            int history_pos_ = -1;
-            bool scroll_to_bottom_ = false;
-            bool reclaim_focus_ = false;
-            size_t max_output_lines_ = 1000;
-            std::function<std::string(const std::string&)> execute_callback_;
-        };
-
-        // File browser component
-        class FileBrowser {
-        public:
-            FileBrowser();
-
-            void render(bool* p_open);
-            void setOnFileSelected(std::function<void(const std::filesystem::path&, bool)> callback);
-            void setCurrentPath(const std::filesystem::path& path);
-            void setSelectedPath(const std::filesystem::path& path);
-
-        private:
-            std::string current_path_;
-            std::string selected_file_;
-            std::function<void(const std::filesystem::path&, bool)> on_file_selected_;
-        };
-
-        // Camera controls window
-        class CameraControlsWindow {
-        public:
-            void render(bool* p_open);
-        };
-
-        // Training controls panel
-        class TrainingControlsPanel {
-        public:
-            struct State {
-                bool manual_start_triggered = false;
-                bool training_started = false;
-                bool save_in_progress = false;
-                std::chrono::steady_clock::time_point save_start_time;
-            };
-
-            void render(Trainer* trainer, State& state, std::shared_ptr<ViewerNotifier> notifier);
-
-        private:
-            void renderStartButton(State& state);
-            void renderRunningControls(Trainer* trainer, State& state);
-            void renderStatus(Trainer* trainer, State& state);
-        };
-
-        // CropBox panel
-        class CropBoxPanel {
-        public:
-            void render();
-            bool show_crop_box_ = false;
-            bool use_crop_box_ = false;
-            std::shared_ptr<RenderBoundingBox> crop_box_;
-
-        private:
-            // Rendering methods
-            void renderAppearanceControls();
-            void renderRotationControls();
-            void renderRotationInputs();
-            void renderBoundsControls();
-            void renderMinBoundsInputs(float min_bounds[3], float max_bounds[3], bool& bounds_changed);
-            void renderMaxBoundsInputs(float min_bounds[3], float max_bounds[3], bool& bounds_changed);
-            void renderBoundsInfo();
-
-            // Helper methods
-            float wrapAngle(float angle);
-            void updateRotationMatrix(float delta_rot_x, float delta_rot_y, float delta_rot_z);
-        };
-
-        // Main GUI manager
         class GuiManager {
         public:
             GuiManager(visualizer::VisualizerImpl* viewer, std::shared_ptr<EventBus> event_bus);
             ~GuiManager();
 
+            // Lifecycle
             void init();
-            void beginFrame();
-            void endFrame();
-            void render();
             void shutdown();
+            void render();
 
-            // Window visibility controls
-            void showFileBrowser(bool show = true);
-            void showScriptingConsole(bool show = true);
-            void showCameraControls(bool show = true);
-            void showScenePanel(bool show = true);
-
-            // GUI state
-            bool isAnyWindowActive() const { return any_window_active_; }
-
-            // Callbacks
-            void setScriptExecutor(std::function<std::string(const std::string&)> executor);
-            void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
-
-            // Console access
-            void addConsoleLog(const char* fmt, ...);
-
-            // Get viewer for internal use
-            visualizer::VisualizerImpl* viewer_;
-
-            // Helper to publish events
-            template <typename EventType>
-            void publish(const EventType& event) {
-                if (event_bus_) {
-                    event_bus_->publish(event);
-                }
-            }
-
-            // Get event bus for internal components
-            std::shared_ptr<EventBus> getEventBus() const { return event_bus_; }
-
+            // State queries
+            bool isAnyWindowActive() const { return ImGui::IsAnyItemActive(); }
             bool showCropBox() const;
             bool useCropBox() const;
 
+            // Window visibility
+            void showWindow(const std::string& name, bool show = true);
+            void toggleWindow(const std::string& name);
+
+            // Console access for logging
+            void addConsoleLog(const char* fmt, ...);
+
+            // Missing methods that visualizer_impl expects
+            void setScriptExecutor(std::function<std::string(const std::string&)> executor);
+            void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
+            void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
+
         private:
-            void renderMainPanel();
-            void renderModeStatus();
-            void renderRenderingSettings();
-            void renderProgressInfo();
-
-            // Event system
-            std::shared_ptr<EventBus> event_bus_;
-            std::vector<size_t> event_handler_ids_;
-
-            // Event handlers
             void setupEventHandlers();
-            void handleSceneLoaded(const SceneLoadedEvent& event);
-            void handleSceneCleared(const SceneClearedEvent& event);
-            void handleTrainingStarted(const TrainingStartedEvent& event);
-            void handleTrainingProgress(const TrainingProgressEvent& event);
-            void handleTrainingPaused(const TrainingPausedEvent& event);
-            void handleTrainingResumed(const TrainingResumedEvent& event);
-            void handleTrainingCompleted(const TrainingCompletedEvent& event);
-            void handleLogMessage(const LogMessageEvent& event);
+            void applyDefaultStyle();
 
-            // Components
-            std::unique_ptr<ScriptingConsole> scripting_console_;
+            // Core dependencies
+            visualizer::VisualizerImpl* viewer_;
+            std::shared_ptr<EventBus> event_bus_;
+
+            // Owned components
+            std::unique_ptr<ScriptingConsole> console_;
             std::unique_ptr<FileBrowser> file_browser_;
-            std::unique_ptr<CameraControlsWindow> camera_controls_;
-            std::unique_ptr<TrainingControlsPanel> training_controls_;
-            std::unique_ptr<CropBoxPanel> crop_box_panel_;
             std::unique_ptr<ScenePanel> scene_panel_;
 
-            // Window states
+            // UI state only
+            std::unordered_map<std::string, bool> window_states_;
             bool show_main_panel_ = true;
-            bool show_file_browser_ = false;
-            bool show_scripting_console_ = false;
-            bool show_camera_controls_ = false;
-            bool show_scene_panel_ = true;
-            bool any_window_active_ = false;
 
-            // ImGui settings
-            ImGuiWindowFlags window_flags_ = 0;
-
-            // Training controls state
-            TrainingControlsPanel::State training_state_;
+            // Event handler IDs for cleanup
+            std::vector<size_t> event_handler_ids_;
         };
-
     } // namespace gui
 } // namespace gs

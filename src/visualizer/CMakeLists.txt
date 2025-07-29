@@ -1,30 +1,38 @@
 add_library(gs_visualizer OBJECT
-        # Public API implementation
-        visualizer.cpp
-        visualizer_impl.cpp
-
-        # Window management
-        window/window_manager.cpp
-
-        # Rendering subsystem
-        rendering/rendering_pipeline.cpp
-        rendering/render_bounding_box.cpp
-
-        # GUI subsystem
-        gui/gui_manager.cpp
-        gui/scene_panel.cpp
-
-        # Scene management
-        scene/scene.cpp
-        scene/scene_manager.cpp
-
-        # Input handling
-        input/input_handler.cpp
-        input/camera_controller.cpp
-
-        # Training integration
-        training/training_manager.cpp
+    # Core
+    visualizer.cpp
+    visualizer_impl.cpp
+    
+    # Window management
+    window/window_manager.cpp
+    
+    # Rendering
+    rendering/rendering_pipeline.cpp
+    rendering/render_bounding_box.cpp
+    
+    # GUI system
+    gui/gui_manager.cpp
+    gui/ui_widgets.cpp
+    gui/panels/main_panel.cpp
+    gui/panels/training_panel.cpp
+    gui/panels/crop_box_panel.cpp
+    gui/panels/scene_panel.cpp
+    gui/windows/scripting_console.cpp
+    gui/windows/file_browser.cpp
+    gui/windows/camera_controls.cpp
+    
+    # Scene management  
+    scene/scene.cpp
+    scene/scene_manager.cpp
+    
+    # Input handling
+    input/input_handler.cpp
+    input/camera_controller.cpp
+    
+    # Training integration
+    training/training_manager.cpp
 )
+
 
 
 # CUDA-OpenGL interop support

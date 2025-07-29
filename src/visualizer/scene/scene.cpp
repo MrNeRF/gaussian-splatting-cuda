@@ -94,7 +94,7 @@ namespace gs {
         }
     }
 
-    void Scene::handleModelInfoQuery(const QueryModelInfoRequest& request) {
+    void Scene::handleModelInfoQuery(const QueryModelInfoRequest& [[maybe_unused]] request) {
         if (!event_bus_)
             return;
 
@@ -118,7 +118,8 @@ namespace gs {
         event_bus_->publish(response);
     }
 
-    void Scene::handleSceneModeQuery(const QuerySceneModeRequest& request) {
+    void Scene::handleSceneModeQuery(const QuerySceneModeRequest& [[maybe_unused]] request) {
+
         if (!event_bus_)
             return;
 
