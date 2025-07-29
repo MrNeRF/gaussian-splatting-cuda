@@ -62,7 +62,7 @@ namespace gs::loader {
             options.progress(50.0f, "Parsing PLY data...");
         }
 
-        auto splat_result = gs::load_ply(path);
+        auto splat_result = load_ply(path);
         if (!splat_result) {
             return std::unexpected(splat_result.error());
         }

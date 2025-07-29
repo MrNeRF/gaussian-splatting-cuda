@@ -6,7 +6,11 @@
 #include <filesystem>
 #include <vector>
 
-std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
-    const std::filesystem::path& transPath);
+namespace gs::loader {
 
-gs::PointCloud generate_random_point_cloud();
+    std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
+        const std::filesystem::path& transPath);
+
+    PointCloud generate_random_point_cloud();
+
+} // namespace gs::loader
