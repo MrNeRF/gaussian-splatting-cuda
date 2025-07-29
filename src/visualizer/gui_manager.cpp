@@ -702,9 +702,9 @@ namespace gs {
         // Updated CropBoxPanel implementation with split functions
 
         void CropBoxPanel::render() {
-            if (ImGui::CollapsingHeader("Clip Box")) {
-                ImGui::Checkbox("Show Clip Box", &show_crop_box_);
-                ImGui::Checkbox("Use Clip Box", &use_crop_box_);
+            if (ImGui::CollapsingHeader("Crop Box")) {
+                ImGui::Checkbox("Show Crop Box", &show_crop_box_);
+                ImGui::Checkbox("Use Crop Box", &use_crop_box_);
 
                 if (show_crop_box_ && crop_box_) {
                     if (!crop_box_->isInitialized()) {
@@ -779,14 +779,14 @@ namespace gs {
             if (ImGui::ArrowButton("##RotX_Up", ImGuiDir_Up)) {
                 diff_x = step;
                 rotation_changed = true;
-                rotate_timer = 0.0f;
+                rotate_timer_x = 0.0f;
             }
             if (ImGui::IsItemActive()) {
-                rotate_timer += ImGui::GetIO().DeltaTime;
-                if (rotate_timer >= repeat_rate) {
+                rotate_timer_x += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_x >= repeat_rate) {
                     diff_x = step;
                     rotation_changed = true;
-                    rotate_timer = 0.0f;
+                    rotate_timer_x = 0.0f;
                 }
             }
 
@@ -794,14 +794,14 @@ namespace gs {
             if (ImGui::ArrowButton("##RotX_Down", ImGuiDir_Down)) {
                 diff_x = -step;
                 rotation_changed = true;
-                rotate_timer = 0.0f;
+                rotate_timer_x = 0.0f;
             }
             if (ImGui::IsItemActive()) {
-                rotate_timer += ImGui::GetIO().DeltaTime;
-                if (rotate_timer >= repeat_rate) {
+                rotate_timer_x += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_x >= repeat_rate) {
                     diff_x = -step;
                     rotation_changed = true;
-                    rotate_timer = 0.0f;
+                    rotate_timer_x = 0.0f;
                 }
             }
 
@@ -813,14 +813,14 @@ namespace gs {
             if (ImGui::ArrowButton("##RotY_Up", ImGuiDir_Up)) {
                 diff_y = step;
                 rotation_changed = true;
-                rotate_timer = 0.0f;
+                rotate_timer_y = 0.0f;
             }
             if (ImGui::IsItemActive()) {
-                rotate_timer += ImGui::GetIO().DeltaTime;
-                if (rotate_timer >= repeat_rate) {
+                rotate_timer_y += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_y >= repeat_rate) {
                     diff_y = step;
                     rotation_changed = true;
-                    rotate_timer = 0.0f;
+                    rotate_timer_y = 0.0f;
                 }
             }
 
@@ -828,14 +828,14 @@ namespace gs {
             if (ImGui::ArrowButton("##RotY_Down", ImGuiDir_Down)) {
                 diff_y = -step;
                 rotation_changed = true;
-                rotate_timer = 0.0f;
+                rotate_timer_y = 0.0f;
             }
             if (ImGui::IsItemActive()) {
-                rotate_timer += ImGui::GetIO().DeltaTime;
-                if (rotate_timer >= repeat_rate) {
+                rotate_timer_y += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_y >= repeat_rate) {
                     diff_y = -step;
                     rotation_changed = true;
-                    rotate_timer = 0.0f;
+                    rotate_timer_y = 0.0f;
                 }
             }
 
@@ -847,14 +847,14 @@ namespace gs {
             if (ImGui::ArrowButton("##RotZ_Up", ImGuiDir_Up)) {
                 diff_z = step;
                 rotation_changed = true;
-                rotate_timer = 0.0f;
+                rotate_timer_z = 0.0f;
             }
             if (ImGui::IsItemActive()) {
-                rotate_timer += ImGui::GetIO().DeltaTime;
-                if (rotate_timer >= repeat_rate) {
+                rotate_timer_z += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_z >= repeat_rate) {
                     diff_z = step;
                     rotation_changed = true;
-                    rotate_timer = 0.0f;
+                    rotate_timer_z = 0.0f;
                 }
             }
 
@@ -862,14 +862,14 @@ namespace gs {
             if (ImGui::ArrowButton("##RotZ_Down", ImGuiDir_Down)) {
                 diff_z = -step;
                 rotation_changed = true;
-                rotate_timer = 0.0f;
+                rotate_timer_z = 0.0f;
             }
             if (ImGui::IsItemActive()) {
-                rotate_timer += ImGui::GetIO().DeltaTime;
-                if (rotate_timer >= repeat_rate) {
+                rotate_timer_z += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_z >= repeat_rate) {
                     diff_z = -step;
                     rotation_changed = true;
-                    rotate_timer = 0.0f;
+                    rotate_timer_z = 0.0f;
                 }
             }
 
