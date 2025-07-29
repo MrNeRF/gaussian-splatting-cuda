@@ -13,6 +13,10 @@ namespace gs::loader {
 
     namespace F = torch::nn::functional;
 
+    // Constants for random point cloud generation
+    constexpr int DEFAULT_NUM_INIT_GAUSSIAN = 10000;
+    constexpr uint64_t DEFAULT_RANDOM_SEED = 8128;
+
     // Use std::numbers::pi instead of a custom PI constant.
 
     float fov_deg_to_focal_length(int resolution, float fov_deg) {
@@ -224,9 +228,9 @@ namespace gs::loader {
     }
 
     PointCloud generate_random_point_cloud() {
-        int numInitGaussian = 10000;
+        int numInitGaussian = DEFAULT_NUM_INIT_GAUSSIAN;
 
-        uint64_t seed = 8128;
+        uint64_t seed = DEFAULT_RANDOM_SEED;
         // Set random seed for reproducibility
         torch::manual_seed(seed);
 

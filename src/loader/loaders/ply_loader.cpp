@@ -48,13 +48,15 @@ namespace gs::loader {
             }
 
             // Return empty result for validation only
-            return LoadResult{
-                .data = std::make_shared<SplatData>(), // Empty shared_ptr
-                .scene_center = torch::zeros({3}),
-                .loader_used = name(),
-                .load_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::high_resolution_clock::now() - start_time),
-                .warnings = {}};
+            LoadResult result;
+            result.data = std::shared_ptr<SplatData>{}; // Empty shared_ptr
+            result.scene_center = torch::zeros({3});
+            result.loader_used = name();
+            result.load_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - start_time);
+            result.warnings = {};
+
+            return result;
         }
 
         // Load the PLY file using existing implementation
