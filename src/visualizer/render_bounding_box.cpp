@@ -134,8 +134,10 @@ namespace gs {
         shader_->bind();
 
         try {
+
+            auto box2World = glm::inverse(world2BBox_);
             // Set uniforms
-            glm::mat4 mvp = projection * view * world2BBox_;
+            glm::mat4 mvp = projection * view * box2World;
 
             shader_->set_uniform("u_mvp", mvp);
             shader_->set_uniform("u_color", color_);
