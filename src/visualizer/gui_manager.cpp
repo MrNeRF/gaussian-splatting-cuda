@@ -1076,8 +1076,8 @@ namespace gs {
             // Apply the rotation transformation to the base transformation
             // The rotation happens in world space, so we compose: new_transform = rotation * base_transform
             glm::mat4 final_transform = rotation_transform * curr_world2bbox_;
-            // intersting problem had to orthogonolize matrix because of numerical issues
-            // (multiplying rotations many time gets you out of rotations group)
+            // Interesting problem: had to orthonormalize the matrix because of numerical issues
+            // (multiplying rotations many times gets you out of the rotations group)
             final_transform = OrthonormalizeRotation(final_transform);
 
             // 2. Check orthonormal rotation: norm(R * R^T - I) < epsilon
