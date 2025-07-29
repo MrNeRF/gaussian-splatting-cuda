@@ -1056,8 +1056,8 @@ namespace gs {
             // Combine rotations: apply in order Z, Y, X (intrinsic rotations)
             glm::mat4 combined_rotation = rot_x * rot_y * rot_z;
 
-            // Get the current center of the bounding box
-            glm::vec3 center = crop_box_->getCenter();
+            // Get the current local center of the bounding box (we are rotating in local box coordinates)
+            glm::vec3 center = crop_box_->getLocalCenter();
 
             // Create translation matrices to move rotation center to origin and back
             glm::mat4 translate_to_origin = glm::mat4(1.0f);
