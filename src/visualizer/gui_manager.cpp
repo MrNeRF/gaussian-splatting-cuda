@@ -699,102 +699,390 @@ namespace gs {
         // CropBoxPanel Implementation
         // ============================================================================
 
+        // Updated CropBoxPanel implementation with split functions
+
         void CropBoxPanel::render() {
-            if (ImGui::CollapsingHeader("Clip Box")) {
-                ImGui::Checkbox("Show Clip Box", &show_crop_box_);
-                ImGui::Checkbox("Use Clip Box", &use_crop_box_);
+            if (ImGui::CollapsingHeader("Crop Box")) {
+                ImGui::Checkbox("Show Crop Box", &show_crop_box_);
+                ImGui::Checkbox("Use Crop Box", &use_crop_box_);
 
                 if (show_crop_box_ && crop_box_) {
                     if (!crop_box_->isInitialized()) {
                         return; // the manager must init crop box
                     }
 
-                    // Color picker
-                    static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
-                    if (ImGui::ColorEdit3("Box Color", bbox_color)) {
-                        crop_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
-                    }
-
-                    // Line width
-                    static float line_width = 2.0f;
-                    float available_width = ImGui::GetContentRegionAvail().x;
-                    float button_width = 120.0f;
-                    float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
-
-                    ImGui::SetNextItemWidth(slider_width);
-                    if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
-                        crop_box_->setLineWidth(line_width);
-                    }
-
-                    // Reset button
-                    if (ImGui::Button("Reset to Default")) {
-                        crop_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
-                    }
-
-                    // Manual bounds adjustment
-                    if (ImGui::TreeNode("Manual Bounds")) {
-                        glm::vec3 current_min = crop_box_->getMinBounds();
-                        glm::vec3 current_max = crop_box_->getMaxBounds();
-
-                        float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
-                        float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
-
-                        bool bounds_changed = false;
-
-                        const float min_range = -8.0f;
-                        const float max_range = 8.0f;
-
-                        // Min Bounds
-                        ImGui::Text("Min Bounds:");
-                        float min_bounds_x = min_bounds[0];
-                        bounds_changed |= ImGui::SliderFloat("Min X", &min_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        min_bounds_x = std::min(min_bounds_x, max_bounds[0]);
-                        min_bounds[0] = min_bounds_x;
-
-                        float min_bounds_y = min_bounds[1];
-                        bounds_changed |= ImGui::SliderFloat("Min Y", &min_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        min_bounds_y = std::min(min_bounds_y, max_bounds[1]);
-                        min_bounds[1] = min_bounds_y;
-
-                        float min_bounds_z = min_bounds[2];
-                        bounds_changed |= ImGui::SliderFloat("Min Z", &min_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        min_bounds_z = std::min(min_bounds_z, max_bounds[2]);
-                        min_bounds[2] = min_bounds_z;
-
-                        // Max Bounds
-                        ImGui::Text("Max Bounds:");
-                        float max_bounds_x = max_bounds[0];
-                        bounds_changed |= ImGui::SliderFloat("Max X", &max_bounds_x, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        max_bounds_x = std::max(max_bounds_x, min_bounds[0]);
-                        max_bounds[0] = max_bounds_x;
-
-                        float max_bounds_y = max_bounds[1];
-                        bounds_changed |= ImGui::SliderFloat("Max Y", &max_bounds_y, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        max_bounds_y = std::max(max_bounds_y, min_bounds[1]);
-                        max_bounds[1] = max_bounds_y;
-
-                        float max_bounds_z = max_bounds[2];
-                        bounds_changed |= ImGui::SliderFloat("Max Z", &max_bounds_z, min_range, max_range, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                        max_bounds_z = std::max(max_bounds_z, min_bounds[2]);
-                        max_bounds[2] = max_bounds_z;
-
-                        if (bounds_changed) {
-                            crop_box_->setBounds(
-                                glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
-                                glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
-                        }
-
-                        // Display current info
-                        glm::vec3 center = crop_box_->getCenter();
-                        glm::vec3 size = crop_box_->getSize();
-
-                        ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
-                        ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
-
-                        ImGui::TreePop();
-                    }
+                    renderAppearanceControls();
+                    renderRotationControls();
+                    renderBoundsControls();
                 }
             }
+        }
+
+        void CropBoxPanel::renderAppearanceControls() {
+            // Color picker
+            static float bbox_color[3] = {1.0f, 1.0f, 0.0f}; // Yellow default
+            if (ImGui::ColorEdit3("Box Color", bbox_color)) {
+                crop_box_->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
+            }
+
+            // Line width
+            static float line_width = 2.0f;
+            float available_width = ImGui::GetContentRegionAvail().x;
+            float button_width = 120.0f;
+            float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
+
+            ImGui::SetNextItemWidth(slider_width);
+            if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
+                crop_box_->setLineWidth(line_width);
+            }
+
+            // Reset button
+            if (ImGui::Button("Reset to Default")) {
+                crop_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+                // Reset rotation angles to 0
+                crop_box_->setworld2BBox(glm::mat4(1.0));
+            }
+        }
+
+        void CropBoxPanel::renderRotationControls() {
+            if (ImGui::TreeNode("Rotation")) {
+                ImGui::Text("Ctrl+click for faster steps");
+                ImGui::Text("Rotation around crop box axes:");
+
+                renderRotationInputs();
+                ImGui::TreePop();
+            }
+        }
+
+        void CropBoxPanel::renderRotationInputs() {
+            const float rotation_text_width = 110.0f;
+            const float rotation_step = 1.0f;
+            const float rotation_step_fast = 15.0f;
+
+            bool rotation_changed = false;
+
+            float diff_x = 0, diff_y = 0, diff_z = 0;
+
+            float step = ImGui::GetIO().KeyCtrl ? rotation_step_fast : rotation_step;
+            float repeat_rate = 0.05f;
+
+            // Separate timers per axis
+            static float rotate_timer_x = 0.0f;
+            static float rotate_timer_y = 0.0f;
+            static float rotate_timer_z = 0.0f;
+
+            // --- X-axis ---
+            ImGui::Text("X-axis:");
+            ImGui::SameLine();
+            ImGui::Text("RotX");
+
+            if (ImGui::ArrowButton("##RotX_Up", ImGuiDir_Up)) {
+                diff_x = step;
+                rotation_changed = true;
+                rotate_timer_x = 0.0f;
+            }
+            if (ImGui::IsItemActive()) {
+                rotate_timer_x += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_x >= repeat_rate) {
+                    diff_x = step;
+                    rotation_changed = true;
+                    rotate_timer_x = 0.0f;
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::ArrowButton("##RotX_Down", ImGuiDir_Down)) {
+                diff_x = -step;
+                rotation_changed = true;
+                rotate_timer_x = 0.0f;
+            }
+            if (ImGui::IsItemActive()) {
+                rotate_timer_x += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_x >= repeat_rate) {
+                    diff_x = -step;
+                    rotation_changed = true;
+                    rotate_timer_x = 0.0f;
+                }
+            }
+
+            // --- Y-axis ---
+            ImGui::Text("Y-axis:");
+            ImGui::SameLine();
+            ImGui::Text("RotY");
+
+            if (ImGui::ArrowButton("##RotY_Up", ImGuiDir_Up)) {
+                diff_y = step;
+                rotation_changed = true;
+                rotate_timer_y = 0.0f;
+            }
+            if (ImGui::IsItemActive()) {
+                rotate_timer_y += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_y >= repeat_rate) {
+                    diff_y = step;
+                    rotation_changed = true;
+                    rotate_timer_y = 0.0f;
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::ArrowButton("##RotY_Down", ImGuiDir_Down)) {
+                diff_y = -step;
+                rotation_changed = true;
+                rotate_timer_y = 0.0f;
+            }
+            if (ImGui::IsItemActive()) {
+                rotate_timer_y += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_y >= repeat_rate) {
+                    diff_y = -step;
+                    rotation_changed = true;
+                    rotate_timer_y = 0.0f;
+                }
+            }
+
+            // --- Z-axis ---
+            ImGui::Text("Z-axis:");
+            ImGui::SameLine();
+            ImGui::Text("RotZ");
+
+            if (ImGui::ArrowButton("##RotZ_Up", ImGuiDir_Up)) {
+                diff_z = step;
+                rotation_changed = true;
+                rotate_timer_z = 0.0f;
+            }
+            if (ImGui::IsItemActive()) {
+                rotate_timer_z += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_z >= repeat_rate) {
+                    diff_z = step;
+                    rotation_changed = true;
+                    rotate_timer_z = 0.0f;
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::ArrowButton("##RotZ_Down", ImGuiDir_Down)) {
+                diff_z = -step;
+                rotation_changed = true;
+                rotate_timer_z = 0.0f;
+            }
+            if (ImGui::IsItemActive()) {
+                rotate_timer_z += ImGui::GetIO().DeltaTime;
+                if (rotate_timer_z >= repeat_rate) {
+                    diff_z = -step;
+                    rotation_changed = true;
+                    rotate_timer_z = 0.0f;
+                }
+            }
+
+            if (rotation_changed) {
+                updateRotationMatrix(diff_x, diff_y, diff_z);
+            }
+        }
+
+        void CropBoxPanel::renderBoundsControls() {
+            if (ImGui::TreeNode("Bounds")) {
+                glm::vec3 current_min = crop_box_->getMinBounds();
+                glm::vec3 current_max = crop_box_->getMaxBounds();
+
+                float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
+                float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
+
+                bool bounds_changed = false;
+
+                renderMinBoundsInputs(min_bounds, max_bounds, bounds_changed);
+                ImGui::Separator();
+                renderMaxBoundsInputs(min_bounds, max_bounds, bounds_changed);
+
+                if (bounds_changed) {
+                    crop_box_->setBounds(
+                        glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
+                        glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
+                }
+
+                renderBoundsInfo();
+
+                ImGui::TreePop();
+            }
+        }
+
+        void CropBoxPanel::renderMinBoundsInputs(float min_bounds[3], float max_bounds[3], bool& bounds_changed) {
+            const float min_range = -8.0f;
+            const float max_range = 8.0f;
+            const float bound_text_width = 110.0f;
+            const float bound_step = 0.01f;
+            const float bound_step_fast = 0.1f;
+
+            ImGui::Text("Ctrl+click for faster steps");
+            ImGui::Text("Min Bounds:");
+
+            // Min X
+            ImGui::Text("X:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(bound_text_width);
+            float min_bounds_x = min_bounds[0];
+            bounds_changed |= ImGui::InputFloat("##MinX", &min_bounds_x, bound_step, bound_step_fast, "%.3f");
+            min_bounds_x = std::clamp(min_bounds_x, min_range, max_range);
+            min_bounds_x = std::min(min_bounds_x, max_bounds[0]);
+            min_bounds[0] = min_bounds_x;
+
+            // Min Y
+            ImGui::Text("Y:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(bound_text_width);
+            float min_bounds_y = min_bounds[1];
+            bounds_changed |= ImGui::InputFloat("##MinY", &min_bounds_y, bound_step, bound_step_fast, "%.3f");
+            min_bounds_y = std::clamp(min_bounds_y, min_range, max_range);
+            min_bounds_y = std::min(min_bounds_y, max_bounds[1]);
+            min_bounds[1] = min_bounds_y;
+
+            // Min Z
+            ImGui::Text("Z:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(bound_text_width);
+            float min_bounds_z = min_bounds[2];
+            bounds_changed |= ImGui::InputFloat("##MinZ", &min_bounds_z, bound_step, bound_step_fast, "%.3f");
+            min_bounds_z = std::clamp(min_bounds_z, min_range, max_range);
+            min_bounds_z = std::min(min_bounds_z, max_bounds[2]);
+            min_bounds[2] = min_bounds_z;
+        }
+
+        void CropBoxPanel::renderMaxBoundsInputs(float min_bounds[3], float max_bounds[3], bool& bounds_changed) {
+            const float min_range = -8.0f;
+            const float max_range = 8.0f;
+            const float bound_text_width = 110.0f;
+            const float bound_step = 0.01f;
+            const float bound_step_fast = 0.1f;
+
+            ImGui::Text("Max Bounds:");
+
+            // Max X
+            ImGui::Text("X:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(bound_text_width);
+            float max_bounds_x = max_bounds[0];
+            bounds_changed |= ImGui::InputFloat("##MaxX", &max_bounds_x, bound_step, bound_step_fast, "%.3f");
+            max_bounds_x = std::clamp(max_bounds_x, min_range, max_range);
+            max_bounds_x = std::max(max_bounds_x, min_bounds[0]);
+            max_bounds[0] = max_bounds_x;
+
+            // Max Y
+            ImGui::Text("Y:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(bound_text_width);
+            float max_bounds_y = max_bounds[1];
+            bounds_changed |= ImGui::InputFloat("##MaxY", &max_bounds_y, bound_step, bound_step_fast, "%.3f");
+            max_bounds_y = std::clamp(max_bounds_y, min_range, max_range);
+            max_bounds_y = std::max(max_bounds_y, min_bounds[1]);
+            max_bounds[1] = max_bounds_y;
+
+            // Max Z
+            ImGui::Text("Z:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(bound_text_width);
+            float max_bounds_z = max_bounds[2];
+            bounds_changed |= ImGui::InputFloat("##MaxZ", &max_bounds_z, bound_step, bound_step_fast, "%.3f");
+            max_bounds_z = std::clamp(max_bounds_z, min_range, max_range);
+            max_bounds_z = std::max(max_bounds_z, min_bounds[2]);
+            max_bounds[2] = max_bounds_z;
+        }
+
+        void CropBoxPanel::renderBoundsInfo() {
+            // Display current info
+            glm::vec3 center = crop_box_->getCenter();
+            glm::vec3 size = crop_box_->getSize();
+
+            ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
+            ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
+        }
+
+        // Helper function to wrap angles to 0-360 range
+        float CropBoxPanel::wrapAngle(float angle) {
+            while (angle < 0.0f)
+                angle += 360.0f;
+            while (angle >= 360.0f)
+                angle -= 360.0f;
+            return angle;
+        }
+
+        // Orthonormalize 3x3 rotation part of a 4x4 matrix
+        glm::mat4 OrthonormalizeRotation(const glm::mat4& matrix) {
+            glm::vec3 x = glm::vec3(matrix[0]);
+            glm::vec3 y = glm::vec3(matrix[1]);
+            glm::vec3 z = glm::vec3(matrix[2]);
+
+            // Orthonormalize using Gram-Schmidt
+            x = glm::normalize(x);
+            y = glm::normalize(y - x * glm::dot(x, y));
+            z = glm::normalize(glm::cross(x, y)); // Ensures right-handed coordinate system
+
+            glm::mat4 result = glm::mat4(1.0f);
+            result[0] = glm::vec4(x, 0.0f);
+            result[1] = glm::vec4(y, 0.0f);
+            result[2] = glm::vec4(z, 0.0f);
+            result[3] = matrix[3]; // Preserve translation
+
+            return result;
+        }
+
+        // Update the rotation matrix
+        void CropBoxPanel::updateRotationMatrix(float delta_rot_x, float delta_rot_y, float delta_rot_z) {
+            if (!crop_box_)
+                return;
+
+            // Convert degrees to radians
+            float rad_x = glm::radians(delta_rot_x);
+            float rad_y = glm::radians(delta_rot_y);
+            float rad_z = glm::radians(delta_rot_z);
+
+            // Create rotation matrices for each axis (in crop box coordinate system)
+            glm::mat4 rot_x = glm::mat4(1.0f);
+            rot_x[1][1] = cos(rad_x);
+            rot_x[1][2] = sin(rad_x);
+            rot_x[2][1] = -sin(rad_x);
+            rot_x[2][2] = cos(rad_x);
+
+            glm::mat4 rot_y = glm::mat4(1.0f);
+            rot_y[0][0] = cos(rad_y);
+            rot_y[0][2] = -sin(rad_y);
+            rot_y[2][0] = sin(rad_y);
+            rot_y[2][2] = cos(rad_y);
+
+            glm::mat4 rot_z = glm::mat4(1.0f);
+            rot_z[0][0] = cos(rad_z);
+            rot_z[0][1] = sin(rad_z);
+            rot_z[1][0] = -sin(rad_z);
+            rot_z[1][1] = cos(rad_z);
+
+            // Combine rotations: apply in order Z, Y, X (intrinsic rotations)
+            glm::mat4 combined_rotation = rot_x * rot_y * rot_z;
+
+            // Get the current center of the bounding box
+            glm::vec3 center = crop_box_->getCenter();
+
+            // Create translation matrices to move rotation center to origin and back
+            glm::mat4 translate_to_origin = glm::mat4(1.0f);
+            translate_to_origin[3][0] = -center.x;
+            translate_to_origin[3][1] = -center.y;
+            translate_to_origin[3][2] = -center.z;
+
+            glm::mat4 translate_back = glm::mat4(1.0f);
+            translate_back[3][0] = center.x;
+            translate_back[3][1] = center.y;
+            translate_back[3][2] = center.z;
+
+            // Create the rotation transformation (translate to origin, rotate, translate back)
+            glm::mat4 rotation_transform = translate_back * combined_rotation * translate_to_origin;
+
+            glm::mat4 curr_world2bbox_ = crop_box_->getworld2BBox();
+            // Apply the rotation transformation to the base transformation
+            // The rotation happens in world space, so we compose: new_transform = rotation * base_transform
+            glm::mat4 final_transform = rotation_transform * curr_world2bbox_;
+            // Interesting problem: had to orthonormalize the matrix because of numerical issues
+            // (multiplying rotations many times gets you out of the rotations group)
+            final_transform = OrthonormalizeRotation(final_transform);
+
+            // 2. Check orthonormal rotation: norm(R * R^T - I) < epsilon
+            // Update the world2BBox transformation matrix
+            crop_box_->setworld2BBox(final_transform);
         }
 
         // ============================================================================
