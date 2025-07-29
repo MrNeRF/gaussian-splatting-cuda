@@ -747,7 +747,7 @@ namespace gs {
         void CropBoxPanel::renderRotationControls() {
             if (ImGui::TreeNode("Rotation")) {
                 ImGui::Text("Ctrl+click for faster steps");
-                ImGui::Text("Rotation around crop box axes (degrees):");
+                ImGui::Text("Rotation around crop box axes:");
 
                 renderRotationInputs();
                 ImGui::TreePop();
