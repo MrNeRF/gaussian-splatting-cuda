@@ -9,10 +9,6 @@
 
 namespace gs {
 
-    static inline torch::Tensor ensure_4d(const torch::Tensor& image) {
-        return image.dim() == 3 ? image.unsqueeze(0) : image;
-    }
-
     std::expected<void, std::string> Trainer::initialize_bilateral_grid() {
         if (!params_.optimization.use_bilateral_grid) {
             return {};
@@ -299,7 +295,7 @@ namespace gs {
         background_ = background_.to(torch::kCUDA);
 
         // Create progress bar based on headless flag
-        if (!params.optimization.headless) {
+        if (params.optimization.headless) {
             progress_ = std::make_unique<TrainingProgress>(
                 params.optimization.iterations,
                 /*update_frequency=*/100);
