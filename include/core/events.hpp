@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <optional>
 #include <string>
+#include <vector>
 #include <unordered_map> // ADDED for NodeSelectedEvent
 
 namespace gs {
