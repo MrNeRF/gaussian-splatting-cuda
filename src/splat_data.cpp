@@ -428,18 +428,18 @@ namespace gs {
             return std::unexpected(std::format("Failed to initialize SplatData: {}", e.what()));
         }
     }
+
+    void SplatData::filterByMask(const torch::Tensor& keep_mask) {
+        TORCH_CHECK(keep_mask.dim() == 1 && keep_mask.size(0) == _means.size(0),
+                    "keep_mask must be 1D and match the number of splats");
+        auto km = keep_mask.to(torch::kBool);
+        _means = _means.index({km}).contiguous();
+        _sh0 = _sh0.index({km}).contiguous();
+        _shN = _shN.index({km}).contiguous();
+        _scaling = _scaling.index({km}).contiguous();
+        _rotation = _rotation.index({km}).contiguous();
+        _opacity = _opacity.index({km}).contiguous();
+        _max_radii2D = _max_radii2D.index({km}).contiguous();
+    }
 }
 
-
-void SplatData::filterByMask(const torch::Tensor& keep_mask) {
-    TORCH_CHECK(keep_mask.dim() == 1 && keep_mask.size(0) == _means.size(0),
-                "keep_mask must be 1D and match the number of splats");
-    auto km = keep_mask.to(torch::kBool);
-    _means = _means.index({km}).contiguous();
-    _sh0 = _sh0.index({km}).contiguous();
-    _shN = _shN.index({km}).contiguous();
-    _scaling = _scaling.index({km}).contiguous();
-    _rotation = _rotation.index({km}).contiguous();
-    _opacity = _opacity.index({km}).contiguous();
-    _max_radii2D = _max_radii2D.index({km}).contiguous();
-}

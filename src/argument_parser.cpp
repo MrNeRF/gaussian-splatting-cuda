@@ -172,7 +172,6 @@ namespace {
                                         preload_to_ram_flag = bool(preload_to_ram),
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         use_attention_mask_flag = bool(use_attention_mask),
-                                        preload_to_ram_flag = bool(preload_to_ram),
                                         enable_eval_flag = bool(enable_eval),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),

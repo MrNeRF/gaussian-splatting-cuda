@@ -67,67 +67,53 @@ namespace gs {
     }
 
     /**
-     * @brief Penalizes opacity outside the mask and rewards opacity inside.
+     * @brief Applies a penalty to guide splat opacity based on an attention mask.
      * @param base_loss The pre-computed photometric loss.
      * @param out The RenderOutput from the rasterizer.
-     * @param mask The binary attention mask where `true` or `1` means INSIDE the ROI.
-     * @param opacities_logits The raw opacity logits tensor from the model.
+     * @param weights The float weight map, where values > 0.5 define the ROI.
+     * @param opacities_alpha The opacity alpha values (0-1) from get_opacity().
      * @param w The global weight multiplier for this penalty.
      */
     static torch::Tensor outsideMaskOpacityPenalty(const torch::Tensor& base_loss,
                                                    const RenderOutput& out,
-                                                   const torch::Tensor& mask,
-                                                   const torch::Tensor& opacities_logits,
+                                                   const torch::Tensor& weights,
+                                                   const torch::Tensor& opacities_alpha,
                                                    float w) {
         if (w == 0.0f) {
             return base_loss;
         }
-        if (!mask.defined() || !out.means2d.defined() || !out.radii.defined()) {
+        if (!weights.defined() || !out.means2d.defined() || !out.radii.defined()) {
             return base_loss;
         }
 
-        torch::Tensor means2d = out.means2d;
-        torch::Tensor radii = out.radii;
-        TORCH_CHECK(opacities_logits.numel() == radii.numel(),
-                    "opacities and radii must match");
-
-        //Filter for splats that are projected onto the screen (radius > 0)
-        torch::Tensor visible_mask = (radii > 0.0f);
+        torch::Tensor visible_mask = (out.radii > 0.0f);
         if (!visible_mask.any().item<bool>()) {
             return base_loss;
         }
+        auto visible_indices = visible_mask.nonzero().squeeze(-1);
+        auto xy = out.means2d.index({visible_indices});
 
-        auto visible_indices = visible_mask.nonzero().squeeze();
-        auto xy = means2d.index({visible_indices});
-        // Convert logits to alpha values (0-1) for visible splats
-        auto alpha = torch::sigmoid(opacities_logits.index({visible_indices}));
+        auto alpha = opacities_alpha.index({visible_indices});
 
-        // Get pixel coordinates and clamp them
         const int W = out.width, H = out.height;
         auto x = torch::round(xy.select(1, 0)).to(torch::kLong).clamp(0, W - 1);
         auto y = torch::round(xy.select(1, 1)).to(torch::kLong).clamp(0, H - 1);
         auto linear_indices = y * W + x;
 
-        // Get per-splat inside/outside masks from the attention mask
-        // Since mask is already bool {true=IN, false=OUT}, we just convert to float.
-        auto is_in_mask = mask.to(torch::kFloat32).flatten();
-
-        // Sample the mask to see if each splat is inside or outside the ROI
-        auto is_in = is_in_mask.index({linear_indices}); // Will be 1.0f for splats inside, 0.0f for splats outside
+        auto bool_mask = (weights > 0.5f);
+        auto is_in_mask = bool_mask.to(torch::kFloat32).flatten();
+        auto is_in = is_in_mask.index({linear_indices});
         auto is_out = 1.0f - is_in;
 
-        // Calculate penalties
-        const float kOut = 20.0f; // High penalty for being opaque OUTSIDE the mask
-        const float kIn = 0.10f;  // Low penalty for being transparent INSIDE the mask
-
+        const float kOut = 2.0f;
+        const float kIn = 0.02f;
         auto outside_penalty = alpha * is_out;
         auto inside_penalty = (1.0f - alpha) * is_in;
 
         auto combined_penalty = w * (kOut * outside_penalty + kIn * inside_penalty);
         auto mean_penalty = combined_penalty.mean();
-
-        // Apply the penalty multiplicatively for stability
-        return base_loss * (1.0f + mean_penalty);
+        
+        return (base_loss * (1.0f + mean_penalty)) + (1e-5f*mean_penalty);
     }
 
     std::expected<torch::Tensor, std::string> Trainer::compute_photometric_loss(const RenderOutput& render_output,
@@ -196,17 +182,17 @@ namespace gs {
             // 3) combined loss
             auto loss = (1.0f - opt_params.lambda_dssim) * l1_loss + opt_params.lambda_dssim * ssim_loss;
             
-        /* 
+        
         if (outOfMaskAlphaPenalty > 0) {
-                auto opacity_logits = splatData.opacity_raw(); 
+                auto opacity = splatData.get_opacity(); 
         
                 loss = outsideMaskOpacityPenalty(loss,
                                                 render_output,
-                                                mask_image,
-                                                opacity_logits,
+                                                weights,
+                                                opacity,
                                                 outOfMaskAlphaPenalty);
-            }
-        */
+        }
+        
 
             return loss;
         } catch (const std::exception& e) {
@@ -467,14 +453,15 @@ namespace gs {
 
             // Compute loss using the factored-out function
             std::expected<torch::Tensor, std::string> loss_result;
-            if (!weights.defined() || params_.optimization.iterations * 0.1 > iter) {
+            const int total_iters = params_.optimization.iterations;
+            if (!weights.defined() || iter < total_iters * 0.1f) {
                 loss_result = compute_photometric_loss( r_output,
                                                         gt_image,
                                                         strategy_->get_model(),
                                                         params_.optimization);
             } 
             else {
-                const float curr_out_of_mask_penalty = params_.optimization.iterations * 0.5 > iter ? 0 : out_of_mask_penalty;
+                const float curr_out_of_mask_penalty = (iter < total_iters * 0.5f) ? out_of_mask_penalty : 0;
                 loss_result = compute_photometric_loss( r_output,
                                                         gt_image,
                                                         weights,
@@ -650,13 +637,13 @@ namespace gs {
 
                     auto camera_with_image = batch[0].data;
                     Camera* cam = camera_with_image.camera;
-                    torch::Tensor gt_image = std::move(camera_with_image.imageTensor);
+                    torch::Tensor gt_image = std::move(camera_with_image.image);
 
                      std::expected<Trainer::StepResult, std::string> step_result;
-                    if (!params_.optimization.use_attention_mask || !camera_with_image.attentionMaskTensor.defined()) {
+                    if (!params_.optimization.use_attention_mask || !camera_with_image.attentionMask.defined()) {
                         step_result = train_step(iter, cam, gt_image, torch::Tensor(), render_mode, 0.0f, stop_token);
                     } else {
-                        torch::Tensor attention_image = std::move(camera_with_image.attentionMaskTensor);
+                        torch::Tensor attention_image = std::move(camera_with_image.attentionMask);
                         float out_of_mask_penalty = 1.0f;
                         step_result = train_step(iter, cam, gt_image, attention_image, render_mode, out_of_mask_penalty, stop_token);
                     }
@@ -733,7 +720,7 @@ training_complete:
         for (auto& batch : *pruning_dataloader) {
             auto camera_with_data = batch[0].data;
             Camera* cam = camera_with_data.camera;
-            torch::Tensor float_weight_map = camera_with_data.attentionMaskTensor;
+            torch::Tensor float_weight_map = camera_with_data.attentionMask;
 
             if (!float_weight_map.defined()) {
                 continue;

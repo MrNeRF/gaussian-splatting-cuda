@@ -72,6 +72,7 @@ namespace gs {
         // Image info
         std::string _image_name;
         std::filesystem::path _image_path;
+        std::filesystem::path _mask_path;
         int _camera_width = 0;
         int _camera_height = 0;
         int _image_width = 0;
