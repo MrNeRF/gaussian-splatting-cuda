@@ -1081,8 +1081,6 @@ namespace gs {
             final_transform = OrthonormalizeRotation(final_transform);
 
             // 2. Check orthonormal rotation: norm(R * R^T - I) < epsilon
-            glm::mat3 R{final_transform};
-
             // Update the world2BBox transformation matrix
             crop_box_->setworld2BBox(final_transform);
         }
