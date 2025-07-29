@@ -92,6 +92,10 @@ find_package(spdlog REQUIRED)
 # Python packages
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
+if(WIN32)
+    set(CMAKE_CUDA_RUNTIME_LIBRARY "Shared") # when using INTEROP in windows static and dynamic symbols are mixed
+endif()
+
 # Check for CUDA-OpenGL interop capability (only if enabled)
 if(ENABLE_CUDA_GL_INTEROP)
     include(CheckCXXSourceCompiles)

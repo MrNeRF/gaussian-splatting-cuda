@@ -707,6 +707,12 @@ namespace gs {
         if (gui_manager_->showCropBox()) {
 
             glm::ivec2& reso = viewport_.windowSize;
+
+            // this happened to me on debug - so I wanted to add protection
+            if (reso.x <= 0 || reso.y <= 0) {
+                return;
+            }
+
             auto fov_rad = glm::radians(config_->fov);
             auto projection = glm::perspective((float)fov_rad, (float)reso.x / reso.y, .1f, 1000.0f);
 
