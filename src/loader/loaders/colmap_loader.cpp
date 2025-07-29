@@ -1,6 +1,6 @@
-#include "loader/loaders/colmap_loader.hpp"
+#include "colmap_loader.hpp"
 #include "core/camera.hpp"
-#include "core/colmap_reader.hpp"
+#include "formats/colmap.hpp"
 #include "core/dataset.hpp"
 #include "core/point_cloud.hpp"
 #include <chrono>

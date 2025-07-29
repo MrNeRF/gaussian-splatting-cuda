@@ -137,8 +137,6 @@ set(HOST_SOURCES
         src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp
-        src/colmap_reader.cpp
-        src/transforms_reader.cpp
         src/parameters.cpp
         src/splat_data.cpp
         src/trainer.cpp
@@ -159,7 +157,6 @@ set(HOST_SOURCES
         src/bilateral_grid.cpp
         src/selective_adam.cpp
         src/training_setup.cpp
-        src/ply_loader.cpp
         src/bounding_box.cpp
         src/visualizer/render_bounding_box.cpp)
 

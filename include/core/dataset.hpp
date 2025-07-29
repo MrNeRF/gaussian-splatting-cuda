@@ -1,9 +1,10 @@
 #pragma once
 
 #include "core/camera.hpp"
-#include "core/colmap_reader.hpp"
+#include "loader/loaders/colmap_loader.hpp"
 #include "core/parameters.hpp"
-#include "core/transforms_reader.hpp"
+#include "loader/formats/colmap.hpp"
+#include "loader/formats/transforms.hpp"
 #include <expected>
 #include <format>
 #include <memory>

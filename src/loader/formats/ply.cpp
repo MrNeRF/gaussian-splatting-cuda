@@ -1,4 +1,4 @@
-#include "core/ply_loader.hpp"
+#include "ply.hpp"
 #include <algorithm>
 #include <charconv>
 #include <chrono>

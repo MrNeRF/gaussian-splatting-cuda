@@ -1,10 +1,10 @@
-#include "loader/loaders/ply_loader.hpp"
-#include "core/ply_loader.hpp" // For gs::load_ply
+#include "ply_loader.hpp"
+#include "formats/ply.hpp"
 #include "core/splat_data.hpp"
 #include <chrono>
 #include <filesystem>
 #include <format>
-#include <fstream> // Add this!
+#include <fstream>
 #include <print>
 
 namespace gs::loader {

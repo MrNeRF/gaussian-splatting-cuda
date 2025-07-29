@@ -1,8 +1,8 @@
-#include "loader/loaders/blender_loader.hpp"
+#include "blender_loader.hpp"
 #include "core/camera.hpp"
 #include "core/dataset.hpp"
 #include "core/point_cloud.hpp"
-#include "core/transforms_reader.hpp"
+#include "formats/transforms.hpp"
 #include <chrono>
 #include <filesystem>
 #include <format>

@@ -1,6 +1,6 @@
 #include "visualizer/scene_manager.hpp"
 #include "core/model_providers.hpp"
-#include "core/ply_loader.hpp"
+#include "loader/formats/ply.hpp"
 #include "core/training_setup.hpp"
 #include "visualizer/event_response_handler.hpp"
 #include "visualizer/training_manager.hpp"

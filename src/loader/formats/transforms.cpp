@@ -1,14 +1,13 @@
 #include <filesystem>
 #include <format>
+#include "transforms.hpp"
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <numbers>
 #include <print>
 #include <torch/torch.h>
-
-#include "core/colmap_reader.hpp"
+#include "formats/colmap.hpp"
 #include "core/image_io.hpp"
-#include "core/transforms_reader.hpp"
 
 namespace F = torch::nn::functional;
 

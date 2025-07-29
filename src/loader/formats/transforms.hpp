@@ -1,6 +1,6 @@
 #pragma once
 #include "core/camera.hpp"
-#include "core/colmap_reader.hpp"
+#include "colmap.hpp"
 #include "core/point_cloud.hpp"
 
 #include <filesystem>
