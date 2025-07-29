@@ -1,9 +1,9 @@
-// kernels/cuda_gl_interop.cu
 #include "config.h"
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 
 #include <cuda_runtime.h>
+#include <cstdint>
 
 namespace gs {
 
