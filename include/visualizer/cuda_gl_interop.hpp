@@ -45,7 +45,7 @@ namespace gs {
     };
 
     // Forward declaration - implemented in CUDA file
-    torch::Tensor convertToRGBA8(const torch::Tensor& input, bool flip_vertical = false);
+    // torch::Tensor convertToRGBA8(const torch::Tensor& input, bool flip_vertical = false);
 
     // Modified FrameBuffer to support interop
     class InteropFrameBuffer : public FrameBuffer {

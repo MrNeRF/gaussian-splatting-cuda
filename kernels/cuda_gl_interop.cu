@@ -4,7 +4,7 @@
 #ifdef CUDA_GL_INTEROP_ENABLED
 
 #include <cuda_runtime.h>
-#include <torch/torch.h>
+// #include <torch/torch.h>
 
 namespace gs {
 
@@ -73,92 +73,92 @@ namespace gs {
     }
 
     // Helper function to convert tensor format for OpenGL
-    torch::Tensor convertToRGBA8(const torch::Tensor& input, bool flip_vertical) {
-        TORCH_CHECK(input.is_cuda(), "Input must be on CUDA");
-        TORCH_CHECK(input.dim() == 3, "Input must be [H, W, C]");
+    // torch::Tensor convertToRGBA8(const torch::Tensor& input, bool flip_vertical) {
+    //     TORCH_CHECK(input.is_cuda(), "Input must be on CUDA");
+    //     TORCH_CHECK(input.dim() == 3, "Input must be [H, W, C]");
 
-        const int h = input.size(0);
-        const int w = input.size(1);
-        const int c = input.size(2);
+    //     const int h = input.size(0);
+    //     const int w = input.size(1);
+    //     const int c = input.size(2);
 
-        // Already in correct format
-        if (c == 4 && input.dtype() == torch::kUInt8 && !flip_vertical) {
-            return input;
-        }
+    //     // Already in correct format
+    //     if (c == 4 && input.dtype() == torch::kUInt8 && !flip_vertical) {
+    //         return input;
+    //     }
 
-        // Allocate output
-        auto output = torch::empty({h, w, 4},
-                                   input.options().dtype(torch::kUInt8));
+    //     // Allocate output
+    //     auto output = torch::empty({h, w, 4},
+    //                                input.options().dtype(torch::kUInt8));
 
-        // Configure kernel launch
-        dim3 block(16, 16);
-        dim3 grid((w + block.x - 1) / block.x,
-                  (h + block.y - 1) / block.y);
+    //     // Configure kernel launch
+    //     dim3 block(16, 16);
+    //     dim3 grid((w + block.x - 1) / block.x,
+    //               (h + block.y - 1) / block.y);
 
-        // Conversion based on input format
-        if (c == 3 && input.dtype() == torch::kFloat32) {
-            if (flip_vertical) {
-                // Convert and flip in one pass
-                auto temp = torch::empty_like(output);
-                convertRGBFloatToRGBAUint8<<<grid, block>>>(
-                    input.data_ptr<float>(),
-                    temp.data_ptr<uint8_t>(),
-                    w, h);
-                flipVertical<uint8_t><<<grid, block>>>(
-                    temp.data_ptr<uint8_t>(),
-                    output.data_ptr<uint8_t>(),
-                    w, h, 4);
-            } else {
-                convertRGBFloatToRGBAUint8<<<grid, block>>>(
-                    input.data_ptr<float>(),
-                    output.data_ptr<uint8_t>(),
-                    w, h);
-            }
-        } else if (c == 4 && input.dtype() == torch::kFloat32) {
-            if (flip_vertical) {
-                auto temp = torch::empty_like(output);
-                convertRGBAFloatToRGBAUint8<<<grid, block>>>(
-                    input.data_ptr<float>(),
-                    temp.data_ptr<uint8_t>(),
-                    w, h);
-                flipVertical<uint8_t><<<grid, block>>>(
-                    temp.data_ptr<uint8_t>(),
-                    output.data_ptr<uint8_t>(),
-                    w, h, 4);
-            } else {
-                convertRGBAFloatToRGBAUint8<<<grid, block>>>(
-                    input.data_ptr<float>(),
-                    output.data_ptr<uint8_t>(),
-                    w, h);
-            }
-        } else if (flip_vertical && c == 4 && input.dtype() == torch::kUInt8) {
-            flipVertical<uint8_t><<<grid, block>>>(
-                input.data_ptr<uint8_t>(),
-                output.data_ptr<uint8_t>(),
-                w, h, 4);
-        } else {
-            // Fallback to torch operations
-            torch::Tensor rgba_float;
-            if (c == 3) {
-                rgba_float = torch::cat({input.to(torch::kFloat32),
-                                         torch::ones({h, w, 1}, input.options().dtype(torch::kFloat32))},
-                                        2);
-            } else {
-                rgba_float = input.to(torch::kFloat32);
-            }
+    //     // Conversion based on input format
+    //     if (c == 3 && input.dtype() == torch::kFloat32) {
+    //         if (flip_vertical) {
+    //             // Convert and flip in one pass
+    //             auto temp = torch::empty_like(output);
+    //             convertRGBFloatToRGBAUint8<<<grid, block>>>(
+    //                 input.data_ptr<float>(),
+    //                 temp.data_ptr<uint8_t>(),
+    //                 w, h);
+    //             flipVertical<uint8_t><<<grid, block>>>(
+    //                 temp.data_ptr<uint8_t>(),
+    //                 output.data_ptr<uint8_t>(),
+    //                 w, h, 4);
+    //         } else {
+    //             convertRGBFloatToRGBAUint8<<<grid, block>>>(
+    //                 input.data_ptr<float>(),
+    //                 output.data_ptr<uint8_t>(),
+    //                 w, h);
+    //         }
+    //     } else if (c == 4 && input.dtype() == torch::kFloat32) {
+    //         if (flip_vertical) {
+    //             auto temp = torch::empty_like(output);
+    //             convertRGBAFloatToRGBAUint8<<<grid, block>>>(
+    //                 input.data_ptr<float>(),
+    //                 temp.data_ptr<uint8_t>(),
+    //                 w, h);
+    //             flipVertical<uint8_t><<<grid, block>>>(
+    //                 temp.data_ptr<uint8_t>(),
+    //                 output.data_ptr<uint8_t>(),
+    //                 w, h, 4);
+    //         } else {
+    //             convertRGBAFloatToRGBAUint8<<<grid, block>>>(
+    //                 input.data_ptr<float>(),
+    //                 output.data_ptr<uint8_t>(),
+    //                 w, h);
+    //         }
+    //     } else if (flip_vertical && c == 4 && input.dtype() == torch::kUInt8) {
+    //         flipVertical<uint8_t><<<grid, block>>>(
+    //             input.data_ptr<uint8_t>(),
+    //             output.data_ptr<uint8_t>(),
+    //             w, h, 4);
+    //     } else {
+    //         // Fallback to torch operations
+    //         torch::Tensor rgba_float;
+    //         if (c == 3) {
+    //             rgba_float = torch::cat({input.to(torch::kFloat32),
+    //                                      torch::ones({h, w, 1}, input.options().dtype(torch::kFloat32))},
+    //                                     2);
+    //         } else {
+    //             rgba_float = input.to(torch::kFloat32);
+    //         }
 
-            output = (rgba_float.clamp(0.0f, 1.0f) * 255.0f).to(torch::kUInt8);
+    //         output = (rgba_float.clamp(0.0f, 1.0f) * 255.0f).to(torch::kUInt8);
 
-            if (flip_vertical) {
-                output = output.flip({0});
-            }
-        }
+    //         if (flip_vertical) {
+    //             output = output.flip({0});
+    //         }
+    //     }
 
-        // Ensure kernel completion
-        cudaDeviceSynchronize();
+    //     // Ensure kernel completion
+    //     cudaDeviceSynchronize();
 
-        return output;
-    }
+    //     return output;
+    // }
 
 } // namespace gs
 

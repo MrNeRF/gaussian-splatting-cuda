@@ -1,4 +1,4 @@
-# windows/linux platform independent
+﻿# windows/linux platform independent
 set(RAW_VCPKG_PATH $ENV{VCPKG_ROOT})
 file(TO_CMAKE_PATH "${RAW_VCPKG_PATH}" VCPKG_ROOT)
 set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
@@ -102,6 +102,9 @@ if(ENABLE_CUDA_GL_INTEROP)
     set(CMAKE_REQUIRED_INCLUDES ${CUDAToolkit_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
     set(CMAKE_REQUIRED_LIBRARIES ${CUDA_LIBRARIES} ${OPENGL_LIBRARIES})
     check_cxx_source_compiles("
+        #ifdef _WIN32
+        #include <windows.h>
+        #endif
         #include <cuda_runtime.h>
         #include <cuda_gl_interop.h>
         int main() {
