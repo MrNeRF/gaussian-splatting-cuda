@@ -767,7 +767,9 @@ namespace gs {
             float repeat_rate = 0.05f;
 
             // Separate timers per axis
-            static float rotate_timer = 0.0f;
+            static float rotate_timer_x = 0.0f;
+            static float rotate_timer_y = 0.0f;
+            static float rotate_timer_z = 0.0f;
 
             // --- X-axis ---
             ImGui::Text("X-axis:");
