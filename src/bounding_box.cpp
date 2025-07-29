@@ -27,4 +27,10 @@ namespace gs {
         world2BBox_ = transform;
     }
 
+    glm::vec3 BoundingBox::getCenter() const {
+        const auto local_center = (min_bounds_ + max_bounds_) * 0.5f;
+        const auto world_center = glm::inverse(world2BBox_) * glm::vec4{local_center, 1.0f};
+        return glm::vec3{world_center};
+    }
+
 } // namespace gs

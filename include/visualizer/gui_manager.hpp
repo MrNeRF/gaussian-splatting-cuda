@@ -94,6 +94,20 @@ namespace gs {
             bool show_crop_box_ = false;
             bool use_crop_box_ = false;
             std::shared_ptr<RenderBoundingBox> crop_box_;
+
+        private:
+            // Rendering methods
+            void renderAppearanceControls();
+            void renderRotationControls();
+            void renderRotationInputs();
+            void renderBoundsControls();
+            void renderMinBoundsInputs(float min_bounds[3], float max_bounds[3], bool& bounds_changed);
+            void renderMaxBoundsInputs(float min_bounds[3], float max_bounds[3], bool& bounds_changed);
+            void renderBoundsInfo();
+
+            // Helper methods
+            float wrapAngle(float angle);
+            void updateRotationMatrix(float delta_rot_x, float delta_rot_y, float delta_rot_z);
         };
 
         // Main GUI manager
