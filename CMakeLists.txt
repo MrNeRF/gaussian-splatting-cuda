@@ -145,8 +145,6 @@ set(HOST_SOURCES
         src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp
-        src/colmap_reader.cpp
-        src/transforms_reader.cpp
         src/parameters.cpp
         src/splat_data.cpp
         src/trainer.cpp
@@ -166,13 +164,12 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
-        src/dataset_reader.cpp
         src/training_setup.cpp
-        src/ply_loader.cpp
         src/bounding_box.cpp
         src/visualizer/render_bounding_box.cpp)
 
-add_library(gaussian_host STATIC ${HOST_SOURCES})
+add_library(gaussian_host STATIC ${HOST_SOURCES} $<TARGET_OBJECTS:gs_loader>)
+add_subdirectory(src/loader)
 
 target_include_directories(gaussian_host
         PUBLIC
@@ -196,6 +193,7 @@ target_link_libraries(gaussian_host
         imgui::imgui
         Threads::Threads
         taywee::args
+        gs_loader
         Python3::Python
         gsplat_backend  # Link to gsplat
         ${OPENGL_LIBRARIES}

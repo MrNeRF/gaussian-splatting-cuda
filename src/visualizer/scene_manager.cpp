@@ -1,7 +1,7 @@
 #include "visualizer/scene_manager.hpp"
 #include "core/model_providers.hpp"
-#include "core/ply_loader.hpp"
 #include "core/training_setup.hpp"
+#include "loader/loader.hpp"
 #include "visualizer/event_response_handler.hpp"
 #include "visualizer/training_manager.hpp"
 #include <chrono>
@@ -253,10 +253,29 @@ namespace gs {
         // Clear any existing scene
         clearScene();
 
-        // Load PLY
-        auto splat_result = gs::load_ply(path);
-        if (!splat_result) {
-            throw std::runtime_error(splat_result.error());
+        // Use the public loader interface
+        auto loader = gs::loader::Loader::create();
+
+        // Set up load options
+        gs::loader::LoadOptions options{
+            .resolution = -1,
+            .images_folder = "images",
+            .validate_only = false,
+            .progress = [this](float percent, const std::string& msg) {
+                // Could publish progress events here if needed
+                std::println("[{:5.1f}%] {}", percent, msg);
+            }};
+
+        // Load the PLY file
+        auto load_result = loader->load(path, options);
+        if (!load_result) {
+            throw std::runtime_error(load_result.error());
+        }
+
+        // Extract SplatData from the result
+        auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
+        if (!splat_data || !*splat_data) {
+            throw std::runtime_error("Expected PLY file but loader returned different data type");
         }
 
         // Create scene if needed
@@ -265,8 +284,8 @@ namespace gs {
             scene_->setEventBus(event_bus_);
         }
 
-        // Set model
-        scene_->setStandaloneModel(std::make_unique<SplatData>(std::move(*splat_result)));
+        // Set model - need to move the data out of the shared_ptr
+        scene_->setStandaloneModel(std::make_unique<SplatData>(std::move(**splat_data)));
 
         // Update state
         {
