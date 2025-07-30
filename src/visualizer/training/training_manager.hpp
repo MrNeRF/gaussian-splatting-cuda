@@ -1,8 +1,6 @@
 #pragma once
 
-#include "core/event_bus.hpp"
 #include "core/events.hpp"
-#include "core/parameters.hpp"
 #include "core/trainer.hpp"
 #include <atomic>
 #include <filesystem>
@@ -39,7 +37,7 @@ namespace gs {
             Error      // Training encountered an error
         };
 
-        TrainerManager() = default;
+        TrainerManager();
         ~TrainerManager();
 
         // Delete copy operations
@@ -57,9 +55,6 @@ namespace gs {
 
         // Link to viewer for notifications
         void setViewer(visualizer::VisualizerImpl* viewer) { viewer_ = viewer; }
-
-        // Set event bus for publishing training events
-        void setEventBus(std::shared_ptr<EventBus> event_bus);
 
         // Training control
         bool startTraining();
@@ -105,24 +100,12 @@ namespace gs {
         void handleTrainingComplete(bool success, const std::string& error = "");
 
         // Event handlers
-        void handleStateQueryRequest(const QueryTrainerStateRequest& request);
-        void publishStateChange(State old_state, State new_state, const std::string& reason);
-
-        // Publish training events
-        void publishTrainingStarted(int total_iterations);
-        void publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining);
-        void publishTrainingPaused(int iteration);
-        void publishTrainingResumed(int iteration);
-        void publishTrainingCompleted(int iteration, float loss, bool success, const std::string& error = "");
-        void publishTrainingStopped(int iteration, bool user_requested);
+        void setupEventHandlers();
 
         // Member variables
         std::unique_ptr<Trainer> trainer_;
         std::unique_ptr<std::jthread> training_thread_;
         visualizer::VisualizerImpl* viewer_ = nullptr;
-
-        // Event bus for publishing events
-        std::shared_ptr<EventBus> event_bus_;
 
         // State tracking
         std::atomic<State> state_{State::Idle};

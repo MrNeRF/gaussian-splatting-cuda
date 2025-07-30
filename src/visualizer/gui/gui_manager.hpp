@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/event_bus.hpp"
+#include "core/events.hpp"
 #include "gui/ui_context.hpp"
 #include <filesystem>
 #include <imgui.h>
@@ -20,7 +20,7 @@ namespace gs {
 
         class GuiManager {
         public:
-            GuiManager(visualizer::VisualizerImpl* viewer, std::shared_ptr<EventBus> event_bus);
+            GuiManager(visualizer::VisualizerImpl* viewer);
             ~GuiManager();
 
             // Lifecycle
@@ -51,7 +51,6 @@ namespace gs {
 
             // Core dependencies
             visualizer::VisualizerImpl* viewer_;
-            std::shared_ptr<EventBus> event_bus_;
 
             // Owned components
             std::unique_ptr<ScriptingConsole> console_;
@@ -61,9 +60,6 @@ namespace gs {
             // UI state only
             std::unordered_map<std::string, bool> window_states_;
             bool show_main_panel_ = true;
-
-            // Event handler IDs for cleanup
-            std::vector<size_t> event_handler_ids_;
         };
     } // namespace gui
 } // namespace gs

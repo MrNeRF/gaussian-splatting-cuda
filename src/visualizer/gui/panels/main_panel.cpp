@@ -69,14 +69,20 @@ namespace gs::gui::panels {
 
         float old_scale = config->scaling_modifier;
         if (widgets::SliderWithReset("Scale", &config->scaling_modifier, 0.01f, 3.0f, 1.0f)) {
-            ctx.event_bus->publish(RenderingSettingsChangedEvent{
-                std::nullopt, config->scaling_modifier, std::nullopt});
+            events::ui::RenderSettingsChanged{
+                .fov = std::nullopt,
+                .scaling_modifier = config->scaling_modifier,
+                .antialiasing = std::nullopt
+            }.emit();
         }
 
         float old_fov = config->fov;
         if (widgets::SliderWithReset("FoV", &config->fov, 45.0f, 120.0f, 75.0f)) {
-            ctx.event_bus->publish(RenderingSettingsChangedEvent{
-                config->fov, std::nullopt, std::nullopt});
+            events::ui::RenderSettingsChanged{
+                .fov = config->fov,
+                .scaling_modifier = std::nullopt,
+                .antialiasing = std::nullopt
+            }.emit();
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED

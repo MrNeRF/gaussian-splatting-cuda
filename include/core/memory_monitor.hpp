@@ -1,6 +1,5 @@
 #pragma once
 
-#include "core/event_bus.hpp"
 #include "core/events.hpp"
 #include <atomic>
 #include <chrono>
@@ -12,8 +11,7 @@ namespace gs {
 
     class MemoryMonitor {
     public:
-        explicit MemoryMonitor(std::shared_ptr<EventBus> event_bus)
-            : event_bus_(event_bus) {}
+        MemoryMonitor() = default;
 
         ~MemoryMonitor() {
             stop();
@@ -54,30 +52,29 @@ namespace gs {
             // TODO: Implement platform-specific RAM monitoring
 
             // Publish memory usage event
-            if (event_bus_) {
-                event_bus_->publish(MemoryUsageEvent{
-                    gpu_used,
-                    gpu_total,
-                    gpu_percent,
-                    ram_used,
-                    ram_total,
-                    ram_percent});
+            events::state::MemoryUsage{
+                .gpu_used = gpu_used,
+                .gpu_total = gpu_total,
+                .gpu_percent = gpu_percent,
+                .ram_used = ram_used,
+                .ram_total = ram_total,
+                .ram_percent = ram_percent}
+                .emit();
 
-                // Check for warnings
-                if (gpu_percent > 90.0f && !gpu_warning_sent_) {
-                    event_bus_->publish(MemoryWarningEvent{
-                        MemoryWarningEvent::Type::GPU,
-                        gpu_percent,
-                        "GPU memory usage critical! Consider reducing batch size or number of Gaussians."});
-                    gpu_warning_sent_ = true;
-                } else if (gpu_percent < 85.0f) {
-                    gpu_warning_sent_ = false;
-                }
+            // Check for warnings
+            if (gpu_percent > 90.0f && !gpu_warning_sent_) {
+                events::notify::MemoryWarning{
+                    .type = events::notify::MemoryWarning::Type::GPU,
+                    .usage_percent = gpu_percent,
+                    .message = "GPU memory usage critical! Consider reducing batch size or number of Gaussians."}
+                    .emit();
+                gpu_warning_sent_ = true;
+            } else if (gpu_percent < 85.0f) {
+                gpu_warning_sent_ = false;
             }
         }
 
     private:
-        std::shared_ptr<EventBus> event_bus_;
         std::thread monitor_thread_;
         std::atomic<bool> running_{false};
         bool gpu_warning_sent_ = false;

@@ -6,7 +6,6 @@
 
 namespace gs {
     // Forward declarations
-    class EventBus;
     namespace visualizer {
         class VisualizerImpl;
     }
@@ -18,7 +17,6 @@ namespace gs {
         // Shared context passed to all UI functions
         struct UIContext {
             visualizer::VisualizerImpl* viewer;
-            std::shared_ptr<EventBus> event_bus;
             ScriptingConsole* console;
             FileBrowser* file_browser;
             std::unordered_map<std::string, bool>* window_states;
