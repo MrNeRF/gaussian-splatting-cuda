@@ -404,7 +404,7 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _optimizer = strategy::create_optimizer(_splat_data, *_params);
 
     // Initialize exponential scheduler
-    _scheduler = strategy::create_scheduler(*_params, _optimizer.get());
+    _scheduler = strategy::create_scheduler(*_params, _optimizer.get(), 0);
 }
 
 bool MCMC::is_refining(int iter) const {
