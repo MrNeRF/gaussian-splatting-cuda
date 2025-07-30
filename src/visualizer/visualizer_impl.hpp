@@ -13,11 +13,15 @@
 #include "rendering/rendering_manager.hpp"
 #include "scene/scene.hpp"
 #include "scene/scene_manager.hpp"
+#include "tools/tool_manager.hpp"
 #include "training/training_manager.hpp"
 #include "visualizer/visualizer.hpp"
 #include "window/window_manager.hpp"
 #include <memory>
 #include <string>
+
+// Forward declaration for GLFW
+struct GLFWwindow;
 
 namespace gs {
     class CommandProcessor;
@@ -47,8 +51,11 @@ namespace gs::visualizer {
         const std::filesystem::path& getCurrentDatasetPath() const { return state_manager_->getCurrentDatasetPath(); }
         TrainerManager* getTrainerManager() { return trainer_manager_.get(); }
         SceneManager* getSceneManager() { return scene_manager_.get(); }
-        GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
-        std::shared_ptr<RenderBoundingBox> getCropBox() const { return crop_box_; }
+        ::GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
+        ToolManager* getToolManager() { return tool_manager_.get(); }
+
+        // Compatibility method for crop box
+        std::shared_ptr<RenderBoundingBox> getCropBox() const;
 
         // GUI needs these for compatibility
         std::shared_ptr<TrainingInfo> info_;
@@ -62,6 +69,7 @@ namespace gs::visualizer {
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
         friend class gui::GuiManager;
+        friend class ToolManager; // Add friend declaration for ToolManager
 
     private:
         // Main loop callbacks
@@ -87,12 +95,12 @@ namespace gs::visualizer {
         std::unique_ptr<CommandProcessor> command_processor_;
         std::unique_ptr<DataLoadingService> data_loader_;
         std::unique_ptr<MainLoop> main_loop_;
+        std::unique_ptr<ToolManager> tool_manager_;
 
         // Support components
         std::shared_ptr<ViewerNotifier> notifier_;
         std::unique_ptr<ErrorHandler> error_handler_;
         std::unique_ptr<MemoryMonitor> memory_monitor_;
-        std::shared_ptr<RenderBoundingBox> crop_box_;
 
         // State
         bool gui_initialized_ = false;

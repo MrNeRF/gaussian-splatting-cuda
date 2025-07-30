@@ -1,11 +1,10 @@
 #include "gui/panels/main_panel.hpp"
 #include "core/events.hpp"
-#include "gui/panels/crop_box_panel.hpp"
+#include "gui/panels/tools_panel.hpp"
 #include "gui/panels/training_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "visualizer_impl.hpp"
 #include <algorithm>
-#include <format>
 #include <imgui.h>
 
 namespace gs::gui::panels {
@@ -36,7 +35,7 @@ namespace gs::gui::panels {
             DrawProgressInfo(ctx);
             ImGui::Separator();
 
-            DrawCropBoxControls(ctx);
+            DrawToolsPanel(ctx);
         }
         ImGui::End();
 

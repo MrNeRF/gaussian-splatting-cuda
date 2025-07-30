@@ -6,7 +6,11 @@ add_library(gs_visualizer OBJECT
     core/data_loading_service.cpp
     core/command_processor.cpp
     core/viewer_state_manager.cpp
-    
+
+    # Tools
+    tools/crop_box_tool.cpp
+    tools/tool_manager.cpp
+
     # Window management
     window/window_manager.cpp
     
@@ -22,6 +26,7 @@ add_library(gs_visualizer OBJECT
     gui/panels/training_panel.cpp
     gui/panels/crop_box_panel.cpp
     gui/panels/scene_panel.cpp
+    gui/panels/tools_panel.cpp
     gui/windows/scripting_console.cpp
     gui/windows/file_browser.cpp
     gui/windows/camera_controls.cpp
