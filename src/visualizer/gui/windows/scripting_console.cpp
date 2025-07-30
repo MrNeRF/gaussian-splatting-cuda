@@ -89,12 +89,15 @@ namespace gs::gui {
     void ScriptingConsole::render(bool* p_open) {
         ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
 
+        // Add NoDocking flag to prevent this window from being docked
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.08f, 0.95f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.1f, 0.1f, 0.15f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.15f, 0.15f, 0.25f, 1.0f));
 
-        if (!ImGui::Begin("Scripting Console", p_open, ImGuiWindowFlags_MenuBar)) {
+        if (!ImGui::Begin("Scripting Console", p_open, window_flags)) {
             ImGui::End();
             ImGui::PopStyleColor(4);
             return;

@@ -1,150 +1,291 @@
 #pragma once
-
+#include <atomic>
+#include <chrono>
+#include <concepts>
 #include <functional>
+#include <iomanip>
 #include <memory>
 #include <mutex>
+#include <print>
+#include <source_location>
+#include <sstream>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
 
-namespace gs {
+#ifdef __GNUG__
+#include <cxxabi.h>
+#endif
 
-    /**
-     * @brief Type-safe event channel for publishing/subscribing to specific event types
-     *
-     * Uses composition to handle event delivery without inheritance
-     */
-    template <typename EventType>
-    class EventChannel {
+namespace gs::event {
+
+    // Event concept
+    template <typename T>
+    concept Event = requires {
+        typename T::event_id;
+    }
+    &&std::is_aggregate_v<T>;
+
+    class Bus {
+        template <typename T>
+        using Handler = std::function<void(const T&)>;
+
+        struct BaseChannel {
+            virtual ~BaseChannel() = default;
+            virtual std::string_view type_name() const = 0;
+            virtual size_t handler_count() const = 0;
+        };
+
+        template <Event E>
+        struct Channel : BaseChannel {
+            std::vector<Handler<E>> handlers;
+            mutable std::mutex mutex;
+
+            std::string_view type_name() const override {
+                return typeid(E).name();
+            }
+
+            size_t handler_count() const override {
+                std::lock_guard lock(mutex);
+                return handlers.size();
+            }
+        };
+
     public:
-        using Handler = std::function<void(const EventType&)>;
         using HandlerId = size_t;
 
-        /**
-         * @brief Subscribe to events on this channel
-         * @param handler Function to call when event is published
-         * @return Handler ID for later unsubscription
-         */
-        HandlerId subscribe(Handler handler) {
-            std::lock_guard<std::mutex> lock(mutex_);
+        // Debug settings
+        struct DebugConfig {
+            bool enabled = false;
+            bool log_emit = true;
+            bool log_subscribe = true;
+            bool log_unhandled = true;
+            bool show_timestamp = true;
+            bool show_location = true;
+        };
+
+        // Emit an event
+        template <Event E>
+        void emit(const E& event, std::source_location loc = std::source_location::current()) {
+            if (debug_.enabled && debug_.log_emit) {
+                log_emit_event<E>(loc);
+            }
+
+            if (auto it = channels_.find(typeid(E)); it != channels_.end()) {
+                auto& channel = static_cast<Channel<E>&>(*it->second);
+
+                // Copy handlers to avoid lock during dispatch
+                std::vector<Handler<E>> handlers_copy;
+                {
+                    std::lock_guard lock(channel.mutex);
+                    handlers_copy = channel.handlers;
+                }
+
+                if (debug_.enabled && debug_.log_unhandled && handlers_copy.empty()) {
+                    std::println("[Event::Bus] WARNING: No handlers for event: {}",
+                                 demangle(typeid(E).name()));
+                }
+
+                for (auto& handler : handlers_copy) {
+                    handler(event);
+                }
+
+                emit_count_++;
+            } else if (debug_.enabled && debug_.log_unhandled) {
+                std::println("[Event::Bus] WARNING: No channel for event: {}",
+                             demangle(typeid(E).name()));
+            }
+        }
+
+        // Subscribe to events
+        template <Event E>
+        HandlerId when(Handler<E> handler, std::source_location loc = std::source_location::current()) {
+            auto& channel = get_channel<E>();
+            std::lock_guard lock(channel.mutex);
+
             HandlerId id = next_id_++;
-            handlers_[id] = std::move(handler);
+            channel.handlers.push_back(std::move(handler));
+
+            if (debug_.enabled && debug_.log_subscribe) {
+                log_subscribe_event<E>(id, loc);
+            }
+
             return id;
         }
 
-        /**
-         * @brief Unsubscribe a handler
-         * @param id Handler ID returned from subscribe
-         */
-        void unsubscribe(HandlerId id) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            handlers_.erase(id);
-        }
+        // Unsubscribe
+        template <Event E>
+        void remove(HandlerId id) {
+            if (auto it = channels_.find(typeid(E)); it != channels_.end()) {
+                auto& channel = static_cast<Channel<E>&>(*it->second);
+                std::lock_guard lock(channel.mutex);
+                auto before = channel.handlers.size();
+                channel.handlers.erase(
+                    std::remove_if(channel.handlers.begin(), channel.handlers.end(),
+                                   [id](const auto&) { return false; }), // TODO: Track IDs properly
+                    channel.handlers.end());
 
-        /**
-         * @brief Publish an event to all subscribers
-         * @param event Event to publish
-         */
-        void publish(const EventType& event) {
-            std::vector<Handler> handlers_copy;
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                handlers_copy.reserve(handlers_.size());
-                for (const auto& [id, handler] : handlers_) {
-                    handlers_copy.push_back(handler);
+                if (debug_.enabled && before != channel.handlers.size()) {
+                    std::println("[Event::Bus] Unsubscribed handler {} from {}",
+                                 id, demangle(typeid(E).name()));
                 }
             }
+        }
 
-            // Call handlers outside of lock to prevent deadlocks
-            for (const auto& handler : handlers_copy) {
-                handler(event);
+        // Clear all handlers for an event type
+        template <Event E>
+        void clear() {
+            if (auto it = channels_.find(typeid(E)); it != channels_.end()) {
+                auto& channel = static_cast<Channel<E>&>(*it->second);
+                std::lock_guard lock(channel.mutex);
+                auto count = channel.handlers.size();
+                channel.handlers.clear();
+
+                if (debug_.enabled && count > 0) {
+                    std::println("[Event::Bus] Cleared {} handlers for {}",
+                                 count, demangle(typeid(E).name()));
+                }
             }
         }
 
-        /**
-         * @brief Clear all subscribers
-         */
-        void clear() {
-            std::lock_guard<std::mutex> lock(mutex_);
-            handlers_.clear();
-        }
-
-        /**
-         * @brief Get number of subscribers
-         */
-        size_t subscriber_count() const {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return handlers_.size();
-        }
-
-    private:
-        mutable std::mutex mutex_;
-        std::unordered_map<HandlerId, Handler> handlers_;
-        HandlerId next_id_ = 1;
-    };
-
-    /**
-     * @brief Central event bus for application-wide event distribution
-     *
-     * Provides type-safe channels for different event types without requiring
-     * inheritance from a base event class.
-     */
-    class EventBus {
-    public:
-        /**
-         * @brief Get or create a channel for a specific event type
-         * @tparam EventType Type of event
-         * @return Shared pointer to the event channel
-         */
-        template <typename EventType>
-        std::shared_ptr<EventChannel<EventType>> channel() {
-            std::lock_guard<std::mutex> lock(mutex_);
-
-            const auto type_id = std::type_index(typeid(EventType));
-            auto it = channels_.find(type_id);
-
-            if (it != channels_.end()) {
-                return std::static_pointer_cast<EventChannel<EventType>>(it->second);
+        // Clear all handlers
+        void clear_all() {
+            std::lock_guard lock(mutex_);
+            if (debug_.enabled) {
+                size_t total = 0;
+                for (const auto& [type, channel] : channels_) {
+                    total += channel->handler_count();
+                }
+                std::println("[Event::Bus] Clearing {} handlers across {} event types",
+                             total, channels_.size());
             }
-
-            auto new_channel = std::make_shared<EventChannel<EventType>>();
-            channels_[type_id] = new_channel;
-            return new_channel;
-        }
-
-        /**
-         * @brief Convenience method to publish an event
-         * @tparam EventType Type of event
-         * @param event Event to publish
-         */
-        template <typename EventType>
-        void publish(const EventType& event) {
-            channel<EventType>()->publish(event);
-        }
-
-        /**
-         * @brief Convenience method to subscribe to an event
-         * @tparam EventType Type of event
-         * @param handler Handler function
-         * @return Handler ID for unsubscription
-         */
-        template <typename EventType>
-        typename EventChannel<EventType>::HandlerId subscribe(
-            typename EventChannel<EventType>::Handler handler) {
-            return channel<EventType>()->subscribe(std::move(handler));
-        }
-
-        /**
-         * @brief Clear all channels
-         */
-        void clear() {
-            std::lock_guard<std::mutex> lock(mutex_);
             channels_.clear();
         }
 
+        // Get subscriber count
+        template <Event E>
+        size_t subscriber_count() const {
+            if (auto it = channels_.find(typeid(E)); it != channels_.end()) {
+                return it->second->handler_count();
+            }
+            return 0;
+        }
+
+        // Debug controls
+        void set_debug(bool enabled) { debug_.enabled = enabled; }
+        DebugConfig& debug_config() { return debug_; }
+
+        // Debug statistics
+        size_t total_emits() const { return emit_count_; }
+        size_t total_channels() const {
+            std::lock_guard lock(mutex_);
+            return channels_.size();
+        }
+
+        void print_stats() const {
+            std::lock_guard lock(mutex_);
+            std::println("[Event::Bus] Statistics:");
+            std::println("  Total emits: {}", emit_count_.load());
+            std::println("  Active channels: {}", channels_.size());
+            std::println("  Registered events:");
+
+            for (const auto& [type, channel] : channels_) {
+                std::println("    {} - {} handlers",
+                             demangle(type.name()),
+                             channel->handler_count());
+            }
+        }
+
     private:
+        template <Event E>
+        Channel<E>& get_channel() {
+            std::lock_guard lock(mutex_);
+            auto [it, inserted] = channels_.try_emplace(
+                typeid(E),
+                std::make_unique<Channel<E>>());
+            return static_cast<Channel<E>&>(*it->second);
+        }
+
+        template <Event E>
+        void log_emit_event(const std::source_location& loc) {
+            std::string msg = std::format("[Event::Bus] EMIT: {}", demangle(typeid(E).name()));
+
+            if (debug_.show_location) {
+                msg += std::format(" @ {}:{}", loc.file_name(), loc.line());
+            }
+
+            if (debug_.show_timestamp) {
+                auto now = std::chrono::system_clock::now();
+                auto time_t = std::chrono::system_clock::to_time_t(now);
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              now.time_since_epoch()) %
+                          1000;
+
+                // Use put_time for formatting
+                std::stringstream time_str;
+                time_str << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+                msg = std::format("[{}.{:03d}] {}", time_str.str(), ms.count(), msg);
+            }
+
+            std::println("{}", msg);
+        }
+
+        template <Event E>
+        void log_subscribe_event(HandlerId id, const std::source_location& loc) {
+            std::string msg = std::format("[Event::Bus] SUBSCRIBE: {} (id={})",
+                                          demangle(typeid(E).name()), id);
+
+            if (debug_.show_location) {
+                msg += std::format(" @ {}:{}", loc.file_name(), loc.line());
+            }
+
+            std::println("{}", msg);
+        }
+
+        // Simple demangler (platform-specific implementation needed)
+        static std::string demangle(const char* name) {
+#ifdef __GNUG__
+            int status = 0;
+            std::unique_ptr<char, void (*)(void*)> res{
+                abi::__cxa_demangle(name, nullptr, nullptr, &status),
+                std::free};
+            return (status == 0) ? res.get() : name;
+#else
+            return name;
+#endif
+        }
+
         mutable std::mutex mutex_;
-        std::unordered_map<std::type_index, std::shared_ptr<void>> channels_;
+        std::unordered_map<std::type_index, std::unique_ptr<BaseChannel>> channels_;
+        std::atomic<HandlerId> next_id_{1};
+        std::atomic<size_t> emit_count_{0};
+        DebugConfig debug_;
     };
 
-} // namespace gs
+    // Global event bus singleton
+    inline Bus& bus() {
+        static Bus instance;
+        return instance;
+    }
+
+    // Convenience functions
+    template <Event E>
+    void emit(const E& event) {
+        bus().emit(event);
+    }
+
+    template <Event E>
+    auto when(auto&& handler) {
+        return bus().when<E>(std::forward<decltype(handler)>(handler));
+    }
+
+    // Debug helper
+    inline void enable_debug(bool emit = true, bool subscribe = true, bool unhandled = true) {
+        auto& b = bus();
+        b.debug_config().enabled = true;
+        b.debug_config().log_emit = emit;
+        b.debug_config().log_subscribe = subscribe;
+        b.debug_config().log_unhandled = unhandled;
+    }
+
+} // namespace gs::event

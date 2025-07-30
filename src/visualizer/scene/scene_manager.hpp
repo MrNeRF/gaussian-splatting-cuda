@@ -1,6 +1,5 @@
 #pragma once
 
-#include "core/event_bus.hpp"
 #include "core/events.hpp"
 #include "core/parameters.hpp"
 #include "rendering/rendering_pipeline.hpp"
@@ -41,7 +40,7 @@ namespace gs {
             std::optional<int> training_iteration;
         };
 
-        explicit SceneManager(std::shared_ptr<EventBus> event_bus);
+        SceneManager();
         ~SceneManager();
 
         // Delete copy operations
@@ -72,36 +71,20 @@ namespace gs {
         RenderingPipeline::RenderResult render(
             const RenderingPipeline::RenderRequest& request);
 
+        TrainerManager* getTrainerManager() { return trainer_manager_; }
+        const TrainerManager* getTrainerManager() const { return trainer_manager_; }
+
     private:
         // Event handlers
         void setupEventHandlers();
-
-        // Command handlers
-        void handleLoadFileCommand(const LoadFileCommand& cmd);
-        void handleClearSceneCommand(const ClearSceneCommand& cmd);
-        void handleRenderRequestCommand(const RenderRequestCommand& cmd);
-
-        // Query handlers
-        void handleSceneStateQuery(const QuerySceneStateRequest& request);
-        void handleRenderCapabilitiesQuery(const QueryRenderCapabilitiesRequest& request);
-
-        // Training event handlers
-        void handleTrainingStarted(const TrainingStartedEvent& event);
-        void handleTrainingCompleted(const TrainingCompletedEvent& event);
-        void handleModelUpdated(const ModelUpdatedEvent& event);
 
         // Internal operations
         void loadPLYInternal(const std::filesystem::path& path);
         void loadDatasetInternal(const std::filesystem::path& path,
                                  const param::TrainingParameters& params);
         void updateSceneState();
-        void publishSceneStateChanged(const SceneState& old_state,
-                                      const SceneState& new_state);
 
         // Member variables
-        std::shared_ptr<EventBus> event_bus_;
-        std::vector<size_t> event_handler_ids_;
-
         std::unique_ptr<Scene> scene_;
         TrainerManager* trainer_manager_ = nullptr;
 

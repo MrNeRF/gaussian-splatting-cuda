@@ -2,11 +2,20 @@ add_library(gs_visualizer OBJECT
     # Core
     visualizer.cpp
     visualizer_impl.cpp
-    
+    core/main_loop.cpp
+    core/data_loading_service.cpp
+    core/command_processor.cpp
+    core/viewer_state_manager.cpp
+
+    # Tools
+    tools/crop_box_tool.cpp
+    tools/tool_manager.cpp
+
     # Window management
     window/window_manager.cpp
     
     # Rendering
+    rendering/rendering_manager.cpp
     rendering/rendering_pipeline.cpp
     rendering/render_bounding_box.cpp
     
@@ -17,6 +26,7 @@ add_library(gs_visualizer OBJECT
     gui/panels/training_panel.cpp
     gui/panels/crop_box_panel.cpp
     gui/panels/scene_panel.cpp
+    gui/panels/tools_panel.cpp
     gui/windows/scripting_console.cpp
     gui/windows/file_browser.cpp
     gui/windows/camera_controls.cpp
@@ -27,6 +37,7 @@ add_library(gs_visualizer OBJECT
     
     # Input handling
     input/input_handler.cpp
+    input/input_manager.cpp
     input/camera_controller.cpp
     
     # Training integration

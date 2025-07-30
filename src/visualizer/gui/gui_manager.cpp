@@ -1,12 +1,11 @@
 #include "gui/gui_manager.hpp"
-#include "core/events.hpp"
-#include "gui/panels/crop_box_panel.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "gui/windows/camera_controls.hpp"
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/scripting_console.hpp"
+#include "tools/crop_box_tool.hpp"
 #include "visualizer_impl.hpp"
 
 #include <GLFW/glfw3.h>
@@ -14,17 +13,17 @@
 #include <format>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <imgui_internal.h>
 
 namespace gs::gui {
 
-    GuiManager::GuiManager(visualizer::VisualizerImpl* viewer, std::shared_ptr<EventBus> event_bus)
-        : viewer_(viewer),
-          event_bus_(event_bus) {
+    GuiManager::GuiManager(visualizer::VisualizerImpl* viewer)
+        : viewer_(viewer) {
 
         // Create components
         console_ = std::make_unique<ScriptingConsole>();
         file_browser_ = std::make_unique<FileBrowser>();
-        scene_panel_ = std::make_unique<ScenePanel>(*event_bus);
+        scene_panel_ = std::make_unique<ScenePanel>();
 
         // Initialize window states
         window_states_["console"] = false;
@@ -36,7 +35,7 @@ namespace gs::gui {
     }
 
     GuiManager::~GuiManager() {
-        // Event handlers are automatically cleaned up when event bus is destroyed
+        // Cleanup handled automatically
     }
 
     void GuiManager::init() {
@@ -46,6 +45,8 @@ namespace gs::gui {
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport
         io.ConfigWindowsMoveFromTitleBarOnly = true;
 
         // Platform/Renderer initialization
@@ -61,11 +62,11 @@ namespace gs::gui {
 
         // Configure components
         setScriptExecutor([this](const std::string& cmd) {
-            return widgets::executeConsoleCommand(cmd, viewer_, event_bus_);
+            return widgets::executeConsoleCommand(cmd, viewer_);
         });
 
         setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
-            event_bus_->publish(LoadFileCommand{path, is_dataset});
+            events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
             window_states_["file_browser"] = false;
         });
 
@@ -73,7 +74,7 @@ namespace gs::gui {
             if (path.empty()) {
                 window_states_["file_browser"] = true;
             } else {
-                event_bus_->publish(LoadFileCommand{path, true});
+                events::cmd::LoadFile{.path = path, .is_dataset = true}.emit();
             }
         });
     }
@@ -90,20 +91,35 @@ namespace gs::gui {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // Get viewport
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+        // Define layout dimensions
+        const float left_panel_width = 250.0f;  // Slimmer Rendering Settings panel
+        const float right_panel_width = 200.0f; // Even slimmer Scene panel
+
         // Create context for this frame
         UIContext ctx{
             .viewer = viewer_,
-            .event_bus = event_bus_,
             .console = console_.get(),
             .file_browser = file_browser_.get(),
             .window_states = &window_states_};
 
-        // Render UI
+        // Draw the main panel (Rendering Settings) with proper positioning
         if (show_main_panel_) {
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(left_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
             panels::DrawMainPanel(ctx);
         }
 
-        // Render windows
+        // Draw Scene panel with proper positioning
+        if (window_states_["scene_panel"]) {
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - right_panel_width, viewport->WorkPos.y), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(right_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
+            scene_panel_->render(&window_states_["scene_panel"]);
+        }
+
+        // Render floating windows (these should remain movable)
         if (window_states_["console"]) {
             console_->render(&window_states_["console"]);
         }
@@ -116,36 +132,69 @@ namespace gs::gui {
             gui::windows::DrawCameraControls(&window_states_["camera_controls"]);
         }
 
-        if (window_states_["scene_panel"]) {
-            scene_panel_->render(&window_states_["scene_panel"]);
-        }
-
         // End frame
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        // Update and Render additional Platform Windows (for multi-viewport)
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup_current_context);
+        }
     }
 
     void GuiManager::setupEventHandlers() {
-        // Handle window visibility - only if ShowWindowEvent exists
-        if (event_bus_) {
-            // Handle log messages
-            event_handler_ids_.push_back(
-                event_bus_->subscribe<LogMessageEvent>([this](const LogMessageEvent& e) {
-                    const char* level = "";
-                    switch (e.level) {
-                    case LogMessageEvent::Level::Info: level = "Info"; break;
-                    case LogMessageEvent::Level::Warning: level = "Warning"; break;
-                    case LogMessageEvent::Level::Error: level = "Error"; break;
-                    case LogMessageEvent::Level::Debug: level = "Debug"; break;
-                    }
+        using namespace events;
 
-                    if (e.source) {
-                        console_->addLog("%s [%s]: %s", level, e.source->c_str(), e.message.c_str());
-                    } else {
-                        console_->addLog("%s: %s", level, e.message.c_str());
-                    }
-                }));
-        }
+        // Handle window visibility
+        cmd::ShowWindow::when([this](const auto& e) {
+            showWindow(e.window_name, e.show);
+        });
+
+        // Handle log messages
+        notify::Log::when([this](const auto& e) {
+            const char* level = "";
+            switch (e.level) {
+            case notify::Log::Level::Info: level = "Info"; break;
+            case notify::Log::Level::Warning: level = "Warning"; break;
+            case notify::Log::Level::Error: level = "Error"; break;
+            case notify::Log::Level::Debug: level = "Debug"; break;
+            }
+
+            if (!e.source.empty()) {
+                console_->addLog("%s [%s]: %s", level, e.source.c_str(), e.message.c_str());
+            } else {
+                console_->addLog("%s: %s", level, e.message.c_str());
+            }
+        });
+
+        // Handle console results
+        ui::ConsoleResult::when([this](const auto& e) {
+            console_->addLog("> %s", e.command.c_str());
+            if (!e.result.empty()) {
+                console_->addLog("%s", e.result.c_str());
+            }
+        });
+
+        // Handle errors
+        notify::Error::when([this](const auto& e) {
+            addConsoleLog("ERROR: %s", e.message.c_str());
+            if (!e.details.empty()) {
+                addConsoleLog("Details: %s", e.details.c_str());
+            }
+        });
+
+        // Handle success messages
+        notify::Success::when([this](const auto& e) {
+            addConsoleLog("SUCCESS: %s", e.message.c_str());
+        });
+
+        // Handle warnings
+        notify::Warning::when([this](const auto& e) {
+            addConsoleLog("WARNING: %s", e.message.c_str());
+        });
     }
 
     void GuiManager::applyDefaultStyle() {
@@ -179,11 +228,23 @@ namespace gs::gui {
     }
 
     bool GuiManager::showCropBox() const {
-        return panels::getCropBoxState().show_crop_box;
+        if (auto* tool_manager = viewer_->getToolManager()) {
+            if (auto* crop_tool = dynamic_cast<visualizer::CropBoxTool*>(
+                    tool_manager->getTool("Crop Box"))) {
+                return crop_tool->shouldShowBox();
+            }
+        }
+        return false;
     }
 
     bool GuiManager::useCropBox() const {
-        return panels::getCropBoxState().use_crop_box;
+        if (auto* tool_manager = viewer_->getToolManager()) {
+            if (auto* crop_tool = dynamic_cast<visualizer::CropBoxTool*>(
+                    tool_manager->getTool("Crop Box"))) {
+                return crop_tool->shouldUseBox();
+            }
+        }
+        return false;
     }
 
     void GuiManager::setScriptExecutor(std::function<std::string(const std::string&)> executor) {
@@ -197,4 +258,5 @@ namespace gs::gui {
             file_browser_->setOnFileSelected(callback);
         }
     }
+
 } // namespace gs::gui

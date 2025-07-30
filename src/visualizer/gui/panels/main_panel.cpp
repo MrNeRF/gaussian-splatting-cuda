@@ -1,11 +1,10 @@
 #include "gui/panels/main_panel.hpp"
 #include "core/events.hpp"
-#include "gui/panels/crop_box_panel.hpp"
+#include "gui/panels/tools_panel.hpp"
 #include "gui/panels/training_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "visualizer_impl.hpp"
 #include <algorithm>
-#include <format>
 #include <imgui.h>
 
 namespace gs::gui::panels {
@@ -13,11 +12,17 @@ namespace gs::gui::panels {
     void DrawMainPanel(const UIContext& ctx) {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
 
+        // Simplified flags - positioning is handled in GuiManager::render()
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
-                                 ImGuiWindowFlags_NoResize;
+                                 ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoCollapse |
+                                 ImGuiWindowFlags_NoTitleBar; // Add this to remove title bar
 
         if (ImGui::Begin("Rendering Setting", nullptr, flags)) {
-            ImGui::SetWindowSize(ImVec2(300, 0));
+            // Add a custom title
+            ImGui::Text("Rendering Settings");
+            ImGui::Separator();
 
             DrawWindowControls(ctx);
             ImGui::Separator();
@@ -36,7 +41,7 @@ namespace gs::gui::panels {
             DrawProgressInfo(ctx);
             ImGui::Separator();
 
-            DrawCropBoxControls(ctx);
+            DrawToolsPanel(ctx);
         }
         ImGui::End();
 
@@ -67,16 +72,20 @@ namespace gs::gui::panels {
         ImGui::Text("Rendering Settings");
         ImGui::Separator();
 
-        float old_scale = config->scaling_modifier;
         if (widgets::SliderWithReset("Scale", &config->scaling_modifier, 0.01f, 3.0f, 1.0f)) {
-            ctx.event_bus->publish(RenderingSettingsChangedEvent{
-                std::nullopt, config->scaling_modifier, std::nullopt});
+            events::ui::RenderSettingsChanged{
+                .fov = std::nullopt,
+                .scaling_modifier = config->scaling_modifier,
+                .antialiasing = std::nullopt}
+                .emit();
         }
 
-        float old_fov = config->fov;
         if (widgets::SliderWithReset("FoV", &config->fov, 45.0f, 120.0f, 75.0f)) {
-            ctx.event_bus->publish(RenderingSettingsChangedEvent{
-                config->fov, std::nullopt, std::nullopt});
+            events::ui::RenderSettingsChanged{
+                .fov = config->fov,
+                .scaling_modifier = std::nullopt,
+                .antialiasing = std::nullopt}
+                .emit();
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED

@@ -1,11 +1,13 @@
 #include "scene.hpp"
-#include "core/event_response_handler.hpp"
 #include "core/model_providers.hpp"
-#include <print>
 
 namespace gs {
 
-    Scene::Scene() : mode_(Mode::Empty) {
+    Scene::Scene() {
+        // Subscribe to query events
+        events::query::GetModelInfo::when([this](const auto&) {
+            handleModelInfoQuery();
+        });
     }
 
     void Scene::setModelProvider(std::shared_ptr<IModelProvider> provider) {
@@ -16,6 +18,7 @@ namespace gs {
         }
 
         // Update mode based on provider type
+        Mode old_mode = mode_;
         if (!provider) {
             mode_ = Mode::Empty;
         } else if (dynamic_cast<TrainerModelProvider*>(provider.get())) {
@@ -24,9 +27,9 @@ namespace gs {
             mode_ = Mode::Viewing;
         }
 
-        // Publish mode change event
-        if (event_bus_) {
-            publishModeChange(mode_, mode_);
+        // Publish mode change event if it changed
+        if (old_mode != mode_) {
+            publishModeChange(old_mode, mode_);
         }
     }
 
@@ -35,7 +38,7 @@ namespace gs {
         model_provider_.reset();
         mode_ = Mode::Empty;
 
-        if (event_bus_ && old_mode != mode_) {
+        if (old_mode != mode_) {
             publishModeChange(old_mode, mode_);
         }
     }
@@ -77,28 +80,8 @@ namespace gs {
         return pipeline_->render(*model, request);
     }
 
-    void Scene::setEventBus(std::shared_ptr<EventBus> event_bus) {
-        event_bus_ = event_bus;
-
-        if (event_bus_) {
-            // Subscribe to queries
-            event_bus_->subscribe<QueryModelInfoRequest>(
-                [this](const QueryModelInfoRequest& request) {
-                    handleModelInfoQuery(request);
-                });
-
-            event_bus_->subscribe<QuerySceneModeRequest>(
-                [this](const QuerySceneModeRequest& request) {
-                    handleSceneModeQuery(request);
-                });
-        }
-    }
-
-    void Scene::handleModelInfoQuery(const QueryModelInfoRequest& [[maybe_unused]] request) {
-        if (!event_bus_)
-            return;
-
-        QueryModelInfoResponse response;
+    void Scene::handleModelInfoQuery() {
+        events::query::ModelInfo response;
 
         if (hasModel()) {
             const SplatData* model = getModel();
@@ -106,64 +89,36 @@ namespace gs {
             response.num_gaussians = model->size();
             response.sh_degree = model->get_active_sh_degree();
             response.scene_scale = model->get_scene_scale();
-            response.model_source = model_provider_->getModelSource();
+            response.source = model_provider_->getModelSource();
         } else {
             response.has_model = false;
             response.num_gaussians = 0;
             response.sh_degree = 0;
             response.scene_scale = 0.0f;
-            response.model_source = "None";
+            response.source = "None";
         }
 
-        event_bus_->publish(response);
-    }
-
-    void Scene::handleSceneModeQuery(const QuerySceneModeRequest& [[maybe_unused]] request) {
-
-        if (!event_bus_)
-            return;
-
-        QuerySceneModeResponse response;
-
-        switch (mode_) {
-        case Mode::Empty:
-            response.mode = QuerySceneModeResponse::Mode::Empty;
-            break;
-        case Mode::Viewing:
-            response.mode = QuerySceneModeResponse::Mode::Viewing;
-            break;
-        case Mode::Training:
-            response.mode = QuerySceneModeResponse::Mode::Training;
-            break;
-        }
-
-        // We don't track the path in Scene, that's SceneManager's responsibility
-        response.current_path = std::nullopt;
-
-        event_bus_->publish(response);
+        response.emit();
     }
 
     void Scene::publishModeChange(Mode old_mode, Mode new_mode) {
-        if (!event_bus_ || old_mode == new_mode)
+        if (old_mode == new_mode)
             return;
 
-        SceneModeChangedEvent event;
-
-        // Convert internal mode to event mode
-        auto convertMode = [](Mode m) -> QuerySceneModeResponse::Mode {
+        // Convert internal mode to string for the event
+        auto modeToString = [](Mode m) -> std::string {
             switch (m) {
-            case Mode::Empty: return QuerySceneModeResponse::Mode::Empty;
-            case Mode::Viewing: return QuerySceneModeResponse::Mode::Viewing;
-            case Mode::Training: return QuerySceneModeResponse::Mode::Training;
-            default: return QuerySceneModeResponse::Mode::Empty;
+            case Mode::Empty: return "Empty";
+            case Mode::Viewing: return "Viewing";
+            case Mode::Training: return "Training";
+            default: return "Unknown";
             }
         };
 
-        event.old_mode = convertMode(old_mode);
-        event.new_mode = convertMode(new_mode);
-        event.loaded_path = std::nullopt; // Scene doesn't track paths
-
-        event_bus_->publish(event);
+        events::ui::RenderModeChanged{
+            .old_mode = modeToString(old_mode),
+            .new_mode = modeToString(new_mode)}
+            .emit();
     }
 
 } // namespace gs

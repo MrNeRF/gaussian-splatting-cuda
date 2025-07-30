@@ -8,7 +8,7 @@
 
 namespace gs::gui {
 
-    // TreeView Implementation
+    // TreeView Implementation (unchanged)
     void TreeView::Render() {
         if (!m_root)
             return;
@@ -90,7 +90,7 @@ namespace gs::gui {
         }
     }
 
-    // ColmapDatasetLoader Implementation
+    // ColmapDatasetLoader Implementation (unchanged)
     std::unique_ptr<SceneNode> ColmapDatasetLoader::LoadDataset(const std::filesystem::path& path) {
         auto root = std::make_unique<SceneNode>();
         root->name = path.filename().string();
@@ -252,7 +252,7 @@ namespace gs::gui {
     }
 
     // ScenePanel Implementation
-    ScenePanel::ScenePanel(EventBus& event_bus) : m_eventBus(event_bus) {
+    ScenePanel::ScenePanel() {
         m_treeView.SetOnSelect([this](const SceneNode& node) {
             onNodeSelected(node);
         });
@@ -265,55 +265,61 @@ namespace gs::gui {
     }
 
     ScenePanel::~ScenePanel() {
-        // EventBus channels clean up automatically when EventBus is destroyed
-        // No need to manually unsubscribe
+        // Cleanup handled automatically
     }
 
     void ScenePanel::setupEventHandlers() {
-        // Subscribe to events using EventBus
-        m_eventHandlerIds.push_back(
-            m_eventBus.subscribe<SceneLoadedEvent>(
-                [this](const SceneLoadedEvent& event) {
-                    handleSceneLoaded(event);
-                }));
+        // Subscribe to events using the new event system
+        events::state::SceneLoaded::when([this](const auto& event) {
+            handleSceneLoaded(event);
+        });
 
-        m_eventHandlerIds.push_back(
-            m_eventBus.subscribe<SceneClearedEvent>(
-                [this](const SceneClearedEvent& event) {
-                    handleSceneCleared(event);
-                }));
+        events::state::SceneCleared::when([this](const auto&) {
+            handleSceneCleared();
+        });
     }
 
-    void ScenePanel::handleSceneLoaded(const SceneLoadedEvent& event) {
+    void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
         // Add the loaded scene to our tree
-        if (!event.source_path.empty()) {
-            loadColmapDataset(event.source_path);
+        if (!event.path.empty()) {
+            loadColmapDataset(event.path);
         }
     }
 
-    void ScenePanel::handleSceneCleared(const SceneClearedEvent& event) {
+    void ScenePanel::handleSceneCleared() {
         // Clear the tree
         m_treeView.SetRootNode(nullptr);
     }
 
     void ScenePanel::render(bool* p_open) {
-        ImGui::SetNextWindowSize(ImVec2(m_panelWidth, 400), ImGuiCond_FirstUseEver);
-
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
 
-        if (!ImGui::Begin("Scene", p_open)) {
+        // Simplified flags - positioning is handled in GuiManager::render()
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoCollapse |
+                                 ImGuiWindowFlags_NoTitleBar; // Add this for consistency
+
+        if (!ImGui::Begin("Scene", p_open, flags)) {
             ImGui::End();
             ImGui::PopStyleColor();
             return;
         }
 
-        // Toolbar
-        if (ImGui::Button("Open File Browser")) {
+        // Add a custom title
+        ImGui::Text("Scene");
+        ImGui::Separator();
+
+        // Make buttons smaller to fit the narrow panel
+        float button_width = ImGui::GetContentRegionAvail().x;
+
+        if (ImGui::Button("Open File Browser", ImVec2(button_width, 0))) {
             // Request to show file browser
-            m_eventBus.publish(LogMessageEvent{
-                LogMessageEvent::Level::Info,
-                "Opening file browser...",
-                std::string("ScenePanel")});
+            events::notify::Log{
+                .level = events::notify::Log::Level::Info,
+                .message = "Opening file browser...",
+                .source = "ScenePanel"}
+                .emit();
 
             // Fire the callback to open file browser with empty path
             if (m_onDatasetLoad) {
@@ -321,8 +327,7 @@ namespace gs::gui {
             }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh")) {
+        if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
             const auto* root = m_treeView.GetRoot();
             if (root) {
                 auto path = root->path;
@@ -331,18 +336,20 @@ namespace gs::gui {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Clear")) {
+
+        if (ImGui::Button("Clear", ImVec2(button_width * 0.48f, 0))) {
             // Clear the tree view
             m_treeView.SetRootNode(nullptr);
 
             // Also clear the actual scene data
-            m_eventBus.publish(ClearSceneCommand{});
+            events::cmd::ClearScene{}.emit();
 
             // Log the action
-            m_eventBus.publish(LogMessageEvent{
-                LogMessageEvent::Level::Info,
-                "Scene cleared",
-                std::string("ScenePanel")});
+            events::notify::Log{
+                .level = events::notify::Log::Level::Info,
+                .message = "Scene cleared",
+                .source = "ScenePanel"}
+                .emit();
         }
 
         ImGui::Separator();
@@ -361,10 +368,11 @@ namespace gs::gui {
         m_treeView.SetRootNode(std::move(dataset));
 
         // Log the action
-        m_eventBus.publish(LogMessageEvent{
-            LogMessageEvent::Level::Info,
-            std::format("Loaded dataset: {}", path.string()),
-            std::string("ScenePanel")});
+        events::notify::Log{
+            .level = events::notify::Log::Level::Info,
+            .message = std::format("Loaded dataset: {}", path.string()),
+            .source = "ScenePanel"}
+            .emit();
     }
 
     void ScenePanel::setOnDatasetLoad(std::function<void(const std::filesystem::path&)> callback) {
@@ -373,10 +381,11 @@ namespace gs::gui {
 
     void ScenePanel::onNodeSelected(const SceneNode& node) {
         // Log selection
-        m_eventBus.publish(LogMessageEvent{
-            LogMessageEvent::Level::Debug,
-            std::format("Selected: {} ({})", node.name, node.path),
-            std::string("ScenePanel")});
+        events::notify::Log{
+            .level = events::notify::Log::Level::Debug,
+            .message = std::format("Selected: {} ({})", node.name, node.path),
+            .source = "ScenePanel"}
+            .emit();
 
         // If it's a dataset root and callback is set, trigger load
         if (node.type == SceneNodeType::ColmapDataset && m_onDatasetLoad) {
@@ -384,9 +393,9 @@ namespace gs::gui {
         }
 
         // Publish NodeSelectedEvent for other components to react
-        m_eventBus.publish(NodeSelectedEvent{
-            node.path,
-            [&node]() -> std::string {
+        events::ui::NodeSelected{
+            .path = node.path,
+            .type = [&node]() -> std::string {
                 switch (node.type) {
                 case SceneNodeType::ColmapDataset: return "ColmapDataset";
                 case SceneNodeType::Directory: return "Directory";
@@ -399,7 +408,8 @@ namespace gs::gui {
                 default: return "Unknown";
                 }
             }(),
-            node.metadata});
+            .metadata = node.metadata}
+            .emit();
     }
 
     void ScenePanel::onNodeExpanded(SceneNode& node) {
