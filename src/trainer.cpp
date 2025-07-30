@@ -1,17 +1,12 @@
 #include "core/trainer.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
-#include "visualizer/detail.hpp"
 #include <chrono>
 #include <expected>
 #include <numeric>
 #include <print>
 
 namespace gs {
-
-    static inline torch::Tensor ensure_4d(const torch::Tensor& image) {
-        return image.dim() == 3 ? image.unsqueeze(0) : image;
-    }
 
     std::expected<void, std::string> Trainer::initialize_bilateral_grid() {
         if (!params_.optimization.use_bilateral_grid) {
@@ -164,11 +159,11 @@ namespace gs {
         background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
         background_ = background_.to(torch::kCUDA);
 
-        // Only create progress bar if no viewer
-        if (!viewer_) {
+        // Create progress bar based on headless flag
+        if (params.optimization.headless) {
             progress_ = std::make_unique<TrainingProgress>(
                 params.optimization.iterations,
-                /*bar_width=*/100);
+                /*update_frequency=*/100);
         }
 
         // Initialize the evaluator - it handles all metrics internally
@@ -195,14 +190,14 @@ namespace gs {
         // Handle pause/resume
         if (pause_requested_.load() && !is_paused_.load()) {
             is_paused_ = true;
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->pause();
             }
             std::println("\nTraining paused at iteration {}", iter);
             std::println("Click 'Resume Training' to continue.");
         } else if (!pause_requested_.load() && is_paused_.load()) {
             is_paused_ = false;
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->resume(iter, current_loss_.load(), static_cast<int>(strategy_->get_model().size()));
             }
             std::println("\nTraining resumed at iteration {}", iter);
@@ -211,8 +206,15 @@ namespace gs {
         // Handle save request
         if (save_requested_.exchange(false)) {
             std::println("\nSaving checkpoint at iteration {}...", iter);
-            strategy_->get_model().save_ply(params_.dataset.output_path / "checkpoints", iter, /*join=*/true);
-            std::println("Checkpoint saved to {}", (params_.dataset.output_path / "checkpoints").string());
+            auto checkpoint_path = params_.dataset.output_path / "checkpoints";
+            strategy_->get_model().save_ply(checkpoint_path, iter, /*join=*/true);
+            std::println("Checkpoint saved to {}", checkpoint_path.string());
+
+            // Emit checkpoint saved event
+            events::state::CheckpointSaved{
+                .iteration = iter,
+                .path = checkpoint_path}
+                .emit();
         }
 
         // Handle stop request - this permanently stops training
@@ -324,6 +326,16 @@ namespace gs {
 
             current_loss_ = loss_value;
 
+            // Emit training progress event (throttled to reduce GUI updates)
+            if (iter % 10 == 0 || iter == 1) { // Only update every 10 iterations
+                events::state::TrainingProgress{
+                    .iteration = iter,
+                    .loss = loss_value,
+                    .num_gaussians = static_cast<int>(strategy_->get_model().size()),
+                    .is_refining = strategy_->is_refining(iter)}
+                    .emit();
+            }
+
             {
                 torch::NoGradGuard no_grad;
 
@@ -339,6 +351,12 @@ namespace gs {
                         bilateral_grid_optimizer_->step();
                         bilateral_grid_optimizer_->zero_grad(true);
                     }
+
+                    // Emit model updated event
+                    events::state::ModelUpdated{
+                        .iteration = iter,
+                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())}
+                        .emit();
                 }
 
                 // Clean evaluation - let the evaluator handle everything
@@ -356,25 +374,23 @@ namespace gs {
                     for (size_t save_step : params_.optimization.save_steps) {
                         if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
                             const bool join_threads = (iter == params_.optimization.save_steps.back());
-                            strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/join_threads);
+                            auto save_path = params_.dataset.output_path;
+                            strategy_->get_model().save_ply(save_path, iter, /*join=*/join_threads);
+
+                            // Emit checkpoint saved event
+                            events::state::CheckpointSaved{
+                                .iteration = iter,
+                                .path = save_path}
+                                .emit();
                         }
                     }
                 }
             }
 
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->update(iter, current_loss_.load(),
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
-            }
-
-            if (viewer_) {
-                if (viewer_->info_) {
-                    auto& info = viewer_->info_;
-                    info->updateProgress(iter, params_.optimization.iterations);
-                    info->updateNumSplats(static_cast<size_t>(strategy_->get_model().size()));
-                    info->updateLoss(current_loss_.load());
-                }
             }
 
             // Return Continue if we should continue training
@@ -393,9 +409,20 @@ namespace gs {
         is_running_ = false;
         training_complete_ = false;
 
-        if (viewer_ && viewer_->notifier_) {
-            // Simple spin wait with atomic
-            while (!viewer_->notifier_->ready.load() && !stop_token.stop_requested()) {
+        // Event-based ready signaling
+        if (!params_.optimization.headless) {
+            std::atomic<bool> ready{false};
+
+            // Subscribe temporarily to start signal
+            events::internal::TrainingReadyToStart::when([&ready](const auto&) {
+                ready = true;
+            });
+
+            // Signal we're ready
+            events::internal::TrainerReady{}.emit();
+
+            // Wait for start signal
+            while (!ready.load() && !stop_token.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
         }
@@ -408,11 +435,12 @@ namespace gs {
             const int num_workers = 4;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->update(iter, current_loss_.load(),
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
             }
+
             for (int epoch = 0; epoch < epochs_needed; ++epoch) {
                 if (stop_token.stop_requested() || stop_requested_.load()) {
                     break;
@@ -445,14 +473,27 @@ namespace gs {
 training_complete:
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
-                strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
+                auto final_path = params_.dataset.output_path;
+                strategy_->get_model().save_ply(final_path, iter, /*join=*/true);
+
+                // Emit final checkpoint saved event
+                events::state::CheckpointSaved{
+                    .iteration = iter,
+                    .path = final_path}
+                    .emit();
+
+                events::notify::Log{
+                    .level = events::notify::Log::Level::Info,
+                    .message = std::format("Training completed. Final model saved at iteration {}", iter),
+                    .source = "Trainer"}
+                    .emit();
             }
 
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->complete();
             }
             evaluator_->save_report();
-            if (!viewer_ && progress_) {
+            if (progress_) {
                 progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
             }
 

@@ -3,12 +3,13 @@
 #include "core/debug_utils.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/selective_adam.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <exception>
 #include <iostream>
 #include <random>
 
-MCMC::MCMC(SplatData&& splat_data)
+MCMC::MCMC(gs::SplatData&& splat_data)
     : _splat_data(std::move(splat_data)) {
 }
 
