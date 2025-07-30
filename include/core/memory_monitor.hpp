@@ -1,7 +1,7 @@
 #pragma once
 
-#include "visualizer/event_bus.hpp"
-#include "visualizer/events.hpp"
+#include "core/event_bus.hpp"
+#include "core/events.hpp"
 #include <atomic>
 #include <chrono>
 #include <cuda_runtime.h>

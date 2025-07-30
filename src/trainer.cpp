@@ -1,7 +1,7 @@
 #include "core/trainer.hpp"
+#include "core/events.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
-#include "visualizer/events.hpp"
 #include <chrono>
 #include <expected>
 #include <numeric>
