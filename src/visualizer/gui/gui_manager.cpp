@@ -93,8 +93,7 @@ namespace gs::gui {
             .viewer = viewer_,
             .console = console_.get(),
             .file_browser = file_browser_.get(),
-            .window_states = &window_states_
-        };
+            .window_states = &window_states_};
 
         // Render UI
         if (show_main_panel_) {

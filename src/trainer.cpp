@@ -212,8 +212,8 @@ namespace gs {
             // Emit checkpoint saved event
             events::state::CheckpointSaved{
                 .iteration = iter,
-                .path = checkpoint_path
-            }.emit();
+                .path = checkpoint_path}
+                .emit();
         }
 
         // Handle stop request - this permanently stops training
@@ -329,8 +329,8 @@ namespace gs {
                     .iteration = iter,
                     .loss = loss_value,
                     .num_gaussians = static_cast<int>(strategy_->get_model().size()),
-                    .is_refining = strategy_->is_refining(iter)
-                }.emit();
+                    .is_refining = strategy_->is_refining(iter)}
+                    .emit();
             }
 
             {
@@ -352,8 +352,8 @@ namespace gs {
                     // Emit model updated event
                     events::state::ModelUpdated{
                         .iteration = iter,
-                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())
-                    }.emit();
+                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())}
+                        .emit();
                 }
 
                 // Clean evaluation - let the evaluator handle everything
@@ -377,8 +377,8 @@ namespace gs {
                             // Emit checkpoint saved event
                             events::state::CheckpointSaved{
                                 .iteration = iter,
-                                .path = save_path
-                            }.emit();
+                                .path = save_path}
+                                .emit();
                         }
                     }
                 }
@@ -476,14 +476,14 @@ training_complete:
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
                     .iteration = iter,
-                    .path = final_path
-                }.emit();
+                    .path = final_path}
+                    .emit();
 
                 events::notify::Log{
                     .level = events::notify::Log::Level::Info,
                     .message = std::format("Training completed. Final model saved at iteration {}", iter),
-                    .source = "Trainer"
-                }.emit();
+                    .source = "Trainer"}
+                    .emit();
             }
 
             if (progress_) {

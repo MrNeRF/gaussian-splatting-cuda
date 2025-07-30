@@ -42,8 +42,8 @@ namespace gs {
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_camera_publish_time_) >= camera_publish_interval_ms_) {
             events::ui::CameraMove{
                 .rotation = viewport_.getRotationMatrix(),
-                .translation = viewport_.getTranslation()
-            }.emit();
+                .translation = viewport_.getTranslation()}
+                .emit();
             last_camera_publish_time_ = now;
         }
     }
@@ -71,24 +71,24 @@ namespace gs {
                 // Force publish on mouse release to ensure final position is sent
                 events::ui::CameraMove{
                     .rotation = viewport_.getRotationMatrix(),
-                    .translation = viewport_.getTranslation()
-                }.emit();
+                    .translation = viewport_.getTranslation()}
+                    .emit();
                 return true;
             } else if (event.button == GLFW_MOUSE_BUTTON_RIGHT && is_rotating_) {
                 is_rotating_ = false;
                 // Force publish on mouse release
                 events::ui::CameraMove{
                     .rotation = viewport_.getRotationMatrix(),
-                    .translation = viewport_.getTranslation()
-                }.emit();
+                    .translation = viewport_.getTranslation()}
+                    .emit();
                 return true;
             } else if (event.button == GLFW_MOUSE_BUTTON_MIDDLE && is_orbiting_) {
                 is_orbiting_ = false;
                 // Force publish on mouse release
                 events::ui::CameraMove{
                     .rotation = viewport_.getRotationMatrix(),
-                    .translation = viewport_.getTranslation()
-                }.emit();
+                    .translation = viewport_.getTranslation()}
+                    .emit();
                 return true;
             }
         }

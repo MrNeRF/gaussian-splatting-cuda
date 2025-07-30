@@ -308,8 +308,8 @@ namespace gs::gui {
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
                 .message = "Opening file browser...",
-                .source = "ScenePanel"
-            }.emit();
+                .source = "ScenePanel"}
+                .emit();
 
             // Fire the callback to open file browser with empty path
             if (m_onDatasetLoad) {
@@ -338,8 +338,8 @@ namespace gs::gui {
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
                 .message = "Scene cleared",
-                .source = "ScenePanel"
-            }.emit();
+                .source = "ScenePanel"}
+                .emit();
         }
 
         ImGui::Separator();
@@ -361,8 +361,8 @@ namespace gs::gui {
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
             .message = std::format("Loaded dataset: {}", path.string()),
-            .source = "ScenePanel"
-        }.emit();
+            .source = "ScenePanel"}
+            .emit();
     }
 
     void ScenePanel::setOnDatasetLoad(std::function<void(const std::filesystem::path&)> callback) {
@@ -374,8 +374,8 @@ namespace gs::gui {
         events::notify::Log{
             .level = events::notify::Log::Level::Debug,
             .message = std::format("Selected: {} ({})", node.name, node.path),
-            .source = "ScenePanel"
-        }.emit();
+            .source = "ScenePanel"}
+            .emit();
 
         // If it's a dataset root and callback is set, trigger load
         if (node.type == SceneNodeType::ColmapDataset && m_onDatasetLoad) {
@@ -398,8 +398,8 @@ namespace gs::gui {
                 default: return "Unknown";
                 }
             }(),
-            .metadata = node.metadata
-        }.emit();
+            .metadata = node.metadata}
+            .emit();
     }
 
     void ScenePanel::onNodeExpanded(SceneNode& node) {
