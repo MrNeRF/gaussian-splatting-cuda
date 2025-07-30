@@ -1,4 +1,7 @@
+#include <cstdlib>
+
 #include "rendering/rendering_manager.hpp"
+
 #include "internal/resource_paths.hpp"
 #include "training/training_manager.hpp"
 
@@ -30,10 +33,26 @@ namespace gs::visualizer {
     }
 
     void RenderingManager::initializeShaders() {
-        quad_shader_ = std::make_shared<Shader>(
-            (gs::visualizer::getShaderPath("screen_quad.vert")).c_str(),
-            (gs::visualizer::getShaderPath("screen_quad.frag")).c_str(),
-            true);
+        constexpr int max_buffer_size = 512;
+
+        auto convertPath = [max_buffer_size](const std::wstring& path, const std::string& shader_name, char* buffer) {
+            const wchar_t* wstr = path.c_str();
+            auto len = wcslen(wstr) + 1;
+
+            if (len > max_buffer_size)
+                throw std::runtime_error(std::format("{} path is too long {} > {}", shader_name, len, max_buffer_size));
+
+            std::wcstombs(buffer, wstr, len);
+            return buffer;
+        };
+
+        char buffer1[max_buffer_size] = {0};
+        char buffer2[max_buffer_size] = {0};
+
+        convertPath(gs::visualizer::getShaderPath("screen_quad.vert"), "screen_quad.vert", buffer1);
+        convertPath(gs::visualizer::getShaderPath("screen_quad.frag"), "screen_quad.frag", buffer2);
+
+        quad_shader_ = std::make_shared<Shader>(buffer1, buffer2, true);
     }
 
     void RenderingManager::renderFrame(const RenderContext& context, SceneManager* scene_manager) {
