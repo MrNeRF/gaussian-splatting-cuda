@@ -12,10 +12,13 @@ namespace gs::gui {
     void FileBrowser::render(bool* p_open) {
         ImGui::SetNextWindowSize(ImVec2(700, 450), ImGuiCond_FirstUseEver);
 
+        // Add NoDocking flag
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.15f, 0.95f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
 
-        if (!ImGui::Begin("File Browser", p_open, ImGuiWindowFlags_MenuBar)) {
+        if (!ImGui::Begin("File Browser", p_open, window_flags)) {
             ImGui::End();
             ImGui::PopStyleColor(2);
             return;

@@ -292,7 +292,7 @@ namespace gs::gui {
     }
 
     void ScenePanel::render(bool* p_open) {
-        ImGui::SetNextWindowSize(ImVec2(m_panelWidth, 400), ImGuiCond_FirstUseEver);
+        // Don't set window size for dockable windows
 
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
 
