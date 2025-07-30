@@ -91,51 +91,12 @@ namespace gs::gui {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Create the main dockspace
-        static bool dockspace_open = true;
-        static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
-
-        // Create a fullscreen window for the dockspace
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
+        // Get viewport
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
-        ImGui::SetNextWindowViewport(viewport->ID);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-        window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-        window_flags |= ImGuiWindowFlags_NoBackground;
 
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::Begin("DockSpace", &dockspace_open, window_flags);
-        ImGui::PopStyleVar(3);
-
-        // Create DockSpace
-        ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
-
-        // Set up default docking layout on first run
-        static bool first_time = true;
-        if (first_time) {
-            first_time = false;
-
-            ImGui::DockBuilderRemoveNode(dockspace_id);
-            ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
-            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
-
-            // Split the dockspace into left and right
-            ImGuiID dock_left, dock_right;
-            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.3f, &dock_left, &dock_right);
-
-            // Dock windows
-            ImGui::DockBuilderDockWindow("Rendering Setting", dock_left);
-            ImGui::DockBuilderDockWindow("Scene", dock_right);
-
-            ImGui::DockBuilderFinish(dockspace_id);
-        }
-
-        ImGui::End(); // End DockSpace window
+        // Define layout dimensions
+        const float left_panel_width = 250.0f;  // Slimmer Rendering Settings panel
+        const float right_panel_width = 200.0f; // Even slimmer Scene panel
 
         // Create context for this frame
         UIContext ctx{
@@ -144,12 +105,21 @@ namespace gs::gui {
             .file_browser = file_browser_.get(),
             .window_states = &window_states_};
 
-        // Render UI
+        // Draw the main panel (Rendering Settings) with proper positioning
         if (show_main_panel_) {
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(left_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
             panels::DrawMainPanel(ctx);
         }
 
-        // Render windows
+        // Draw Scene panel with proper positioning
+        if (window_states_["scene_panel"]) {
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - right_panel_width, viewport->WorkPos.y), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(right_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
+            scene_panel_->render(&window_states_["scene_panel"]);
+        }
+
+        // Render floating windows (these should remain movable)
         if (window_states_["console"]) {
             console_->render(&window_states_["console"]);
         }
@@ -160,10 +130,6 @@ namespace gs::gui {
 
         if (window_states_["camera_controls"]) {
             gui::windows::DrawCameraControls(&window_states_["camera_controls"]);
-        }
-
-        if (window_states_["scene_panel"]) {
-            scene_panel_->render(&window_states_["scene_panel"]);
         }
 
         // End frame

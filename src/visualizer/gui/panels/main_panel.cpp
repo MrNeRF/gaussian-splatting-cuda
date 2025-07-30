@@ -12,11 +12,17 @@ namespace gs::gui::panels {
     void DrawMainPanel(const UIContext& ctx) {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
 
-        // Remove NoResize flag for docking
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar;
+        // Simplified flags - positioning is handled in GuiManager::render()
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
+                                 ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoCollapse |
+                                 ImGuiWindowFlags_NoTitleBar; // Add this to remove title bar
 
         if (ImGui::Begin("Rendering Setting", nullptr, flags)) {
-            // Remove SetWindowSize since docking will handle sizing
+            // Add a custom title
+            ImGui::Text("Rendering Settings");
+            ImGui::Separator();
 
             DrawWindowControls(ctx);
             ImGui::Separator();
