@@ -1,7 +1,7 @@
 #include "core/strategy.hpp"
 
 namespace strategy {
-    void initialize_gaussians(SplatData& splat_data) {
+    void initialize_gaussians(gs::SplatData& splat_data) {
         const auto dev = torch::kCUDA;
         splat_data.means() = splat_data.means().to(dev).set_requires_grad(true);
         splat_data.scaling_raw() = splat_data.scaling_raw().to(dev).set_requires_grad(true);
@@ -12,7 +12,7 @@ namespace strategy {
     }
 
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(
-        SplatData& splat_data,
+        gs::SplatData& splat_data,
         const gs::param::OptimizationParameters& params) {
         if (params.selective_adam) {
             std::cout << "Using SelectiveAdam optimizer" << std::endl;
@@ -78,7 +78,7 @@ namespace strategy {
         std::function<torch::Tensor(const int, const torch::Tensor)> param_fn,
         std::function<std::unique_ptr<torch::optim::OptimizerParamState>((torch::optim::OptimizerParamState&, const torch::Tensor))> optimizer_fn,
         std::unique_ptr<torch::optim::Optimizer>& optimizer,
-        SplatData& splat_data,
+        gs::SplatData& splat_data,
         std::vector<size_t> param_idxs) {
         std::array<torch::Tensor*, 6> params = {
             &splat_data.means(),

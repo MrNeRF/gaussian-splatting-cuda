@@ -1,15 +1,15 @@
 #pragma once
 
 #include "core/istrategy.hpp"
-#include "core/strategy.hpp"
 #include "core/selective_adam.hpp"
+#include "core/strategy.hpp"
 #include <memory>
 #include <torch/torch.h>
 
 class DefaultStrategy : public IStrategy {
 public:
     DefaultStrategy() = delete;
-    DefaultStrategy(SplatData&& splat_data);
+    DefaultStrategy(gs::SplatData&& splat_data);
 
     DefaultStrategy(const DefaultStrategy&) = delete;
     DefaultStrategy& operator=(const DefaultStrategy&) = delete;
@@ -22,8 +22,8 @@ public:
     void post_backward(int iter, gs::RenderOutput& render_output, bool packed = false) override;
     void step(int iter) override;
     bool is_refining(int iter) const override;
-    SplatData& get_model() override { return _splat_data; }
-    const SplatData& get_model() const override { return _splat_data; }
+    gs::SplatData& get_model() override { return _splat_data; }
+    const gs::SplatData& get_model() const override { return _splat_data; }
 
 private:
     // Helper functions
@@ -38,7 +38,7 @@ private:
     // Member variables
     std::unique_ptr<torch::optim::Optimizer> _optimizer;
     std::unique_ptr<ExponentialLR> _scheduler;
-    SplatData _splat_data;
+    gs::SplatData _splat_data;
     std::unique_ptr<const gs::param::OptimizationParameters> _params;
 
     // Default strategy specific parameters

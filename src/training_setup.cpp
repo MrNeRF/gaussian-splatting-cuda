@@ -1,5 +1,4 @@
 #include "core/training_setup.hpp"
-#include "core/dataset_reader.hpp"
 #include "core/default_strategy.hpp"
 #include "core/mcmc.hpp"
 #include "core/point_cloud.hpp"
