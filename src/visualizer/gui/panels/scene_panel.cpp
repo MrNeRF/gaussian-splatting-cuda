@@ -292,18 +292,28 @@ namespace gs::gui {
     }
 
     void ScenePanel::render(bool* p_open) {
-        ImGui::SetNextWindowSize(ImVec2(m_panelWidth, 400), ImGuiCond_FirstUseEver);
-
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
 
-        if (!ImGui::Begin("Scene", p_open)) {
+        // Simplified flags - positioning is handled in GuiManager::render()
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoCollapse |
+                                 ImGuiWindowFlags_NoTitleBar; // Add this for consistency
+
+        if (!ImGui::Begin("Scene", p_open, flags)) {
             ImGui::End();
             ImGui::PopStyleColor();
             return;
         }
 
-        // Toolbar
-        if (ImGui::Button("Open File Browser")) {
+        // Add a custom title
+        ImGui::Text("Scene");
+        ImGui::Separator();
+
+        // Make buttons smaller to fit the narrow panel
+        float button_width = ImGui::GetContentRegionAvail().x;
+
+        if (ImGui::Button("Open File Browser", ImVec2(button_width, 0))) {
             // Request to show file browser
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
@@ -317,8 +327,7 @@ namespace gs::gui {
             }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh")) {
+        if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
             const auto* root = m_treeView.GetRoot();
             if (root) {
                 auto path = root->path;
@@ -327,7 +336,8 @@ namespace gs::gui {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Clear")) {
+
+        if (ImGui::Button("Clear", ImVec2(button_width * 0.48f, 0))) {
             // Clear the tree view
             m_treeView.SetRootNode(nullptr);
 

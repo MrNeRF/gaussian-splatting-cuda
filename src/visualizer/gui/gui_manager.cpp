@@ -1,7 +1,6 @@
 #include "gui/gui_manager.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
-#include "gui/panels/tools_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "gui/windows/camera_controls.hpp"
 #include "gui/windows/file_browser.hpp"
@@ -14,6 +13,7 @@
 #include <format>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <imgui_internal.h>
 
 namespace gs::gui {
 
@@ -45,6 +45,8 @@ namespace gs::gui {
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport
         io.ConfigWindowsMoveFromTitleBarOnly = true;
 
         // Platform/Renderer initialization
@@ -89,6 +91,13 @@ namespace gs::gui {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // Get viewport
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+        // Define layout dimensions
+        const float left_panel_width = 250.0f;  // Slimmer Rendering Settings panel
+        const float right_panel_width = 200.0f; // Even slimmer Scene panel
+
         // Create context for this frame
         UIContext ctx{
             .viewer = viewer_,
@@ -96,12 +105,21 @@ namespace gs::gui {
             .file_browser = file_browser_.get(),
             .window_states = &window_states_};
 
-        // Render UI
+        // Draw the main panel (Rendering Settings) with proper positioning
         if (show_main_panel_) {
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(left_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
             panels::DrawMainPanel(ctx);
         }
 
-        // Render windows
+        // Draw Scene panel with proper positioning
+        if (window_states_["scene_panel"]) {
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - right_panel_width, viewport->WorkPos.y), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(right_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
+            scene_panel_->render(&window_states_["scene_panel"]);
+        }
+
+        // Render floating windows (these should remain movable)
         if (window_states_["console"]) {
             console_->render(&window_states_["console"]);
         }
@@ -114,13 +132,17 @@ namespace gs::gui {
             gui::windows::DrawCameraControls(&window_states_["camera_controls"]);
         }
 
-        if (window_states_["scene_panel"]) {
-            scene_panel_->render(&window_states_["scene_panel"]);
-        }
-
         // End frame
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        // Update and Render additional Platform Windows (for multi-viewport)
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup_current_context);
+        }
     }
 
     void GuiManager::setupEventHandlers() {

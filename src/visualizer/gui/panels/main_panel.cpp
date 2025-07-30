@@ -12,11 +12,17 @@ namespace gs::gui::panels {
     void DrawMainPanel(const UIContext& ctx) {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
 
+        // Simplified flags - positioning is handled in GuiManager::render()
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
-                                 ImGuiWindowFlags_NoResize;
+                                 ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoResize |
+                                 ImGuiWindowFlags_NoCollapse |
+                                 ImGuiWindowFlags_NoTitleBar; // Add this to remove title bar
 
         if (ImGui::Begin("Rendering Setting", nullptr, flags)) {
-            ImGui::SetWindowSize(ImVec2(300, 0));
+            // Add a custom title
+            ImGui::Text("Rendering Settings");
+            ImGui::Separator();
 
             DrawWindowControls(ctx);
             ImGui::Separator();
@@ -66,7 +72,6 @@ namespace gs::gui::panels {
         ImGui::Text("Rendering Settings");
         ImGui::Separator();
 
-        float old_scale = config->scaling_modifier;
         if (widgets::SliderWithReset("Scale", &config->scaling_modifier, 0.01f, 3.0f, 1.0f)) {
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
@@ -75,7 +80,6 @@ namespace gs::gui::panels {
                 .emit();
         }
 
-        float old_fov = config->fov;
         if (widgets::SliderWithReset("FoV", &config->fov, 45.0f, 120.0f, 75.0f)) {
             events::ui::RenderSettingsChanged{
                 .fov = config->fov,
