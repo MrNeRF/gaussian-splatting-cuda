@@ -2,6 +2,7 @@
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
 #include "core/model_providers.hpp"
+#include "tools/crop_box_tool.hpp"
 
 namespace gs::visualizer {
 
@@ -21,7 +22,6 @@ namespace gs::visualizer {
 
         // Create other components
         notifier_ = std::make_shared<ViewerNotifier>();
-        crop_box_ = std::make_shared<RenderBoundingBox>();
 
         // Create scene manager
         scene_manager_ = std::make_unique<SceneManager>();
@@ -32,6 +32,11 @@ namespace gs::visualizer {
         trainer_manager_ = std::make_unique<TrainerManager>();
         trainer_manager_->setViewer(this);
         scene_manager_->setTrainerManager(trainer_manager_.get());
+
+        // Create tool manager
+        tool_manager_ = std::make_unique<ToolManager>(this);
+        tool_manager_->registerBuiltinTools();
+        tool_manager_->addTool("Crop Box"); // Add crop box by default
 
         // Create support components
         gui_manager_ = std::make_unique<gui::GuiManager>(this);
@@ -192,6 +197,9 @@ namespace gs::visualizer {
 
         rendering_manager_->initialize();
 
+        // Initialize tools
+        tool_manager_->initialize();
+
         // Initialize GUI
         gui_manager_->init();
         gui_initialized_ = true;
@@ -203,25 +211,46 @@ namespace gs::visualizer {
         window_manager_->updateWindowSize();
         viewport_.windowSize = window_manager_->getWindowSize();
         viewport_.frameBufferSize = window_manager_->getFramebufferSize();
+
+        // Update tools
+        tool_manager_->update();
     }
 
     void VisualizerImpl::render() {
         // Update rendering settings from state manager
         RenderSettings settings = rendering_manager_->getSettings();
-        settings.show_crop_box = gui_manager_->showCropBox();
-        settings.use_crop_box = gui_manager_->useCropBox();
+
+        // Get crop box state from tool
+        if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
+            settings.show_crop_box = crop_tool->shouldShowBox();
+            settings.use_crop_box = crop_tool->shouldUseBox();
+        } else {
+            settings.show_crop_box = false;
+            settings.use_crop_box = false;
+        }
+
         settings.antialiasing = state_manager_->isAntiAliasingEnabled();
         settings.fov = state_manager_->getRenderingConfig()->getFovDegrees();
         settings.scaling_modifier = state_manager_->getRenderingConfig()->getScalingModifier();
         rendering_manager_->updateSettings(settings);
 
+        // Get crop box for rendering
+        RenderBoundingBox* crop_box_ptr = nullptr;
+        if (auto crop_box = getCropBox()) {
+            crop_box_ptr = crop_box.get();
+        }
+
         // Render
         RenderingManager::RenderContext context{
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
-            .crop_box = crop_box_.get()};
+            .crop_box = crop_box_ptr};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
+
+        // Render tools
+        tool_manager_->render();
+
         gui_manager_->render();
 
         window_manager_->swapBuffers();
@@ -229,7 +258,7 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::shutdown() {
-        // Any cleanup needed
+        tool_manager_->shutdown();
     }
 
     void VisualizerImpl::run() {
@@ -250,6 +279,13 @@ namespace gs::visualizer {
 
     void VisualizerImpl::clearScene() {
         data_loader_->clearScene();
+    }
+
+    std::shared_ptr<RenderBoundingBox> VisualizerImpl::getCropBox() const {
+        if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
+            return crop_tool->getBoundingBox();
+        }
+        return nullptr;
     }
 
 } // namespace gs::visualizer

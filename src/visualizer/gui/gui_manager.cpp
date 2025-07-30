@@ -1,11 +1,12 @@
 #include "gui/gui_manager.hpp"
-#include "gui/panels/crop_box_panel.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
+#include "gui/panels/tools_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "gui/windows/camera_controls.hpp"
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/scripting_console.hpp"
+#include "tools/crop_box_tool.hpp"
 #include "visualizer_impl.hpp"
 
 #include <GLFW/glfw3.h>
@@ -205,11 +206,23 @@ namespace gs::gui {
     }
 
     bool GuiManager::showCropBox() const {
-        return panels::getCropBoxState().show_crop_box;
+        if (auto* tool_manager = viewer_->getToolManager()) {
+            if (auto* crop_tool = dynamic_cast<visualizer::CropBoxTool*>(
+                    tool_manager->getTool("Crop Box"))) {
+                return crop_tool->shouldShowBox();
+            }
+        }
+        return false;
     }
 
     bool GuiManager::useCropBox() const {
-        return panels::getCropBoxState().use_crop_box;
+        if (auto* tool_manager = viewer_->getToolManager()) {
+            if (auto* crop_tool = dynamic_cast<visualizer::CropBoxTool*>(
+                    tool_manager->getTool("Crop Box"))) {
+                return crop_tool->shouldUseBox();
+            }
+        }
+        return false;
     }
 
     void GuiManager::setScriptExecutor(std::function<std::string(const std::string&)> executor) {

@@ -49,6 +49,17 @@ namespace gs {
         } // namespace cmd
 
         // ============================================================================
+        // Tools - Notifications about what has happened
+        // ============================================================================
+
+        namespace tools {
+            EVENT(ToolEnabled, std::string tool_name;);
+            EVENT(ToolDisabled, std::string tool_name;);
+            EVENT(CropBoxSettingsChanged,
+                  bool show_box;
+                  bool use_box;);
+        } // namespace tools
+        // ============================================================================
         // State - Notifications about what has happened
         // ============================================================================
         namespace state {
