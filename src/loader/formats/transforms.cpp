@@ -222,7 +222,7 @@ namespace gs::loader {
             }
         }
 
-        auto center = torch::zeros({1, 3}, torch::kFloat32);
+        auto center = torch::zeros({3}, torch::kFloat32);
 
         return {camerasdata, center};
     }
