@@ -28,8 +28,8 @@ namespace gs {
             } else {
                 notify::Error{
                     .message = "Cannot load dataset without parameters",
-                    .details = "No cached parameters available"
-                }.emit();
+                    .details = "No cached parameters available"}
+                    .emit();
             }
         });
 
@@ -111,8 +111,7 @@ namespace gs {
                 .scaling_modifier = cmd.scaling_modifier,
                 .antialiasing = cmd.antialiasing,
                 .render_mode = static_cast<RenderMode>(cmd.render_mode),
-                .crop_box = static_cast<const BoundingBox*>(cmd.crop_box)
-            };
+                .crop_box = static_cast<const BoundingBox*>(cmd.crop_box)};
 
             auto result = render(request);
 
@@ -120,7 +119,8 @@ namespace gs {
                 .request_id = cmd.request_id,
                 .success = result.valid,
                 .render_ms = 0.0f // TODO: Add timing
-            }.emit();
+            }
+                .emit();
         });
     }
 
@@ -136,8 +136,8 @@ namespace gs {
         } catch (const std::exception& e) {
             events::notify::Error{
                 .message = std::format("Failed to load PLY: {}", e.what()),
-                .details = std::format("Path: {}", path.string())
-            }.emit();
+                .details = std::format("Path: {}", path.string())}
+                .emit();
         }
     }
 
@@ -149,8 +149,8 @@ namespace gs {
         } catch (const std::exception& e) {
             events::notify::Error{
                 .message = std::format("Failed to load dataset: {}", e.what()),
-                .details = std::format("Path: {}", path.string())
-            }.emit();
+                .details = std::format("Path: {}", path.string())}
+                .emit();
         }
     }
 
@@ -197,8 +197,8 @@ namespace gs {
         events::state::FrameRendered{
             .render_ms = render_time,
             .fps = 1000.0f / render_time,
-            .num_gaussians = static_cast<int>(current_state_.num_gaussians)
-        }.emit();
+            .num_gaussians = static_cast<int>(current_state_.num_gaussians)}
+            .emit();
 
         return result;
     }
@@ -220,8 +220,7 @@ namespace gs {
             .progress = [this](float percent, const std::string& msg) {
                 // Could publish progress events here if needed
                 std::println("[{:5.1f}%] {}", percent, msg);
-            }
-        };
+            }};
 
         // Load the PLY file
         auto load_result = loader->load(path, options);
@@ -258,14 +257,14 @@ namespace gs {
             .scene = scene_.get(),
             .path = path,
             .type = events::state::SceneLoaded::Type::PLY,
-            .num_gaussians = current_state_.num_gaussians
-        }.emit();
+            .num_gaussians = current_state_.num_gaussians}
+            .emit();
 
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
             .message = std::format("Loaded PLY with {} Gaussians", current_state_.num_gaussians),
-            .source = "SceneManager"
-        }.emit();
+            .source = "SceneManager"}
+            .emit();
     }
 
     void SceneManager::loadDatasetInternal(const std::filesystem::path& path,
@@ -319,23 +318,23 @@ namespace gs {
             .scene = scene_.get(),
             .path = path,
             .type = events::state::SceneLoaded::Type::Dataset,
-            .num_gaussians = current_state_.num_gaussians
-        }.emit();
+            .num_gaussians = current_state_.num_gaussians}
+            .emit();
 
         events::state::DatasetLoadCompleted{
             .path = path,
             .success = true,
             .error = std::nullopt,
             .num_images = num_images,
-            .num_points = current_state_.num_gaussians
-        }.emit();
+            .num_points = current_state_.num_gaussians}
+            .emit();
 
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
             .message = std::format("Loaded dataset with {} images and {} initial Gaussians",
-                        num_images, current_state_.num_gaussians),
-            .source = "SceneManager"
-        }.emit();
+                                   num_images, current_state_.num_gaussians),
+            .source = "SceneManager"}
+            .emit();
     }
 
     void SceneManager::updateSceneState() {
