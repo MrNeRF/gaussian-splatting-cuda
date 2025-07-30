@@ -72,8 +72,8 @@ namespace gs::gui::panels {
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
                 .scaling_modifier = config->scaling_modifier,
-                .antialiasing = std::nullopt
-            }.emit();
+                .antialiasing = std::nullopt}
+                .emit();
         }
 
         float old_fov = config->fov;
@@ -81,8 +81,8 @@ namespace gs::gui::panels {
             events::ui::RenderSettingsChanged{
                 .fov = config->fov,
                 .scaling_modifier = std::nullopt,
-                .antialiasing = std::nullopt
-            }.emit();
+                .antialiasing = std::nullopt}
+                .emit();
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED

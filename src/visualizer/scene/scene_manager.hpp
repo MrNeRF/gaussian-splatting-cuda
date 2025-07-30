@@ -71,6 +71,9 @@ namespace gs {
         RenderingPipeline::RenderResult render(
             const RenderingPipeline::RenderRequest& request);
 
+        TrainerManager* getTrainerManager() { return trainer_manager_; }
+        const TrainerManager* getTrainerManager() const { return trainer_manager_; }
+
     private:
         // Event handlers
         void setupEventHandlers();

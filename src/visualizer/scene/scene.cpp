@@ -117,8 +117,8 @@ namespace gs {
 
         events::ui::RenderModeChanged{
             .old_mode = modeToString(old_mode),
-            .new_mode = modeToString(new_mode)
-        }.emit();
+            .new_mode = modeToString(new_mode)}
+            .emit();
     }
 
 } // namespace gs

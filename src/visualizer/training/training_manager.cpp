@@ -107,8 +107,8 @@ namespace gs {
 
         // Emit training started event
         events::state::TrainingStarted{
-            .total_iterations = getTotalIterations()
-        }.emit();
+            .total_iterations = getTotalIterations()}
+            .emit();
 
         // Start training thread
         training_thread_ = std::make_unique<std::jthread>(
@@ -130,8 +130,8 @@ namespace gs {
             setState(State::Paused);
 
             events::state::TrainingPaused{
-                .iteration = getCurrentIteration()
-            }.emit();
+                .iteration = getCurrentIteration()}
+                .emit();
 
             std::println("TrainerManager: Training paused");
         }
@@ -147,8 +147,8 @@ namespace gs {
             setState(State::Running);
 
             events::state::TrainingResumed{
-                .iteration = getCurrentIteration()
-            }.emit();
+                .iteration = getCurrentIteration()}
+                .emit();
 
             std::println("TrainerManager: Training resumed");
         }
@@ -172,8 +172,8 @@ namespace gs {
 
         events::state::TrainingStopped{
             .iteration = getCurrentIteration(),
-            .user_requested = true
-        }.emit();
+            .user_requested = true}
+            .emit();
     }
 
     void TrainerManager::requestSaveCheckpoint() {
@@ -184,8 +184,8 @@ namespace gs {
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
                 .message = "Checkpoint save requested",
-                .source = "TrainerManager"
-            }.emit();
+                .source = "TrainerManager"}
+                .emit();
         }
     }
 
@@ -254,8 +254,8 @@ namespace gs {
             .iteration = getCurrentIteration(),
             .final_loss = getCurrentLoss(),
             .success = success,
-            .error = error.empty() ? std::nullopt : std::optional(error)
-        }.emit();
+            .error = error.empty() ? std::nullopt : std::optional(error)}
+            .emit();
 
         // Notify completion
         {
