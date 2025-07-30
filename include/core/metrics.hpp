@@ -1,9 +1,9 @@
 #pragma once
 
 #include "core/dataset.hpp"
+#include "core/event_bus.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
-#include "visualizer/event_bus.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iomanip>

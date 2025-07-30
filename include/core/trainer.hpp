@@ -2,11 +2,11 @@
 
 #include "core/bilateral_grid.hpp"
 #include "core/dataset.hpp"
+#include "core/event_bus.hpp"
 #include "core/istrategy.hpp"
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
 #include "core/training_progress.hpp"
-#include "visualizer/event_bus.hpp"
 #include <atomic>
 #include <expected>
 #include <memory>
