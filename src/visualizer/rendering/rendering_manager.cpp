@@ -31,8 +31,8 @@ namespace gs::visualizer {
 
     void RenderingManager::initializeShaders() {
         quad_shader_ = std::make_shared<Shader>(
-            (gs::visualizer::getShaderPath("screen_quad.vert")).c_str(),
-            (gs::visualizer::getShaderPath("screen_quad.frag")).c_str(),
+            (gs::visualizer::getShaderPath("screen_quad.vert")).string().c_str(),
+            (gs::visualizer::getShaderPath("screen_quad.frag")).string().c_str(),
             true);
     }
 
