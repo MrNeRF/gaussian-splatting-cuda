@@ -1,5 +1,4 @@
 #include "gui/gui_manager.hpp"
-#include "core/events.hpp"
 #include "gui/panels/crop_box_panel.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
@@ -17,14 +16,13 @@
 
 namespace gs::gui {
 
-    GuiManager::GuiManager(visualizer::VisualizerImpl* viewer, std::shared_ptr<EventBus> event_bus)
-        : viewer_(viewer),
-          event_bus_(event_bus) {
+    GuiManager::GuiManager(visualizer::VisualizerImpl* viewer)
+        : viewer_(viewer) {
 
         // Create components
         console_ = std::make_unique<ScriptingConsole>();
         file_browser_ = std::make_unique<FileBrowser>();
-        scene_panel_ = std::make_unique<ScenePanel>(*event_bus);
+        scene_panel_ = std::make_unique<ScenePanel>();
 
         // Initialize window states
         window_states_["console"] = false;
@@ -36,7 +34,7 @@ namespace gs::gui {
     }
 
     GuiManager::~GuiManager() {
-        // Event handlers are automatically cleaned up when event bus is destroyed
+        // Cleanup handled automatically
     }
 
     void GuiManager::init() {
@@ -61,11 +59,11 @@ namespace gs::gui {
 
         // Configure components
         setScriptExecutor([this](const std::string& cmd) {
-            return widgets::executeConsoleCommand(cmd, viewer_, event_bus_);
+            return widgets::executeConsoleCommand(cmd, viewer_);
         });
 
         setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
-            event_bus_->publish(LoadFileCommand{path, is_dataset});
+            events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
             window_states_["file_browser"] = false;
         });
 
@@ -73,7 +71,7 @@ namespace gs::gui {
             if (path.empty()) {
                 window_states_["file_browser"] = true;
             } else {
-                event_bus_->publish(LoadFileCommand{path, true});
+                events::cmd::LoadFile{.path = path, .is_dataset = true}.emit();
             }
         });
     }
@@ -93,10 +91,10 @@ namespace gs::gui {
         // Create context for this frame
         UIContext ctx{
             .viewer = viewer_,
-            .event_bus = event_bus_,
             .console = console_.get(),
             .file_browser = file_browser_.get(),
-            .window_states = &window_states_};
+            .window_states = &window_states_
+        };
 
         // Render UI
         if (show_main_panel_) {
@@ -126,26 +124,55 @@ namespace gs::gui {
     }
 
     void GuiManager::setupEventHandlers() {
-        // Handle window visibility - only if ShowWindowEvent exists
-        if (event_bus_) {
-            // Handle log messages
-            event_handler_ids_.push_back(
-                event_bus_->subscribe<LogMessageEvent>([this](const LogMessageEvent& e) {
-                    const char* level = "";
-                    switch (e.level) {
-                    case LogMessageEvent::Level::Info: level = "Info"; break;
-                    case LogMessageEvent::Level::Warning: level = "Warning"; break;
-                    case LogMessageEvent::Level::Error: level = "Error"; break;
-                    case LogMessageEvent::Level::Debug: level = "Debug"; break;
-                    }
+        using namespace events;
 
-                    if (e.source) {
-                        console_->addLog("%s [%s]: %s", level, e.source->c_str(), e.message.c_str());
-                    } else {
-                        console_->addLog("%s: %s", level, e.message.c_str());
-                    }
-                }));
-        }
+        // Handle window visibility
+        cmd::ShowWindow::when([this](const auto& e) {
+            showWindow(e.window_name, e.show);
+        });
+
+        // Handle log messages
+        notify::Log::when([this](const auto& e) {
+            const char* level = "";
+            switch (e.level) {
+            case notify::Log::Level::Info: level = "Info"; break;
+            case notify::Log::Level::Warning: level = "Warning"; break;
+            case notify::Log::Level::Error: level = "Error"; break;
+            case notify::Log::Level::Debug: level = "Debug"; break;
+            }
+
+            if (!e.source.empty()) {
+                console_->addLog("%s [%s]: %s", level, e.source.c_str(), e.message.c_str());
+            } else {
+                console_->addLog("%s: %s", level, e.message.c_str());
+            }
+        });
+
+        // Handle console results
+        ui::ConsoleResult::when([this](const auto& e) {
+            console_->addLog("> %s", e.command.c_str());
+            if (!e.result.empty()) {
+                console_->addLog("%s", e.result.c_str());
+            }
+        });
+
+        // Handle errors
+        notify::Error::when([this](const auto& e) {
+            addConsoleLog("ERROR: %s", e.message.c_str());
+            if (!e.details.empty()) {
+                addConsoleLog("Details: %s", e.details.c_str());
+            }
+        });
+
+        // Handle success messages
+        notify::Success::when([this](const auto& e) {
+            addConsoleLog("SUCCESS: %s", e.message.c_str());
+        });
+
+        // Handle warnings
+        notify::Warning::when([this](const auto& e) {
+            addConsoleLog("WARNING: %s", e.message.c_str());
+        });
     }
 
     void GuiManager::applyDefaultStyle() {
@@ -197,4 +224,5 @@ namespace gs::gui {
             file_browser_->setOnFileSelected(callback);
         }
     }
+
 } // namespace gs::gui

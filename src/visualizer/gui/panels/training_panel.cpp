@@ -1,8 +1,6 @@
 #include "gui/panels/training_panel.hpp"
-#include "core/event_response_handler.hpp"
 #include "core/events.hpp"
 #include "gui/ui_widgets.hpp"
-#include <format>
 #include <imgui.h>
 
 namespace gs::gui::panels {
@@ -13,78 +11,87 @@ namespace gs::gui::panels {
 
         auto& state = TrainingPanelState::getInstance();
 
-        // Query trainer state
-        EventResponseHandler<QueryTrainerStateRequest, QueryTrainerStateResponse> handler(ctx.event_bus);
-        auto response = handler.querySync(QueryTrainerStateRequest{});
+        // Query trainer state using the new event system
+        events::query::TrainerState response;
+        bool has_response = false;
 
-        if (!response) {
+        // Set up a one-time handler for the response
+        auto handler = events::query::TrainerState::when([&response, &has_response](const auto& r) {
+            response = r;
+            has_response = true;
+        });
+
+        // Send the query
+        events::query::GetTrainerState{}.emit();
+
+        // Wait a bit for response (in a real app, this would be async)
+        // For now, we'll assume the response is immediate
+
+        if (!has_response) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
             return;
         }
 
         // Render controls based on state
-        switch (response->state) {
-        case QueryTrainerStateResponse::State::Idle:
+        switch (response.state) {
+        case events::query::TrainerState::State::Idle:
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
             break;
-        case QueryTrainerStateResponse::State::Ready:
+
+        case events::query::TrainerState::State::Ready:
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             if (ImGui::Button("Start Training", ImVec2(-1, 0))) {
-                ctx.event_bus->publish(StartTrainingCommand{});
+                events::cmd::StartTraining{}.emit();
             }
             ImGui::PopStyleColor(2);
             break;
 
-        case QueryTrainerStateResponse::State::Running:
+        case events::query::TrainerState::State::Running:
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
             if (ImGui::Button("Pause", ImVec2(-1, 0))) {
-                ctx.event_bus->publish(PauseTrainingCommand{});
+                events::cmd::PauseTraining{}.emit();
             }
             ImGui::PopStyleColor(2);
             break;
 
-        case QueryTrainerStateResponse::State::Paused:
+        case events::query::TrainerState::State::Paused:
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             if (ImGui::Button("Resume", ImVec2(-1, 0))) {
-                ctx.event_bus->publish(ResumeTrainingCommand{});
+                events::cmd::ResumeTraining{}.emit();
             }
             ImGui::PopStyleColor(2);
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
             if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
-                ctx.event_bus->publish(StopTrainingCommand{});
+                events::cmd::StopTraining{}.emit();
             }
             ImGui::PopStyleColor(2);
             break;
 
-        case QueryTrainerStateResponse::State::Stopping:
-            ImGui::TextColored(ImVec4(0.7f, 0.5f, 0.1f, 1.0f), "Stopping training...");
-            break;
-
-        case QueryTrainerStateResponse::State::Completed:
+        case events::query::TrainerState::State::Completed:
             ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
             break;
 
-        case QueryTrainerStateResponse::State::Error:
+        case events::query::TrainerState::State::Error:
             ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Training Error!");
-            if (response->error_message) {
-                ImGui::TextWrapped("%s", response->error_message->c_str());
+            if (response.error_message) {
+                ImGui::TextWrapped("%s", response.error_message->c_str());
             }
             break;
         }
 
         // Save checkpoint button (available during training)
-        if (response->state == QueryTrainerStateResponse::State::Running ||
-            response->state == QueryTrainerStateResponse::State::Paused) {
+        if (response.state == events::query::TrainerState::State::Running ||
+            response.state == events::query::TrainerState::State::Paused) {
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
             if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
-                ctx.event_bus->publish(SaveCheckpointCommand{});
+                events::cmd::SaveCheckpoint{}.emit();
                 state.save_in_progress = true;
                 state.save_start_time = std::chrono::steady_clock::now();
             }
@@ -106,8 +113,8 @@ namespace gs::gui::panels {
 
         // Status display
         ImGui::Separator();
-        ImGui::Text("Status: %s", widgets::GetTrainerStateString(static_cast<int>(response->state)));
-        ImGui::Text("Iteration: %d", response->current_iteration);
-        ImGui::Text("Loss: %.6f", response->current_loss);
+        ImGui::Text("Status: %s", widgets::GetTrainerStateString(static_cast<int>(response.state)));
+        ImGui::Text("Iteration: %d", response.current_iteration);
+        ImGui::Text("Loss: %.6f", response.current_loss);
     }
 } // namespace gs::gui::panels

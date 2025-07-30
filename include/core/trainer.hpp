@@ -2,7 +2,7 @@
 
 #include "core/bilateral_grid.hpp"
 #include "core/dataset.hpp"
-#include "core/event_bus.hpp"
+#include "core/events.hpp"
 #include "core/istrategy.hpp"
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
@@ -57,9 +57,6 @@ namespace gs {
         // just for viewer to get model
         const IStrategy& get_strategy() const { return *strategy_; }
 
-        // Set event bus for publishing training events
-        void setEventBus(std::shared_ptr<EventBus> event_bus) { event_bus_ = event_bus; }
-
         // Allow viewer to lock for rendering
         std::shared_mutex& getRenderMutex() const { return render_mutex_; }
 
@@ -106,19 +103,11 @@ namespace gs {
         // Handle control requests
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
-        // Event publishing methods
-        void publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining);
-        void publishCheckpointSaved(int iteration, const std::filesystem::path& path);
-        void publishModelUpdated(int iteration, size_t num_gaussians);
-
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;
         std::unique_ptr<IStrategy> strategy_;
         param::TrainingParameters params_;
-
-        // Event bus for publishing events
-        std::shared_ptr<EventBus> event_bus_;
 
         torch::Tensor background_{};
         std::unique_ptr<TrainingProgress> progress_;

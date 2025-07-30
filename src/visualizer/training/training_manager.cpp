@@ -3,6 +3,10 @@
 
 namespace gs {
 
+    TrainerManager::TrainerManager() {
+        setupEventHandlers();
+    }
+
     TrainerManager::~TrainerManager() {
         // Ensure training is stopped before destruction
         if (training_thread_ && training_thread_->joinable()) {
@@ -12,21 +16,59 @@ namespace gs {
         }
     }
 
+    void TrainerManager::setupEventHandlers() {
+        using namespace events::query;
+
+        // Handle trainer state queries
+        GetTrainerState::when([this](const auto&) {
+            TrainerState response;
+
+            // Map internal state to response state
+            switch (state_.load()) {
+            case State::Idle:
+                response.state = TrainerState::State::Idle;
+                break;
+            case State::Ready:
+                response.state = TrainerState::State::Ready;
+                break;
+            case State::Running:
+                response.state = TrainerState::State::Running;
+                break;
+            case State::Paused:
+                response.state = TrainerState::State::Paused;
+                break;
+            case State::Completed:
+                response.state = TrainerState::State::Completed;
+                break;
+            case State::Error:
+                response.state = TrainerState::State::Error;
+                break;
+            default:
+                response.state = TrainerState::State::Idle;
+            }
+
+            response.current_iteration = getCurrentIteration();
+            response.current_loss = getCurrentLoss();
+            response.total_iterations = getTotalIterations();
+
+            if (!last_error_.empty()) {
+                response.error_message = last_error_;
+            }
+
+            response.emit();
+        });
+    }
+
     void TrainerManager::setTrainer(std::unique_ptr<Trainer> trainer) {
         // Clear any existing trainer first
         clearTrainer();
 
         if (trainer) {
             trainer_ = std::move(trainer);
-
-            // Publish state change event
-            publishStateChange(State::Idle, State::Ready, "Trainer loaded");
             setState(State::Ready);
 
-            // Just set event bus
-            if (event_bus_) {
-                trainer_->setEventBus(event_bus_);
-            }
+            // Trainer is ready
+            events::internal::TrainerReady{}.emit();
         }
     }
 
@@ -40,12 +82,6 @@ namespace gs {
         // Clear the trainer
         trainer_.reset();
         last_error_.clear();
-
-        // Publish state change
-        auto old_state = state_.load();
-        if (old_state != State::Idle) {
-            publishStateChange(old_state, State::Idle, "Trainer cleared");
-        }
         setState(State::Idle);
     }
 
@@ -67,14 +103,12 @@ namespace gs {
             training_complete_ = false;
         }
 
-        // Publish state change
-        publishStateChange(State::Ready, State::Running, "Training started");
         setState(State::Running);
 
-        // Publish training started event
-        if (event_bus_) {
-            publishTrainingStarted(getTotalIterations());
-        }
+        // Emit training started event
+        events::state::TrainingStarted{
+            .total_iterations = getTotalIterations()
+        }.emit();
 
         // Start training thread
         training_thread_ = std::make_unique<std::jthread>(
@@ -93,12 +127,11 @@ namespace gs {
 
         if (trainer_) {
             trainer_->request_pause();
-            publishStateChange(State::Running, State::Paused, "User requested pause");
             setState(State::Paused);
 
-            if (event_bus_) {
-                publishTrainingPaused(getCurrentIteration());
-            }
+            events::state::TrainingPaused{
+                .iteration = getCurrentIteration()
+            }.emit();
 
             std::println("TrainerManager: Training paused");
         }
@@ -111,12 +144,11 @@ namespace gs {
 
         if (trainer_) {
             trainer_->request_resume();
-            publishStateChange(State::Paused, State::Running, "User requested resume");
             setState(State::Running);
 
-            if (event_bus_) {
-                publishTrainingResumed(getCurrentIteration());
-            }
+            events::state::TrainingResumed{
+                .iteration = getCurrentIteration()
+            }.emit();
 
             std::println("TrainerManager: Training resumed");
         }
@@ -127,8 +159,6 @@ namespace gs {
             return;
         }
 
-        auto old_state = state_.load();
-        publishStateChange(old_state, State::Stopping, "User requested stop");
         setState(State::Stopping);
 
         if (trainer_) {
@@ -140,9 +170,10 @@ namespace gs {
             training_thread_->request_stop();
         }
 
-        if (event_bus_) {
-            publishTrainingStopped(getCurrentIteration(), true);
-        }
+        events::state::TrainingStopped{
+            .iteration = getCurrentIteration(),
+            .user_requested = true
+        }.emit();
     }
 
     void TrainerManager::requestSaveCheckpoint() {
@@ -150,12 +181,11 @@ namespace gs {
             trainer_->request_save();
             std::println("TrainerManager: Checkpoint save requested");
 
-            if (event_bus_) {
-                event_bus_->publish(LogMessageEvent{
-                    LogMessageEvent::Level::Info,
-                    "Checkpoint save requested",
-                    "TrainerManager"});
-            }
+            events::notify::Log{
+                .level = events::notify::Log::Level::Info,
+                .message = "Checkpoint save requested",
+                .source = "TrainerManager"
+            }.emit();
         }
     }
 
@@ -218,20 +248,14 @@ namespace gs {
             std::println(stderr, "TrainerManager: Training error: {}", error);
         }
 
-        auto old_state = state_.load();
-        auto new_state = success ? State::Completed : State::Error;
+        setState(success ? State::Completed : State::Error);
 
-        publishStateChange(old_state, new_state,
-                           success ? "Training completed successfully" : "Training failed");
-        setState(new_state);
-
-        if (event_bus_) {
-            publishTrainingCompleted(
-                getCurrentIteration(),
-                getCurrentLoss(),
-                success,
-                error);
-        }
+        events::state::TrainingCompleted{
+            .iteration = getCurrentIteration(),
+            .final_loss = getCurrentLoss(),
+            .success = success,
+            .error = error.empty() ? std::nullopt : std::optional(error)
+        }.emit();
 
         // Notify completion
         {
@@ -239,120 +263,6 @@ namespace gs {
             training_complete_ = true;
         }
         completion_cv_.notify_all();
-    }
-
-    void TrainerManager::setEventBus(std::shared_ptr<EventBus> event_bus) {
-        event_bus_ = event_bus;
-
-        if (event_bus_) {
-            // Subscribe to state query requests
-            event_bus_->subscribe<QueryTrainerStateRequest>(
-                [this](const QueryTrainerStateRequest& request) {
-                    handleStateQueryRequest(request);
-                });
-        }
-    }
-
-    void TrainerManager::handleStateQueryRequest(const QueryTrainerStateRequest& request) {
-        if (!event_bus_)
-            return;
-
-        QueryTrainerStateResponse response;
-
-        // Map internal state to response state
-        switch (state_.load()) {
-        case State::Idle: response.state = QueryTrainerStateResponse::State::Idle; break;
-        case State::Ready: response.state = QueryTrainerStateResponse::State::Ready; break;
-        case State::Running: response.state = QueryTrainerStateResponse::State::Running; break;
-        case State::Paused: response.state = QueryTrainerStateResponse::State::Paused; break;
-        case State::Stopping: response.state = QueryTrainerStateResponse::State::Stopping; break;
-        case State::Completed: response.state = QueryTrainerStateResponse::State::Completed; break;
-        case State::Error: response.state = QueryTrainerStateResponse::State::Error; break;
-        }
-
-        response.current_iteration = getCurrentIteration();
-        response.current_loss = getCurrentLoss();
-        response.total_iterations = getTotalIterations();
-
-        if (!last_error_.empty()) {
-            response.error_message = last_error_;
-        }
-
-        event_bus_->publish(response);
-    }
-
-    // Event publishing methods
-    void TrainerManager::publishStateChange(State old_state, State new_state, const std::string& reason) {
-        if (!event_bus_)
-            return;
-
-        TrainerStateChangedEvent event;
-
-        // Map states
-        auto mapState = [](State s) -> QueryTrainerStateResponse::State {
-            switch (s) {
-            case State::Idle: return QueryTrainerStateResponse::State::Idle;
-            case State::Ready: return QueryTrainerStateResponse::State::Ready;
-            case State::Running: return QueryTrainerStateResponse::State::Running;
-            case State::Paused: return QueryTrainerStateResponse::State::Paused;
-            case State::Stopping: return QueryTrainerStateResponse::State::Stopping;
-            case State::Completed: return QueryTrainerStateResponse::State::Completed;
-            case State::Error: return QueryTrainerStateResponse::State::Error;
-            default: return QueryTrainerStateResponse::State::Idle;
-            }
-        };
-
-        event.old_state = mapState(old_state);
-        event.new_state = mapState(new_state);
-        event.reason = reason;
-
-        event_bus_->publish(event);
-    }
-
-    void TrainerManager::publishTrainingStarted(int total_iterations) {
-        if (event_bus_) {
-            event_bus_->publish(TrainingStartedEvent{total_iterations});
-            event_bus_->publish(TrainingReadyToStartEvent{});
-        }
-    }
-
-    void TrainerManager::publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining) {
-        if (event_bus_) {
-            event_bus_->publish(TrainingProgressEvent{
-                iteration,
-                getTotalIterations(),
-                loss,
-                num_gaussians,
-                is_refining});
-        }
-    }
-
-    void TrainerManager::publishTrainingPaused(int iteration) {
-        if (event_bus_) {
-            event_bus_->publish(TrainingPausedEvent{iteration});
-        }
-    }
-
-    void TrainerManager::publishTrainingResumed(int iteration) {
-        if (event_bus_) {
-            event_bus_->publish(TrainingResumedEvent{iteration});
-        }
-    }
-
-    void TrainerManager::publishTrainingCompleted(int iteration, float loss, bool success, const std::string& error) {
-        if (event_bus_) {
-            event_bus_->publish(TrainingCompletedEvent{
-                iteration,
-                loss,
-                success,
-                error.empty() ? std::nullopt : std::optional<std::string>(error)});
-        }
-    }
-
-    void TrainerManager::publishTrainingStopped(int iteration, bool user_requested) {
-        if (event_bus_) {
-            event_bus_->publish(TrainingStoppedEvent{iteration, user_requested});
-        }
     }
 
 } // namespace gs
