@@ -1,10 +1,8 @@
 #pragma once
 
-#include "core/event_bus.hpp"
 #include "core/events.hpp"
 #include <filesystem>
 #include <functional>
-#include <imgui.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -84,7 +82,7 @@ namespace gs {
         // Scene panel that integrates with existing GUI
         class ScenePanel {
         public:
-            ScenePanel(EventBus& event_bus);
+            ScenePanel();
             ~ScenePanel();
 
             void render(bool* p_open);
@@ -92,7 +90,6 @@ namespace gs {
             void setOnDatasetLoad(std::function<void(const std::filesystem::path&)> callback);
 
         private:
-            EventBus& m_eventBus;
             TreeView m_treeView;
             ColmapDatasetLoader m_datasetLoader;
 
@@ -103,10 +100,9 @@ namespace gs {
             std::function<void(const std::filesystem::path&)> m_onDatasetLoad;
 
             // Event handlers
-            std::vector<size_t> m_eventHandlerIds;
             void setupEventHandlers();
-            void handleSceneLoaded(const SceneLoadedEvent& event);
-            void handleSceneCleared(const SceneClearedEvent& event);
+            void handleSceneLoaded(const events::state::SceneLoaded& event);
+            void handleSceneCleared();
             void onNodeSelected(const SceneNode& node);
             void onNodeExpanded(SceneNode& node);
         };

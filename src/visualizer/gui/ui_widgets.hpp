@@ -22,6 +22,5 @@ namespace gs::gui::widgets {
 
     // Console command execution
     std::string executeConsoleCommand(const std::string& command,
-                                      visualizer::VisualizerImpl* viewer,
-                                      std::shared_ptr<EventBus> event_bus);
+                                      visualizer::VisualizerImpl* viewer);
 } // namespace gs::gui::widgets

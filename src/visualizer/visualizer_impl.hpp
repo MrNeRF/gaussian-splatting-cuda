@@ -1,8 +1,6 @@
 #pragma once
 
 #include "core/error_handler.hpp"
-#include "core/event_bus.hpp"
-#include "core/events.hpp"
 #include "core/image_io.hpp"
 #include "core/memory_monitor.hpp"
 #include "core/parameters.hpp"
@@ -93,10 +91,9 @@ namespace gs::visualizer {
         std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }
         const std::filesystem::path& getCurrentPLYPath() const { return current_ply_path_; }
         const std::filesystem::path& getCurrentDatasetPath() const { return current_dataset_path_; }
-        TrainerManager* getTrainerManager() { return trainer_manager_.get(); } // MOVED TO PUBLIC
+        TrainerManager* getTrainerManager() { return trainer_manager_.get(); }
         SceneManager* getSceneManager() { return scene_manager_.get(); }
         GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
-        std::shared_ptr<EventBus> getEventBus() const { return event_bus_; }
         std::shared_ptr<RenderBoundingBox> getCropBox() const { return crop_box_; }
 
         // Public members accessed by GUI
@@ -149,13 +146,6 @@ namespace gs::visualizer {
 
         // Event system
         void setupEventHandlers();
-        void handleStartTrainingCommand(const StartTrainingCommand& cmd);
-        void handlePauseTrainingCommand(const PauseTrainingCommand& cmd);
-        void handleResumeTrainingCommand(const ResumeTrainingCommand& cmd);
-        void handleStopTrainingCommand(const StopTrainingCommand& cmd);
-        void handleSaveCheckpointCommand(const SaveCheckpointCommand& cmd);
-        void handleLoadFileCommand(const LoadFileCommand& cmd);
-        void handleRenderingSettingsChanged(const RenderingSettingsChangedEvent& event);
 
     private:
         // Options and parameters
@@ -175,17 +165,12 @@ namespace gs::visualizer {
         int frame_time_;
         std::chrono::time_point<std::chrono::high_resolution_clock> last_time_;
 
-        // Event system
-        std::shared_ptr<EventBus> event_bus_;
+        // Scene management
         std::unique_ptr<SceneManager> scene_manager_;
-        std::vector<size_t> event_handler_ids_;
 
         // Error handling and monitoring
         std::unique_ptr<ErrorHandler> error_handler_;
         std::unique_ptr<MemoryMonitor> memory_monitor_;
-
-        // Cache for last memory usage
-        MemoryUsageEvent last_memory_usage_;
 
         // Bounding box visualization
         std::shared_ptr<RenderBoundingBox> crop_box_;
