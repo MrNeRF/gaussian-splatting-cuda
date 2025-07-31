@@ -23,6 +23,9 @@ namespace gs::visualizer {
         void render(const ToolContext& ctx) override;
         void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) override;
 
+        // Input handling
+        void registerInputHandlers(InputHandler& handler) override;
+
         // Crop box specific methods
         std::shared_ptr<gs::RenderBoundingBox> getBoundingBox() { return bounding_box_; }
         bool shouldShowBox() const { return show_crop_box_; }
@@ -38,6 +41,12 @@ namespace gs::visualizer {
         glm::mat4 orthonormalizeRotation(const glm::mat4& matrix);
         static float wrapAngle(float angle);
 
+        // Input handling helpers
+        bool isMouseOverHandle(const glm::dvec2& mouse_pos) const;
+        void startDragging(const glm::dvec2& mouse_pos);
+        void updateDragging(const glm::dvec2& mouse_pos);
+        void stopDragging();
+
         std::shared_ptr<gs::RenderBoundingBox> bounding_box_;
 
         // UI state
@@ -50,6 +59,22 @@ namespace gs::visualizer {
         float rotate_timer_x_ = 0.0f;
         float rotate_timer_y_ = 0.0f;
         float rotate_timer_z_ = 0.0f;
+
+        // Interaction state
+        bool is_dragging_ = false;
+        glm::dvec2 drag_start_pos_;
+        glm::vec3 drag_start_box_min_;
+        glm::vec3 drag_start_box_max_;
+        enum class DragHandle {
+            None,
+            MinX,
+            MinY,
+            MinZ,
+            MaxX,
+            MaxY,
+            MaxZ,
+            Center
+        } current_handle_ = DragHandle::None;
     };
 
 } // namespace gs::visualizer
