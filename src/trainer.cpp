@@ -1,7 +1,6 @@
 #include "core/trainer.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
-#include "visualizer/events.hpp"
 #include <chrono>
 #include <expected>
 #include <numeric>
@@ -358,6 +357,7 @@ namespace gs {
         // Print render mode configuration
         std::println("Render mode: {}", params.optimization.render_mode);
         std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
+        std::println("Strategy: {}", params.optimization.strategy);
     }
 
     Trainer::~Trainer() {
@@ -395,10 +395,11 @@ namespace gs {
             strategy_->get_model().save_ply(checkpoint_path, iter, /*join=*/true);
             std::println("Checkpoint saved to {}", checkpoint_path.string());
 
-            // Publish checkpoint saved event
-            if (event_bus_) {
-                publishCheckpointSaved(iter, checkpoint_path);
-            }
+            // Emit checkpoint saved event
+            events::state::CheckpointSaved{
+                .iteration = iter,
+                .path = checkpoint_path}
+                .emit();
         }
 
         // Handle stop request - this permanently stops training
@@ -407,36 +408,6 @@ namespace gs {
             std::println("Saving final model...");
             strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
             is_running_ = false;
-        }
-    }
-
-    void Trainer::publishTrainingProgress(int iteration, float loss, int num_gaussians, bool is_refining) {
-        if (event_bus_) {
-            event_bus_->publish(TrainingProgressEvent{
-                iteration,
-                static_cast<int>(params_.optimization.iterations), // Add total iterations
-                loss,
-                num_gaussians,
-                is_refining});
-        }
-    }
-
-    void Trainer::publishCheckpointSaved(int iteration, const std::filesystem::path& path) {
-        if (event_bus_) {
-            event_bus_->publish(CheckpointSavedEvent{
-                iteration, path});
-
-            event_bus_->publish(LogMessageEvent{
-                LogMessageEvent::Level::Info,
-                std::format("Checkpoint saved at iteration {}", iteration),
-                "Trainer"});
-        }
-    }
-
-    void Trainer::publishModelUpdated(int iteration, size_t num_gaussians) {
-        if (event_bus_) {
-            event_bus_->publish(ModelUpdatedEvent{
-                iteration, num_gaussians});
         }
     }
 
@@ -498,6 +469,8 @@ namespace gs {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
             }
 
+            strategy_->pre_backward(r_output);
+
             // Compute loss using the factored-out function
             std::expected<torch::Tensor, std::string> loss_result;
             const int total_iters = params_.optimization.iterations;
@@ -554,13 +527,14 @@ namespace gs {
 
             current_loss_ = loss_value;
 
-            // Publish training progress event (throttled to reduce GUI updates)
-            if (event_bus_ && (iter % 10 == 0 || iter == 1)) { // Only update every 10 iterations
-                publishTrainingProgress(
-                    iter,
-                    loss_value,
-                    static_cast<int>(strategy_->get_model().size()),
-                    strategy_->is_refining(iter));
+            // Emit training progress event (throttled to reduce GUI updates)
+            if (iter % 10 == 0 || iter == 1) { // Only update every 10 iterations
+                events::state::TrainingProgress{
+                    .iteration = iter,
+                    .loss = loss_value,
+                    .num_gaussians = static_cast<int>(strategy_->get_model().size()),
+                    .is_refining = strategy_->is_refining(iter)}
+                    .emit();
             }
 
             {
@@ -579,10 +553,11 @@ namespace gs {
                         bilateral_grid_optimizer_->zero_grad(true);
                     }
 
-                    // Publish model updated event
-                    if (event_bus_) {
-                        publishModelUpdated(iter, strategy_->get_model().size());
-                    }
+                    // Emit model updated event
+                    events::state::ModelUpdated{
+                        .iteration = iter,
+                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())}
+                        .emit();
                 }
 
                 // Clean evaluation - let the evaluator handle everything
@@ -603,10 +578,11 @@ namespace gs {
                             auto save_path = params_.dataset.output_path;
                             strategy_->get_model().save_ply(save_path, iter, /*join=*/join_threads);
 
-                            // Publish checkpoint saved event
-                            if (event_bus_) {
-                                publishCheckpointSaved(iter, save_path);
-                            }
+                            // Emit checkpoint saved event
+                            events::state::CheckpointSaved{
+                                .iteration = iter,
+                                .path = save_path}
+                                .emit();
                         }
                     }
                 }
@@ -635,25 +611,21 @@ namespace gs {
         training_complete_ = false;
 
         // Event-based ready signaling
-        if (event_bus_ && !params_.optimization.headless) {
+        if (!params_.optimization.headless) {
             std::atomic<bool> ready{false};
 
             // Subscribe temporarily to start signal
-            auto handler_id = event_bus_->subscribe<TrainingReadyToStartEvent>(
-                [&ready](const TrainingReadyToStartEvent&) {
-                    ready = true;
-                });
+            events::internal::TrainingReadyToStart::when([&ready](const auto&) {
+                ready = true;
+            });
 
             // Signal we're ready
-            event_bus_->publish(TrainerReadyEvent{});
+            events::internal::TrainerReady{}.emit();
 
             // Wait for start signal
             while (!ready.load() && !stop_token.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
-
-            // Unsubscribe
-            event_bus_->channel<TrainingReadyToStartEvent>()->unsubscribe(handler_id);
         }
 
         is_running_ = true; // Now we can start
@@ -714,15 +686,17 @@ training_complete:
                 auto final_path = params_.dataset.output_path;
                 strategy_->get_model().save_ply(final_path, iter, /*join=*/true);
 
-                // Publish final checkpoint saved event
-                if (event_bus_) {
-                    publishCheckpointSaved(iter, final_path);
+                // Emit final checkpoint saved event
+                events::state::CheckpointSaved{
+                    .iteration = iter,
+                    .path = final_path}
+                    .emit();
 
-                    event_bus_->publish(LogMessageEvent{
-                        LogMessageEvent::Level::Info,
-                        std::format("Training completed. Final model saved at iteration {}", iter),
-                        "Trainer"});
-                }
+                events::notify::Log{
+                    .level = events::notify::Log::Level::Info,
+                    .message = std::format("Training completed. Final model saved at iteration {}", iter),
+                    .source = "Trainer"}
+                    .emit();
             }
 
             if (progress_) {
@@ -743,8 +717,6 @@ training_complete:
             return std::unexpected(std::format("Training failed: {}", e.what()));
         }
     }
-
-    // trainer.cpp
 
     void Trainer::prune_after_training(float threshold) {
         torch::NoGradGuard no_grad;

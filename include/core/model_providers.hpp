@@ -69,11 +69,6 @@ namespace gs {
             return "Training";
         }
 
-        // Update trainer reference
-        void setTrainer(Trainer* trainer) {
-            trainer_ = trainer;
-        }
-
     private:
         Trainer* trainer_;
     };

@@ -3,7 +3,6 @@
 #include "core/dataset.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
-#include "visualizer/event_bus.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -11,7 +10,6 @@
 #include <sstream>
 #include <string>
 #include <torch/script.h>
-#include <torch/torch.h>
 #include <vector>
 
 class splatData;
@@ -71,7 +69,7 @@ namespace gs {
             int num_gaussians;
             int iteration;
 
-            std::string to_string() const {
+            [[nodiscard]] std::string to_string() const {
                 std::stringstream ss;
                 ss << std::fixed << std::setprecision(4);
                 ss << "PSNR: " << psnr
@@ -82,11 +80,11 @@ namespace gs {
                 return ss.str();
             }
 
-            std::string to_csv_header() const {
+            static std::string to_csv_header() {
                 return "iteration,psnr,ssim,lpips,time_per_image,num_gaussians";
             }
 
-            std::string to_csv_row() const {
+            [[nodiscard]] std::string to_csv_row() const {
                 std::stringstream ss;
                 ss << iteration << ","
                    << std::fixed << std::setprecision(6)
@@ -143,8 +141,6 @@ namespace gs {
                 std::cout << "[Evaluation at step " << iteration << "]" << std::endl;
             }
 
-            void setEventBus(std::shared_ptr<EventBus> event_bus) { event_bus_ = event_bus; }
-
         private:
             // Configuration
             const param::TrainingParameters _params;
@@ -154,9 +150,6 @@ namespace gs {
             std::unique_ptr<SSIM> _ssim_metric;
             std::unique_ptr<LPIPS> _lpips_metric;
             std::unique_ptr<MetricsReporter> _reporter;
-
-            // Event bus
-            std::shared_ptr<EventBus> event_bus_;
 
             // Helper functions
             torch::Tensor apply_depth_colormap(const torch::Tensor& depth_normalized) const;

@@ -121,6 +121,7 @@ namespace gs {
                     {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
                     {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
                     {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
+                    {"strategy", defaults.strategy, "Optimization strategy: mcmc, default"},
                     {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
                     {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
                     {"skip_intermediate", defaults.skip_intermediate_saving, "Skip saving intermediate results and only save final output"},
@@ -131,6 +132,15 @@ namespace gs {
                     {"bilateral_grid_W", defaults.bilateral_grid_W, "Bilateral grid W dimension"},
                     {"bilateral_grid_lr", defaults.bilateral_grid_lr, "Learning rate for bilateral grid"},
                     {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"},
+                    {"prune_opacity", defaults.prune_opacity, "Opacity pruning threshold"},
+                    {"grow_scale3d", defaults.grow_scale3d, "3D scale threshold for duplication"},
+                    {"grow_scale2d", defaults.grow_scale2d, "2D scale threshold for splitting"},
+                    {"prune_scale3d", defaults.prune_scale3d, "3D scale threshold for pruning"},
+                    {"prune_scale2d", defaults.prune_scale2d, "2D scale threshold for pruning"},
+                    {"stop_refine_scale2d", defaults.stop_refine_scale2d, "Stop refining Gaussians based on 2D scale at this iteration"},
+                    {"reset_every", defaults.reset_every, "Reset opacity every this many iterations"},
+                    {"pause_refine_after_reset", defaults.pause_refine_after_reset, "Pause refinement after reset for N iterations"},
+                    {"revised_opacity", defaults.revised_opacity, "Use revised opacity heuristic"},
                     {"steps_scaler", defaults.steps_scaler, "Scales the training steps and values"},
                     {"antialiasing", defaults.antialiasing, "Enables antialiasing"},
                     {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
@@ -296,6 +306,15 @@ namespace gs {
                     }
                 }
 
+                if (json.contains("strategy")) {
+                    std::string strategy = json["strategy"];
+                    if (strategy == "mcmc" || strategy == "default") {
+                        params.strategy = strategy;
+                    } else {
+                        std::println(stderr, "Warning: Invalid optimization strategy '{}' in JSON. Using default 'default'", strategy);
+                    }
+                }
+
                 if (json.contains("eval_steps")) {
                     params.eval_steps.clear();
                     for (const auto& step : json["eval_steps"]) {
@@ -339,6 +358,33 @@ namespace gs {
                 }
                 if (json.contains("tv_loss_weight")) {
                     params.tv_loss_weight = json["tv_loss_weight"];
+                }
+                if (json.contains("prune_opacity")) {
+                    params.prune_opacity = json["prune_opacity"];
+                }
+                if (json.contains("grow_scale3d")) {
+                    params.grow_scale3d = json["grow_scale3d"];
+                }
+                if (json.contains("grow_scale2d")) {
+                    params.grow_scale2d = json["grow_scale2d"];
+                }
+                if (json.contains("prune_scale3d")) {
+                    params.prune_scale3d = json["prune_scale3d"];
+                }
+                if (json.contains("prune_scale2d")) {
+                    params.prune_scale2d = json["prune_scale2d"];
+                }
+                if (json.contains("stop_refine_scale2d")) {
+                    params.stop_refine_scale2d = json["stop_refine_scale2d"];
+                }
+                if (json.contains("reset_every")) {
+                    params.reset_every = json["reset_every"];
+                }
+                if (json.contains("pause_refine_after_reset")) {
+                    params.pause_refine_after_reset = json["pause_refine_after_reset"];
+                }
+                if (json.contains("revised_opacity")) {
+                    params.revised_opacity = json["revised_opacity"];
                 }
                 if (json.contains("steps_scaler")) {
                     params.steps_scaler = json["steps_scaler"];
@@ -409,6 +455,7 @@ namespace gs {
                 opt_json["save_steps"] = params.optimization.save_steps;
                 opt_json["enable_eval"] = params.optimization.enable_eval;
                 opt_json["enable_save_eval_images"] = params.optimization.enable_save_eval_images;
+                opt_json["strategy"] = params.optimization.strategy;
                 opt_json["skip_intermediate"] = params.optimization.skip_intermediate_saving;
                 opt_json["preload_to_ram"] = params.optimization.preload_to_ram;
                 opt_json["use_bilateral_grid"] = params.optimization.use_bilateral_grid;
@@ -417,6 +464,15 @@ namespace gs {
                 opt_json["bilateral_grid_W"] = params.optimization.bilateral_grid_W;
                 opt_json["bilateral_grid_lr"] = params.optimization.bilateral_grid_lr;
                 opt_json["tv_loss_weight"] = params.optimization.tv_loss_weight;
+                opt_json["prune_opacity"] = params.optimization.prune_opacity;
+                opt_json["grow_scale3d"] = params.optimization.grow_scale3d;
+                opt_json["grow_scale2d"] = params.optimization.grow_scale2d;
+                opt_json["prune_scale3d"] = params.optimization.prune_scale3d;
+                opt_json["prune_scale2d"] = params.optimization.prune_scale2d;
+                opt_json["stop_refine_scale2d"] = params.optimization.stop_refine_scale2d;
+                opt_json["reset_every"] = params.optimization.reset_every;
+                opt_json["pause_refine_after_reset"] = params.optimization.pause_refine_after_reset;
+                opt_json["revised_opacity"] = params.optimization.revised_opacity;
                 opt_json["steps_scaler"] = params.optimization.steps_scaler;
                 opt_json["antialiasing"] = params.optimization.antialiasing;
                 opt_json["sh_degree_interval"] = params.optimization.sh_degree_interval;

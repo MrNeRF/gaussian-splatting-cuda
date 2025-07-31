@@ -17,6 +17,7 @@ namespace {
     };
 
     const std::set<std::string> VALID_RENDER_MODES = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
+    const std::set<std::string> VALID_STRATEGIES = {"mcmc", "default"};
 
     void scale_steps_vector(std::vector<size_t>& steps, size_t scaler) {
         std::set<size_t> unique_steps(steps.begin(), steps.end());
@@ -63,6 +64,7 @@ namespace {
             ::args::ValueFlag<int> sh_degree(parser, "sh_degree", "Max SH degree [1-3]", {"sh-degree"});
             ::args::ValueFlag<float> min_opacity(parser, "min_opacity", "Minimum opacity threshold", {"min-opacity"});
             ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
+            ::args::ValueFlag<std::string> strategy(parser, "strategy", "Optimization strategy: mcmc, default", {"strategy"});
 
             // Optional flag arguments
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
@@ -154,6 +156,14 @@ namespace {
                         mode));
                 }
             }
+            if (strategy) {
+                const auto strat = ::args::get(strategy);
+                if (VALID_STRATEGIES.find(strat) == VALID_STRATEGIES.end()) {
+                    return std::unexpected(std::format(
+                        "ERROR: Invalid optimization strategy '{}'. Valid strategies are: mcmc, default",
+                        strat));
+                }
+            }
 
             // Create lambda to apply command line overrides after JSON loading
             auto apply_cmd_overrides = [&params,
@@ -168,6 +178,7 @@ namespace {
                                         sh_degree_val = sh_degree ? std::optional<int>(::args::get(sh_degree)) : std::optional<int>(),
                                         min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
+                                        strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
                                         // Capture flag states
                                         preload_to_ram_flag = bool(preload_to_ram),
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
@@ -203,6 +214,7 @@ namespace {
                 setVal(sh_degree_val, opt.sh_degree);
                 setVal(min_opacity_val, opt.min_opacity);
                 setVal(render_mode_val, opt.render_mode);
+                setVal(strategy_val, opt.strategy);
 
                 setFlag(use_attention_mask_flag, opt.use_attention_mask);
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);

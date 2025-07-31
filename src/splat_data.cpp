@@ -1,5 +1,4 @@
 #include "core/splat_data.hpp"
-#include "core/dataset_reader.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
 
@@ -346,12 +345,9 @@ namespace gs {
     std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
         const gs::param::TrainingParameters& params,
         torch::Tensor scene_center,
-        std::unique_ptr<IDataReader> dataSetReader) {
+        const PointCloud& pcd) {
 
         try {
-            // Helper lambdas
-            auto pcd = dataSetReader->createPointCloud();
-
             const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
             const auto scene_scale = dists.median().item<float>();
 
@@ -363,11 +359,12 @@ namespace gs {
             const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
             const auto f32_cuda = f32.device(torch::kCUDA);
 
-            // Ensure colors are normalized floats
-            pcd.normalize_colors();
+            // Create a mutable copy for normalization
+            PointCloud pcd_copy = pcd;
+            pcd_copy.normalize_colors();
 
             // 1. means - already a tensor, just move to CUDA and set requires_grad
-            auto means = pcd.means.to(torch::kCUDA).set_requires_grad(true);
+            auto means = pcd_copy.means.to(torch::kCUDA).set_requires_grad(true);
 
             // 2. scaling (log(σ)) - compute nearest neighbor distances
             auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
@@ -388,7 +385,7 @@ namespace gs {
 
             // 5. shs (SH coefficients)
             // Colors are already normalized to float by pcd.normalize_colors()
-            auto colors_float = pcd.colors.to(torch::kCUDA);
+            auto colors_float = pcd_copy.colors.to(torch::kCUDA);
             auto fused_color = rgb_to_sh(colors_float);
 
             const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));
