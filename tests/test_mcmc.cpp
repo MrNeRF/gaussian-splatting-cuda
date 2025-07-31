@@ -7,6 +7,8 @@
 #include <memory>
 #include <torch/torch.h>
 
+using namespace gs;
+
 class MCMCTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -34,16 +36,26 @@ protected:
         setupTestCamera();
     }
 
+
     void setupTestCamera() {
         // Create a test camera
         auto R = torch::eye(3, torch::kFloat32);
         auto T = torch::tensor({0.0f, 0.0f, 5.0f}, torch::kFloat32);
         float fov = M_PI / 3.0f; // 60 degrees
 
+        int width = 256;
+        int height = 256;
+
         test_camera = std::make_unique<Camera>(
-            R, T, fov, fov,
+            R, T, fov2focal(fov, width),
+            fov2focal(fov, height),
+            0.5*width,
+            0.5*height,
+            torch::empty({0}, torch::kFloat32),
+            torch::empty({0}, torch::kFloat32),
+            gsplat::CameraModelType::PINHOLE,
             "test_camera",
-            "", 256, 256, 0);
+            "", width, height, 0);
 
         // Background color
         background = torch::zeros({3}, device);
