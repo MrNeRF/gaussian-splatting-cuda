@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace gs::visualizer {
 
@@ -35,6 +36,9 @@ namespace gs::visualizer {
 
         GuiActiveCheck gui_active_check_;
         FileDropCallback file_drop_callback_;
+
+        // Handler IDs for cleanup
+        std::vector<InputHandler::HandlerId> gui_handler_ids_;
 
         void setupInputHandlers();
         bool handleFileDrop(const InputHandler::FileDropEvent& event);

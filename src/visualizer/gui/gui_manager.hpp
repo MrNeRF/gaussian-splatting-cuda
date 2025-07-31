@@ -29,7 +29,8 @@ namespace gs {
             void render();
 
             // State queries
-            bool isAnyWindowActive() const { return ImGui::IsAnyItemActive(); }
+            bool wantsInput() const;
+            bool isAnyWindowActive() const;
             bool showCropBox() const;
             bool useCropBox() const;
 

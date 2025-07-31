@@ -4,12 +4,14 @@
 #include "input/input_handler.hpp"
 #include "internal/viewport.hpp"
 #include <chrono>
+#include <vector>
 
 namespace gs {
 
     class CameraController {
     public:
         explicit CameraController(Viewport& viewport) : viewport_(viewport) {}
+        ~CameraController();
 
         // Setup input handlers
         void connectToInputHandler(InputHandler& input_handler);
@@ -26,6 +28,9 @@ namespace gs {
 
         Viewport& viewport_;
         InputHandler* input_handler_ = nullptr; // Store reference for key state queries
+
+        // Handler IDs for cleanup
+        std::vector<InputHandler::HandlerId> handler_ids_;
 
         // State
         bool is_panning_ = false;
