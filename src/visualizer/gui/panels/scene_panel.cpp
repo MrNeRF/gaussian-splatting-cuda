@@ -1,6 +1,7 @@
 #include "gui/panels/scene_panel.hpp"
 #include "gui/windows/image_preview.hpp"
 #include <algorithm>
+#include <filesystem>
 #include <format>
 #include <imgui.h>
 #include <print>
@@ -67,11 +68,34 @@ namespace gs::gui {
             if (ImGui::MenuItem("Copy Path")) {
                 ImGui::SetClipboardText(node.path.c_str());
             }
-            if (node.type == SceneNodeType::ColmapDataset && ImGui::MenuItem("Load Dataset")) {
-                if (m_onSelect) {
-                    m_onSelect(node);
+
+            // Only show "Load Dataset" option for dataset nodes that aren't the currently loaded dataset
+            if (node.type == SceneNodeType::ColmapDataset) {
+                // Check if this is already the loaded dataset by querying current state
+                bool is_loaded = false;
+
+                // Query current scene info
+                events::query::SceneInfo response;
+                auto handler = events::query::SceneInfo::when([&response](const auto& r) {
+                    response = r;
+                });
+                events::query::GetSceneInfo{}.emit();
+
+                // Check if this path matches the currently loaded dataset
+                if (response.type == events::query::SceneInfo::Type::Dataset &&
+                    response.source_path.string() == node.path) {
+                    is_loaded = true;
+                }
+
+                if (!is_loaded && ImGui::MenuItem("Load Dataset")) {
+                    // Emit the load file event directly from here
+                    events::cmd::LoadFile{
+                        .path = std::filesystem::path(node.path),
+                        .is_dataset = true}
+                        .emit();
                 }
             }
+
             ImGui::EndPopup();
         }
 
@@ -405,11 +429,6 @@ namespace gs::gui {
             .message = std::format("Selected: {} ({})", node.name, node.path),
             .source = "ScenePanel"}
             .emit();
-
-        // If it's a dataset root and callback is set, trigger load
-        if (node.type == SceneNodeType::ColmapDataset && m_onDatasetLoad) {
-            m_onDatasetLoad(std::filesystem::path(node.path));
-        }
 
         // Publish NodeSelectedEvent for other components to react
         events::ui::NodeSelected{
