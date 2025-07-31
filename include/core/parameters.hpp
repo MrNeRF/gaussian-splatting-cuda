@@ -36,6 +36,7 @@ namespace gs {
             bool enable_save_eval_images = true;              // Save during evaluation images
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
+            std::string strategy = "default";                 // Optimization strategy: mcmc, default.
             bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
 
             // Bilateral grid parameters
@@ -45,6 +46,17 @@ namespace gs {
             int bilateral_grid_W = 8;
             float bilateral_grid_lr = 2e-3f;
             float tv_loss_weight = 10.f;
+
+            // Default strategy specific parameters
+            float prune_opacity = 0.005f;
+            float grow_scale3d = 0.01f;
+            float grow_scale2d = 0.05f;
+            float prune_scale3d = 0.1f;
+            float prune_scale2d = 0.15f;
+            size_t stop_refine_scale2d = 0;
+            size_t reset_every = 3'000;
+            size_t pause_refine_after_reset = 0;
+            bool revised_opacity = false;
 
             float steps_scaler = 0.f;    // If < 0, step size scaling is disabled
             bool selective_adam = false; // Use Selective Adam optimizer
