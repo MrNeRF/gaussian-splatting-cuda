@@ -141,6 +141,9 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/application.cpp
         src/argument_parser.cpp
+        src/scheduler.cpp
+        src/strategy.cpp
+        src/default_strategy.cpp
         src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp
@@ -374,6 +377,7 @@ if(BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
 
     set(TEST_SOURCES
+            tests/test_default_strategy.cpp
             tests/test_mcmc.cpp
             tests/test_basic.cpp
             tests/test_rasterization.cpp
