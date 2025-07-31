@@ -152,18 +152,18 @@ projection_ewa_3dgs_packed_bwd(
 at::Tensor spherical_harmonics_fwd(
     const uint32_t degrees_to_use,
     const at::Tensor dirs,               // [..., 3]
-    const at::Tensor coeffs,             // [..., K, 3]
+    const at::Tensor sh0_coeffs,          // [..., 1, 3]
+    const at::Tensor shN_coeffs,          // [..., K-1, 3]
     const at::optional<at::Tensor> masks // [...]
 );
-std::tuple<at::Tensor, at::Tensor> spherical_harmonics_bwd(
+std::tuple<at::Tensor, at::Tensor, at::Tensor> spherical_harmonics_bwd(
     const uint32_t K,
     const uint32_t degrees_to_use,
     const at::Tensor dirs,                // [..., 3]
-    const at::Tensor coeffs,              // [..., K, 3]
+    const at::Tensor shN_coeffs,          // [..., K-1, 3]
     const at::optional<at::Tensor> masks, // [...]
     const at::Tensor v_colors,            // [..., 3]
-    bool compute_v_dirs
-);
+    bool compute_v_dirs);
 
 // Fused Adam that supports a valid mask to skip updating certain parameters.
 // Note skipping is not equivalent with zeroing out the gradients, which will
@@ -173,7 +173,9 @@ void adam(
     const at::Tensor &param_grad,         // [..., D]
     at::Tensor &exp_avg,                  // [..., D]
     at::Tensor &exp_avg_sq,               // [..., D]
+    at::Tensor &mask_counter,             // [..., D]
     const at::optional<at::Tensor> valid, // [...]
+    const int64_t step_count,
     const float lr,
     const float b1,
     const float b2,
@@ -219,10 +221,7 @@ std::tuple<at::Tensor, at::Tensor> quat_scale_to_covar_preci_bwd(
 // Rasterize 3D Gaussian to pixels
 std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
     // Gaussian parameters
-    const at::Tensor means2d,   // [C, N, 2] or [nnz, 2]
-    const at::Tensor conics,    // [C, N, 3] or [nnz, 3]
-    const at::Tensor colors,    // [C, N, channels] or [nnz, channels]
-    const at::Tensor opacities, // [C, N]  or [nnz]
+    const at::Tensor gaussians,                 // [C, N, 9] or [nnz, 9]
     const at::optional<at::Tensor> backgrounds, // [C, channels]
     const at::optional<at::Tensor> masks,       // [C, tile_height, tile_width]
     // image size
@@ -236,10 +235,7 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
 std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor>
 rasterize_to_pixels_3dgs_bwd(
     // Gaussian parameters
-    const at::Tensor means2d,                   // [C, N, 2] or [nnz, 2]
-    const at::Tensor conics,                    // [C, N, 3] or [nnz, 3]
-    const at::Tensor colors,                    // [C, N, 3] or [nnz, 3]
-    const at::Tensor opacities,                 // [C, N] or [nnz]
+    const at::Tensor gaussians,                 // [C, N, 9] or [nnz, 9]
     const at::optional<at::Tensor> backgrounds, // [C, 3]
     const at::optional<at::Tensor> masks,       // [C, tile_height, tile_width]
     // image size

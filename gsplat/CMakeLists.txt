@@ -40,9 +40,6 @@ add_library(gsplat_backend STATIC ${GSPLAT_SOURCES})
 
 set_target_properties(gsplat_backend PROPERTIES
         CUDA_ARCHITECTURES native
-        CUDA_SEPARABLE_COMPILATION ON
-        POSITION_INDEPENDENT_CODE ON
-        CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
 target_include_directories(gsplat_backend
@@ -66,7 +63,7 @@ target_link_libraries(gsplat_backend
 # Compile options for both CUDA and C++
 target_compile_options(gsplat_backend PRIVATE
         $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 --use_fast_math --expt-relaxed-constexpr -diag-suppress=20012,186>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -lineinfo --use_fast_math --expt-relaxed-constexpr -diag-suppress=20012,186 --ptxas-options=-v>
         $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0 -g>
         $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:-O3>
 )

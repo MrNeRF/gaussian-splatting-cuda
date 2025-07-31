@@ -16,10 +16,7 @@ namespace gsplat {
 template <uint32_t CDIM>
 void launch_rasterize_to_pixels_3dgs_fwd_kernel(
     // Gaussian parameters
-    const at::Tensor means2d,   // [C, N, 2] or [nnz, 2]
-    const at::Tensor conics,    // [C, N, 3] or [nnz, 3]
-    const at::Tensor colors,    // [C, N, channels] or [nnz, channels]
-    const at::Tensor opacities, // [C, N]  or [nnz]
+    const at::Tensor gaussians,                 // [C, N, 9] or [nnz, 9]
     const at::optional<at::Tensor> backgrounds, // [C, channels]
     const at::optional<at::Tensor> masks,       // [C, tile_height, tile_width]
     // image size
@@ -38,10 +35,7 @@ void launch_rasterize_to_pixels_3dgs_fwd_kernel(
 template <uint32_t CDIM>
 void launch_rasterize_to_pixels_3dgs_bwd_kernel(
     // Gaussian parameters
-    const at::Tensor means2d,                   // [C, N, 2] or [nnz, 2]
-    const at::Tensor conics,                    // [C, N, 3] or [nnz, 3]
-    const at::Tensor colors,                    // [C, N, 3] or [nnz, 3]
-    const at::Tensor opacities,                 // [C, N] or [nnz]
+    const at::Tensor gaussians,                 // [C, N, 9] or [nnz, 9]
     const at::optional<at::Tensor> backgrounds, // [C, 3]
     const at::optional<at::Tensor> masks,       // [C, tile_height, tile_width]
     // image size

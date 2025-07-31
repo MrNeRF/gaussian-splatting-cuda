@@ -1,5 +1,6 @@
 #include "core/camera.hpp"
 #include "core/image_io.hpp"
+#include <c10/cuda/CUDAGuard.h>
 
 static torch::Tensor world_to_view(const torch::Tensor& R, const torch::Tensor& t) {
     assert_mat(R, 3, 3, "R");
@@ -31,7 +32,8 @@ Camera::Camera(const torch::Tensor& R,
       _image_path(image_path),
       _image_width(width),
       _image_height(height),
-      _world_view_transform{world_to_view(R, T)} {
+      _world_view_transform{world_to_view(R, T)},
+      _stream(at::cuda::getStreamFromPool(false)) {
 }
 
 torch::Tensor Camera::K() const {
@@ -66,19 +68,20 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
     _image_width = w;
     _image_height = h;
 
-    // Use pinned memory for faster GPU transfer
-    auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
-
     torch::Tensor image = torch::from_blob(
                               data,
                               {h, w, c},
                               {w * c, c, 1},
-                              pinned_options)
-                              .to(torch::kFloat32)
-                              .permute({2, 0, 1})
-                              .clone() /
-                          255.0f;
+                              torch::dtype(torch::kUInt8))
+                              .pin_memory();
 
+    // Use a stream other than the default stream to overlap memcpy and compute
+    at::cuda::CUDAStreamGuard g(_stream);
+    auto image_gpu = image.to(torch::kCUDA, true)
+                         .to(torch::kFloat32, true)
+                         .permute({2, 0, 1}) /
+                     255.0f;
     free_image(data);
-    return image.to(torch::kCUDA, /*non_blocking=*/true);
+    _stream.synchronize();
+    return image_gpu;
 }

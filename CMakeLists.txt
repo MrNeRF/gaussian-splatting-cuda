@@ -151,6 +151,7 @@ set(KERNEL_SOURCES
         kernels/bilateral_grid_forward.cu
         kernels/bilateral_grid_backward.cu
         kernels/bilateral_grid_tv.cu
+        kernels/inject_noise.cu
 )
 
 # Add CUDA-OpenGL interop kernels if supported
@@ -162,9 +163,6 @@ add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
 
 set_target_properties(gaussian_kernels PROPERTIES
         CUDA_ARCHITECTURES native
-        CUDA_SEPARABLE_COMPILATION ON
-        POSITION_INDEPENDENT_CODE ON
-        CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
 target_include_directories(gaussian_kernels
@@ -196,7 +194,7 @@ endif()
 
 target_compile_options(gaussian_kernels PRIVATE
         $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -lineinfo -use_fast_math --ptxas-options=-v>
 )
 
 # =============================================================================
@@ -242,8 +240,6 @@ add_executable(${PROJECT_NAME} src/main.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
         CUDA_ARCHITECTURES native
-        CUDA_SEPARABLE_COMPILATION ON
-        CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -364,8 +360,6 @@ if(BUILD_TESTS)
 
     set_target_properties(gaussian_tests PROPERTIES
             CUDA_ARCHITECTURES native
-            CUDA_SEPARABLE_COMPILATION ON
-            CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
 
     target_include_directories(gaussian_tests PRIVATE

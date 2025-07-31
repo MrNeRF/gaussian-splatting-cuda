@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/torch_shapes.hpp"
+#include <c10/cuda/CUDAStream.h>
 #include <filesystem>
 #include <future>
 #include <string>
@@ -58,4 +59,6 @@ private:
 
     // GPU tensors (computed on demand)
     torch::Tensor _world_view_transform;
+    // CUDA stream
+    at::cuda::CUDAStream _stream;
 };

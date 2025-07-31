@@ -17,7 +17,9 @@ void adam(
     const at::Tensor &param_grad,         // [N, ...]
     at::Tensor &exp_avg,                  // [N, ...]
     at::Tensor &exp_avg_sq,               // [N, ...]
+    at::Tensor &mask_counter,               // [N, ...]
     const at::optional<at::Tensor> valid, // [N]
+    const int64_t step_count,
     const float lr,
     const float b1,
     const float b2,
@@ -28,6 +30,7 @@ void adam(
     CHECK_INPUT(param_grad);
     CHECK_INPUT(exp_avg);
     CHECK_INPUT(exp_avg_sq);
+    CHECK_INPUT(mask_counter);
     if (valid.has_value()) {
         CHECK_INPUT(valid.value());
         TORCH_CHECK(valid.value().dim() == 1, "valid should be 1D tensor");
@@ -38,7 +41,7 @@ void adam(
     }
 
     launch_adam_kernel(
-        param, param_grad, exp_avg, exp_avg_sq, valid, lr, b1, b2, eps
+        param, param_grad, exp_avg, exp_avg_sq, mask_counter, valid, step_count, lr, b1, b2, eps
     );
 }
 

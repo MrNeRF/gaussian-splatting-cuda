@@ -11,17 +11,21 @@ namespace gs {
     inline torch::Tensor spherical_harmonics(
         int sh_degree,
         const torch::Tensor& dirs,
-        const torch::Tensor& coeffs,
+        const torch::Tensor& sh0_coeffs,
+        const torch::Tensor& shN_coeffs,
         const torch::Tensor& masks = {}) {
 
         // Validate inputs
-        TORCH_CHECK((sh_degree + 1) * (sh_degree + 1) <= coeffs.size(-2),
+        TORCH_CHECK((sh_degree + 1) * (sh_degree + 1) <= shN_coeffs.size(-2) + 1,
                     "coeffs K dimension must be at least ", (sh_degree + 1) * (sh_degree + 1),
-                    ", got ", coeffs.size(-2));
-        TORCH_CHECK(dirs.sizes().slice(0, dirs.dim() - 1) == coeffs.sizes().slice(0, coeffs.dim() - 2),
-                    "dirs and coeffs batch dimensions must match");
+                    ", got ", shN_coeffs.size(-2));
+        TORCH_CHECK(dirs.sizes().slice(0, dirs.dim() - 1) == sh0_coeffs.sizes().slice(0, sh0_coeffs.dim() - 2),
+                    "dirs and sh0_coeffs batch dimensions must match");
+        TORCH_CHECK(dirs.sizes().slice(0, dirs.dim() - 1) == shN_coeffs.sizes().slice(0, shN_coeffs.dim() - 2),
+                    "dirs and shN_coeffs batch dimensions must match");
         TORCH_CHECK(dirs.size(-1) == 3, "dirs last dimension must be 3, got ", dirs.size(-1));
-        TORCH_CHECK(coeffs.size(-1) == 3, "coeffs last dimension must be 3, got ", coeffs.size(-1));
+        TORCH_CHECK(sh0_coeffs.size(-1) == 3, "sh0_coeffs last dimension must be 3, got ", sh0_coeffs.size(-1));
+        TORCH_CHECK(shN_coeffs.size(-1) == 3, "shN_coeffs last dimension must be 3, got ", shN_coeffs.size(-1));
 
         if (masks.defined()) {
             TORCH_CHECK(masks.sizes() == dirs.sizes().slice(0, dirs.dim() - 1),
@@ -30,13 +34,14 @@ namespace gs {
 
         // Create sh_degree tensor
         auto sh_degree_tensor = torch::tensor({sh_degree},
-                                              torch::TensorOptions().dtype(torch::kInt32).device(dirs.device()));
+                                              torch::TensorOptions().dtype(torch::kInt32));
 
         // Call the autograd function
         return SphericalHarmonicsFunction::apply(
             sh_degree_tensor,
             dirs.contiguous(),
-            coeffs.contiguous(),
+            sh0_coeffs.contiguous(),
+            shN_coeffs.contiguous(),
             masks.defined() ? masks.contiguous() : masks)[0];
     }
 
@@ -58,12 +63,14 @@ namespace gs {
         const int image_width = static_cast<int>(viewpoint_camera.image_width());
 
         // Prepare viewmat and K
-        auto viewmat = viewpoint_camera.world_view_transform().to(torch::kCUDA);
+        auto viewmat_cpu = viewpoint_camera.world_view_transform();
+        TORCH_CHECK(viewmat_cpu.is_cpu(), "viewmat_cpu must be on CPU");
+        auto viewmat = viewmat_cpu.to(torch::kCUDA, true);
         TORCH_CHECK(viewmat.dim() == 3 && viewmat.size(0) == 1 && viewmat.size(1) == 4 && viewmat.size(2) == 4,
                     "viewmat must be [1, 4, 4] after transpose and unsqueeze, got ", viewmat.sizes());
         TORCH_CHECK(viewmat.is_cuda(), "viewmat must be on CUDA");
 
-        const auto K = viewpoint_camera.K().to(torch::kCUDA);
+        const auto K = viewpoint_camera.K().to(torch::kCUDA, true);
         TORCH_CHECK(K.is_cuda(), "K must be on CUDA");
 
         // Get Gaussian parameters
@@ -74,7 +81,8 @@ namespace gs {
         }
         const auto scales = gaussian_model.get_scaling();
         const auto rotations = gaussian_model.get_rotation();
-        const auto sh_coeffs = gaussian_model.get_shs();
+        const auto sh0_coeffs = gaussian_model.sh0();
+        const auto shN_coeffs = gaussian_model.shN();
         const int sh_degree = gaussian_model.get_active_sh_degree();
 
         // Validate Gaussian parameters
@@ -87,21 +95,24 @@ namespace gs {
                     "scales must be [N, 3], got ", scales.sizes());
         TORCH_CHECK(rotations.dim() == 2 && rotations.size(0) == N && rotations.size(1) == 4,
                     "rotations must be [N, 4], got ", rotations.sizes());
-        TORCH_CHECK(sh_coeffs.dim() == 3 && sh_coeffs.size(0) == N && sh_coeffs.size(2) == 3,
-                    "sh_coeffs must be [N, K, 3], got ", sh_coeffs.sizes());
+        TORCH_CHECK(sh0_coeffs.dim() == 3 && sh0_coeffs.size(0) == N && sh0_coeffs.size(2) == 3,
+                    "sh0_coeffs must be [N, 1, 3], got ", sh0_coeffs.sizes());
+        TORCH_CHECK(shN_coeffs.dim() == 3 && shN_coeffs.size(0) == N && shN_coeffs.size(2) == 3,
+                    "shN_coeffs must be [N, K - 1, 3], got ", shN_coeffs.sizes());
 
         // Check if we have enough SH coefficients for the requested degree
         const int required_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
-        TORCH_CHECK(sh_coeffs.size(1) >= required_sh_coeffs,
+        TORCH_CHECK(shN_coeffs.size(1) + 1 >= required_sh_coeffs,
                     "Not enough SH coefficients. Expected at least ", required_sh_coeffs,
-                    " but got ", sh_coeffs.size(1));
+                    " but got ", shN_coeffs.size(1));
 
         // Device checks for Gaussian parameters
         TORCH_CHECK(means3D.is_cuda(), "means3D must be on CUDA");
         TORCH_CHECK(opacities.is_cuda(), "opacities must be on CUDA");
         TORCH_CHECK(scales.is_cuda(), "scales must be on CUDA");
         TORCH_CHECK(rotations.is_cuda(), "rotations must be on CUDA");
-        TORCH_CHECK(sh_coeffs.is_cuda(), "sh_coeffs must be on CUDA");
+        TORCH_CHECK(sh0_coeffs.is_cuda(), "sh0_coeffs must be on CUDA");
+        TORCH_CHECK(shN_coeffs.is_cuda(), "shN_coeffs must be on CUDA");
 
         // Handle background color - can be undefined
         torch::Tensor prepared_bg_color;
@@ -130,7 +141,7 @@ namespace gs {
                                             far_plane,
                                             radius_clip,
                                             scaling_modifier},
-                                           torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+                                           torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
 
         auto proj_outputs = ProjectionFunction::apply(
             means3D, rotations, scales, opacities, viewmat, K, proj_settings);
@@ -148,7 +159,7 @@ namespace gs {
 
         // Step 2: Compute colors from SH
         // First, compute camera position from inverse viewmat
-        auto viewmat_inv = torch::inverse(viewmat);
+        auto viewmat_inv = torch::inverse(viewmat_cpu).to(torch::kCUDA, true);
         auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3}); // [C, 3]
 
         // Compute directions from camera to each Gaussian
@@ -158,10 +169,11 @@ namespace gs {
         auto masks = (radii > 0).all(-1); // [C, N]
 
         // The Python code broadcasts colors from [N, K, 3] to [C, N, K, 3] if needed
-        auto shs = sh_coeffs.unsqueeze(0); // [1, N, K, 3]
+        auto sh0s = sh0_coeffs.unsqueeze(0); // [1, N, K, 3]
+        auto shNs = shN_coeffs.unsqueeze(0); // [1, N, K, 3]
 
         // Now call spherical harmonics with proper directions
-        auto colors = spherical_harmonics(sh_degree, dirs, shs, masks); // [C, N, 3]
+        auto colors = spherical_harmonics(sh_degree, dirs, sh0s, shNs, masks); // [C, N, 3]
 
         // Apply the SH offset and clamping for rendering (shift from [-0.5, 0.5] to [0, 1])
         colors = torch::clamp_min(colors + 0.5f, 0.0f);
@@ -238,7 +250,7 @@ namespace gs {
         auto raster_settings = torch::tensor({(float)image_width,
                                               (float)image_height,
                                               (float)tile_size},
-                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
 
         auto raster_outputs = RasterizationFunction::apply(
             means2d, conics, render_colors, final_opacities, final_bg,
@@ -302,7 +314,7 @@ namespace gs {
         result.means2d = means2d_with_grad;
         result.depths = depths.squeeze(0);
         result.radii = std::get<0>(radii.squeeze(0).max(-1));
-        result.visibility = (result.radii > 0);
+        result.visibility = masks.squeeze(0);
         result.width = image_width;
         result.height = image_height;
 

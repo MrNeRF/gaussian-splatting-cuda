@@ -32,7 +32,8 @@ namespace gs {
             torch::autograd::AutogradContext* ctx,
             torch::Tensor sh_degree_tensor, // [1] containing sh_degree
             torch::Tensor dirs,             // [N, 3]
-            torch::Tensor coeffs,           // [N, K, 3]
+            torch::Tensor sh0_coeffs,       // [..., 1, 3]
+            torch::Tensor shN_coeffs,       // [..., K-1, 3]
             torch::Tensor masks);           // [N] optional boolean masks
 
         static torch::autograd::tensor_list backward(

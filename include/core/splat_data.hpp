@@ -41,6 +41,8 @@ public:
     torch::Tensor get_opacity() const;
     torch::Tensor get_rotation() const;
     torch::Tensor get_scaling() const;
+    // Concat sh0 and shN to form shs
+    // They are split to set different learning rates
     torch::Tensor get_shs() const;
 
     // Simple inline getters
@@ -53,6 +55,8 @@ public:
     inline torch::Tensor& opacity_raw() { return _opacity; }
     inline torch::Tensor& rotation_raw() { return _rotation; }
     inline torch::Tensor& scaling_raw() { return _scaling; }
+    inline const torch::Tensor& sh0() const { return _sh0; }
+    inline const torch::Tensor& shN() const { return _shN; }
     inline torch::Tensor& sh0() { return _sh0; }
     inline torch::Tensor& shN() { return _shN; }
     inline torch::Tensor& max_radii2D() { return _max_radii2D; }

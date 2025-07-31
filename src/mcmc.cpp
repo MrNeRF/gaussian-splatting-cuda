@@ -3,6 +3,7 @@
 #include "core/debug_utils.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "kernels/inject_noise.cuh"
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <exception>
 #include <iostream>
@@ -78,7 +79,7 @@ torch::Tensor MCMC::multinomial_sample(const torch::Tensor& weights, int n, bool
         }
 
         auto result = torch::tensor(sampled_indices, torch::kLong);
-        return result.to(weights.device());
+        return result.to(weights.device(), true);
     }
 }
 
@@ -113,6 +114,7 @@ void MCMC::update_optimizer_for_relocate(torch::optim::Optimizer* optimizer,
         // SelectiveAdam
         selective_adam_state->exp_avg.index_put_({sampled_indices}, 0);
         selective_adam_state->exp_avg_sq.index_put_({sampled_indices}, 0);
+        selective_adam_state->mask_counter.index_put_({sampled_indices}, 0);
 
         if (selective_adam_state->max_exp_avg_sq.defined()) {
             selective_adam_state->max_exp_avg_sq.index_put_({sampled_indices}, 0);
@@ -346,12 +348,15 @@ int MCMC::add_new_gs() {
                 auto zeros_to_add = torch::zeros(new_shape, selective_adam_state->exp_avg.options());
                 auto new_exp_avg = torch::cat({selective_adam_state->exp_avg, zeros_to_add}, 0);
                 auto new_exp_avg_sq = torch::cat({selective_adam_state->exp_avg_sq, zeros_to_add}, 0);
+                auto new_mask_counter = torch::cat({selective_adam_state->mask_counter,
+                    torch::zeros(new_shape, selective_adam_state->mask_counter.options())}, 0);
 
                 // Create new state
                 auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
                 new_state->step_count = selective_adam_state->step_count;
                 new_state->exp_avg = new_exp_avg;
                 new_state->exp_avg_sq = new_exp_avg_sq;
+                new_state->mask_counter = new_mask_counter;
                 if (selective_adam_state->max_exp_avg_sq.defined()) {
                     auto new_max_exp_avg_sq = torch::cat({selective_adam_state->max_exp_avg_sq, zeros_to_add}, 0);
                     new_state->max_exp_avg_sq = new_max_exp_avg_sq;
@@ -414,10 +419,8 @@ void MCMC::inject_noise() {
     );
     auto covars = std::get<0>(covar_result); // [N, 3, 3]
 
-    // Opacity sigmoid function: 1 / (1 + exp(-k * (x - x0)))
-    const float k = 100.0f;
-    const float x0 = 0.995f;
-    auto op_sigmoid = 1.0f / (1.0f + torch::exp(-k * ((1.0f - opacities) - x0)));
+    at::Tensor op_sigmoid = at::empty_like(opacities);
+    launch_get_opacity_sigmoid(opacities, op_sigmoid, opacities.size(0));
 
     // Get current learning rate from optimizer (after scheduler has updated it)
     float current_lr = 0.0f;
@@ -429,13 +432,14 @@ void MCMC::inject_noise() {
     }
 
     // Generate noise
-    auto noise = torch::randn_like(_splat_data.means()) * op_sigmoid.unsqueeze(-1) * current_lr * _noise_lr;
+    auto noise = torch::randn_like(_splat_data.means()) * op_sigmoid.unsqueeze(-1) * (current_lr * _noise_lr);
 
     // Transform noise by covariance
-    noise = torch::bmm(covars, noise.unsqueeze(-1)).squeeze(-1);
+    // noise = torch::bmm(covars, noise.unsqueeze(-1)).squeeze(-1);
 
     // Add noise to positions
-    _splat_data.means().add_(noise);
+    // _splat_data.means().add_(noise);
+    launch_sgemv_3x3(covars, noise, _splat_data.means());
 }
 
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
@@ -458,7 +462,7 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
         // Add new Gaussians
         add_new_gs();
 
-        c10::cuda::CUDACachingAllocator::emptyCache();
+        // c10::cuda::CUDACachingAllocator::emptyCache();
     }
 
     // Inject noise to positions

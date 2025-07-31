@@ -122,6 +122,40 @@ inline std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor> create_dataset_
     return {dataset, scene_center};
 }
 
+class InfiniteRandomSampler : public torch::data::samplers::RandomSampler {
+    using super = torch::data::samplers::RandomSampler;
+public:
+    explicit InfiniteRandomSampler(size_t dataset_size)
+        : super(dataset_size) {}
+
+    std::optional<std::vector<size_t>> next(size_t batch_size) override {
+        auto indices = super::next(batch_size);
+        if (!indices) {
+            super::reset();
+            indices = super::next(batch_size);
+        }
+        return indices;
+    }
+
+private:
+    size_t dataset_size_;
+};
+
+inline auto create_infinite_dataloader_from_dataset(
+    std::shared_ptr<CameraDataset> dataset,
+    int num_workers = 4) {
+
+    const size_t dataset_size = dataset->size().value();
+
+    return torch::data::make_data_loader(
+        *dataset,
+        InfiniteRandomSampler(dataset_size),
+        torch::data::DataLoaderOptions()
+            .batch_size(1)
+            .workers(num_workers)
+            .enforce_ordering(false));
+}
+
 inline auto create_dataloader_from_dataset(
     std::shared_ptr<CameraDataset> dataset,
     int num_workers = 4) {

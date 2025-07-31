@@ -13,7 +13,9 @@ void launch_adam_kernel(
     const at::Tensor &param_grad,         // [N, ...]
     at::Tensor &exp_avg,                  // [N, ...]
     at::Tensor &exp_avg_sq,               // [N, ...]
+    at::Tensor &mask_counter,             // [N, ...]
     const at::optional<at::Tensor> valid, // [N]
+    const int64_t step_count,
     const float lr,
     const float b1,
     const float b2,

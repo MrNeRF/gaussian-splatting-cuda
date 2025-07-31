@@ -19,10 +19,7 @@ namespace gsplat {
 
 std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
     // Gaussian parameters
-    const at::Tensor means2d,   // [C, N, 2] or [nnz, 2]
-    const at::Tensor conics,    // [C, N, 3] or [nnz, 3]
-    const at::Tensor colors,    // [C, N, channels] or [nnz, channels]
-    const at::Tensor opacities, // [C, N]  or [nnz]
+    const at::Tensor gaussians,                 // [C, N, 9] or [nnz, 9]
     const at::optional<at::Tensor> backgrounds, // [C, channels]
     const at::optional<at::Tensor> masks,       // [C, tile_height, tile_width]
     // image size
@@ -33,11 +30,8 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
     const at::Tensor tile_offsets, // [C, tile_height, tile_width]
     const at::Tensor flatten_ids   // [n_isects]
 ) {
-    DEVICE_GUARD(means2d);
-    CHECK_INPUT(means2d);
-    CHECK_INPUT(conics);
-    CHECK_INPUT(colors);
-    CHECK_INPUT(opacities);
+    DEVICE_GUARD(gaussians);
+    CHECK_INPUT(gaussians);
     CHECK_INPUT(tile_offsets);
     CHECK_INPUT(flatten_ids);
     if (backgrounds.has_value()) {
@@ -48,23 +42,20 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
     }
 
     uint32_t C = tile_offsets.size(0); // number of cameras
-    uint32_t channels = colors.size(-1);
+    uint32_t channels = gaussians.size(-1) - 6;
 
     at::Tensor renders =
-        at::empty({C, image_height, image_width, channels}, means2d.options());
+        at::empty({C, image_height, image_width, channels}, gaussians.options());
     at::Tensor alphas =
-        at::empty({C, image_height, image_width, 1}, means2d.options());
+        at::empty({C, image_height, image_width, 1}, gaussians.options());
     at::Tensor last_ids = at::empty(
-        {C, image_height, image_width}, means2d.options().dtype(at::kInt)
+        {C, image_height, image_width}, gaussians.options().dtype(at::kInt)
     );
 
 #define __LAUNCH_KERNEL__(N)                                                   \
     case N:                                                                    \
         launch_rasterize_to_pixels_3dgs_fwd_kernel<N>(                         \
-            means2d,                                                           \
-            conics,                                                            \
-            colors,                                                            \
-            opacities,                                                         \
+            gaussians,                                                         \
             backgrounds,                                                       \
             masks,                                                             \
             image_width,                                                       \
@@ -82,25 +73,25 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
     // channels into the kernel functions and avoid necessary global memory
     // writes. This requires moving the channel padding from python to C side.
     switch (channels) {
-        __LAUNCH_KERNEL__(1)
-        __LAUNCH_KERNEL__(2)
+        // __LAUNCH_KERNEL__(1)
+        // __LAUNCH_KERNEL__(2)
         __LAUNCH_KERNEL__(3)
-        __LAUNCH_KERNEL__(4)
-        __LAUNCH_KERNEL__(5)
-        __LAUNCH_KERNEL__(8)
-        __LAUNCH_KERNEL__(9)
-        __LAUNCH_KERNEL__(16)
-        __LAUNCH_KERNEL__(17)
-        __LAUNCH_KERNEL__(32)
-        __LAUNCH_KERNEL__(33)
-        __LAUNCH_KERNEL__(64)
-        __LAUNCH_KERNEL__(65)
-        __LAUNCH_KERNEL__(128)
-        __LAUNCH_KERNEL__(129)
-        __LAUNCH_KERNEL__(256)
-        __LAUNCH_KERNEL__(257)
-        __LAUNCH_KERNEL__(512)
-        __LAUNCH_KERNEL__(513)
+        // __LAUNCH_KERNEL__(4)
+        // __LAUNCH_KERNEL__(5)
+        // __LAUNCH_KERNEL__(8)
+        // __LAUNCH_KERNEL__(9)
+        // __LAUNCH_KERNEL__(16)
+        // __LAUNCH_KERNEL__(17)
+        // __LAUNCH_KERNEL__(32)
+        // __LAUNCH_KERNEL__(33)
+        // __LAUNCH_KERNEL__(64)
+        // __LAUNCH_KERNEL__(65)
+        // __LAUNCH_KERNEL__(128)
+        // __LAUNCH_KERNEL__(129)
+        // __LAUNCH_KERNEL__(256)
+        // __LAUNCH_KERNEL__(257)
+        // __LAUNCH_KERNEL__(512)
+        // __LAUNCH_KERNEL__(513)
     default:
         AT_ERROR("Unsupported number of channels: ", channels);
     }
@@ -112,10 +103,7 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
 std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor>
 rasterize_to_pixels_3dgs_bwd(
     // Gaussian parameters
-    const at::Tensor means2d,                   // [C, N, 2] or [nnz, 2]
-    const at::Tensor conics,                    // [C, N, 3] or [nnz, 3]
-    const at::Tensor colors,                    // [C, N, 3] or [nnz, 3]
-    const at::Tensor opacities,                 // [C, N] or [nnz]
+    const at::Tensor gaussians,                 // [C, N, 9] or [nnz, 9]
     const at::optional<at::Tensor> backgrounds, // [C, 3]
     const at::optional<at::Tensor> masks,       // [C, tile_height, tile_width]
     // image size
@@ -132,13 +120,8 @@ rasterize_to_pixels_3dgs_bwd(
     const at::Tensor v_render_colors, // [C, image_height, image_width, 3]
     const at::Tensor v_render_alphas, // [C, image_height, image_width, 1]
     // options
-    bool absgrad
-) {
-    DEVICE_GUARD(means2d);
-    CHECK_INPUT(means2d);
-    CHECK_INPUT(conics);
-    CHECK_INPUT(colors);
-    CHECK_INPUT(opacities);
+    bool absgrad) {
+    CHECK_INPUT(gaussians);
     CHECK_INPUT(tile_offsets);
     CHECK_INPUT(flatten_ids);
     CHECK_INPUT(render_alphas);
@@ -152,24 +135,26 @@ rasterize_to_pixels_3dgs_bwd(
         CHECK_INPUT(masks.value());
     }
 
-    uint32_t channels = colors.size(-1);
+    uint32_t channels = gaussians.size(-1) - 6;
 
-    at::Tensor v_means2d = at::zeros_like(means2d);
-    at::Tensor v_conics = at::zeros_like(conics);
-    at::Tensor v_colors = at::zeros_like(colors);
-    at::Tensor v_opacities = at::zeros_like(opacities);
+    auto shape = gaussians.sizes().vec();
+    shape[shape.size() - 1] = 2;
+    at::Tensor v_means2d = at::zeros(shape, gaussians.options());
     at::Tensor v_means2d_abs;
     if (absgrad) {
-        v_means2d_abs = at::zeros_like(means2d);
+        v_means2d_abs = at::zeros_like(gaussians);
     }
+    shape[shape.size() - 1] = 3;
+    at::Tensor v_conics = at::zeros(shape, gaussians.options());
+    shape[shape.size() - 1] = channels;
+    at::Tensor v_colors = at::zeros(shape, gaussians.options());
+    shape.resize(shape.size() - 1);
+    at::Tensor v_opacities = at::zeros(shape, gaussians.options());
 
 #define __LAUNCH_KERNEL__(N)                                                   \
     case N:                                                                    \
         launch_rasterize_to_pixels_3dgs_bwd_kernel<N>(                         \
-            means2d,                                                           \
-            conics,                                                            \
-            colors,                                                            \
-            opacities,                                                         \
+            gaussians,                                                         \
             backgrounds,                                                       \
             masks,                                                             \
             image_width,                                                       \
@@ -193,25 +178,25 @@ rasterize_to_pixels_3dgs_bwd(
     // channels into the kernel functions and avoid necessary global memory
     // writes. This requires moving the channel padding from python to C side.
     switch (channels) {
-        __LAUNCH_KERNEL__(1)
-        __LAUNCH_KERNEL__(2)
+        // __LAUNCH_KERNEL__(1)
+        // __LAUNCH_KERNEL__(2)
         __LAUNCH_KERNEL__(3)
-        __LAUNCH_KERNEL__(4)
-        __LAUNCH_KERNEL__(5)
-        __LAUNCH_KERNEL__(8)
-        __LAUNCH_KERNEL__(9)
-        __LAUNCH_KERNEL__(16)
-        __LAUNCH_KERNEL__(17)
-        __LAUNCH_KERNEL__(32)
-        __LAUNCH_KERNEL__(33)
-        __LAUNCH_KERNEL__(64)
-        __LAUNCH_KERNEL__(65)
-        __LAUNCH_KERNEL__(128)
-        __LAUNCH_KERNEL__(129)
-        __LAUNCH_KERNEL__(256)
-        __LAUNCH_KERNEL__(257)
-        __LAUNCH_KERNEL__(512)
-        __LAUNCH_KERNEL__(513)
+        // __LAUNCH_KERNEL__(4)
+        // __LAUNCH_KERNEL__(5)
+        // __LAUNCH_KERNEL__(8)
+        // __LAUNCH_KERNEL__(9)
+        // __LAUNCH_KERNEL__(16)
+        // __LAUNCH_KERNEL__(17)
+        // __LAUNCH_KERNEL__(32)
+        // __LAUNCH_KERNEL__(33)
+        // __LAUNCH_KERNEL__(64)
+        // __LAUNCH_KERNEL__(65)
+        // __LAUNCH_KERNEL__(128)
+        // __LAUNCH_KERNEL__(129)
+        // __LAUNCH_KERNEL__(256)
+        // __LAUNCH_KERNEL__(257)
+        // __LAUNCH_KERNEL__(512)
+        // __LAUNCH_KERNEL__(513)
     default:
         AT_ERROR("Unsupported number of channels: ", channels);
     }

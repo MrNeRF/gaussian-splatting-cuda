@@ -72,7 +72,8 @@ namespace gs {
                      std::unique_ptr<IStrategy> strategy,
                      const param::TrainingParameters& params)
         : strategy_(std::move(strategy)),
-          params_(params) {
+          params_(params),
+          callback_stream_(at::cuda::getStreamFromPool()) {
 
         if (!torch::cuda::is_available()) {
             throw std::runtime_error("CUDA is not available – aborting.");
@@ -222,8 +223,6 @@ namespace gs {
                                           strategy_->get_model(),
                                           params_.optimization);
 
-        current_loss_ = loss.item<float>();
-
         loss.backward();
 
         {
@@ -265,25 +264,41 @@ namespace gs {
             }
         }
 
-        progress_->update(iter, loss.item<float>(),
-                          static_cast<int>(strategy_->get_model().size()),
-                          strategy_->is_refining(iter));
+        // There is small bubble before the forward step is launched
+        // So we start next iteration without synchronization here
+        auto loss_cpu = loss.to(torch::kCPU, true);
+        callback_ = [this, loss_cpu, iter]() {
+            current_loss_ = loss_cpu.item<float>();
+            progress_->update(iter, current_loss_,
+                              static_cast<int>(strategy_->get_model().size()),
+                              strategy_->is_refining(iter));
 
-        if (viewer_) {
-            if (viewer_->info_) {
-                auto& info = viewer_->info_;
-                std::lock_guard<std::mutex> lock(viewer_->info_->mtx);
-                info->updateProgress(iter, params_.optimization.iterations);
-                info->updateNumSplats(static_cast<size_t>(strategy_->get_model().size()));
-                info->updateLoss(loss.item<float>());
-            }
+            if (viewer_) {
+                if (viewer_->info_) {
+                    auto& info = viewer_->info_;
+                    std::lock_guard<std::mutex> lock(viewer_->info_->mtx);
+                    info->updateProgress(iter, params_.optimization.iterations);
+                    info->updateNumSplats(static_cast<size_t>(strategy_->get_model().size()));
+                    info->updateLoss(current_loss_);
+                }
 
-            if (viewer_->notifier_) {
-                auto& notifier = viewer_->notifier_;
-                std::unique_lock<std::mutex> lock(notifier->mtx);
-                notifier->cv.wait(lock, [&notifier] { return notifier->ready; });
+                if (viewer_->notifier_) {
+                    auto& notifier = viewer_->notifier_;
+                    std::unique_lock<std::mutex> lock(notifier->mtx);
+                    notifier->cv.wait(lock, [&notifier] { return notifier->ready; });
+                }
             }
-        }
+            callback_busy_ = false;
+        };
+
+        // callback_finish_event_.synchronize();
+        callback_stream_.synchronize();
+        callback_launch_event_.record();
+        callback_launch_event_.block(callback_stream_);
+        auto old = callback_busy_.exchange(true);
+        TORCH_CHECK(!old);
+        auto err = cudaLaunchHostFunc(callback_stream_, [](void* self) { ((Trainer*)self)->callback_(); }, this);
+        TORCH_CHECK(err == cudaSuccess, "Failed to launch host function");
 
         // Return true if we should continue training
         return iter < params_.optimization.iterations && !stop_requested_;
@@ -305,16 +320,20 @@ namespace gs {
         int iter = 1;
         const int epochs_needed = (params_.optimization.iterations + train_dataset_size_ - 1) / train_dataset_size_;
 
-        const int num_workers = 4;
+        const int num_workers = 16;
 
         const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
         bool should_continue = true;
 
-        for (int epoch = 0; epoch < epochs_needed && should_continue; ++epoch) {
-            auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
+        auto loader = create_infinite_dataloader_from_dataset(train_dataset_, num_workers);
+        auto iterator = loader->begin();
 
-            for (auto& batch : *train_dataloader) {
+        for (int epoch = 0; epoch < epochs_needed && should_continue; ++epoch) {
+            for (int i = 0; i < train_dataset_size_; i++) {
+                TORCH_CHECK(iterator != loader->end());
+                auto& batch = *iterator;
+                ++iterator;
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera;
                 torch::Tensor gt_image = std::move(camera_with_image.image);
@@ -328,6 +347,9 @@ namespace gs {
                 ++iter;
             }
         }
+
+        callback_stream_.synchronize();
+        TORCH_CHECK(!callback_busy_);
 
         // Final save if not already saved by stop request
         if (!stop_requested_) {

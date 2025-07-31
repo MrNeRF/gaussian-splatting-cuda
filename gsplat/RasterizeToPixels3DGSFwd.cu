@@ -20,23 +20,19 @@ __global__ void rasterize_to_pixels_3dgs_fwd_kernel(
     const uint32_t N,
     const uint32_t n_isects,
     const bool packed,
-    const vec2 *__restrict__ means2d,         // [C, N, 2] or [nnz, 2]
-    const vec3 *__restrict__ conics,          // [C, N, 3] or [nnz, 3]
-    const scalar_t *__restrict__ colors,      // [C, N, CDIM] or [nnz, CDIM]
-    const scalar_t *__restrict__ opacities,   // [C, N] or [nnz]
-    const scalar_t *__restrict__ backgrounds, // [C, CDIM]
-    const bool *__restrict__ masks,           // [C, tile_height, tile_width]
+    const float* gaussians,                   // [C, 6+CDIM]
+    const scalar_t* __restrict__ backgrounds, // [C, CDIM]
+    const bool* __restrict__ masks,           // [C, tile_height, tile_width]
     const uint32_t image_width,
     const uint32_t image_height,
     const uint32_t tile_size,
     const uint32_t tile_width,
     const uint32_t tile_height,
-    const int32_t *__restrict__ tile_offsets, // [C, tile_height, tile_width]
-    const int32_t *__restrict__ flatten_ids,  // [n_isects]
-    scalar_t
-        *__restrict__ render_colors, // [C, image_height, image_width, CDIM]
-    scalar_t *__restrict__ render_alphas, // [C, image_height, image_width, 1]
-    int32_t *__restrict__ last_ids        // [C, image_height, image_width]
+    const int32_t* __restrict__ tile_offsets, // [C, tile_height, tile_width]
+    const int32_t* __restrict__ flatten_ids,  // [n_isects]
+    scalar_t* __restrict__ render_colors,     // [C, image_height, image_width, CDIM]
+    scalar_t* __restrict__ render_alphas,     // [C, image_height, image_width, 1]
+    int32_t* __restrict__ last_ids            // [C, image_height, image_width]
 ) {
     // each thread draws one pixel, but also timeshares caching gaussians in a
     // shared tile
@@ -92,11 +88,7 @@ __global__ void rasterize_to_pixels_3dgs_fwd_kernel(
         (range_end - range_start + block_size - 1) / block_size;
 
     extern __shared__ int s[];
-    int32_t *id_batch = (int32_t *)s; // [block_size]
-    vec3 *xy_opacity_batch =
-        reinterpret_cast<vec3 *>(&id_batch[block_size]); // [block_size]
-    vec3 *conic_batch =
-        reinterpret_cast<vec3 *>(&xy_opacity_batch[block_size]); // [block_size]
+    float* gaussians_shared = reinterpret_cast<float*>(s);
 
     // current visibility left to render
     // transmittance is gonna be used in the backward pass which requires a high
@@ -111,6 +103,8 @@ __global__ void rasterize_to_pixels_3dgs_fwd_kernel(
     // designated pixel
     uint32_t tr = block.thread_rank();
 
+    uint32_t padded_len = (6 + CDIM + 3) / 4 * 4;
+
     float pix_out[CDIM] = {0.f};
     for (uint32_t b = 0; b < num_batches; ++b) {
         // resync all threads before beginning next batch
@@ -122,14 +116,18 @@ __global__ void rasterize_to_pixels_3dgs_fwd_kernel(
         // each thread fetch 1 gaussian from front to back
         // index of gaussian to load
         uint32_t batch_start = range_start + block_size * b;
-        uint32_t idx = batch_start + tr;
-        if (idx < range_end) {
-            int32_t g = flatten_ids[idx]; // flatten index in [C * N] or [nnz]
-            id_batch[tr] = g;
-            const vec2 xy = means2d[g];
-            const float opac = opacities[g];
-            xy_opacity_batch[tr] = {xy.x, xy.y, opac};
-            conic_batch[tr] = conics[g];
+
+        // Collectively load gaussians to coalesce global memory access
+        for (uint32_t i = 0; i < 6 + CDIM; i++) {
+            uint32_t n = i * block_size + tr;
+            uint32_t idx = n / (6 + CDIM) + batch_start;
+            uint32_t subidx = n % (6 + CDIM);
+            if (idx < range_end && subidx < 6 + CDIM) {
+                int32_t g = flatten_ids[idx];
+                // Note: bank conflicts here
+                gaussians_shared[n / (6 + CDIM) * padded_len + subidx] =
+                    gaussians[g * (6 + CDIM) + subidx];
+            }
         }
 
         // wait for other threads to collect the gaussians in batch
@@ -138,10 +136,15 @@ __global__ void rasterize_to_pixels_3dgs_fwd_kernel(
         // process gaussians in the current batch for this pixel
         uint32_t batch_size = min(block_size, range_end - batch_start);
         for (uint32_t t = 0; (t < batch_size) && !done; ++t) {
-            const vec3 conic = conic_batch[t];
-            const vec3 xy_opac = xy_opacity_batch[t];
-            const float opac = xy_opac.z;
-            const vec2 delta = {xy_opac.x - px, xy_opac.y - py};
+
+            const float4 part1 = *reinterpret_cast<const float4*>(&gaussians_shared[t * padded_len]);
+            const float2 part2 = *reinterpret_cast<const float2*>(&gaussians_shared[t * padded_len + 4]);
+            float3 conic = {part1.x, part1.y, part1.z};
+            float mean_x = part1.w;
+            float mean_y = part2.x;
+            float opac = part2.y;
+
+            const vec2 delta = {mean_x - px, mean_y - py};
             const float sigma = 0.5f * (conic.x * delta.x * delta.x +
                                         conic.z * delta.y * delta.y) +
                                 conic.y * delta.x * delta.y;
@@ -156,13 +159,21 @@ __global__ void rasterize_to_pixels_3dgs_fwd_kernel(
                 break;
             }
 
-            int32_t g = id_batch[t];
             const float vis = alpha * T;
-            const float *c_ptr = colors + g * CDIM;
+            const float* c_ptr = &gaussians_shared[t * padded_len + 6];
+            if (CDIM == 3) {
+                float2 rg = *reinterpret_cast<const float2*>(c_ptr);
+                float b = c_ptr[2];
+                pix_out[0] += rg.x * vis;
+                pix_out[1] += rg.y * vis;
+                pix_out[2] += b * vis;
+            } else {
 #pragma unroll
-            for (uint32_t k = 0; k < CDIM; ++k) {
-                pix_out[k] += c_ptr[k] * vis;
+                for (uint32_t k = 0; k < CDIM; ++k) {
+                    pix_out[k] += c_ptr[k] * vis;
+                }
             }
+
             cur_idx = batch_start + t;
 
             T = next_T;
@@ -190,10 +201,7 @@ __global__ void rasterize_to_pixels_3dgs_fwd_kernel(
 template <uint32_t CDIM>
 void launch_rasterize_to_pixels_3dgs_fwd_kernel(
     // Gaussian parameters
-    const at::Tensor means2d,   // [C, N, 2] or [nnz, 2]
-    const at::Tensor conics,    // [C, N, 3] or [nnz, 3]
-    const at::Tensor colors,    // [C, N, channels] or [nnz, channels]
-    const at::Tensor opacities, // [C, N]  or [nnz]
+    const at::Tensor gaussians,                 // [C, N, 9] or [nnz, 9]
     const at::optional<at::Tensor> backgrounds, // [C, channels]
     const at::optional<at::Tensor> masks,       // [C, tile_height, tile_width]
     // image size
@@ -208,10 +216,10 @@ void launch_rasterize_to_pixels_3dgs_fwd_kernel(
     at::Tensor alphas,  // [C, image_height, image_width]
     at::Tensor last_ids // [C, image_height, image_width]
 ) {
-    bool packed = means2d.dim() == 2;
+    bool packed = false;
 
     uint32_t C = tile_offsets.size(0);         // number of cameras
-    uint32_t N = packed ? 0 : means2d.size(1); // number of gaussians
+    uint32_t N = packed ? 0 : gaussians.size(1); // number of gaussians
     uint32_t tile_height = tile_offsets.size(1);
     uint32_t tile_width = tile_offsets.size(2);
     uint32_t n_isects = flatten_ids.size(0);
@@ -221,8 +229,9 @@ void launch_rasterize_to_pixels_3dgs_fwd_kernel(
     dim3 threads = {tile_size, tile_size, 1};
     dim3 grid = {C, tile_height, tile_width};
 
-    int64_t shmem_size =
-        tile_size * tile_size * (sizeof(int32_t) + sizeof(vec3) + sizeof(vec3));
+    int elem_num = sizeof(vec3) + sizeof(vec3) + sizeof(float) * CDIM;
+    // Padded to 16 byte boundary
+    int64_t shmem_size = tile_size * tile_size * ((elem_num + 15) / 16) * 16;
 
     // TODO: an optimization can be done by passing the actual number of
     // channels into the kernel functions and avoid necessary global memory
@@ -245,10 +254,7 @@ void launch_rasterize_to_pixels_3dgs_fwd_kernel(
             N,
             n_isects,
             packed,
-            reinterpret_cast<vec2 *>(means2d.data_ptr<float>()),
-            reinterpret_cast<vec3 *>(conics.data_ptr<float>()),
-            colors.data_ptr<float>(),
-            opacities.data_ptr<float>(),
+            reinterpret_cast<float *>(gaussians.data_ptr<float>()),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                     : nullptr,
             masks.has_value() ? masks.value().data_ptr<bool>() : nullptr,
@@ -270,10 +276,7 @@ void launch_rasterize_to_pixels_3dgs_fwd_kernel(
 // TODO: this is slow to compile, can we do something about it?
 #define __INS__(CDIM)                                                          \
     template void launch_rasterize_to_pixels_3dgs_fwd_kernel<CDIM>(            \
-        const at::Tensor means2d,                                              \
-        const at::Tensor conics,                                               \
-        const at::Tensor colors,                                               \
-        const at::Tensor opacities,                                            \
+        const at::Tensor gaussians,                                            \
         const at::optional<at::Tensor> backgrounds,                            \
         const at::optional<at::Tensor> masks,                                  \
         uint32_t image_width,                                                  \
@@ -286,25 +289,25 @@ void launch_rasterize_to_pixels_3dgs_fwd_kernel(
         at::Tensor last_ids                                                    \
     );
 
-__INS__(1)
-__INS__(2)
+// __INS__(1)
+// __INS__(2)
 __INS__(3)
-__INS__(4)
-__INS__(5)
-__INS__(8)
-__INS__(9)
-__INS__(16)
-__INS__(17)
-__INS__(32)
-__INS__(33)
-__INS__(64)
-__INS__(65)
-__INS__(128)
-__INS__(129)
-__INS__(256)
-__INS__(257)
-__INS__(512)
-__INS__(513)
+// __INS__(4)
+// __INS__(5)
+// __INS__(8)
+// __INS__(9)
+// __INS__(16)
+// __INS__(17)
+// __INS__(32)
+// __INS__(33)
+// __INS__(64)
+// __INS__(65)
+// __INS__(128)
+// __INS__(129)
+// __INS__(256)
+// __INS__(257)
+// __INS__(512)
+// __INS__(513)
 #undef __INS__
 
 } // namespace gsplat

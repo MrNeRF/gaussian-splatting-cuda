@@ -6,6 +6,7 @@
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
 #include "core/training_progress.hpp"
+#include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <memory>
 #include <torch/torch.h>
@@ -101,6 +102,12 @@ namespace gs {
         // Current training state
         std::atomic<int> current_iteration_{0};
         std::atomic<float> current_loss_{0.0f};
+
+        std::function<void()> callback_;
+        std::atomic<bool> callback_busy_{false};
+        at::cuda::CUDAStream callback_stream_;
+        at::cuda::CUDAEvent callback_launch_event_;
+        at::cuda::CUDAEvent callback_finish_event_;
     };
 
 } // namespace gs

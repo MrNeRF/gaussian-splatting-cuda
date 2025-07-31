@@ -22,11 +22,13 @@ __device__ void sh_coeffs_to_color_fast(
     const uint32_t degree,  // degree of SH to be evaluated
     const uint32_t c,       // color channel
     const vec3 &dir,        // [3]
-    const scalar_t *coeffs, // [K, 3]
+    const scalar_t *sh0_coeffs, // [3]
+    const scalar_t *shN_coeffs, // [K-1, 3]
     // output
     scalar_t *colors // [3]
 ) {
-    float result = 0.2820947917738781f * coeffs[c];
+    float result = 0.2820947917738781f * sh0_coeffs[c];
+    const scalar_t *coeffs = shN_coeffs - 3;
     if (degree >= 1) {
         // Normally rsqrt is faster than sqrt, but --use_fast_math will optimize
         // sqrt on single precision, so we use sqrt here.
@@ -114,15 +116,19 @@ __device__ void sh_coeffs_to_color_fast_vjp(
     const uint32_t degree,    // degree of SH to be evaluated
     const uint32_t c,         // color channel
     const vec3 &dir,          // [3]
-    const scalar_t *coeffs,   // [K, 3]
+    const scalar_t *shN_coeffs,// [K - 1, 3]
+    bool mask,
     const scalar_t *v_colors, // [3]
     // output
-    scalar_t *v_coeffs, // [K, 3]
+    scalar_t *v_coeffs0,// [..., K, 3]
+    scalar_t *v_coeffsN,// [..., K, 3]
     vec3 *v_dir         // [3] optional
 ) {
     float v_colors_local = v_colors[c];
+    const scalar_t *coeffs = shN_coeffs - 3;
+    scalar_t *v_coeffs = v_coeffsN - 3;
 
-    v_coeffs[c] = 0.2820947917738781f * v_colors_local;
+    v_coeffs0[c] = mask ? 0.2820947917738781f * v_colors_local : 0.f;
     if (degree < 1) {
         return;
     }
@@ -132,9 +138,9 @@ __device__ void sh_coeffs_to_color_fast_vjp(
     float z = dir.z * inorm;
     float v_x = 0.f, v_y = 0.f, v_z = 0.f;
 
-    v_coeffs[1 * 3 + c] = -0.48860251190292f * y * v_colors_local;
-    v_coeffs[2 * 3 + c] = 0.48860251190292f * z * v_colors_local;
-    v_coeffs[3 * 3 + c] = -0.48860251190292f * x * v_colors_local;
+    v_coeffs[1 * 3 + c] = mask ? -0.48860251190292f * y * v_colors_local : 0.f;
+    v_coeffs[2 * 3 + c] = mask ? 0.48860251190292f * z * v_colors_local : 0.f;
+    v_coeffs[3 * 3 + c] = mask ? -0.48860251190292f * x * v_colors_local : 0.f;
 
     if (v_dir != nullptr) {
         v_x += -0.48860251190292f * coeffs[3 * 3 + c] * v_colors_local;
@@ -163,11 +169,11 @@ __device__ void sh_coeffs_to_color_fast_vjp(
     float pSH5 = fTmp0B * y;
     float pSH8 = 0.5462742152960395f * fC1;
     float pSH4 = 0.5462742152960395f * fS1;
-    v_coeffs[4 * 3 + c] = pSH4 * v_colors_local;
-    v_coeffs[5 * 3 + c] = pSH5 * v_colors_local;
-    v_coeffs[6 * 3 + c] = pSH6 * v_colors_local;
-    v_coeffs[7 * 3 + c] = pSH7 * v_colors_local;
-    v_coeffs[8 * 3 + c] = pSH8 * v_colors_local;
+    v_coeffs[4 * 3 + c] = mask ? pSH4 * v_colors_local : 0.f;
+    v_coeffs[5 * 3 + c] = mask ? pSH5 * v_colors_local : 0.f;
+    v_coeffs[6 * 3 + c] = mask ? pSH6 * v_colors_local : 0.f;
+    v_coeffs[7 * 3 + c] = mask ? pSH7 * v_colors_local : 0.f;
+    v_coeffs[8 * 3 + c] = mask ? pSH8 * v_colors_local : 0.f;
 
     float fTmp0B_z, fC1_x, fC1_y, fS1_x, fS1_y, pSH6_z, pSH7_x, pSH7_z, pSH5_y,
         pSH5_z, pSH8_x, pSH8_y, pSH4_x, pSH4_y;
@@ -222,13 +228,13 @@ __device__ void sh_coeffs_to_color_fast_vjp(
     float pSH10 = fTmp1B * fS1;
     float pSH15 = -0.5900435899266435f * fC2;
     float pSH9 = -0.5900435899266435f * fS2;
-    v_coeffs[9 * 3 + c] = pSH9 * v_colors_local;
-    v_coeffs[10 * 3 + c] = pSH10 * v_colors_local;
-    v_coeffs[11 * 3 + c] = pSH11 * v_colors_local;
-    v_coeffs[12 * 3 + c] = pSH12 * v_colors_local;
-    v_coeffs[13 * 3 + c] = pSH13 * v_colors_local;
-    v_coeffs[14 * 3 + c] = pSH14 * v_colors_local;
-    v_coeffs[15 * 3 + c] = pSH15 * v_colors_local;
+    v_coeffs[9 * 3 + c] = mask ? pSH9 * v_colors_local : 0.f;
+    v_coeffs[10 * 3 + c] = mask ? pSH10 * v_colors_local : 0.f;
+    v_coeffs[11 * 3 + c] = mask ? pSH11 * v_colors_local : 0.f;
+    v_coeffs[12 * 3 + c] = mask ? pSH12 * v_colors_local : 0.f;
+    v_coeffs[13 * 3 + c] = mask ? pSH13 * v_colors_local : 0.f;
+    v_coeffs[14 * 3 + c] = mask ? pSH14 * v_colors_local : 0.f;
+    v_coeffs[15 * 3 + c] = mask ? pSH15 * v_colors_local : 0.f;
 
     float fTmp0C_z, fTmp1B_z, fC2_x, fC2_y, fS2_x, fS2_y, pSH12_z, pSH13_x,
         pSH13_z, pSH11_y, pSH11_z, pSH14_x, pSH14_y, pSH14_z, pSH10_x, pSH10_y,
@@ -299,15 +305,15 @@ __device__ void sh_coeffs_to_color_fast_vjp(
     float pSH17 = fTmp2B * fS2;
     float pSH24 = 0.6258357354491763f * fC3;
     float pSH16 = 0.6258357354491763f * fS3;
-    v_coeffs[16 * 3 + c] = pSH16 * v_colors_local;
-    v_coeffs[17 * 3 + c] = pSH17 * v_colors_local;
-    v_coeffs[18 * 3 + c] = pSH18 * v_colors_local;
-    v_coeffs[19 * 3 + c] = pSH19 * v_colors_local;
-    v_coeffs[20 * 3 + c] = pSH20 * v_colors_local;
-    v_coeffs[21 * 3 + c] = pSH21 * v_colors_local;
-    v_coeffs[22 * 3 + c] = pSH22 * v_colors_local;
-    v_coeffs[23 * 3 + c] = pSH23 * v_colors_local;
-    v_coeffs[24 * 3 + c] = pSH24 * v_colors_local;
+    v_coeffs[16 * 3 + c] = mask ? pSH16 * v_colors_local : 0.f;
+    v_coeffs[17 * 3 + c] = mask ? pSH17 * v_colors_local : 0.f;
+    v_coeffs[18 * 3 + c] = mask ? pSH18 * v_colors_local : 0.f;
+    v_coeffs[19 * 3 + c] = mask ? pSH19 * v_colors_local : 0.f;
+    v_coeffs[20 * 3 + c] = mask ? pSH20 * v_colors_local : 0.f;
+    v_coeffs[21 * 3 + c] = mask ? pSH21 * v_colors_local : 0.f;
+    v_coeffs[22 * 3 + c] = mask ? pSH22 * v_colors_local : 0.f;
+    v_coeffs[23 * 3 + c] = mask ? pSH23 * v_colors_local : 0.f;
+    v_coeffs[24 * 3 + c] = mask ? pSH24 * v_colors_local : 0.f;
 
     float fTmp0D_z, fTmp1C_z, fTmp2B_z, fC3_x, fC3_y, fS3_x, fS3_y, pSH20_z,
         pSH21_x, pSH21_z, pSH19_y, pSH19_z, pSH22_x, pSH22_y, pSH22_z, pSH18_x,
@@ -376,7 +382,8 @@ __global__ void spherical_harmonics_fwd_kernel(
     const uint32_t K,
     const uint32_t degrees_to_use,
     const vec3 *__restrict__ dirs,       // [N, 3]
-    const scalar_t *__restrict__ coeffs, // [N, K, 3]
+    const scalar_t *__restrict__ sh0_coeffs, // [N, 1, 3]
+    const scalar_t *__restrict__ shN_coeffs, // [N, K-1, 3]
     const bool *__restrict__ masks,      // [N]
     scalar_t *__restrict__ colors        // [N, 3]
 ) {
@@ -394,21 +401,22 @@ __global__ void spherical_harmonics_fwd_kernel(
         degrees_to_use,
         c,
         dirs[elem_id],
-        coeffs + elem_id * K * 3,
-        colors + elem_id * 3
-    );
+        sh0_coeffs + elem_id * 3,
+        shN_coeffs + elem_id * (K-1) * 3,
+        colors + elem_id * 3);
 }
 
 void launch_spherical_harmonics_fwd_kernel(
     // inputs
     const uint32_t degrees_to_use,
     const at::Tensor dirs,                // [..., 3]
-    const at::Tensor coeffs,              // [..., K, 3]
+    const at::Tensor sh0_coeffs,          // [..., 1, 3]
+    const at::Tensor shN_coeffs,          // [..., K-1, 3]
     const at::optional<at::Tensor> masks, // [...]
     // outputs
     at::Tensor colors // [..., 2]
 ) {
-    const uint32_t K = coeffs.size(-2);
+    const uint32_t K = shN_coeffs.size(-2) + 1;
     const uint32_t N = dirs.numel() / 3;
 
     // parallelize over N * 3
@@ -435,7 +443,8 @@ void launch_spherical_harmonics_fwd_kernel(
                     K,
                     degrees_to_use,
                     reinterpret_cast<vec3 *>(dirs.data_ptr<scalar_t>()),
-                    coeffs.data_ptr<scalar_t>(),
+                    sh0_coeffs.data_ptr<scalar_t>(),
+                    shN_coeffs.data_ptr<scalar_t>(),
                     masks.has_value() ? masks.value().data_ptr<bool>()
                                       : nullptr,
                     colors.data_ptr<scalar_t>()
@@ -450,10 +459,11 @@ __global__ void spherical_harmonics_bwd_kernel(
     const uint32_t K,
     const uint32_t degrees_to_use,
     const vec3 *__restrict__ dirs,         // [N, 3]
-    const scalar_t *__restrict__ coeffs,   // [N, K, 3]
+    const scalar_t *__restrict__ shN_coeffs,// [N, K-1, 3]
     const bool *__restrict__ masks,        // [N]
     const scalar_t *__restrict__ v_colors, // [N, 3
-    scalar_t *__restrict__ v_coeffs,       // [N, K, 3]
+    scalar_t *v_coeffs0,                  // [..., K, 3]
+    scalar_t *v_coeffsN,                  // [..., K, 3]
     scalar_t *__restrict__ v_dirs          // [N, 3] optional
 ) {
     // parallelize over N * 3
@@ -463,21 +473,21 @@ __global__ void spherical_harmonics_bwd_kernel(
     }
     uint32_t elem_id = idx / 3;
     uint32_t c = idx % 3; // color channel
-    if (masks != nullptr && !masks[elem_id]) {
-        return;
-    }
+    bool mask = masks == nullptr || masks[elem_id];
 
     vec3 v_dir = {0.f, 0.f, 0.f};
     sh_coeffs_to_color_fast_vjp(
         degrees_to_use,
         c,
         dirs[elem_id],
-        coeffs + elem_id * K * 3,
+        shN_coeffs + elem_id * (K-1) * 3,
+        mask,
         v_colors + elem_id * 3,
-        v_coeffs + elem_id * K * 3,
+        v_coeffs0 + elem_id * 3,
+        v_coeffsN + elem_id * (K - 1) * 3,
         v_dirs == nullptr ? nullptr : &v_dir
     );
-    if (v_dirs != nullptr) {
+    if (mask && v_dirs != nullptr) {
         gpuAtomicAdd(v_dirs + elem_id * 3, v_dir.x);
         gpuAtomicAdd(v_dirs + elem_id * 3 + 1, v_dir.y);
         gpuAtomicAdd(v_dirs + elem_id * 3 + 2, v_dir.z);
@@ -488,14 +498,15 @@ void launch_spherical_harmonics_bwd_kernel(
     // inputs
     const uint32_t degrees_to_use,
     const at::Tensor dirs,                // [..., 3]
-    const at::Tensor coeffs,              // [..., K, 3]
+    const at::Tensor shN_coeffs,          // [..., K-1, 3]
     const at::optional<at::Tensor> masks, // [...]
     const at::Tensor v_colors,            // [..., 3]
     // outputs
-    at::Tensor v_coeffs,            // [..., K, 3]
+    at::Tensor v_coeffs0,           // [..., K, 3]
+    at::Tensor v_coeffsN,           // [..., K, 3]
     at::optional<at::Tensor> v_dirs // [..., 3]
 ) {
-    const uint32_t K = coeffs.size(-2);
+    const uint32_t K = shN_coeffs.size(-2) + 1;
     const uint32_t N = dirs.numel() / 3;
 
     // parallelize over N * 3
@@ -522,11 +533,12 @@ void launch_spherical_harmonics_bwd_kernel(
                     K,
                     degrees_to_use,
                     reinterpret_cast<vec3 *>(dirs.data_ptr<scalar_t>()),
-                    coeffs.data_ptr<scalar_t>(),
+                    shN_coeffs.data_ptr<scalar_t>(),
                     masks.has_value() ? masks.value().data_ptr<bool>()
                                       : nullptr,
                     v_colors.data_ptr<scalar_t>(),
-                    v_coeffs.data_ptr<scalar_t>(),
+                    v_coeffs0.data_ptr<scalar_t>(),
+                    v_coeffsN.data_ptr<scalar_t>(),
                     v_dirs.has_value() ? v_dirs.value().data_ptr<scalar_t>()
                                        : nullptr
                 );

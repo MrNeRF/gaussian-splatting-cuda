@@ -56,6 +56,7 @@ namespace gs {
             torch::Tensor exp_avg;
             torch::Tensor exp_avg_sq;
             torch::Tensor max_exp_avg_sq; // For amsgrad variant (not used currently)
+            torch::Tensor mask_counter;
             int64_t step_count = 0;
 
             void serialize(torch::serialize::OutputArchive& archive) const override {
@@ -65,6 +66,7 @@ namespace gs {
                 if (max_exp_avg_sq.defined()) {
                     archive.write("max_exp_avg_sq", max_exp_avg_sq);
                 }
+                archive.write("mask_counter", mask_counter);
             }
         };
 

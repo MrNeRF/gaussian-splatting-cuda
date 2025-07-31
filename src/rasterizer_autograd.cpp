@@ -48,7 +48,7 @@ namespace gs {
         }
         TORCH_CHECK(viewmat.is_cuda(), "viewmat must be on CUDA");
         TORCH_CHECK(K.is_cuda(), "K must be on CUDA");
-        TORCH_CHECK(settings.is_cuda(), "settings must be on CUDA");
+        TORCH_CHECK(settings.is_cpu(), "settings must be on CPU");
 
         // Extract settings - keep on same device as input
         const auto width = settings[0].item<int>();
@@ -229,7 +229,8 @@ namespace gs {
         torch::autograd::AutogradContext* ctx,
         torch::Tensor sh_degree_tensor, // [1] containing sh_degree
         torch::Tensor dirs,             // [..., 3]
-        torch::Tensor coeffs,           // [..., K, 3]
+        torch::Tensor sh0_coeffs,       // [..., 1, 3]
+        torch::Tensor shN_coeffs,       // [..., K-1, 3]
         torch::Tensor masks) {          // [...] optional
 
         const int sh_degree = sh_degree_tensor.item<int>();
@@ -238,16 +239,20 @@ namespace gs {
         // Input validation
         TORCH_CHECK(dirs.size(-1) == 3,
                     "dirs last dimension must be 3, got ", dirs.size(-1));
-        TORCH_CHECK(coeffs.size(-1) == 3,
-                    "coeffs last dimension must be 3, got ", coeffs.size(-1));
-        TORCH_CHECK(coeffs.size(-2) >= num_sh_coeffs,
-                    "coeffs K dimension must be at least ", num_sh_coeffs, ", got ", coeffs.size(-2));
+        TORCH_CHECK(sh0_coeffs.size(-1) == 3,
+                    "sh0_coeffs last dimension must be 3, got ", sh0_coeffs.size(-1));
+        TORCH_CHECK(shN_coeffs.size(-1) == 3,
+                    "shN_coeffs last dimension must be 3, got ", shN_coeffs.size(-1));
+        TORCH_CHECK(shN_coeffs.size(-2) >= num_sh_coeffs - 1,
+                    "shN_coeffs K dimension must be at least ", num_sh_coeffs - 1, ", got ", shN_coeffs.size(-2));
 
         // Get batch dimensions
         auto batch_dims = dirs.sizes().slice(0, dirs.dim() - 1);
 
-        TORCH_CHECK(dirs.sizes().slice(0, dirs.dim() - 1) == coeffs.sizes().slice(0, coeffs.dim() - 2),
-                    "dirs and coeffs batch dimensions must match");
+        TORCH_CHECK(dirs.sizes().slice(0, dirs.dim() - 1) == sh0_coeffs.sizes().slice(0, sh0_coeffs.dim() - 2),
+                    "dirs and sh0_coeffs batch dimensions must match");
+        TORCH_CHECK(dirs.sizes().slice(0, dirs.dim() - 1) == shN_coeffs.sizes().slice(0, shN_coeffs.dim() - 2),
+                    "dirs and shN_coeffs batch dimensions must match");
 
         if (masks.defined()) {
             TORCH_CHECK(masks.sizes() == batch_dims,
@@ -256,15 +261,17 @@ namespace gs {
 
         // Device checks
         TORCH_CHECK(dirs.is_cuda(), "dirs must be on CUDA");
-        TORCH_CHECK(coeffs.is_cuda(), "coeffs must be on CUDA");
-        TORCH_CHECK(sh_degree_tensor.is_cuda(), "sh_degree_tensor must be on CUDA");
+        TORCH_CHECK(sh0_coeffs.is_cuda(), "sh0_coeffs must be on CUDA");
+        TORCH_CHECK(shN_coeffs.is_cuda(), "shN_coeffs must be on CUDA");
+        TORCH_CHECK(sh_degree_tensor.is_cpu(), "sh_degree_tensor must be on CPU");
         if (masks.defined()) {
             TORCH_CHECK(masks.is_cuda(), "masks must be on CUDA");
         }
 
         // Ensure tensors are contiguous
         dirs = dirs.contiguous();
-        coeffs = coeffs.contiguous();
+        sh0_coeffs = sh0_coeffs.contiguous();
+        shN_coeffs = shN_coeffs.contiguous();
         if (masks.defined()) {
             masks = masks.contiguous();
         } else {
@@ -274,12 +281,13 @@ namespace gs {
 
         // Flatten batch dimensions for CUDA kernel
         auto dirs_flat = dirs.reshape({-1, 3});
-        auto coeffs_flat = coeffs.reshape({-1, coeffs.size(-2), 3});
+        auto sh0_coeffs_flat = sh0_coeffs.reshape({-1, sh0_coeffs.size(-2), 3});
+        auto shN_coeffs_flat = shN_coeffs.reshape({-1, shN_coeffs.size(-2), 3});
         auto masks_flat = masks.reshape({-1});
 
         // Call spherical harmonics forward - pass FULL coeffs!
         auto colors = gsplat::spherical_harmonics_fwd(
-            sh_degree, dirs_flat, coeffs_flat, masks_flat);
+            sh_degree, dirs_flat, sh0_coeffs_flat, shN_coeffs_flat, masks_flat);
 
         // Reshape output back to original batch dimensions
         auto output_shape = dirs.sizes().vec();
@@ -289,9 +297,9 @@ namespace gs {
         TORCH_CHECK(colors.is_cuda(), "colors must be on CUDA after SH computation");
 
         // Save for backward - save everything as-is
-        ctx->save_for_backward({dirs, coeffs, masks});
+        ctx->save_for_backward({dirs, sh0_coeffs, shN_coeffs, masks});
         ctx->saved_data["sh_degree"] = sh_degree;
-        ctx->saved_data["num_bases"] = coeffs.size(-2); // Save the full K dimension
+        ctx->saved_data["num_bases"] = shN_coeffs.size(-2) + 1; // Save the full K dimension
 
         return {colors};
     }
@@ -304,15 +312,17 @@ namespace gs {
 
         auto saved = ctx->get_saved_variables();
         const auto& dirs = saved[0];
-        const auto& coeffs = saved[1];
-        const auto& masks = saved[2];
+        const auto& sh0_coeffs = saved[1];
+        const auto& shN_coeffs = saved[2];
+        const auto& masks = saved[3];
 
         const int sh_degree = ctx->saved_data["sh_degree"].to<int>();
         const int num_bases = ctx->saved_data["num_bases"].to<int>();
 
         // Flatten for CUDA kernel
         auto dirs_flat = dirs.reshape({-1, 3});
-        auto coeffs_flat = coeffs.reshape({-1, num_bases, 3});
+        auto sh0_coeffs_flat = sh0_coeffs.reshape({-1, sh0_coeffs.size(-2), 3});
+        auto shN_coeffs_flat = shN_coeffs.reshape({-1, shN_coeffs.size(-2), 3});
         auto masks_flat = masks.reshape({-1});
         auto v_colors_flat = v_colors.reshape({-1, 3});
 
@@ -321,18 +331,22 @@ namespace gs {
 
         auto sh_grads = gsplat::spherical_harmonics_bwd(
             num_bases, sh_degree,
-            dirs_flat, coeffs_flat, masks_flat,
+            dirs_flat, shN_coeffs_flat, masks_flat,
             v_colors_flat, compute_v_dirs);
 
-        auto v_coeffs = std::get<0>(sh_grads);
-        auto v_dirs = std::get<1>(sh_grads);
+        auto v_coeffs0 = std::get<0>(sh_grads);
+        auto v_coeffsN = std::get<1>(sh_grads);
+        auto v_dirs = std::get<2>(sh_grads);
 
         // Reshape gradients back to original shapes
         if (v_dirs.defined()) {
             v_dirs = v_dirs.reshape(dirs.sizes());
         }
-        if (v_coeffs.defined()) {
-            v_coeffs = v_coeffs.reshape(coeffs.sizes());
+        if (v_coeffs0.defined()) {
+            v_coeffs0 = v_coeffs0.reshape({sh0_coeffs.size(0), sh0_coeffs.size(1), sh0_coeffs.size(2), sh0_coeffs.size(3)});
+        }
+        if (v_coeffsN.defined()) {
+            v_coeffsN = v_coeffsN.reshape({shN_coeffs.size(0), shN_coeffs.size(1), shN_coeffs.size(2), shN_coeffs.size(3)});
         }
 
         // Check gradient requirements
@@ -340,11 +354,14 @@ namespace gs {
             v_dirs = torch::Tensor();
         }
         if (!ctx->needs_input_grad(2)) {
-            v_coeffs = torch::Tensor();
+            v_coeffs0 = torch::Tensor();
+        }
+        if (!ctx->needs_input_grad(3)) {
+            v_coeffsN = torch::Tensor();
         }
 
         // Return gradients in same order as inputs: sh_degree_tensor, dirs, coeffs, masks
-        return {torch::Tensor(), v_dirs, v_coeffs, torch::Tensor()};
+        return {torch::Tensor(), v_dirs, v_coeffs0, v_coeffsN, torch::Tensor()};
     }
 
     // RasterizationFunction implementation
@@ -393,13 +410,19 @@ namespace gs {
         TORCH_CHECK(opacities.is_cuda(), "opacities must be on CUDA");
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
         TORCH_CHECK(flatten_ids.is_cuda(), "flatten_ids must be on CUDA");
-        TORCH_CHECK(settings.is_cuda(), "settings must be on CUDA");
+        TORCH_CHECK(settings.is_cpu(), "settings must be on CPU");
 
         // Ensure tensors are contiguous
-        means2d = means2d.contiguous();
-        conics = conics.contiguous();
-        colors = colors.contiguous();
-        opacities = opacities.contiguous();
+        // means2d = means2d.contiguous();
+        // conics = conics.contiguous();
+        // colors = colors.contiguous();
+        // opacities = opacities.contiguous();
+        at::Tensor gaussians = torch::cat({conics,
+                                           means2d,
+                                           opacities.index({at::indexing::Ellipsis, at::indexing::None}),
+                                           colors},
+                                          -1)
+                                   .contiguous();
         isect_offsets = isect_offsets.contiguous();
         flatten_ids = flatten_ids.contiguous();
 
@@ -412,7 +435,7 @@ namespace gs {
 
         // Call rasterization with optional background
         auto raster_results = gsplat::rasterize_to_pixels_3dgs_fwd(
-            means2d, conics, colors, opacities,
+            gaussians,
             bg_color_opt, {}, // bg_color_opt might not have value, masks is empty optional
             width, height, tile_size,
             isect_offsets, flatten_ids);
@@ -437,7 +460,7 @@ namespace gs {
         TORCH_CHECK(last_ids.is_cuda(), "last_ids must be on CUDA");
 
         // Save for backward
-        ctx->save_for_backward({means2d, conics, colors, opacities, bg_color,
+        ctx->save_for_backward({gaussians, bg_color,
                                 isect_offsets, flatten_ids, rendered_alpha, last_ids, settings});
 
         return {rendered_image, rendered_alpha, last_ids};
@@ -451,16 +474,13 @@ namespace gs {
         auto grad_alpha = grad_outputs[1].contiguous();
 
         auto saved = ctx->get_saved_variables();
-        const auto& means2d = saved[0];
-        const auto& conics = saved[1];
-        const auto& colors = saved[2];
-        const auto& opacities = saved[3];
-        const auto& bg_color = saved[4];
-        const auto& isect_offsets = saved[5];
-        const auto& flatten_ids = saved[6];
-        const auto& rendered_alpha = saved[7];
-        const auto& last_ids = saved[8];
-        const auto& settings = saved[9];
+        const auto& gaussians = saved[0];
+        const auto& bg_color = saved[1];
+        const auto& isect_offsets = saved[2];
+        const auto& flatten_ids = saved[3];
+        const auto& rendered_alpha = saved[4];
+        const auto& last_ids = saved[5];
+        const auto& settings = saved[6];
 
         // Extract settings
         const auto width = settings[0].item<int>();
@@ -475,7 +495,7 @@ namespace gs {
 
         // Call backward
         auto raster_grads = gsplat::rasterize_to_pixels_3dgs_bwd(
-            means2d, conics, colors, opacities,
+            gaussians,
             bg_color_opt, {}, // bg_color_opt might not have value, masks is empty optional
             width, height, tile_size,
             isect_offsets, flatten_ids,
@@ -529,7 +549,7 @@ namespace gs {
 
         TORCH_CHECK(quats.is_cuda(), "quats must be on CUDA");
         TORCH_CHECK(scales.is_cuda(), "scales must be on CUDA");
-        TORCH_CHECK(settings.is_cuda(), "settings must be on CUDA");
+        TORCH_CHECK(settings.is_cpu(), "settings must be on CPU");
 
         // Extract settings
         bool compute_covar = settings[0].item<bool>();
