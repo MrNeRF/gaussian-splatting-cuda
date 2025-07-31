@@ -72,8 +72,8 @@ torch::Tensor Camera::load_and_get_image(int resolution) {
                               data,
                               {h, w, c},
                               {w * c, c, 1},
-                              torch::dtype(torch::kUInt8))
-                              .pin_memory();
+                              torch::dtype(torch::kUInt8));
+                            //   .pin_memory();
 
     // Use a stream other than the default stream to overlap memcpy and compute
     at::cuda::CUDAStreamGuard g(_stream);

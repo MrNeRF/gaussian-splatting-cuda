@@ -107,7 +107,6 @@ namespace gs {
         std::atomic<bool> callback_busy_{false};
         at::cuda::CUDAStream callback_stream_;
         at::cuda::CUDAEvent callback_launch_event_;
-        at::cuda::CUDAEvent callback_finish_event_;
     };
 
 } // namespace gs

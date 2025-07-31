@@ -58,7 +58,7 @@ void save_image(const std::filesystem::path& path, torch::Tensor image) {
     int channels = image.size(2);
 
     // Debug print
-    // std::cout << "Saving image: " << path << " shape: [" << height << ", " << width << ", " << channels << "]\n";
+    std::cout << "Saving image: " << path << " shape: [" << height << ", " << width << ", " << channels << "]\n";
 
     // Convert to uint8
     auto img_uint8 = (image.clamp(0, 1) * 255).to(torch::kUInt8).contiguous();

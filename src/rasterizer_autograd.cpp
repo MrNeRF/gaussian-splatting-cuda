@@ -412,14 +412,9 @@ namespace gs {
         TORCH_CHECK(flatten_ids.is_cuda(), "flatten_ids must be on CUDA");
         TORCH_CHECK(settings.is_cpu(), "settings must be on CPU");
 
-        // Ensure tensors are contiguous
-        // means2d = means2d.contiguous();
-        // conics = conics.contiguous();
-        // colors = colors.contiguous();
-        // opacities = opacities.contiguous();
         at::Tensor gaussians = torch::cat({conics,
                                            means2d,
-                                           opacities.index({at::indexing::Ellipsis, at::indexing::None}),
+                                           opacities.unsqueeze(-1),
                                            colors},
                                           -1)
                                    .contiguous();

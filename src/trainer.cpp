@@ -291,7 +291,6 @@ namespace gs {
             callback_busy_ = false;
         };
 
-        // callback_finish_event_.synchronize();
         callback_stream_.synchronize();
         callback_launch_event_.record();
         callback_launch_event_.block(callback_stream_);

@@ -62,9 +62,7 @@ __global__ void adam_kernel_fused(
     float register_exp_avg_sq = exp_avg_sq[p_idx];
     float bias_correction1 = 1 - powf(b1, step_count);
     float bias_correction2 = 1 - powf(b2, step_count);
-    // if (isnan(register_param_grad)) {
-    //     printf("Grad N: %d, D: %d\n", N, D);
-    // }
+
     // last step * (k + k^2 + k^3 + ... + k^register_counter) ==
     // last step * k * (1 - k^register_counter) / (1 - k)
     float k = b1 / sqrtf(b2);
@@ -77,56 +75,6 @@ __global__ void adam_kernel_fused(
     float step = register_exp_avg / (sqrt(register_exp_avg_sq) / sqrt(bias_correction2) + eps);
 
     param[p_idx] += (step + masked_steps) * -lr / bias_correction1;
-    exp_avg[p_idx] = register_exp_avg;
-    exp_avg_sq[p_idx] = register_exp_avg_sq;
-    // if (isnan(param[p_idx])) {
-    //     printf("Param N: %d, D: %d\n", N, D);
-    // }
-}
-
-template <typename scalar_t>
-__global__ void adam_kernel_unrolled(
-    const uint32_t N,
-    const uint32_t D,
-    scalar_t* __restrict__ param,
-    const scalar_t* __restrict__ param_grad,
-    scalar_t* __restrict__ exp_avg,
-    scalar_t* __restrict__ exp_avg_sq,
-    const uint8_t* __restrict__ mask_counter,
-    const int64_t step_count,
-    const float lr,
-    const float b1,
-    const float b2,
-    const float eps) {
-    auto p_idx = cg::this_grid().thread_rank();
-    const uint32_t g_idx = p_idx / D;
-
-    if (g_idx >= N)
-        return;
-
-    uint8_t register_counter = mask_counter ? mask_counter[g_idx] : 1 + MASK_COUNTER_THRESHOLD;
-    if (register_counter < MASK_COUNTER_THRESHOLD)
-        return;
-    if (register_counter > MASK_COUNTER_THRESHOLD)
-        register_counter -= MASK_COUNTER_THRESHOLD;
-
-    float register_param_grad = param_grad[p_idx];
-    float register_exp_avg = exp_avg[p_idx];
-    float register_exp_avg_sq = exp_avg_sq[p_idx];
-    float register_param = param[p_idx];
-    for (int i = register_counter - 1; i >= 0; i--) {
-        float bias_correction1 = 1 - powf(b1, step_count - i);
-        float bias_correction2 = 1 - powf(b2, step_count - i);
-        register_exp_avg = b1 * register_exp_avg;
-        register_exp_avg_sq = b2 * register_exp_avg_sq;
-        if (i == 0) {
-            register_exp_avg += (1.0f - b1) * register_param_grad;
-            register_exp_avg_sq += (1.0f - b2) * register_param_grad * register_param_grad;
-        }
-        register_param -= lr / bias_correction1 * register_exp_avg
-                          / (sqrt(register_exp_avg_sq) / sqrt(bias_correction2) + eps);
-    }
-    param[p_idx] = register_param;
     exp_avg[p_idx] = register_exp_avg;
     exp_avg_sq[p_idx] = register_exp_avg_sq;
 }

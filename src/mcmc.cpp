@@ -435,10 +435,7 @@ void MCMC::inject_noise() {
     auto noise = torch::randn_like(_splat_data.means()) * op_sigmoid.unsqueeze(-1) * (current_lr * _noise_lr);
 
     // Transform noise by covariance
-    // noise = torch::bmm(covars, noise.unsqueeze(-1)).squeeze(-1);
-
     // Add noise to positions
-    // _splat_data.means().add_(noise);
     launch_sgemv_3x3(covars, noise, _splat_data.means());
 }
 
@@ -474,7 +471,7 @@ void MCMC::step(int iter) {
         if (_params->selective_adam && _last_visibility_mask.defined()) {
             auto* selective_adam = dynamic_cast<gs::SelectiveAdam*>(_optimizer.get());
             if (selective_adam) {
-                selective_adam->step(_last_visibility_mask);
+                selective_adam->step(iter > _params->selective_adam_after ? _last_visibility_mask : torch::Tensor());
             } else {
                 _optimizer->step();
             }

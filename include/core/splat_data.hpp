@@ -41,8 +41,6 @@ public:
     torch::Tensor get_opacity() const;
     torch::Tensor get_rotation() const;
     torch::Tensor get_scaling() const;
-    // Concat sh0 and shN to form shs
-    // They are split to set different learning rates
     torch::Tensor get_shs() const;
 
     // Simple inline getters
