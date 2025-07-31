@@ -71,7 +71,8 @@ namespace gs {
                 torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
                 _image_cache.push_back(image.clone());
                 torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resolution);
-                _attention_weights_cache.push_back(attention_weights.clone());
+                if (attention_weights.defined())
+                    _attention_weights_cache.push_back(attention_weights.clone());
             }
             std::cout << "Dataset preloading complete." << std::endl;
         }
@@ -86,7 +87,10 @@ namespace gs {
 
             if (!_image_cache.empty() && _image_cache.size() > index) {
                 // Get tensors directly from RAM cache
-                return {{cam.get(), _image_cache[index], _attention_weights_cache[index]}, torch::empty({})};
+                if (!_attention_weights_cache.empty())
+                    return {{cam.get(), _image_cache[index], _attention_weights_cache[index]}, torch::empty({})};
+                else
+                    return {{cam.get(), _image_cache[index], torch::Tensor()}, torch::empty({})};
             } else {
                 // Fallback to loading from disk if not preloaded
                 torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);

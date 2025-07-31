@@ -79,7 +79,8 @@ namespace gs {
      */
     static torch::Tensor pixelBasedOpacityPenalty(const torch::Tensor& base_loss,
                                                   const torch::Tensor& rendered_alpha,
-                                                  const torch::Tensor& weights) {
+                                                  const torch::Tensor& weights,
+                                                  const float w) {
         
         const float kOut = 0.125f;
         const float kIn = 0.875f;
@@ -100,7 +101,7 @@ namespace gs {
         // 3. Combine and normalize the penalties
         // We sum the penalty over all pixels and normalize by the total number of pixels.
         float num_pixels = static_cast<float>(rendered_alpha.numel());
-        auto total_penalty = (kIn * inside_penalty_map.sum() + kOut * outside_penalty_map.sum()) / num_pixels;
+        auto total_penalty = w * (kIn * inside_penalty_map.sum() + kOut * outside_penalty_map.sum()) / num_pixels;
 
         // 4. Add the penalty to the base loss
         // For pixel-based losses, adding is often more stable than multiplying.
@@ -226,17 +227,18 @@ namespace gs {
             auto loss = (1.0f - opt_params.lambda_dssim) * l1_loss + opt_params.lambda_dssim * ssim_loss;
             
         
-        if (outOfMaskAlphaPenalty > 0) {
-                auto opacity = splatData.get_opacity(); 
-        
+        if (outOfMaskAlphaPenalty>0) {
+                /* auto opacity = splatData.get_opacity(); 
                 loss = outsideMaskOpacityPenalty(loss,
                                                 render_output,
                                                 weights,
                                                 opacity,
-                                                outOfMaskAlphaPenalty);
-                /* loss = pixelBasedOpacityPenalty(loss,
+                                                outOfMaskAlphaPenalty);*/
+
+                loss = pixelBasedOpacityPenalty(loss,
                                                 render_output.alpha.squeeze(0), // Squeeze to [H, W] if needed
-                                                weights);*/
+                                                weights,
+                                                outOfMaskAlphaPenalty);
         }
         
 
@@ -417,7 +419,7 @@ namespace gs {
         torch::Tensor gt_image,
         torch::Tensor weights,
         RenderMode render_mode,
-        float out_of_mask_penalty,
+        bool out_of_mask_penalty,
         std::stop_token stop_token) {
 
         try {
@@ -474,18 +476,37 @@ namespace gs {
             // Compute loss using the factored-out function
             std::expected<torch::Tensor, std::string> loss_result;
             const int total_iters = params_.optimization.iterations;
-            if (!weights.defined() || iter < total_iters * 0.1f) {
+
+
+            
+            const int warmup_end_iter = total_iters * 0.1f;
+            const int full_penalty_end_iter = total_iters * 0.5f;
+            const int decay_end_iter = total_iters * 0.8f;
+
+            if (!weights.defined() || iter < warmup_end_iter) {
                 loss_result = compute_photometric_loss( r_output,
                                                         gt_image,
                                                         strategy_->get_model(),
                                                         params_.optimization);
             } 
             else {
-                const float curr_out_of_mask_penalty = (iter < total_iters * 0.5f) ? out_of_mask_penalty : 0;
+
+                float current_penalty_w = 0.0f;
+                if (out_of_mask_penalty) {
+                    if (iter <= full_penalty_end_iter) {
+                        current_penalty_w = 1;
+                    } else if (iter < decay_end_iter) {
+                        const int decay_start_iter = full_penalty_end_iter;
+                        const int decay_duration = decay_end_iter - decay_start_iter;
+                        const float decay_progress = static_cast<float>(iter - decay_start_iter) / decay_duration;
+                        current_penalty_w = 1.0f - decay_progress;
+                    }
+                }
+
                 loss_result = compute_photometric_loss( r_output,
                                                         gt_image,
                                                         weights,
-                                                        curr_out_of_mask_penalty,
+                                                        current_penalty_w,
                                                         strategy_->get_model(),
                                                         params_.optimization);
             }
@@ -660,10 +681,10 @@ namespace gs {
 
                      std::expected<Trainer::StepResult, std::string> step_result;
                     if (!params_.optimization.use_attention_mask || !camera_with_image.attentionMask.defined()) {
-                        step_result = train_step(iter, cam, gt_image, torch::Tensor(), render_mode, 0.0f, stop_token);
+                        step_result = train_step(iter, cam, gt_image, torch::Tensor(), render_mode, false, stop_token);
                     } else {
                         torch::Tensor attention_image = std::move(camera_with_image.attentionMask);
-                        float out_of_mask_penalty = 1.0f;
+                        bool out_of_mask_penalty = true;
                         step_result = train_step(iter, cam, gt_image, attention_image, render_mode, out_of_mask_penalty, stop_token);
                     }
                     if (!step_result) {
@@ -759,7 +780,10 @@ training_complete:
             }
 
             auto idx = visible.nonzero().squeeze();
-            auto xy = out.means2d.index({idx});
+            auto means2d_squeezed = out.means2d.squeeze(0);
+
+            // Ahora la indexación es coherente
+            auto xy = means2d_squeezed.index({idx});
 
             // Now these calculations will be correct because bool_mask is 2D.
             const int W = bool_mask.size(1);

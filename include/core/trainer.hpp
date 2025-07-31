@@ -78,7 +78,7 @@ namespace gs {
             torch::Tensor gt_image,
             torch::Tensor weights,
             RenderMode render_mode,
-            float out_of_mask_penalty,
+            bool out_of_mask_penalty,
             std::stop_token stop_token = {});
 
         // Protected methods for computing loss - now return expected values

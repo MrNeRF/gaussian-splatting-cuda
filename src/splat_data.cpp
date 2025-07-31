@@ -436,7 +436,7 @@ namespace gs {
         _scaling = _scaling.index({km}).contiguous();
         _rotation = _rotation.index({km}).contiguous();
         _opacity = _opacity.index({km}).contiguous();
-        _max_radii2D = _max_radii2D.index({km}).contiguous();
+        //_max_radii2D is not required;
     }
 }
 
