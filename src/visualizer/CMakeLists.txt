@@ -30,6 +30,7 @@ add_library(gs_visualizer OBJECT
     gui/windows/scripting_console.cpp
     gui/windows/file_browser.cpp
     gui/windows/camera_controls.cpp
+    gui/windows/image_preview.cpp
     
     # Scene management  
     scene/scene.cpp
