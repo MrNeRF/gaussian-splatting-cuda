@@ -20,9 +20,6 @@ namespace gs::visualizer {
         anti_aliasing_ = options.antialiasing;
         state_manager_->setAntiAliasing(options.antialiasing);
 
-        // Create other components
-        notifier_ = std::make_shared<ViewerNotifier>();
-
         // Create scene manager
         scene_manager_ = std::make_unique<SceneManager>();
         auto scene = std::make_unique<Scene>();

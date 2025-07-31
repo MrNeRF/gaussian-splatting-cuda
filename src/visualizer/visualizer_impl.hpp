@@ -7,7 +7,6 @@
 #include "core/viewer_state_manager.hpp"
 #include "gui/gui_manager.hpp"
 #include "input/input_manager.hpp"
-#include "internal/viewer_notifier.hpp"
 #include "internal/viewport.hpp"
 #include "rendering/render_bounding_box.hpp"
 #include "rendering/rendering_manager.hpp"
@@ -46,7 +45,6 @@ namespace gs::visualizer {
         Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
         std::shared_ptr<TrainingInfo> getTrainingInfo() const { return state_manager_->getTrainingInfo(); }
         std::shared_ptr<RenderingConfig> getRenderingConfig() const { return state_manager_->getRenderingConfig(); }
-        std::shared_ptr<ViewerNotifier> getNotifier() const { return notifier_; }
         const std::filesystem::path& getCurrentPLYPath() const { return state_manager_->getCurrentPLYPath(); }
         const std::filesystem::path& getCurrentDatasetPath() const { return state_manager_->getCurrentDatasetPath(); }
         TrainerManager* getTrainerManager() { return trainer_manager_.get(); }
@@ -98,7 +96,6 @@ namespace gs::visualizer {
         std::unique_ptr<ToolManager> tool_manager_;
 
         // Support components
-        std::shared_ptr<ViewerNotifier> notifier_;
         std::unique_ptr<ErrorHandler> error_handler_;
         std::unique_ptr<MemoryMonitor> memory_monitor_;
 
