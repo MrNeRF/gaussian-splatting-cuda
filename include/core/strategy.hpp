@@ -4,6 +4,7 @@
 #include "core/selective_adam.hpp"
 #include <memory>
 #include <torch/torch.h>
+// Add this include for OptimizerParamState
 
 namespace strategy {
     void initialize_gaussians(gs::SplatData& splat_data);
@@ -17,9 +18,13 @@ namespace strategy {
         torch::optim::Optimizer* optimizer,
         int param_group_index = -1);
 
+    // Use explicit type alias to help MSVC
+    using ParamUpdateFn = std::function<torch::Tensor(const int, const torch::Tensor)>;
+    using OptimizerUpdateFn = std::function<std::unique_ptr<torch::optim::OptimizerParamState>(torch::optim::OptimizerParamState&, const torch::Tensor)>;
+
     void update_param_with_optimizer(
-        std::function<torch::Tensor(const int, const torch::Tensor)> param_fn,
-        std::function<std::unique_ptr<torch::optim::OptimizerParamState>((torch::optim::OptimizerParamState&, const torch::Tensor))> optimizer_fn,
+        const ParamUpdateFn& param_fn,
+        const OptimizerUpdateFn& optimizer_fn,
         std::unique_ptr<torch::optim::Optimizer>& optimizer,
         gs::SplatData& splat_data,
         std::vector<size_t> param_idxs = {0, 1, 2, 3, 4, 5});
