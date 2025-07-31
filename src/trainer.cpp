@@ -61,6 +61,54 @@ namespace gs {
             return std::unexpected(std::format("Error computing photometric loss: {}", e.what()));
         }
     }
+    // Place this new static function inside trainer.cpp
+
+    /**
+     * @brief Applies a penalty based on the final rendered alpha channel of the image.
+     *
+     * This method penalizes pixels inside the mask that are semi-transparent and
+     * pixels outside the mask that have any opacity. It's a more direct approach
+     * than the splat-based penalty.
+     *
+     * @param base_loss The pre-computed photometric loss.
+     * @param rendered_alpha The final accumulated alpha channel from the rasterizer [H, W].
+     * @param weights The float weight map, where values > 0.5 define the ROI.
+     * @param w The global weight multiplier for this penalty.
+     * @param kIn The weight for penalizing transparency INSIDE the mask.
+     * @param kOut The weight for penalizing opacity OUTSIDE the mask.
+     * @return torch::Tensor The loss with the pixel-based opacity penalty added.
+     */
+    static torch::Tensor pixelBasedOpacityPenalty(const torch::Tensor& base_loss,
+                                                  const torch::Tensor& rendered_alpha,
+                                                  const torch::Tensor& weights) {
+        
+        const float kOut = 0.125f;
+        const float kIn = 0.875f;
+
+        // Convert the float weight map to a clean boolean mask
+        auto bool_mask = (weights > 0.5f);
+
+        // 1. Penalty for being transparent INSIDE the mask
+        // (1.0 - alpha) is high where pixels are transparent.
+        // We multiply by the boolean mask to only consider pixels inside the ROI.
+        auto inside_penalty_map = (1.0f - rendered_alpha) * bool_mask;
+
+        // 2. Penalty for being opaque OUTSIDE the mask
+        // `alpha` is high where pixels are opaque.
+        // We multiply by the inverted mask to only consider pixels outside the ROI.
+        auto outside_penalty_map = rendered_alpha * (~bool_mask);
+
+        // 3. Combine and normalize the penalties
+        // We sum the penalty over all pixels and normalize by the total number of pixels.
+        float num_pixels = static_cast<float>(rendered_alpha.numel());
+        auto total_penalty = (kIn * inside_penalty_map.sum() + kOut * outside_penalty_map.sum()) / num_pixels;
+
+        // 4. Add the penalty to the base loss
+        // For pixel-based losses, adding is often more stable than multiplying.
+        //return base_loss + 0.01 * total_penalty;
+        
+        return (base_loss * (1.0f + total_penalty)) + (1e-2f * total_penalty);
+    }
 
     /**
      * @brief Applies a penalty to guide splat opacity based on an attention mask.
@@ -187,6 +235,9 @@ namespace gs {
                                                 weights,
                                                 opacity,
                                                 outOfMaskAlphaPenalty);
+                /* loss = pixelBasedOpacityPenalty(loss,
+                                                render_output.alpha.squeeze(0), // Squeeze to [H, W] if needed
+                                                weights);*/
         }
         
 
