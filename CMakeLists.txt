@@ -388,6 +388,7 @@ if(BUILD_TESTS)
             tests/test_numerical_gradients.cpp
             tests/test_garden_data.cpp
             tests/torch_impl.cpp
+            tests/test_geometry.cpp
     )
 
     add_executable(gaussian_tests ${TEST_SOURCES})

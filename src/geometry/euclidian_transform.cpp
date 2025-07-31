@@ -1,4 +1,4 @@
-#include "core/geometry/euclidian_transform.hpp"
+#include "geometry/euclidian_transform.hpp"
 
 namespace gs {
     namespace geometry {
