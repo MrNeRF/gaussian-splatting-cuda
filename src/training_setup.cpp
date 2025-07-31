@@ -1,4 +1,5 @@
 #include "core/training_setup.hpp"
+#include "core/default_strategy.hpp"
 #include "core/mcmc.hpp"
 #include "core/point_cloud.hpp"
 #include "loader/loader.hpp"
@@ -69,8 +70,13 @@ namespace gs {
                     return std::unexpected(std::format("Failed to initialize model: {}", splat_result.error()));
                 }
 
-                // Create strategy
-                auto strategy = std::make_unique<MCMC>(std::move(*splat_result));
+                // 5. Create strategy
+                std::unique_ptr<IStrategy> strategy;
+                if (params.optimization.strategy == "mcmc") {
+                    strategy = std::make_unique<MCMC>(std::move(*splat_result));
+                } else {
+                    strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
+                }
 
                 // Create trainer
                 auto trainer = std::make_unique<Trainer>(

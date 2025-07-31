@@ -9,6 +9,8 @@
 #include <iostream>
 #include <torch/torch.h>
 
+using namespace gs;
+
 class RasterizationComparisonTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -538,7 +540,18 @@ TEST_F(RasterizationComparisonTest, CompareWithGSRasterize) {
         auto T = viewmat_inv.slice(0, 0, 3).select(1, 3).to(torch::kCPU);
 
         float fov = 2.0f * std::atan(width / (2.0f * focal));
-        Camera camera(R, T, fov, fov, "test_cam_" + std::to_string(cam_idx), "", width, height, cam_idx);
+
+        Camera camera(R, T,
+                      fov2focal(fov, width), fov2focal(fov, height),
+                      0.5 * width,
+                      0.5 * height,
+                      torch::empty({0}, torch::kFloat32),
+                      torch::empty({0}, torch::kFloat32),
+                      gsplat::CameraModelType::PINHOLE,
+                      "test_cam_" + std::to_string(cam_idx),
+                      "",
+                      width, height,
+                      cam_idx);
 
         auto bg_single = bg_color[cam_idx];
         auto output = gs::rasterize(camera, gaussians, bg_single, 1.0f, false);
@@ -680,7 +693,14 @@ TEST_F(RasterizationComparisonTest, TestDifferentRenderModes) {
         auto R = torch::eye(3, torch::kCPU);
         auto T = torch::zeros({3}, torch::kCPU);
         float fov = 2.0f * std::atan(width / (2.0f * focal));
-        Camera camera(R, T, fov, fov, "test_camera", "", width, height, 0);
+
+        Camera camera(R, T, focal, focal,
+                      0.5 * width,
+                      0.5 * height, torch::empty({0}, torch::kFloat32),
+                      torch::empty({0}, torch::kFloat32),
+                      gsplat::CameraModelType::PINHOLE,
+                      "test_camera", "",
+                      width, height, 0);
 
         auto bg_single = bg_color.squeeze(0);
         auto output = gs::rasterize(camera, gaussians, bg_single, 1.0f, false);

@@ -227,6 +227,18 @@ namespace gs::gui {
         }
     }
 
+    bool GuiManager::wantsInput() const {
+        ImGuiIO& io = ImGui::GetIO();
+        return io.WantCaptureMouse || io.WantCaptureKeyboard;
+    }
+
+    bool GuiManager::isAnyWindowActive() const {
+        return ImGui::IsAnyItemActive() ||
+               ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) ||
+               ImGui::GetIO().WantCaptureMouse ||
+               ImGui::GetIO().WantCaptureKeyboard;
+    }
+
     bool GuiManager::showCropBox() const {
         if (auto* tool_manager = viewer_->getToolManager()) {
             if (auto* crop_tool = dynamic_cast<visualizer::CropBoxTool*>(

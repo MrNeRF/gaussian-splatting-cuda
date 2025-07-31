@@ -36,24 +36,124 @@ namespace gs {
         }
     }
 
-    void InputHandler::addMouseButtonHandler(MouseButtonCallback handler) {
-        mouse_button_handlers_.push_back(handler);
+    InputHandler::HandlerId InputHandler::addMouseButtonHandler(MouseButtonCallback handler,
+                                                                InputPriority priority) {
+        HandlerId id = next_handler_id_++;
+
+        mouse_button_handlers_.push_back({.id = id,
+                                          .priority = priority,
+                                          .callback = std::move(handler)});
+
+        // Sort by priority (highest first)
+        std::sort(mouse_button_handlers_.begin(), mouse_button_handlers_.end(),
+                  [](const auto& a, const auto& b) {
+                      return has_higher_priority(a.priority, b.priority);
+                  });
+
+        return id;
     }
 
-    void InputHandler::addMouseMoveHandler(MouseMoveCallback handler) {
-        mouse_move_handlers_.push_back(handler);
+    InputHandler::HandlerId InputHandler::addMouseMoveHandler(MouseMoveCallback handler,
+                                                              InputPriority priority) {
+        HandlerId id = next_handler_id_++;
+
+        mouse_move_handlers_.push_back({.id = id,
+                                        .priority = priority,
+                                        .callback = std::move(handler)});
+
+        std::sort(mouse_move_handlers_.begin(), mouse_move_handlers_.end(),
+                  [](const auto& a, const auto& b) {
+                      return has_higher_priority(a.priority, b.priority);
+                  });
+
+        return id;
     }
 
-    void InputHandler::addMouseScrollHandler(MouseScrollCallback handler) {
-        mouse_scroll_handlers_.push_back(handler);
+    InputHandler::HandlerId InputHandler::addMouseScrollHandler(MouseScrollCallback handler,
+                                                                InputPriority priority) {
+        HandlerId id = next_handler_id_++;
+
+        mouse_scroll_handlers_.push_back({.id = id,
+                                          .priority = priority,
+                                          .callback = std::move(handler)});
+
+        std::sort(mouse_scroll_handlers_.begin(), mouse_scroll_handlers_.end(),
+                  [](const auto& a, const auto& b) {
+                      return has_higher_priority(a.priority, b.priority);
+                  });
+
+        return id;
     }
 
-    void InputHandler::addKeyHandler(KeyCallback handler) {
-        key_handlers_.push_back(handler);
+    InputHandler::HandlerId InputHandler::addKeyHandler(KeyCallback handler,
+                                                        InputPriority priority) {
+        HandlerId id = next_handler_id_++;
+
+        key_handlers_.push_back({.id = id,
+                                 .priority = priority,
+                                 .callback = std::move(handler)});
+
+        std::sort(key_handlers_.begin(), key_handlers_.end(),
+                  [](const auto& a, const auto& b) {
+                      return has_higher_priority(a.priority, b.priority);
+                  });
+
+        return id;
     }
 
-    void InputHandler::addFileDropHandler(FileDropCallback handler) {
-        file_drop_handlers_.push_back(handler);
+    InputHandler::HandlerId InputHandler::addFileDropHandler(FileDropCallback handler,
+                                                             InputPriority priority) {
+        HandlerId id = next_handler_id_++;
+
+        file_drop_handlers_.push_back({.id = id,
+                                       .priority = priority,
+                                       .callback = std::move(handler)});
+
+        std::sort(file_drop_handlers_.begin(), file_drop_handlers_.end(),
+                  [](const auto& a, const auto& b) {
+                      return has_higher_priority(a.priority, b.priority);
+                  });
+
+        return id;
+    }
+
+    void InputHandler::removeHandler(HandlerId id) {
+        // Remove from all handler vectors
+        auto remove_by_id = [id](auto& handlers) {
+            handlers.erase(
+                std::remove_if(handlers.begin(), handlers.end(),
+                               [id](const auto& h) { return h.id == id; }),
+                handlers.end());
+        };
+
+        remove_by_id(mouse_button_handlers_);
+        remove_by_id(mouse_move_handlers_);
+        remove_by_id(mouse_scroll_handlers_);
+        remove_by_id(key_handlers_);
+        remove_by_id(file_drop_handlers_);
+    }
+
+    void InputHandler::removeAllHandlers() {
+        mouse_button_handlers_.clear();
+        mouse_move_handlers_.clear();
+        mouse_scroll_handlers_.clear();
+        key_handlers_.clear();
+        file_drop_handlers_.clear();
+    }
+
+    void InputHandler::removeHandlersByPriority(InputPriority priority) {
+        auto remove_by_priority = [priority](auto& handlers) {
+            handlers.erase(
+                std::remove_if(handlers.begin(), handlers.end(),
+                               [priority](const auto& h) { return h.priority == priority; }),
+                handlers.end());
+        };
+
+        remove_by_priority(mouse_button_handlers_);
+        remove_by_priority(mouse_move_handlers_);
+        remove_by_priority(mouse_scroll_handlers_);
+        remove_by_priority(key_handlers_);
+        remove_by_priority(file_drop_handlers_);
     }
 
     bool InputHandler::isKeyPressed(int key) const {
@@ -70,7 +170,7 @@ namespace gs {
 
     bool InputHandler::dispatchMouseButton(const MouseButtonEvent& event) {
         for (const auto& handler : mouse_button_handlers_) {
-            if (handler(event)) {
+            if (handler.callback(event)) {
                 return true; // Event consumed
             }
         }
@@ -79,7 +179,7 @@ namespace gs {
 
     bool InputHandler::dispatchMouseMove(const MouseMoveEvent& event) {
         for (const auto& handler : mouse_move_handlers_) {
-            if (handler(event)) {
+            if (handler.callback(event)) {
                 return true; // Event consumed
             }
         }
@@ -88,7 +188,7 @@ namespace gs {
 
     bool InputHandler::dispatchMouseScroll(const MouseScrollEvent& event) {
         for (const auto& handler : mouse_scroll_handlers_) {
-            if (handler(event)) {
+            if (handler.callback(event)) {
                 return true; // Event consumed
             }
         }
@@ -97,7 +197,7 @@ namespace gs {
 
     bool InputHandler::dispatchKey(const KeyEvent& event) {
         for (const auto& handler : key_handlers_) {
-            if (handler(event)) {
+            if (handler.callback(event)) {
                 return true; // Event consumed
             }
         }
@@ -106,7 +206,7 @@ namespace gs {
 
     bool InputHandler::dispatchFileDrop(const FileDropEvent& event) {
         for (const auto& handler : file_drop_handlers_) {
-            if (handler(event)) {
+            if (handler.callback(event)) {
                 return true; // Event consumed
             }
         }

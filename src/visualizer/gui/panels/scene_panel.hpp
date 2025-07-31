@@ -55,6 +55,10 @@ namespace gs {
                 m_onExpand = std::move(callback);
             }
 
+            void SetOnDoubleClick(SelectCallback callback) {
+                m_onDoubleClick = std::move(callback);
+            }
+
             void Render();
 
             // Accessor for root node
@@ -66,6 +70,7 @@ namespace gs {
             std::unique_ptr<SceneNode> m_root;
             SelectCallback m_onSelect;
             ExpandCallback m_onExpand;
+            SelectCallback m_onDoubleClick;
             SceneNode* m_selectedNode = nullptr;
         };
 
@@ -99,12 +104,19 @@ namespace gs {
             // Callbacks
             std::function<void(const std::filesystem::path&)> m_onDatasetLoad;
 
+            // Image preview integration
+            std::unique_ptr<class ImagePreview> m_imagePreview;
+            std::vector<std::filesystem::path> m_currentImagePaths;
+            bool m_showImagePreview = false;
+
             // Event handlers
             void setupEventHandlers();
             void handleSceneLoaded(const events::state::SceneLoaded& event);
             void handleSceneCleared();
             void onNodeSelected(const SceneNode& node);
             void onNodeExpanded(SceneNode& node);
+            void onNodeDoubleClicked(const SceneNode& node);
+            void collectImagePaths(const SceneNode& node, std::vector<std::filesystem::path>& paths) const;
         };
 
     } // namespace gui

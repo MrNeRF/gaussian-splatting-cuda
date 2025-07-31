@@ -1,5 +1,6 @@
 #include "input/input_manager.hpp"
 #include <algorithm>
+#include <imgui.h>
 #include <print>
 
 namespace gs::visualizer {
@@ -9,7 +10,14 @@ namespace gs::visualizer {
           viewport_(viewport) {
     }
 
-    InputManager::~InputManager() = default;
+    InputManager::~InputManager() {
+        // Clean up our handlers
+        if (input_handler_) {
+            for (auto id : gui_handler_ids_) {
+                input_handler_->removeHandler(id);
+            }
+        }
+    }
 
     void InputManager::initialize() {
         // Create input handler
@@ -30,27 +38,49 @@ namespace gs::visualizer {
         if (!input_handler_)
             return;
 
-        // GUI gets first priority
-        input_handler_->addMouseButtonHandler(
-            [this](const InputHandler::MouseButtonEvent&) {
-                return gui_active_check_ ? gui_active_check_() : false;
-            });
+        // Clear existing GUI handlers
+        for (auto id : gui_handler_ids_) {
+            input_handler_->removeHandler(id);
+        }
+        gui_handler_ids_.clear();
 
-        input_handler_->addMouseMoveHandler(
-            [this](const InputHandler::MouseMoveEvent&) {
-                return gui_active_check_ ? gui_active_check_() : false;
-            });
+        // GUI gets highest priority for all mouse input
+        gui_handler_ids_.push_back(
+            input_handler_->addMouseButtonHandler(
+                [this](const InputHandler::MouseButtonEvent&) {
+                    return ImGui::GetIO().WantCaptureMouse;
+                },
+                InputPriority::GUI));
 
-        input_handler_->addMouseScrollHandler(
-            [this](const InputHandler::MouseScrollEvent&) {
-                return gui_active_check_ ? gui_active_check_() : false;
-            });
+        gui_handler_ids_.push_back(
+            input_handler_->addMouseMoveHandler(
+                [this](const InputHandler::MouseMoveEvent&) {
+                    return ImGui::GetIO().WantCaptureMouse;
+                },
+                InputPriority::GUI));
 
-        // File drop handler
-        input_handler_->addFileDropHandler(
-            [this](const InputHandler::FileDropEvent& event) {
-                return handleFileDrop(event);
-            });
+        gui_handler_ids_.push_back(
+            input_handler_->addMouseScrollHandler(
+                [this](const InputHandler::MouseScrollEvent&) {
+                    return ImGui::GetIO().WantCaptureMouse;
+                },
+                InputPriority::GUI));
+
+        // GUI gets highest priority for keyboard input
+        gui_handler_ids_.push_back(
+            input_handler_->addKeyHandler(
+                [this](const InputHandler::KeyEvent&) {
+                    return ImGui::GetIO().WantCaptureKeyboard;
+                },
+                InputPriority::GUI));
+
+        // File drop handler - high priority
+        gui_handler_ids_.push_back(
+            input_handler_->addFileDropHandler(
+                [this](const InputHandler::FileDropEvent& event) {
+                    return handleFileDrop(event);
+                },
+                InputPriority::System));
     }
 
     bool InputManager::handleFileDrop(const InputHandler::FileDropEvent& event) {

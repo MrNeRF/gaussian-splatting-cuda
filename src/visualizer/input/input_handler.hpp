@@ -1,5 +1,8 @@
 #pragma once
 
+#include "input/input_priority.hpp"
+#include <algorithm>
+#include <atomic>
 #include <functional>
 #include <glm/glm.hpp>
 #include <mutex>
@@ -50,15 +53,28 @@ namespace gs {
         using KeyCallback = std::function<bool(const KeyEvent&)>;
         using FileDropCallback = std::function<bool(const FileDropEvent&)>;
 
+        // Handler ID type for removal
+        using HandlerId = std::size_t;
+
         explicit InputHandler(GLFWwindow* window);
         ~InputHandler();
 
-        // Subscribe to events (returns true if event was consumed)
-        void addMouseButtonHandler(MouseButtonCallback handler);
-        void addMouseMoveHandler(MouseMoveCallback handler);
-        void addMouseScrollHandler(MouseScrollCallback handler);
-        void addKeyHandler(KeyCallback handler);
-        void addFileDropHandler(FileDropCallback handler);
+        // Subscribe to events with priority (returns handler ID)
+        HandlerId addMouseButtonHandler(MouseButtonCallback handler,
+                                        InputPriority priority = InputPriority::Default);
+        HandlerId addMouseMoveHandler(MouseMoveCallback handler,
+                                      InputPriority priority = InputPriority::Default);
+        HandlerId addMouseScrollHandler(MouseScrollCallback handler,
+                                        InputPriority priority = InputPriority::Default);
+        HandlerId addKeyHandler(KeyCallback handler,
+                                InputPriority priority = InputPriority::Default);
+        HandlerId addFileDropHandler(FileDropCallback handler,
+                                     InputPriority priority = InputPriority::Default);
+
+        // Remove handlers
+        void removeHandler(HandlerId id);
+        void removeAllHandlers();
+        void removeHandlersByPriority(InputPriority priority);
 
         // Input state queries
         bool isKeyPressed(int key) const;
@@ -71,6 +87,14 @@ namespace gs {
         bool isEnabled() const { return enabled_; }
 
     private:
+        // Prioritized handler wrapper
+        template <typename T>
+        struct PrioritizedHandler {
+            HandlerId id;
+            InputPriority priority;
+            T callback;
+        };
+
         // GLFW callbacks
         static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
         static void cursorPosCallback(GLFWwindow* window, double x, double y);
@@ -88,12 +112,15 @@ namespace gs {
         GLFWwindow* window_;
         bool enabled_ = true;
 
-        // Handler lists (processed in order, stops when one returns true)
-        std::vector<MouseButtonCallback> mouse_button_handlers_;
-        std::vector<MouseMoveCallback> mouse_move_handlers_;
-        std::vector<MouseScrollCallback> mouse_scroll_handlers_;
-        std::vector<KeyCallback> key_handlers_;
-        std::vector<FileDropCallback> file_drop_handlers_;
+        // Handler lists with priorities
+        std::vector<PrioritizedHandler<MouseButtonCallback>> mouse_button_handlers_;
+        std::vector<PrioritizedHandler<MouseMoveCallback>> mouse_move_handlers_;
+        std::vector<PrioritizedHandler<MouseScrollCallback>> mouse_scroll_handlers_;
+        std::vector<PrioritizedHandler<KeyCallback>> key_handlers_;
+        std::vector<PrioritizedHandler<FileDropCallback>> file_drop_handlers_;
+
+        // Handler ID generation
+        std::atomic<HandlerId> next_handler_id_{1};
 
         // Input state
         mutable std::mutex state_mutex_;

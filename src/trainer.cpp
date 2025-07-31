@@ -172,6 +172,7 @@ namespace gs {
         // Print render mode configuration
         std::println("Render mode: {}", params.optimization.render_mode);
         std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
+        std::println("Strategy: {}", params.optimization.strategy);
     }
 
     Trainer::~Trainer() {
@@ -280,6 +281,8 @@ namespace gs {
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
             }
+
+            strategy_->pre_backward(r_output);
 
             // Compute losses using the factored-out functions
             auto loss_result = compute_photometric_loss(r_output,

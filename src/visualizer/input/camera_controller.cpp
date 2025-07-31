@@ -11,30 +11,47 @@
 
 namespace gs {
 
+    CameraController::~CameraController() {
+        // Clean up our handlers
+        if (input_handler_) {
+            for (auto id : handler_ids_) {
+                input_handler_->removeHandler(id);
+            }
+        }
+    }
+
     void CameraController::connectToInputHandler(InputHandler& input_handler) {
         // Store reference to input handler for checking key states
         input_handler_ = &input_handler;
 
-        // Register all handlers
-        input_handler.addMouseButtonHandler(
-            [this](const InputHandler::MouseButtonEvent& event) {
-                return handleMouseButton(event);
-            });
+        // Register all handlers with Camera priority
+        handler_ids_.push_back(
+            input_handler.addMouseButtonHandler(
+                [this](const InputHandler::MouseButtonEvent& event) {
+                    return handleMouseButton(event);
+                },
+                InputPriority::Camera));
 
-        input_handler.addMouseMoveHandler(
-            [this](const InputHandler::MouseMoveEvent& event) {
-                return handleMouseMove(event);
-            });
+        handler_ids_.push_back(
+            input_handler.addMouseMoveHandler(
+                [this](const InputHandler::MouseMoveEvent& event) {
+                    return handleMouseMove(event);
+                },
+                InputPriority::Camera));
 
-        input_handler.addMouseScrollHandler(
-            [this](const InputHandler::MouseScrollEvent& event) {
-                return handleMouseScroll(event);
-            });
+        handler_ids_.push_back(
+            input_handler.addMouseScrollHandler(
+                [this](const InputHandler::MouseScrollEvent& event) {
+                    return handleMouseScroll(event);
+                },
+                InputPriority::Camera));
 
-        input_handler.addKeyHandler(
-            [this](const InputHandler::KeyEvent& event) {
-                return handleKey(event);
-            });
+        handler_ids_.push_back(
+            input_handler.addKeyHandler(
+                [this](const InputHandler::KeyEvent& event) {
+                    return handleKey(event);
+                },
+                InputPriority::Camera));
     }
 
     void CameraController::publishCameraChanged() {
