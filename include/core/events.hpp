@@ -42,10 +42,12 @@ namespace gs {
             EVENT(StopTraining, );
             EVENT(SaveCheckpoint, std::optional<int> iteration;);
             EVENT(LoadFile, std::filesystem::path path; bool is_dataset;);
+            EVENT(LoadMultiplePLYFiles, std::vector<std::filesystem::path> paths;);
             EVENT(ClearScene, );
             EVENT(ResetCamera, );
             EVENT(ShowWindow, std::string window_name; bool show;);
             EVENT(ExecuteConsole, std::string command;);
+            EVENT(RemoveSelectedModels, );
         } // namespace cmd
 
         // ============================================================================
@@ -79,6 +81,7 @@ namespace gs {
                   size_t num_gaussians;);
             EVENT(SceneCleared, );
             EVENT(ModelUpdated, int iteration; size_t num_gaussians;);
+            EVENT(ModelSelectionChanged, std::vector<std::string> selected_ids;);
 
             // Data loading
             EVENT(DatasetLoadStarted, std::filesystem::path path;);

@@ -33,6 +33,47 @@ namespace gs {
             }
         });
 
+        // Handle multiple PLY files
+        cmd::LoadMultiplePLYFiles::when([this](const auto& cmd) {
+            // Clear scene first for multiple files
+            clearScene();
+
+            // Load each PLY file additively
+            for (const auto& path : cmd.paths) {
+                loadPLYAdditive(path);
+            }
+        });
+
+        // Handle remove selected models
+        cmd::RemoveSelectedModels::when([this](const auto&) {
+            if (!scene_)
+                return;
+
+            auto selected_ids = scene_->getSelectedModelIds();
+            size_t removed_count = 0;
+
+            for (const auto& id : selected_ids) {
+                if (scene_->removeModel(id)) {
+                    removed_count++;
+                }
+            }
+
+            if (removed_count > 0) {
+                notify::Info{
+                    .message = std::format("Removed {} model(s)", removed_count)}
+                    .emit();
+
+                // Update state
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex_);
+                    current_state_.num_gaussians = scene_->getTotalGaussianCount();
+                    if (scene_->getModelCount() == 0) {
+                        current_state_.type = SceneType::None;
+                    }
+                }
+            }
+        });
+
         cmd::ClearScene::when([this](const auto&) {
             clearScene();
         });
@@ -133,6 +174,17 @@ namespace gs {
     void SceneManager::loadPLY(const std::filesystem::path& path) {
         try {
             loadPLYInternal(path);
+        } catch (const std::exception& e) {
+            events::notify::Error{
+                .message = std::format("Failed to load PLY: {}", e.what()),
+                .details = std::format("Path: {}", path.string())}
+                .emit();
+        }
+    }
+
+    void SceneManager::loadPLYAdditive(const std::filesystem::path& path) {
+        try {
+            loadPLYAdditiveInternal(path);
         } catch (const std::exception& e) {
             events::notify::Error{
                 .message = std::format("Failed to load PLY: {}", e.what()),
@@ -263,6 +315,81 @@ namespace gs {
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
             .message = std::format("Loaded PLY with {} Gaussians", current_state_.num_gaussians),
+            .source = "SceneManager"}
+            .emit();
+    }
+
+    void SceneManager::loadPLYAdditiveInternal(const std::filesystem::path& path) {
+        std::println("SceneManager: Adding PLY file: {}", path.string());
+
+        // Use the public loader interface
+        auto loader = gs::loader::Loader::create();
+
+        // Set up load options
+        gs::loader::LoadOptions options{
+            .resolution = -1,
+            .images_folder = "images",
+            .validate_only = false,
+            .progress = [this](float percent, const std::string& msg) {
+                std::println("[{:5.1f}%] {}", percent, msg);
+            }};
+
+        // Load the PLY file
+        auto load_result = loader->load(path, options);
+        if (!load_result) {
+            throw std::runtime_error(load_result.error());
+        }
+
+        // Extract SplatData from the result
+        auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
+        if (!splat_data || !*splat_data) {
+            throw std::runtime_error("Expected PLY file but loader returned different data type");
+        }
+
+        // Create scene if needed
+        if (!scene_) {
+            scene_ = std::make_unique<Scene>();
+        }
+
+        // Create a standalone provider for this model
+        auto provider = std::make_shared<StandaloneModelProvider>(
+            std::make_unique<SplatData>(std::move(**splat_data)));
+
+        // Add model to scene with proper name
+        std::string model_name = path.filename().string();
+        std::string model_id = scene_->addModel(model_name, path, provider);
+
+        if (model_id.empty()) {
+            throw std::runtime_error("Failed to add model to scene");
+        }
+
+        // Update state
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            current_state_.type = SceneType::PLY;
+            current_state_.source_path = path;
+            current_state_.num_gaussians = scene_->getTotalGaussianCount();
+            current_state_.is_training = false;
+            current_state_.training_iteration.reset();
+        }
+
+        // IMPORTANT: Emit the SceneLoaded event!
+        events::state::SceneLoaded{
+            .scene = scene_.get(),
+            .path = path,
+            .type = events::state::SceneLoaded::Type::PLY,
+            .num_gaussians = provider->getModel()->get_means().size(0)} // Individual model size
+            .emit();
+
+        std::println("SceneManager: Emitted SceneLoaded event for PLY: {}", path.filename().string());
+
+        // Notify
+        events::notify::Log{
+            .level = events::notify::Log::Level::Info,
+            .message = std::format("Added PLY '{}' with {} Gaussians (Total: {})",
+                                   model_name,
+                                   provider->getModel()->size(),
+                                   current_state_.num_gaussians),
             .source = "SceneManager"}
             .emit();
     }

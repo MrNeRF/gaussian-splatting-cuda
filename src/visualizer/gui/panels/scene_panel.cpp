@@ -26,7 +26,18 @@ namespace gs::gui {
             flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
         }
 
-        if (m_selectedNode == &node) {
+        // Check if this node represents a selected model
+        bool is_selected = false;
+        if (node.type == SceneNodeType::PointCloud && m_sceneRef) {
+            for (const auto* entry : m_sceneRef->getModels()) {
+                if (entry->path.string() == node.path && entry->selected) {
+                    is_selected = true;
+                    break;
+                }
+            }
+        }
+
+        if (is_selected) {
             flags |= ImGuiTreeNodeFlags_Selected;
         }
 
@@ -44,13 +55,56 @@ namespace gs::gui {
         default: icon = "[?]";
         }
 
+        // For point cloud models, add visibility checkbox
+        if (node.type == SceneNodeType::PointCloud && m_sceneRef) {
+            // Find the model entry
+            const Scene::ModelEntry* model_entry = nullptr;
+            for (const auto* entry : m_sceneRef->getModels()) {
+                if (entry->path.string() == node.path) {
+                    model_entry = entry;
+                    break;
+                }
+            }
+
+            if (model_entry) {
+                bool visible = model_entry->visible;
+                if (ImGui::Checkbox(std::format("##visible_{}", node.path).c_str(), &visible)) {
+                    // Cast away const to modify visibility
+                    const_cast<Scene*>(m_sceneRef)->setModelVisible(model_entry->id, visible);
+                }
+                ImGui::SameLine();
+            }
+        }
+
         std::string label = std::format("{} {}", icon, node.name);
 
+        // Highlight selected models
+        if (is_selected) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+        }
+
         bool isOpen = ImGui::TreeNodeEx(&node, flags, "%s", label.c_str());
+
+        if (is_selected) {
+            ImGui::PopStyleColor();
+        }
 
         // Handle selection
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             m_selectedNode = &node;
+
+            // Handle model selection for point clouds
+            if (node.type == SceneNodeType::PointCloud && m_sceneRef) {
+                // Find the model ID from the path
+                for (const auto* entry : m_sceneRef->getModels()) {
+                    if (entry->path.string() == node.path) {
+                        bool exclusive = !ImGui::GetIO().KeyCtrl; // Ctrl for multi-select
+                        const_cast<Scene*>(m_sceneRef)->selectModel(entry->id, exclusive);
+                        break;
+                    }
+                }
+            }
+
             if (m_onSelect) {
                 m_onSelect(node);
             }
@@ -93,6 +147,13 @@ namespace gs::gui {
                         .path = std::filesystem::path(node.path),
                         .is_dataset = true}
                         .emit();
+                }
+            }
+
+            // Add remove option for selected models
+            if (node.type == SceneNodeType::PointCloud && is_selected) {
+                if (ImGui::MenuItem("Remove Selected")) {
+                    events::cmd::RemoveSelectedModels{}.emit();
                 }
             }
 
@@ -318,15 +379,67 @@ namespace gs::gui {
     }
 
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
+        // Set scene reference for the tree view
+        m_treeView.SetSceneReference(event.scene);
+
         // Add the loaded scene to our tree
         if (!event.path.empty()) {
-            loadColmapDataset(event.path);
+            if (event.type == events::state::SceneLoaded::Type::Dataset) {
+                loadColmapDataset(event.path);
+            } else if (event.type == events::state::SceneLoaded::Type::PLY) {
+                // For PLY files, we need to append to existing tree or create new one
+                const auto* currentRoot = m_treeView.GetRoot();
+                std::unique_ptr<SceneNode> root;
+
+                if (currentRoot && currentRoot->type == SceneNodeType::Root && currentRoot->name == "Loaded Models") {
+                    // Clone existing tree (we need to recreate it because we can't modify const)
+                    root = std::make_unique<SceneNode>();
+                    root->name = "Loaded Models";
+                    root->path = "";
+                    root->type = SceneNodeType::Root;
+                    root->expanded = true;
+
+                    // Copy existing children
+                    for (const auto& child : currentRoot->children) {
+                        auto newChild = std::make_unique<SceneNode>();
+                        newChild->name = child->name;
+                        newChild->path = child->path;
+                        newChild->type = child->type;
+                        newChild->childrenLoaded = child->childrenLoaded;
+                        newChild->metadata = child->metadata;
+                        newChild->expanded = child->expanded;
+                        root->children.push_back(std::move(newChild));
+                    }
+                } else {
+                    // Create new root
+                    root = std::make_unique<SceneNode>();
+                    root->name = "Loaded Models";
+                    root->path = "";
+                    root->type = SceneNodeType::Root;
+                    root->expanded = true;
+                }
+
+                // Add the new PLY file
+                auto plyNode = std::make_unique<SceneNode>();
+                plyNode->name = event.path.filename().string();
+                plyNode->path = event.path.string();
+                plyNode->type = SceneNodeType::PointCloud;
+                plyNode->childrenLoaded = true;
+                plyNode->metadata["gaussians"] = std::format("{}", event.num_gaussians);
+                plyNode->metadata["format"] = "PLY";
+
+                root->children.push_back(std::move(plyNode));
+                root->childrenLoaded = true;
+
+                m_treeView.SetRootNode(std::move(root));
+            }
         }
     }
 
     void ScenePanel::handleSceneCleared() {
         // Clear the tree
         m_treeView.SetRootNode(nullptr);
+        m_treeView.SetSceneReference(nullptr);
     }
 
     void ScenePanel::render(bool* p_open) {
@@ -391,6 +504,54 @@ namespace gs::gui {
         }
 
         ImGui::Separator();
+
+        // Show total gaussian count if we have PLY models loaded
+        const auto* root = m_treeView.GetRoot();
+        if (root && root->type == SceneNodeType::Root && root->name == "Loaded Models") {
+            size_t total_gaussians = 0;
+            size_t visible_gaussians = 0;
+            size_t selected_count = 0;
+
+            // Get scene reference to check visibility
+            auto* scene = m_treeView.GetSceneReference();
+
+            for (const auto& child : root->children) {
+                if (child->type == SceneNodeType::PointCloud) {
+                    auto it = child->metadata.find("gaussians");
+                    if (it != child->metadata.end()) {
+                        try {
+                            size_t count = std::stoull(it->second);
+                            total_gaussians += count;
+
+                            // Check if visible and selected
+                            if (scene) {
+                                for (const auto* entry : scene->getModels()) {
+                                    if (entry->path.string() == child->path) {
+                                        if (entry->visible) {
+                                            visible_gaussians += count;
+                                        }
+                                        if (entry->selected) {
+                                            selected_count++;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        } catch (...) {}
+                    }
+                }
+            }
+
+            ImGui::Text("Total Gaussians: %zu", total_gaussians);
+            ImGui::Text("Visible: %zu", visible_gaussians);
+            ImGui::Text("Models: %zu (%zu selected)", root->children.size(), selected_count);
+            ImGui::Separator();
+
+            // Add help text
+            ImGui::TextDisabled("Ctrl+Click to multi-select");
+            ImGui::TextDisabled("Delete key to remove selected");
+            ImGui::Separator();
+        }
 
         // Tree view
         ImGui::BeginChild("SceneTree", ImVec2(0, 0), true);
