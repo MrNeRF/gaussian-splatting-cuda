@@ -7,6 +7,8 @@
 
 #include <glm/glm.hpp>
 
+#include "core/geometry/euclidian_transform.hpp"
+
 namespace gs {
     class BoundingBox {
     public:
@@ -17,9 +19,9 @@ namespace gs {
         virtual void setBounds(const glm::vec3& min, const glm::vec3& max);
 
         // Set custom transform matrix for the bounding box
-        void setworld2BBox(const glm::mat4& transform);
+        void setworld2BBox(const geometry::EuclideanTransform& transform);
         // getter
-        const glm::mat4& getworld2BBox() const { return world2BBox_; }
+        const geometry::EuclideanTransform& getworld2BBox() const { return world2BBox_; }
 
         // Get current bounds
         glm::vec3 getMinBounds() const { return min_bounds_; }
@@ -32,7 +34,7 @@ namespace gs {
         // Bounding box properties
         glm::vec3 min_bounds_;
         glm::vec3 max_bounds_;
-        // relative position of bounding box to world
-        glm::mat4 world2BBox_;
+        // relative position of bounding box to the world
+        geometry::EuclideanTransform world2BBox_;
     };
 } // namespace gs

@@ -221,7 +221,7 @@ namespace gs::visualizer {
 
             if (ImGui::Button("Reset to Default")) {
                 bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
-                bounding_box_->setworld2BBox(glm::mat4(1.0));
+                bounding_box_->setworld2BBox(geometry::EuclideanTransform());
             }
 
             // Rotation controls
@@ -431,70 +431,16 @@ namespace gs::visualizer {
         float rad_y = glm::radians(delta_rot_y);
         float rad_z = glm::radians(delta_rot_z);
 
-        glm::mat4 rot_x = glm::mat4(1.0f);
-        rot_x[1][1] = cos(rad_x);
-        rot_x[1][2] = sin(rad_x);
-        rot_x[2][1] = -sin(rad_x);
-        rot_x[2][2] = cos(rad_x);
-
-        glm::mat4 rot_y = glm::mat4(1.0f);
-        rot_y[0][0] = cos(rad_y);
-        rot_y[0][2] = -sin(rad_y);
-        rot_y[2][0] = sin(rad_y);
-        rot_y[2][2] = cos(rad_y);
-
-        glm::mat4 rot_z = glm::mat4(1.0f);
-        rot_z[0][0] = cos(rad_z);
-        rot_z[0][1] = sin(rad_z);
-        rot_z[1][0] = -sin(rad_z);
-        rot_z[1][1] = cos(rad_z);
-
-        glm::mat4 combined_rotation = rot_x * rot_y * rot_z;
+        geometry::EuclideanTransform rotate(rad_x, rad_y, rad_z, 0.0f, 0.0f, 0.0f);
 
         glm::vec3 center = bounding_box_->getLocalCenter();
 
-        glm::mat4 translate_to_origin = glm::mat4(1.0f);
-        translate_to_origin[3][0] = -center.x;
-        translate_to_origin[3][1] = -center.y;
-        translate_to_origin[3][2] = -center.z;
+        geometry::EuclideanTransform translate_to_origin(-center);
+        geometry::EuclideanTransform translate_back = translate_to_origin.inv();
 
-        glm::mat4 translate_back = glm::mat4(1.0f);
-        translate_back[3][0] = center.x;
-        translate_back[3][1] = center.y;
-        translate_back[3][2] = center.z;
+        geometry::EuclideanTransform current_transform = bounding_box_->getworld2BBox();
+        auto rotation_transform = translate_back * rotate * translate_to_origin * current_transform;
 
-        glm::mat4 rotation_transform = translate_back * combined_rotation * translate_to_origin;
-        glm::mat4 curr_world2bbox = bounding_box_->getworld2BBox();
-        glm::mat4 final_transform = rotation_transform * curr_world2bbox;
-        final_transform = orthonormalizeRotation(final_transform);
-
-        bounding_box_->setworld2BBox(final_transform);
+        bounding_box_->setworld2BBox(rotation_transform);
     }
-
-    glm::mat4 CropBoxTool::orthonormalizeRotation(const glm::mat4& matrix) {
-        glm::vec3 x = glm::vec3(matrix[0]);
-        glm::vec3 y = glm::vec3(matrix[1]);
-        glm::vec3 z = glm::vec3(matrix[2]);
-
-        x = glm::normalize(x);
-        y = glm::normalize(y - x * glm::dot(x, y));
-        z = glm::normalize(glm::cross(x, y));
-
-        glm::mat4 result = glm::mat4(1.0f);
-        result[0] = glm::vec4(x, 0.0f);
-        result[1] = glm::vec4(y, 0.0f);
-        result[2] = glm::vec4(z, 0.0f);
-        result[3] = matrix[3];
-
-        return result;
-    }
-
-    float CropBoxTool::wrapAngle(float angle) {
-        while (angle < 0.0f)
-            angle += 360.0f;
-        while (angle >= 360.0f)
-            angle -= 360.0f;
-        return angle;
-    }
-
 } // namespace gs::visualizer

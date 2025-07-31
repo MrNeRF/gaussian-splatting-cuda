@@ -94,7 +94,7 @@ namespace gs {
                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
             // Get the world2BBox transformation matrix
-            const glm::mat4& world2bbox = bounding_box->getworld2BBox();
+            const glm::mat4 world2bbox = bounding_box->getworld2BBox().toMat4();
 
             // Convert GLM matrix to torch tensor [4, 4]
             auto world2bbox_tensor = torch::zeros({4, 4}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
