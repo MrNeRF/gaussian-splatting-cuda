@@ -3,7 +3,7 @@
 namespace gs {
     namespace geometry {
         EuclideanTransform::EuclideanTransform()
-            : m_rotation(1.0f, 0.0f, 0.0f, 0.0f),
+            : m_rotation(glm::identity<glm::quat>()),
               m_translation(0.0f, 0.0f, 0.0f) {
             // Identity quaternion and zero translation
         }
