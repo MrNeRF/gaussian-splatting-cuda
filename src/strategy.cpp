@@ -75,8 +75,8 @@ namespace strategy {
     }
 
     void update_param_with_optimizer(
-        std::function<torch::Tensor(const int, const torch::Tensor)> param_fn,
-        OptimizerFnType optimizer_fn,
+        const ParamUpdateFn& param_fn,
+        const OptimizerUpdateFn& optimizer_fn,
         std::unique_ptr<torch::optim::Optimizer>& optimizer,
         gs::SplatData& splat_data,
         std::vector<size_t> param_idxs) {
