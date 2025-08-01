@@ -1,5 +1,5 @@
 #include "input/input_manager.hpp"
-#include <algorithm>
+#include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <print>
 
@@ -81,11 +81,29 @@ namespace gs::visualizer {
                     return handleFileDrop(event);
                 },
                 InputPriority::System));
+
+        // Delete key handler for removing selected models
+        gui_handler_ids_.push_back(
+            input_handler_->addKeyHandler(
+                [this](const InputHandler::KeyEvent& event) {
+                    if (event.key == GLFW_KEY_DELETE && event.action == GLFW_PRESS) {
+                        // Only handle if GUI doesn't want the key
+                        if (!ImGui::GetIO().WantCaptureKeyboard) {
+                            events::cmd::RemoveSelectedModels{}.emit();
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+                InputPriority::Scene));
     }
 
     bool InputManager::handleFileDrop(const InputHandler::FileDropEvent& event) {
         if (!file_drop_callback_)
             return false;
+
+        // Collect all PLY files
+        std::vector<std::filesystem::path> ply_files;
 
         // Process each dropped file
         for (const auto& path_str : event.paths) {
@@ -93,18 +111,7 @@ namespace gs::visualizer {
 
             // Check if it's a PLY file
             if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
-                std::println("Dropped PLY file: {}", filepath.string());
-
-                if (file_drop_callback_(filepath, false)) {
-                    // Log the action
-                    events::notify::Log{
-                        .level = events::notify::Log::Level::Info,
-                        .message = std::format("Loaded PLY file via drag-and-drop: {}",
-                                               filepath.filename().string()),
-                        .source = "InputManager"}
-                        .emit();
-                    return true;
-                }
+                ply_files.push_back(filepath);
             }
 
             if (std::filesystem::is_directory(filepath)) {
@@ -141,6 +148,35 @@ namespace gs::visualizer {
                 }
             }
         }
+
+        // Handle PLY files
+        if (!ply_files.empty()) {
+            if (ply_files.size() == 1) {
+                // Single PLY - use existing logic
+                std::println("Dropped PLY file: {}", ply_files[0].string());
+                if (file_drop_callback_(ply_files[0], false)) {
+                    events::notify::Log{
+                        .level = events::notify::Log::Level::Info,
+                        .message = std::format("Loaded PLY file via drag-and-drop: {}",
+                                               ply_files[0].filename().string()),
+                        .source = "InputManager"}
+                        .emit();
+                    return true;
+                }
+            } else {
+                // Multiple PLY files - emit new event
+                std::println("Dropped {} PLY files", ply_files.size());
+                events::cmd::LoadMultiplePLYFiles{.paths = ply_files}.emit();
+
+                events::notify::Log{
+                    .level = events::notify::Log::Level::Info,
+                    .message = std::format("Loading {} PLY files via drag-and-drop", ply_files.size()),
+                    .source = "InputManager"}
+                    .emit();
+                return true;
+            }
+        }
+
         return false;
     }
 

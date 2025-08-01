@@ -59,6 +59,7 @@ namespace gs {
 
         // High-level operations
         void loadPLY(const std::filesystem::path& path);
+        void loadPLYAdditive(const std::filesystem::path& path); // Add this!
         void loadDataset(const std::filesystem::path& path,
                          const param::TrainingParameters& params);
         void clearScene();
@@ -80,6 +81,7 @@ namespace gs {
 
         // Internal operations
         void loadPLYInternal(const std::filesystem::path& path);
+        void loadPLYAdditiveInternal(const std::filesystem::path& path);
         void loadDatasetInternal(const std::filesystem::path& path,
                                  const param::TrainingParameters& params);
         void updateSceneState();

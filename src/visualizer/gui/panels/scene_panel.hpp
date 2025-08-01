@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/events.hpp"
+#include "scene/scene.hpp"
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -59,6 +60,14 @@ namespace gs {
                 m_onDoubleClick = std::move(callback);
             }
 
+            void SetSceneReference(const Scene* scene) {
+                m_sceneRef = scene;
+            }
+
+            const Scene* GetSceneReference() const {
+                return m_sceneRef;
+            }
+
             void Render();
 
             // Accessor for root node
@@ -72,6 +81,7 @@ namespace gs {
             ExpandCallback m_onExpand;
             SelectCallback m_onDoubleClick;
             SceneNode* m_selectedNode = nullptr;
+            const Scene* m_sceneRef = nullptr; // Reference to scene for selection/visibility
         };
 
         // COLMAP dataset loader
@@ -113,6 +123,7 @@ namespace gs {
             void setupEventHandlers();
             void handleSceneLoaded(const events::state::SceneLoaded& event);
             void handleSceneCleared();
+            void handleRemoveSelectedModels();
             void onNodeSelected(const SceneNode& node);
             void onNodeExpanded(SceneNode& node);
             void onNodeDoubleClicked(const SceneNode& node);
