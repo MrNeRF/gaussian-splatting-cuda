@@ -135,7 +135,7 @@ namespace gs {
 
         try {
 
-            auto box2World = glm::inverse(world2BBox_);
+            auto box2World = world2BBox_.inv().toMat4();
             // Set uniforms
             glm::mat4 mvp = projection * view * box2World;
 

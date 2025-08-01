@@ -60,17 +60,17 @@ target_compile_options(gs_loader PRIVATE
 )
 
 # AVX2 support for ply.cpp
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
 
-    if(COMPILER_SUPPORTS_AVX2)
+    if (COMPILER_SUPPORTS_AVX2)
         target_compile_options(gs_loader PRIVATE
                 $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma>
         )
         target_compile_definitions(gs_loader PRIVATE HAS_AVX2_SUPPORT)
-    endif()
-endif()
+    endif ()
+endif ()
 
 # Export only the public header
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../include/loader/loader.hpp
