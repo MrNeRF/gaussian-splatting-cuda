@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/bounding_box.hpp"
+#include "geometry//bounding_box.hpp"
 
 #include "rendering/shader.hpp"
 #include <memory>

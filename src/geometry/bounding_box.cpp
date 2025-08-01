@@ -1,4 +1,4 @@
-#include "core/bounding_box.hpp"
+#include "../../include/geometry/bounding_box.hpp"
 
 #include <stdexcept>
 // ============================================================================

@@ -156,7 +156,7 @@ set(HOST_SOURCES
         src/bilateral_grid.cpp
         src/selective_adam.cpp
         src/training_setup.cpp
-        src/bounding_box.cpp
+        src/geometry/bounding_box.cpp
         src/geometry/euclidian_transform.cpp
 )
 
