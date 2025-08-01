@@ -49,7 +49,7 @@ namespace gs {
         bool packed,
         bool antialiased,
         RenderMode render_mode,
-        const gs::BoundingBox* bounding_box) {
+        const gs::geometry::BoundingBox* bounding_box) {
 
         // Ensure we don't use packed mode (not supported in this implementation)
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
@@ -94,7 +94,7 @@ namespace gs {
                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
             // Get the world2BBox transformation matrix
-            const glm::mat4& world2bbox = bounding_box->getworld2BBox();
+            const glm::mat4 world2bbox = bounding_box->getworld2BBox().toMat4();
 
             // Convert GLM matrix to torch tensor [4, 4]
             auto world2bbox_tensor = torch::zeros({4, 4}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
