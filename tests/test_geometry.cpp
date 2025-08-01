@@ -7,13 +7,14 @@
 
 #include "geometry/euclidean_transform.hpp" // Adjust path as needed
 
+constexpr int RANDOM_SEED = 8128;
 using namespace gs::geometry;
 
 class EuclideanTransformTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Initialize random number generator with a fixed seed for reproducible tests
-        rng.seed(8128);
+        rng.seed(RANDOM_SEED);
         angle_dist = std::uniform_real_distribution<float>(-std::numbers::pi, std::numbers::pi);
         translation_dist = std::uniform_real_distribution<float>(-10.0f, 10.0f);
     }
