@@ -1,27 +1,38 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
-#include "core/ply_loader.hpp"
-#include "core/training_setup.hpp"
-#include "visualizer/detail.hpp"
+#include "visualizer/visualizer.hpp"
 #include <print>
 
 namespace gs {
     int Application::run(std::unique_ptr<param::TrainingParameters> params) {
-        auto viewer = std::make_unique<GSViewer>("3DGS Viewer", 1280, 720);
-        viewer->setAntiAliasing(params->optimization.antialiasing);
+        // Create visualizer with options
+        auto viewer = visualizer::Visualizer::create({.title = "3DGS Viewer",
+                                                      .width = 1280,
+                                                      .height = 720,
+                                                      .antialiasing = params->optimization.antialiasing,
+                                                      .enable_cuda_interop = true});
+
+        // Set parameters
         viewer->setParameters(*params);
 
-        // If a PLY was specified via command line, load it
+        // Load data if specified
         if (!params->ply_path.empty()) {
-            viewer->loadPLYFile(params->ply_path);
-        }
-        // If a dataset was specified via command line, load it
-        else if (!params->dataset.data_path.empty()) {
-            viewer->loadDataset(params->dataset.data_path);
+            auto result = viewer->loadPLY(params->ply_path);
+            if (!result) {
+                std::println(stderr, "Error: {}", result.error());
+                return -1;
+            }
+        } else if (!params->dataset.data_path.empty()) {
+            auto result = viewer->loadDataset(params->dataset.data_path);
+            if (!result) {
+                std::println(stderr, "Error: {}", result.error());
+                return -1;
+            }
         }
 
         std::println("Anti-aliasing: {}", params->optimization.antialiasing ? "enabled" : "disabled");
 
+        // Run the viewer
         viewer->run();
 
         std::println("Viewer closed.");

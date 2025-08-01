@@ -7,6 +7,8 @@
 #include <memory>
 #include <torch/torch.h>
 
+using namespace gs;
+
 class MCMCTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -40,10 +42,19 @@ protected:
         auto T = torch::tensor({0.0f, 0.0f, 5.0f}, torch::kFloat32);
         float fov = M_PI / 3.0f; // 60 degrees
 
+        int width = 256;
+        int height = 256;
+
         test_camera = std::make_unique<Camera>(
-            R, T, fov, fov,
+            R, T, fov2focal(fov, width),
+            fov2focal(fov, height),
+            0.5 * width,
+            0.5 * height,
+            torch::empty({0}, torch::kFloat32),
+            torch::empty({0}, torch::kFloat32),
+            gsplat::CameraModelType::PINHOLE,
             "test_camera",
-            "", 256, 256, 0);
+            "", width, height, 0);
 
         // Background color
         background = torch::zeros({3}, device);
@@ -88,6 +99,8 @@ TEST_F(MCMCTest, FullPipelineIntegrationTest) {
     // Check render output is valid
     EXPECT_EQ(render_output.image.sizes(), torch::IntArrayRef({3, 256, 256}));
     EXPECT_FALSE(render_output.image.isnan().any().item<bool>());
+
+    mcmc->pre_backward(render_output);
 
     // Compute loss and backward
     auto loss = render_output.image.mean();
@@ -150,6 +163,7 @@ TEST_F(MCMCTest, SHDegreeIncrementWithRenderingTest) {
 
     // Render again and call post_backward at iteration 1000
     render_output = performRendering(*mcmc);
+    mcmc->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -206,6 +220,7 @@ TEST_F(MCMCTest, NoiseInjectionWithRenderingTest) {
 
     // Render again
     render_output = performRendering(*mcmc);
+    mcmc->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -239,6 +254,7 @@ TEST_F(MCMCTest, RefinementWithActualRenderingTest) {
 
     // Run refinement step
     render_output = performRendering(*mcmc);
+    mcmc->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -256,7 +272,7 @@ TEST_F(MCMCTest, RelocationMechanicsTest) {
 
     params.optimization.min_opacity = 0.005f;
     params.optimization.start_refine = 500;
-    params.optimization.stop_refine= 1000;
+    params.optimization.stop_refine = 1000;
     mcmc->initialize(params.optimization);
 
     // Initialize optimizer
@@ -278,6 +294,7 @@ TEST_F(MCMCTest, RelocationMechanicsTest) {
 
     // Trigger relocation through rendering
     render_output = performRendering(*mcmc);
+    mcmc->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -310,6 +327,7 @@ TEST_F(MCMCTest, ConsistentRenderingAfterOperationsTest) {
     // Run through several iterations
     for (int iter = 1; iter <= 5; ++iter) {
         auto render_output = performRendering(*mcmc);
+        mcmc->pre_backward(render_output);
         auto loss = render_output.image.mean();
         loss.backward();
 
@@ -350,6 +368,7 @@ TEST_F(MCMCTest, MultipleRefinementCyclesTest) {
     // Run multiple refinement cycles
     for (int iter = 100; iter <= 500; iter += 100) {
         auto render_output = performRendering(*mcmc);
+        mcmc->pre_backward(render_output);
         auto loss = render_output.image.mean();
         loss.backward();
 

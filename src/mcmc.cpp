@@ -3,38 +3,13 @@
 #include "core/debug_utils.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/selective_adam.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <exception>
 #include <iostream>
 #include <random>
 
-void MCMC::ExponentialLR::step() {
-    if (param_group_index_ >= 0) {
-        auto& group = optimizer_.param_groups()[param_group_index_];
-
-        // Try to cast to our custom Options first
-        if (auto* selective_adam_options = dynamic_cast<gs::SelectiveAdam::Options*>(&group.options())) {
-            double current_lr = selective_adam_options->lr();
-            selective_adam_options->lr(current_lr * gamma_);
-        } else if (auto* adam_options = dynamic_cast<torch::optim::AdamOptions*>(&group.options())) {
-            double current_lr = adam_options->lr();
-            adam_options->lr(current_lr * gamma_);
-        }
-    } else {
-        // Update all param groups
-        for (auto& group : optimizer_.param_groups()) {
-            if (auto* selective_adam_options = dynamic_cast<gs::SelectiveAdam::Options*>(&group.options())) {
-                double current_lr = selective_adam_options->lr();
-                selective_adam_options->lr(current_lr * gamma_);
-            } else if (auto* adam_options = dynamic_cast<torch::optim::AdamOptions*>(&group.options())) {
-                double current_lr = adam_options->lr();
-                adam_options->lr(current_lr * gamma_);
-            }
-        }
-    }
-}
-
-MCMC::MCMC(SplatData&& splat_data)
+MCMC::MCMC(gs::SplatData&& splat_data)
     : _splat_data(std::move(splat_data)) {
 }
 
@@ -261,133 +236,53 @@ int MCMC::add_new_gs() {
     }
     _splat_data.scaling_raw().index_put_({sampled_idxs}, torch::log(new_scales));
 
-    // Prepare new Gaussians to concatenate
-    auto new_means = _splat_data.means().index_select(0, sampled_idxs);
-    auto new_sh0 = _splat_data.sh0().index_select(0, sampled_idxs);
-    auto new_shN = _splat_data.shN().index_select(0, sampled_idxs);
-    auto new_scaling = _splat_data.scaling_raw().index_select(0, sampled_idxs);
-    auto new_rotation = _splat_data.rotation_raw().index_select(0, sampled_idxs);
-    auto new_opacity = _splat_data.opacity_raw().index_select(0, sampled_idxs);
+    const auto param_fn = [&sampled_idxs](const int i, const torch::Tensor param) {
+        const torch::Tensor new_param = param.index_select(0, sampled_idxs);
+        return torch::cat({param, new_param}, 0).set_requires_grad(param.requires_grad());
+    };
 
-    // Step 1: Concatenate all parameters
-    auto concat_means = torch::cat({_splat_data.means(), new_means}, 0).set_requires_grad(true);
-    auto concat_sh0 = torch::cat({_splat_data.sh0(), new_sh0}, 0).set_requires_grad(true);
-    auto concat_shN = torch::cat({_splat_data.shN(), new_shN}, 0).set_requires_grad(true);
-    auto concat_scaling = torch::cat({_splat_data.scaling_raw(), new_scaling}, 0).set_requires_grad(true);
-    auto concat_rotation = torch::cat({_splat_data.rotation_raw(), new_rotation}, 0).set_requires_grad(true);
-    auto concat_opacity = torch::cat({_splat_data.opacity_raw(), new_opacity}, 0).set_requires_grad(true);
+    const auto optimizer_fn = [&sampled_idxs](torch::optim::OptimizerParamState& state,
+                                              const torch::Tensor full_param)
+        -> std::unique_ptr<torch::optim::OptimizerParamState> {
+        auto new_shape = full_param.sizes().vec();
+        new_shape[0] = sampled_idxs.size(0);
+        if (auto* adam_state = dynamic_cast<torch::optim::AdamParamState*>(&state)) {
+            // Standard Adam state
+            auto zeros_to_add = torch::zeros(new_shape, adam_state->exp_avg().options());
+            auto new_exp_avg = torch::cat({adam_state->exp_avg(), zeros_to_add}, 0);
+            auto new_exp_avg_sq = torch::cat({adam_state->exp_avg_sq(), zeros_to_add}, 0);
 
-    // Step 2: SAFER optimizer state update
-    // Store the new parameters in a temporary array first
-    std::array<torch::Tensor*, 6> new_params = {
-        &concat_means, &concat_sh0, &concat_shN,
-        &concat_scaling, &concat_rotation, &concat_opacity};
-
-    // Collect old parameter keys and states
-    std::vector<void*> old_param_keys;
-    std::vector<std::unique_ptr<torch::optim::OptimizerParamState>> saved_states;
-
-    for (int i = 0; i < 6; ++i) {
-        auto& old_param = _optimizer->param_groups()[i].params()[0];
-        void* old_param_key = old_param.unsafeGetTensorImpl();
-        old_param_keys.push_back(old_param_key);
-
-        // Check if state exists
-        auto state_it = _optimizer->state().find(old_param_key);
-        if (state_it != _optimizer->state().end()) {
-            // Clone the state before modifying - handle both optimizer types
-            if (auto* adam_state = dynamic_cast<torch::optim::AdamParamState*>(state_it->second.get())) {
-                // Standard Adam state
-                torch::IntArrayRef new_shape;
-                if (i == 0)
-                    new_shape = new_means.sizes();
-                else if (i == 1)
-                    new_shape = new_sh0.sizes();
-                else if (i == 2)
-                    new_shape = new_shN.sizes();
-                else if (i == 3)
-                    new_shape = new_scaling.sizes();
-                else if (i == 4)
-                    new_shape = new_rotation.sizes();
-                else
-                    new_shape = new_opacity.sizes();
-
-                auto zeros_to_add = torch::zeros(new_shape, adam_state->exp_avg().options());
-                auto new_exp_avg = torch::cat({adam_state->exp_avg(), zeros_to_add}, 0);
-                auto new_exp_avg_sq = torch::cat({adam_state->exp_avg_sq(), zeros_to_add}, 0);
-
-                // Create new state
-                auto new_state = std::make_unique<torch::optim::AdamParamState>();
-                new_state->step(adam_state->step());
-                new_state->exp_avg(new_exp_avg);
-                new_state->exp_avg_sq(new_exp_avg_sq);
-                if (adam_state->max_exp_avg_sq().defined()) {
-                    auto new_max_exp_avg_sq = torch::cat({adam_state->max_exp_avg_sq(), zeros_to_add}, 0);
-                    new_state->max_exp_avg_sq(new_max_exp_avg_sq);
-                }
-
-                saved_states.push_back(std::move(new_state));
-            } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(state_it->second.get())) {
-                // SelectiveAdam state
-                torch::IntArrayRef new_shape;
-                if (i == 0)
-                    new_shape = new_means.sizes();
-                else if (i == 1)
-                    new_shape = new_sh0.sizes();
-                else if (i == 2)
-                    new_shape = new_shN.sizes();
-                else if (i == 3)
-                    new_shape = new_scaling.sizes();
-                else if (i == 4)
-                    new_shape = new_rotation.sizes();
-                else
-                    new_shape = new_opacity.sizes();
-
-                auto zeros_to_add = torch::zeros(new_shape, selective_adam_state->exp_avg.options());
-                auto new_exp_avg = torch::cat({selective_adam_state->exp_avg, zeros_to_add}, 0);
-                auto new_exp_avg_sq = torch::cat({selective_adam_state->exp_avg_sq, zeros_to_add}, 0);
-
-                // Create new state
-                auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-                new_state->step_count = selective_adam_state->step_count;
-                new_state->exp_avg = new_exp_avg;
-                new_state->exp_avg_sq = new_exp_avg_sq;
-                if (selective_adam_state->max_exp_avg_sq.defined()) {
-                    auto new_max_exp_avg_sq = torch::cat({selective_adam_state->max_exp_avg_sq, zeros_to_add}, 0);
-                    new_state->max_exp_avg_sq = new_max_exp_avg_sq;
-                }
-
-                saved_states.push_back(std::move(new_state));
-            } else {
-                saved_states.push_back(nullptr);
+            // Create new state
+            auto new_state = std::make_unique<torch::optim::AdamParamState>();
+            new_state->step(adam_state->step());
+            new_state->exp_avg(new_exp_avg);
+            new_state->exp_avg_sq(new_exp_avg_sq);
+            if (adam_state->max_exp_avg_sq().defined()) {
+                auto new_max_exp_avg_sq = torch::cat({adam_state->max_exp_avg_sq(), zeros_to_add}, 0);
+                new_state->max_exp_avg_sq(new_max_exp_avg_sq);
             }
-        } else {
-            saved_states.push_back(nullptr);
+            return new_state;
+        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
+            // SelectiveAdam state
+            auto zeros_to_add = torch::zeros(new_shape, selective_adam_state->exp_avg.options());
+            auto new_exp_avg = torch::cat({selective_adam_state->exp_avg, zeros_to_add}, 0);
+            auto new_exp_avg_sq = torch::cat({selective_adam_state->exp_avg_sq, zeros_to_add}, 0);
+
+            // Create new state
+            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
+            new_state->step_count = selective_adam_state->step_count;
+            new_state->exp_avg = new_exp_avg;
+            new_state->exp_avg_sq = new_exp_avg_sq;
+            if (selective_adam_state->max_exp_avg_sq.defined()) {
+                auto new_max_exp_avg_sq = torch::cat({selective_adam_state->max_exp_avg_sq, zeros_to_add}, 0);
+                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
+            }
+            return new_state;
         }
-    }
+        return nullptr;
+    };
 
-    // Now remove all old states
-    for (auto key : old_param_keys) {
-        _optimizer->state().erase(key);
-    }
-
-    // Update parameters and add new states
-    for (int i = 0; i < 6; ++i) {
-        _optimizer->param_groups()[i].params()[0] = *new_params[i];
-
-        if (saved_states[i]) {
-            void* new_param_key = new_params[i]->unsafeGetTensorImpl();
-            _optimizer->state()[new_param_key] = std::move(saved_states[i]);
-        }
-    }
-
-    // Step 3: Finally update the model's parameters
-    _splat_data.means() = concat_means;
-    _splat_data.sh0() = concat_sh0;
-    _splat_data.shN() = concat_shN;
-    _splat_data.scaling_raw() = concat_scaling;
-    _splat_data.rotation_raw() = concat_rotation;
-    _splat_data.opacity_raw() = concat_opacity;
+    strategy::update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data);
 
     return n_new;
 }
@@ -438,7 +333,9 @@ void MCMC::inject_noise() {
     _splat_data.means().add_(noise);
 }
 
-void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
+void MCMC::pre_backward(gs::RenderOutput& render_output) {}
+
+void MCMC::post_backward(int iter, gs::RenderOutput& render_output, bool packed) {
     // Store visibility mask for selective adam
     if (_params->selective_adam) {
         _last_visibility_mask = render_output.visibility;
@@ -485,13 +382,7 @@ void MCMC::step(int iter) {
 void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _params = std::make_unique<const gs::param::OptimizationParameters>(optimParams);
 
-    const auto dev = torch::kCUDA;
-    _splat_data.means() = _splat_data.means().to(dev).set_requires_grad(true);
-    _splat_data.scaling_raw() = _splat_data.scaling_raw().to(dev).set_requires_grad(true);
-    _splat_data.rotation_raw() = _splat_data.rotation_raw().to(dev).set_requires_grad(true);
-    _splat_data.opacity_raw() = _splat_data.opacity_raw().to(dev).set_requires_grad(true);
-    _splat_data.sh0() = _splat_data.sh0().to(dev).set_requires_grad(true);
-    _splat_data.shN() = _splat_data.shN().to(dev).set_requires_grad(true);
+    strategy::initialize_gaussians(_splat_data);
 
     // Initialize binomial coefficients
     const int n_max = 51;
@@ -507,64 +398,13 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
             binoms_accessor[n][k] = binom;
         }
     }
-    _binoms = _binoms.to(dev);
+    _binoms = _binoms.to(torch::kCUDA);
 
     // Initialize optimizer
-
-    if (_params->selective_adam) {
-        std::cout << "Using SelectiveAdam optimizer" << std::endl;
-
-        using Options = gs::SelectiveAdam::Options;
-        std::vector<torch::optim::OptimizerParamGroup> groups;
-
-        // Create groups with proper unique_ptr<Options>
-        auto add_param_group = [&groups](const torch::Tensor& param, double lr) {
-            auto options = std::make_unique<Options>(lr);
-            options->eps(1e-15).betas(std::make_tuple(0.9, 0.999));
-            groups.emplace_back(
-                std::vector<torch::Tensor>{param},
-                std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options)));
-        };
-
-        add_param_group(_splat_data.means(), _params->means_lr * _splat_data.get_scene_scale());
-        add_param_group(_splat_data.sh0(), _params->shs_lr);
-        add_param_group(_splat_data.shN(), _params->shs_lr / 20.f);
-        add_param_group(_splat_data.scaling_raw(), _params->scaling_lr);
-        add_param_group(_splat_data.rotation_raw(), _params->rotation_lr);
-        add_param_group(_splat_data.opacity_raw(), _params->opacity_lr);
-
-        auto global_options = std::make_unique<Options>(0.f);
-        global_options->eps(1e-15);
-        _optimizer = std::make_unique<gs::SelectiveAdam>(std::move(groups), std::move(global_options));
-    } else {
-        using torch::optim::AdamOptions;
-        std::vector<torch::optim::OptimizerParamGroup> groups;
-
-        // Calculate initial learning rate for position
-        groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.means()},
-                                                              std::make_unique<AdamOptions>(_params->means_lr * _splat_data.get_scene_scale())));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.sh0()},
-                                                              std::make_unique<AdamOptions>(_params->shs_lr)));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.shN()},
-                                                              std::make_unique<AdamOptions>(_params->shs_lr / 20.f)));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.scaling_raw()},
-                                                              std::make_unique<AdamOptions>(_params->scaling_lr)));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.rotation_raw()},
-                                                              std::make_unique<AdamOptions>(_params->rotation_lr)));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({_splat_data.opacity_raw()},
-                                                              std::make_unique<AdamOptions>(_params->opacity_lr)));
-
-        for (auto& g : groups)
-            static_cast<AdamOptions&>(g.options()).eps(1e-15);
-
-        _optimizer = std::make_unique<torch::optim::Adam>(groups, AdamOptions(0.f).eps(1e-15));
-    }
+    _optimizer = strategy::create_optimizer(_splat_data, *_params);
 
     // Initialize exponential scheduler
-    // Python: gamma = 0.01^(1/max_steps)
-    // This means after max_steps, lr will be 0.01 * initial_lr
-    const double gamma = std::pow(0.01, 1.0 / _params->iterations);
-    _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma, 0);
+    _scheduler = strategy::create_scheduler(*_params, _optimizer.get(), 0);
 }
 
 bool MCMC::is_refining(int iter) const {
