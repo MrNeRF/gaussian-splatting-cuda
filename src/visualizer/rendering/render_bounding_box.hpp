@@ -1,12 +1,12 @@
 #pragma once
 
-#include "geometry//bounding_box.hpp"
+#include "geometry/bounding_box.hpp"
 
 #include "rendering/shader.hpp"
 #include <memory>
 
 namespace gs {
-    class RenderBoundingBox : public BoundingBox {
+    class RenderBoundingBox : public geometry::BoundingBox {
     public:
         RenderBoundingBox();
         ~RenderBoundingBox();

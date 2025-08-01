@@ -49,7 +49,7 @@ namespace gs {
         bool packed,
         bool antialiased,
         RenderMode render_mode,
-        const gs::BoundingBox* bounding_box) {
+        const gs::geometry::BoundingBox* bounding_box) {
 
         // Ensure we don't use packed mode (not supported in this implementation)
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Ops.h"
-#include "geometry//bounding_box.hpp"
+#include "geometry/bounding_box.hpp"
 #include "core/camera.hpp"
 #include "core/splat_data.hpp"
 #include <torch/torch.h>
@@ -64,6 +64,6 @@ namespace gs {
         bool packed = false,
         bool antialiased = false,
         RenderMode render_mode = RenderMode::RGB,
-        const gs::BoundingBox* = nullptr);
+        const gs::geometry::BoundingBox* = nullptr);
 
 } // namespace gs

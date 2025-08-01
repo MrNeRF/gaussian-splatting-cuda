@@ -157,7 +157,7 @@ set(HOST_SOURCES
         src/selective_adam.cpp
         src/training_setup.cpp
         src/geometry/bounding_box.cpp
-        src/geometry/euclidian_transform.cpp
+        src/geometry/euclidean_transform.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})

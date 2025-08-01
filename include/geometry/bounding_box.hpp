@@ -7,9 +7,10 @@
 
 #include <glm/glm.hpp>
 
-#include "geometry/euclidian_transform.hpp"
+#include "geometry/euclidean_transform.hpp"
 
 namespace gs {
+namespace geometry {
     class BoundingBox {
     public:
         BoundingBox();
@@ -35,6 +36,7 @@ namespace gs {
         glm::vec3 min_bounds_;
         glm::vec3 max_bounds_;
         // relative position of bounding box to the world
-        geometry::EuclideanTransform world2BBox_;
+        EuclideanTransform world2BBox_;
     };
+} // namespace geometry
 } // namespace gs

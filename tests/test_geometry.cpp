@@ -5,7 +5,7 @@
 #include <numbers> // std::numbers
 #include <random>
 
-#include "geometry/euclidian_transform.hpp" // Adjust path as needed
+#include "geometry/euclidean_transform.hpp" // Adjust path as needed
 
 using namespace gs::geometry;
 
