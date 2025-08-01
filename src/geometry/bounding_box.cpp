@@ -10,7 +10,7 @@ namespace gs {
         BoundingBox::BoundingBox()
             : min_bounds_(-1.0f, -1.0f, -1.0f),
               max_bounds_(1.0f, 1.0f, 1.0f),
-              world2BBox_(1.0f) {}
+              world2BBox_(EuclideanTransform()) {}
 
         BoundingBox::~BoundingBox() {}
 
