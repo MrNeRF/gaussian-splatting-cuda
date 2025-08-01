@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Ops.h"
-#include "geometry/bounding_box.hpp"
 #include "core/camera.hpp"
 #include "core/splat_data.hpp"
+#include "geometry/bounding_box.hpp"
 #include <torch/torch.h>
 
 namespace gs {
