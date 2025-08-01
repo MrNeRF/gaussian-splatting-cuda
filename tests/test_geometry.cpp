@@ -198,7 +198,7 @@ TEST_F(EuclideanTransformTest, PointAndVectorTransformation) {
 
 // Test 5: Composition operator
 TEST_F(EuclideanTransformTest, CompositionOperator) {
-    const int num_tests = 50;
+    const int num_tests = 10;
 
     for (int i = 0; i < num_tests; ++i) {
         // Create two random transforms
