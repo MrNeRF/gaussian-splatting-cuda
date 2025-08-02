@@ -158,45 +158,52 @@ namespace gs {
         return true;
     }
 
-    bool CameraController::handleKey(const InputHandler::KeyEvent& event) {
-        if (!is_enabled_)
-            return false;
-
-        const float ADVANCE_RATE = 1.0f;
-        const float ADVANCE_RATE_FINE_TUNE = 0.3f;
-
+    bool CameraController::handleSpeedChange(const InputHandler::KeyEvent& event) {
         // Handle speed control first (Ctrl + Plus/Minus)
         if (input_handler_ && (input_handler_->isKeyPressed(GLFW_KEY_LEFT_CONTROL) ||
                                input_handler_->isKeyPressed(GLFW_KEY_RIGHT_CONTROL))) {
 
-            if (event.action == GLFW_PRESS) {
-                if (event.key == GLFW_KEY_EQUAL || event.key == GLFW_KEY_KP_ADD) {
-                    // Increase speed (Ctrl + '+' or Ctrl + '=')
-                    viewport_.camera.increaseWasdSpeed();
+            if (input_handler_->isKeyPressed(GLFW_KEY_EQUAL) ||
+                input_handler_->isKeyPressed(event.key == GLFW_KEY_KP_ADD)) {
+                // Increase speed (Ctrl + '+' or Ctrl + '=')
+                viewport_.camera.increaseWasdSpeed();
 
-                    // Emit speed change event
-                    events::ui::SpeedChanged{
-                        .current_speed = viewport_.camera.getWasdSpeed(),
-                        .max_speed = viewport_.camera.getMaxWasdSpeed()}
-                        .emit();
+                // Emit speed change event
+                events::ui::SpeedChanged{
+                    .current_speed = viewport_.camera.getWasdSpeed(),
+                    .max_speed = viewport_.camera.getMaxWasdSpeed()}
+                    .emit();
 
-                    return true;
-                } else if (event.key == GLFW_KEY_MINUS || event.key == GLFW_KEY_KP_SUBTRACT) {
-                    // Decrease speed (Ctrl + '-')
-                    viewport_.camera.decreaseWasdSpeed();
-
-                    // Emit speed change event
-                    events::ui::SpeedChanged{
-                        .current_speed = viewport_.camera.getWasdSpeed(),
-                        .max_speed = viewport_.camera.getMaxWasdSpeed()}
-                        .emit();
-
-                    return true;
-                }
+                return true;
             }
-            // If Ctrl is held but it's not +/-, don't process WASD movement
-            return false;
+            if (input_handler_->isKeyPressed(GLFW_KEY_MINUS) ||
+                input_handler_->isKeyPressed(GLFW_KEY_KP_SUBTRACT)) {
+                // Decrease speed (Ctrl + '-')
+                viewport_.camera.decreaseWasdSpeed();
+
+                // Emit speed change event
+                events::ui::SpeedChanged{
+                    .current_speed = viewport_.camera.getWasdSpeed(),
+                    .max_speed = viewport_.camera.getMaxWasdSpeed()}
+                    .emit();
+
+                return true;
+            }
         }
+        // If Ctrl is held but it's not +/-, don't process WASD movement
+        return false;
+    }
+
+    bool CameraController::handleKey(const InputHandler::KeyEvent& event) {
+        if (!is_enabled_)
+            return false;
+
+        if (handleSpeedChange(event)) {
+            return true;
+        }
+
+        const float ADVANCE_RATE = 1.0f;
+        const float ADVANCE_RATE_FINE_TUNE = 0.3f;
 
         // Handle WASD movement (only if Ctrl is not pressed)
         float advance_rate = 0.0f;
