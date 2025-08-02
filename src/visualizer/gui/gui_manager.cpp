@@ -9,6 +9,7 @@
 #include "visualizer_impl.hpp"
 
 #include <GLFW/glfw3.h>
+#include <chrono>
 #include <cstdarg>
 #include <format>
 #include <imgui_impl_glfw.h>
@@ -30,6 +31,10 @@ namespace gs::gui {
         window_states_["file_browser"] = false;
         window_states_["camera_controls"] = false;
         window_states_["scene_panel"] = true;
+
+        // Initialize speed overlay state
+        speed_overlay_visible_ = false;
+        speed_overlay_duration_ = std::chrono::milliseconds(3000); // 3 seconds
 
         setupEventHandlers();
     }
@@ -132,6 +137,9 @@ namespace gs::gui {
             gui::windows::DrawCameraControls(&window_states_["camera_controls"]);
         }
 
+        // Render speed overlay if visible
+        renderSpeedOverlay();
+
         // End frame
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -145,12 +153,115 @@ namespace gs::gui {
         }
     }
 
+    void GuiManager::renderSpeedOverlay() {
+        // Check if overlay should be hidden
+        if (speed_overlay_visible_) {
+            auto now = std::chrono::steady_clock::now();
+            if (now - speed_overlay_start_time_ >= speed_overlay_duration_) {
+                speed_overlay_visible_ = false;
+            }
+        }
+
+        if (!speed_overlay_visible_) {
+            return;
+        }
+
+        // Get viewport for positioning
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+        // Position overlay in the center-top of the viewport
+        const float overlay_width = 300.0f;
+        const float overlay_height = 80.0f;
+        const float padding = 20.0f;
+
+        ImVec2 overlay_pos(
+            viewport->WorkPos.x + (viewport->WorkSize.x - overlay_width) * 0.5f,
+            viewport->WorkPos.y + padding);
+
+        // Create overlay window
+        ImGui::SetNextWindowPos(overlay_pos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(overlay_width, overlay_height), ImGuiCond_Always);
+
+        // Window flags to make it non-interactive and styled nicely
+        ImGuiWindowFlags overlay_flags =
+            ImGuiWindowFlags_NoTitleBar |
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoScrollbar |
+            ImGuiWindowFlags_NoScrollWithMouse |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoInputs |
+            ImGuiWindowFlags_NoFocusOnAppearing |
+            ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        // Apply semi-transparent background
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.7f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 1.0f, 0.3f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+
+        if (ImGui::Begin("##SpeedOverlay", nullptr, overlay_flags)) {
+            // Calculate fade effect based on remaining time
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - speed_overlay_start_time_);
+            auto remaining = speed_overlay_duration_ - elapsed;
+
+            float fade_alpha = 1.0f;
+            if (remaining < std::chrono::milliseconds(500)) {
+                // Fade out in the last 500ms
+                fade_alpha = static_cast<float>(remaining.count()) / 500.0f;
+            }
+
+            // Center the text
+            ImVec2 window_size = ImGui::GetWindowSize();
+
+            // Speed text
+            std::string speed_text = std::format("WASD Speed: {:.3f}", current_speed_);
+            ImVec2 speed_text_size = ImGui::CalcTextSize(speed_text.c_str());
+            ImGui::SetCursorPos(ImVec2(
+                (window_size.x - speed_text_size.x) * 0.5f,
+                window_size.y * 0.3f));
+
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, fade_alpha));
+            ImGui::Text("%s", speed_text.c_str());
+            ImGui::PopStyleColor();
+
+            // Max speed text
+            std::string max_text = std::format("Max: {:.3f}", max_speed_);
+            ImVec2 max_text_size = ImGui::CalcTextSize(max_text.c_str());
+            ImGui::SetCursorPos(ImVec2(
+                (window_size.x - max_text_size.x) * 0.5f,
+                window_size.y * 0.6f));
+
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, fade_alpha * 0.8f));
+            ImGui::Text("%s", max_text.c_str());
+            ImGui::PopStyleColor();
+        }
+        ImGui::End();
+
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(2);
+    }
+
+    void GuiManager::showSpeedOverlay(float current_speed, float max_speed) {
+        current_speed_ = current_speed;
+        max_speed_ = max_speed;
+        speed_overlay_visible_ = true;
+        speed_overlay_start_time_ = std::chrono::steady_clock::now();
+    }
+
     void GuiManager::setupEventHandlers() {
         using namespace events;
 
         // Handle window visibility
         cmd::ShowWindow::when([this](const auto& e) {
             showWindow(e.window_name, e.show);
+        });
+
+        // Handle speed change events (you'll need to add this event type)
+        ui::SpeedChanged::when([this](const auto& e) {
+            showSpeedOverlay(e.current_speed, e.max_speed);
         });
 
         // Handle log messages

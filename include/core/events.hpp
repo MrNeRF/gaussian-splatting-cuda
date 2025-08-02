@@ -139,6 +139,7 @@ namespace gs {
         namespace ui {
             EVENT(WindowResized, int width; int height;);
             EVENT(CameraMove, glm::mat3 rotation; glm::vec3 translation;);
+            EVENT(SpeedChanged, float current_speed; float max_speed;);
             EVENT(RenderSettingsChanged,
                   std::optional<float> fov;
                   std::optional<float> scaling_modifier;

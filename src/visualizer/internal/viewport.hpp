@@ -19,22 +19,22 @@ class Viewport {
         float rotateCenterSpeed = 0.002f;
         float rotateRollSpeed = 0.01f;
         float translateSpeed = 0.001f;
-        float wasdSpeed = 0.03f;
+        float wasdSpeed = 0.06f;
 
-        float maxWasdSpeed = 1.0f;  // Maximum WASD speed
-        float wasdSpeedChangePercentage = 0.1f;  // 10% change per key press
+        float maxWasdSpeed = 1.0f;              // Maximum WASD speed
+        float wasdSpeedChangePercentage = 1.0f; // 1% change per key press
 
         void increaseWasdSpeed() {
-            wasdSpeed = std::min(wasdSpeed * (1.0f + wasdSpeedChangePercentage), maxWasdSpeed);
+            wasdSpeed = std::min(wasdSpeed + maxWasdSpeed * wasdSpeedChangePercentage / 100, maxWasdSpeed);
         }
 
         void decreaseWasdSpeed() {
-            wasdSpeed = std::max(wasdSpeed * (1.0f - wasdSpeedChangePercentage), 0.001f);  // Minimum speed to avoid zero
+            wasdSpeed = std::max(wasdSpeed - maxWasdSpeed * wasdSpeedChangePercentage / 100, 0.001f); // Minimum speed to avoid zero
         }
 
         void setMaxWasdSpeed(float maxSpeed) {
             maxWasdSpeed = maxSpeed;
-            wasdSpeed = std::min(wasdSpeed, maxWasdSpeed);  // Clamp current speed if it exceeds new max
+            wasdSpeed = std::min(wasdSpeed, maxWasdSpeed); // Clamp current speed if it exceeds new max
         }
 
         float getWasdSpeed() const {
@@ -46,9 +46,8 @@ class Viewport {
         }
 
         void setWasdSpeedChangePercentage(float percentage) {
-            wasdSpeedChangePercentage = std::max(0.01f, std::min(percentage, 1.0f));  // Clamp between 1% and 100%
+            wasdSpeedChangePercentage = std::max(0.01f, std::min(percentage, 1.0f)); // Clamp between 1% and 100%
         }
-
 
         glm::mat3 R = glm::mat3(1.0f);
         glm::vec3 t = glm::vec3(0.0f);
