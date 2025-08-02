@@ -46,7 +46,7 @@ class Viewport {
         }
 
         void setWasdSpeedChangePercentage(float percentage) {
-            wasdSpeedChangePercentage = std::max(0.01f, std::min(percentage, 1.0f)); // Clamp between 1% and 100%
+            wasdSpeedChangePercentage = std::max(1.0f, std::min(percentage, 100.0f)); // Clamp between 1% and 100%
         }
 
         glm::mat3 R = glm::mat3(1.0f);
