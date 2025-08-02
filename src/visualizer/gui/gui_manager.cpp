@@ -217,7 +217,7 @@ namespace gs::gui {
             ImVec2 window_size = ImGui::GetWindowSize();
 
             // Speed text
-            std::string speed_text = std::format("WASD Speed: {:.3f}", current_speed_);
+            std::string speed_text = std::format("WASD Speed: {:.2f}", current_speed_);
             ImVec2 speed_text_size = ImGui::CalcTextSize(speed_text.c_str());
             ImGui::SetCursorPos(ImVec2(
                 (window_size.x - speed_text_size.x) * 0.5f,
