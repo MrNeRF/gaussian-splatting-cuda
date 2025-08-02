@@ -159,11 +159,8 @@ namespace gs::gui {
             auto now = std::chrono::steady_clock::now();
             if (now - speed_overlay_start_time_ >= speed_overlay_duration_) {
                 speed_overlay_visible_ = false;
+                return;
             }
-        }
-
-        if (!speed_overlay_visible_) {
-            return;
         }
 
         // Get viewport for positioning
