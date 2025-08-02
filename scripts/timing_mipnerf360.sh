@@ -2,13 +2,19 @@
 
 SCENE_DIR="data"
 RESULT_DIR="results/benchmark"
-SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
+#SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
+SCENE_LIST="bicycle"
 
 # Start total timer
 total_start=$(date +%s)
 
 # Initialize array to store individual times
 declare -A scene_times
+
+USE_FLASHGS_ARG=""
+if [[ "$@" == *"--use-flashgs"* ]]; then
+    USE_FLASHGS_ARG="--use-flashgs"
+fi
 
 for SCENE in $SCENE_LIST;
 do
@@ -31,7 +37,8 @@ do
         -d $SCENE_DIR/$SCENE/ \
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
-        --iter 30000
+        --iter 20000 $USE_FLASHGS_ARG
+    #--iter 30000
     
     # End timer for this scene
     scene_end=$(date +%s)

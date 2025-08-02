@@ -2,6 +2,7 @@
 #include "Ops.h"
 #include "core/rasterizer_autograd.hpp"
 #include <torch/torch.h>
+#include <iomanip>
 
 namespace gs {
 
@@ -48,6 +49,7 @@ namespace gs {
         float scaling_modifier,
         bool packed,
         bool antialiased,
+        bool use_flashgs,
         RenderMode render_mode) {
 
         // Ensure we don't use packed mode (not supported in this implementation)
@@ -217,9 +219,14 @@ namespace gs {
         const int tile_height = (image_height + tile_size - 1) / tile_size;
 
         const auto isect_results = gsplat::intersect_tile(
-            means2d, radii, depths, {}, {},
+            means2d, radii, depths, 
+            use_flashgs ? std::make_optional(conics.squeeze(0)) : std::nullopt,    // Pass conics if FlashGS
+            use_flashgs ? std::make_optional(final_opacities.squeeze(0)) : std::nullopt, // Pass opacities if FlashGS
+            {}, {},
             1, tile_size, tile_width, tile_height,
-            true);
+            true,
+            use_flashgs
+        );
 
         const auto tiles_per_gauss = std::get<0>(isect_results);
         const auto isect_ids = std::get<1>(isect_results);
@@ -228,6 +235,156 @@ namespace gs {
         auto isect_offsets = gsplat::intersect_offset(
             isect_ids, 1, tile_width, tile_height);
         isect_offsets = isect_offsets.reshape({1, tile_height, tile_width});
+
+        // Debug prints for tile statistics (every 100 iterations)
+        static int debug_counter = 0;
+        debug_counter++;
+        if (debug_counter % 100 == 0) {
+            // Calculate statistics about gaussians per tile
+            auto offsets_cpu = isect_offsets.to(torch::kCPU);
+            auto offsets_data = offsets_cpu.data_ptr<int32_t>();
+            
+            int total_intersections = 0;
+            int max_gaussians_per_tile = 0;
+            int min_gaussians_per_tile = INT_MAX;
+            int tiles_with_gaussians = 0;
+            std::vector<int> gaussians_per_tile_list;
+            
+            // Calculate statistics about tiles per gaussian
+            auto tiles_per_gauss_cpu = tiles_per_gauss.to(torch::kCPU);
+            auto tiles_per_gauss_data = tiles_per_gauss_cpu.data_ptr<int32_t>();
+            std::vector<int> tiles_per_gaussian_list;
+            int total_tiles_used = 0;
+            
+            // Also analyze gaussian radii to understand coverage
+            auto radii_cpu = radii.to(torch::kCPU);
+            auto radii_data = radii_cpu.data_ptr<int32_t>();
+            float avg_radius_x = 0.0f, avg_radius_y = 0.0f;
+            int valid_radii_count = 0;
+            
+            for (int i = 0; i < tile_height * tile_width; ++i) {
+                int gaussians_this_tile;
+                if (i == tile_height * tile_width - 1) {
+                    gaussians_this_tile = flatten_ids.size(0) - offsets_data[i];
+                } else {
+                    gaussians_this_tile = offsets_data[i + 1] - offsets_data[i];
+                }
+                
+                if (gaussians_this_tile > 0) {
+                    tiles_with_gaussians++;
+                    total_intersections += gaussians_this_tile;
+                    max_gaussians_per_tile = std::max(max_gaussians_per_tile, gaussians_this_tile);
+                    min_gaussians_per_tile = std::min(min_gaussians_per_tile, gaussians_this_tile);
+                    gaussians_per_tile_list.push_back(gaussians_this_tile);
+                }
+            }
+            
+            // Calculate ACTUAL tiles per gaussian from intersection data
+            // NOTE: tiles_per_gauss only contains bounding box areas, not actual intersections!
+            // We need to count from the actual intersection data instead
+            int visible_gaussians = 0;
+            std::vector<int> actual_tiles_per_gaussian;
+            if (flatten_ids.size(0) > 0) {
+                // Initialize counter for each gaussian
+                int max_gaussian_id = 0;
+                auto flatten_ids_cpu = flatten_ids.to(torch::kCPU);
+                auto flatten_ids_data = flatten_ids_cpu.data_ptr<int32_t>();
+                
+                // Find max gaussian ID to size our counter array
+                for (int i = 0; i < flatten_ids.size(0); ++i) {
+                    max_gaussian_id = std::max(max_gaussian_id, flatten_ids_data[i]);
+                }
+                
+                actual_tiles_per_gaussian.resize(max_gaussian_id + 1, 0);
+                
+                // Count actual intersections per gaussian
+                for (int i = 0; i < flatten_ids.size(0); ++i) {
+                    int gaussian_id = flatten_ids_data[i];
+                    if (gaussian_id >= 0) {
+                        actual_tiles_per_gaussian[gaussian_id]++;
+                    }
+                }
+                
+                // Collect statistics from actual intersection counts
+                for (int count : actual_tiles_per_gaussian) {
+                    if (count == 0) {
+                        continue;
+                    }
+                    visible_gaussians++;
+                    tiles_per_gaussian_list.push_back(count);
+                    total_tiles_used += count;
+                }
+            }
+            
+            // Calculate average radius
+            for (int i = 0; i < radii.size(0); ++i) {
+                float radius_x = radii_data[i * 2];
+                float radius_y = radii_data[i * 2 + 1];
+                if (radius_x > 0 && radius_y > 0) {
+                    avg_radius_x += radius_x;
+                    avg_radius_y += radius_y;
+                    valid_radii_count++;
+                }
+            }
+            
+            if (valid_radii_count > 0) {
+                avg_radius_x /= valid_radii_count;
+                avg_radius_y /= valid_radii_count;
+            }
+            
+            float avg_gaussians_per_tile = tiles_with_gaussians > 0 ? 
+                (float)total_intersections / tiles_with_gaussians : 0.0f;
+            
+            // Calculate median gaussians per tile
+            float median_gaussians_per_tile = 0.0f;
+            if (!gaussians_per_tile_list.empty()) {
+                std::sort(gaussians_per_tile_list.begin(), gaussians_per_tile_list.end());
+                size_t n = gaussians_per_tile_list.size();
+                if (n % 2 == 0) {
+                    median_gaussians_per_tile = (gaussians_per_tile_list[n/2-1] + gaussians_per_tile_list[n/2]) / 2.0f;
+                } else {
+                    median_gaussians_per_tile = gaussians_per_tile_list[n/2];
+                }
+            }
+            
+            // Calculate average, median, min, max tiles per gaussian
+            float avg_tiles_per_gaussian = tiles_per_gaussian_list.size() > 0 ? 
+                (float)total_tiles_used / tiles_per_gaussian_list.size() : 0.0f;
+            
+            float median_tiles_per_gaussian = 0.0f;
+            int min_tiles_per_gaussian = 0;
+            int max_tiles_per_gaussian = 0;
+
+            std::cout << "tiles_per_gaussian_list size: " << tiles_per_gaussian_list.size() << std::endl;
+            
+            if (!tiles_per_gaussian_list.empty()) {
+                std::sort(tiles_per_gaussian_list.begin(), tiles_per_gaussian_list.end());
+                size_t n = tiles_per_gaussian_list.size();
+                if (n % 2 == 0) {
+                    median_tiles_per_gaussian = (tiles_per_gaussian_list[n/2-1] + tiles_per_gaussian_list[n/2]) / 2.0f;
+                } else {
+                    median_tiles_per_gaussian = tiles_per_gaussian_list[n/2];
+                }
+                min_tiles_per_gaussian = tiles_per_gaussian_list[0];
+                max_tiles_per_gaussian = tiles_per_gaussian_list[n-1];
+            }
+            
+            std::cout << std::fixed << std::setprecision(2);
+            std::cout << std::endl;
+            std::cout << "[DEBUG] Iteration " << debug_counter 
+                      << " - Total tile intersections: " << total_intersections
+                      << ", visible gaussians: " << visible_gaussians
+                      << ", gaussians per tile: (med: " << median_gaussians_per_tile
+                      << ", avg: " << avg_gaussians_per_tile
+                      << ", min: " << min_gaussians_per_tile
+                      << ", max: " << max_gaussians_per_tile
+                      << "), tiles per gaussian: (med: " << median_tiles_per_gaussian
+                      << ", avg: " << avg_tiles_per_gaussian
+                      << ", min: " << min_tiles_per_gaussian
+                      << ", max: " << max_tiles_per_gaussian << ")"
+                      << std::endl;
+            std::cout << std::defaultfloat;
+        }
 
         TORCH_CHECK(tiles_per_gauss.is_cuda(), "tiles_per_gauss must be on CUDA");
         TORCH_CHECK(isect_ids.is_cuda(), "isect_ids must be on CUDA");

@@ -293,6 +293,7 @@ namespace gs {
                 config_->scaling_modifier,
                 false,
                 false,
+                false,
                 RenderMode::RGB);
         }
 

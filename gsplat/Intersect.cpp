@@ -13,21 +13,34 @@
 namespace gsplat {
 
 std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
-    const at::Tensor means2d,                    // [C, N, 2] or [nnz, 2]
-    const at::Tensor radii,                      // [C, N, 2] or [nnz, 2]
-    const at::Tensor depths,                     // [C, N] or [nnz]
+    const at::Tensor means2d,                     // [C, N, 2] or [nnz, 2]
+    const at::Tensor radii,                       // [C, N, 2] or [nnz, 2]
+    const at::Tensor depths,                      // [C, N] or [nnz]
+    const at::optional<at::Tensor> conics,       // [C, N, 3] or [nnz, 3] - ADD: optional for FlashGS
+    const at::optional<at::Tensor> opacities,    // [C, N] or [nnz] - ADD: optional for FlashGS
     const at::optional<at::Tensor> camera_ids,   // [nnz]
     const at::optional<at::Tensor> gaussian_ids, // [nnz]
     const uint32_t C,
     const uint32_t tile_size,
     const uint32_t tile_width,
     const uint32_t tile_height,
-    const bool sort
+    const bool sort,
+    const bool use_flashgs
 ) {
     DEVICE_GUARD(means2d);
     CHECK_INPUT(means2d);
     CHECK_INPUT(radii);
     CHECK_INPUT(depths);
+
+    // FlashGS validation
+    if (use_flashgs) {
+        TORCH_CHECK(
+            conics.has_value() && opacities.has_value(),
+            "When use_flashgs is true, conics and opacities must be provided."
+        );
+        CHECK_INPUT(conics.value());
+        CHECK_INPUT(opacities.value());
+    }
 
     uint32_t n_elements = means2d.numel() / 2;
     bool packed = means2d.dim() == 2;
@@ -56,24 +69,47 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
         at::empty_like(depths, depths.options().dtype(at::kInt));
     int64_t n_isects;
     at::Tensor cum_tiles_per_gauss;
+
     if (n_elements) {
-        launch_intersect_tile_kernel(
-            // inputs
-            means2d,
-            radii,
-            depths,
-            packed ? camera_ids : c10::nullopt,
-            packed ? gaussian_ids : c10::nullopt,
-            C,
-            tile_size,
-            tile_width,
-            tile_height,
-            c10::nullopt, // cum_tiles_per_gauss
-            // outputs
-            at::optional<at::Tensor>(tiles_per_gauss),
-            c10::nullopt, // isect_ids
-            c10::nullopt  // flatten_ids
-        );
+        if (use_flashgs) {
+            launch_intersect_tile_kernel_flashgs(
+                // inputs
+                means2d,
+                radii,
+                depths,
+                conics.value(),     // Required for FlashGS
+                opacities.value(),  // Required for FlashGS
+                packed ? camera_ids : c10::nullopt,
+                packed ? gaussian_ids : c10::nullopt,
+                C,
+                tile_size,
+                tile_width,
+                tile_height,
+                c10::nullopt, // cum_tiles_per_gauss
+                // outputs
+                at::optional<at::Tensor>(tiles_per_gauss),
+                c10::nullopt, // isect_ids
+                c10::nullopt  // flatten_ids
+            );
+        } else {
+            launch_intersect_tile_kernel(
+                // inputs
+                means2d,
+                radii,
+                depths,
+                packed ? camera_ids : c10::nullopt,
+                packed ? gaussian_ids : c10::nullopt,
+                C,
+                tile_size,
+                tile_width,
+                tile_height,
+                c10::nullopt, // cum_tiles_per_gauss
+                // outputs
+                at::optional<at::Tensor>(tiles_per_gauss),
+                c10::nullopt, // isect_ids
+                c10::nullopt  // flatten_ids
+            );
+        }
         cum_tiles_per_gauss = at::cumsum(tiles_per_gauss.view({-1}), 0);
         n_isects = cum_tiles_per_gauss[-1].item<int64_t>();
     } else {
@@ -86,23 +122,45 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
     at::Tensor flatten_ids =
         at::empty({n_isects}, depths.options().dtype(at::kInt));
     if (n_isects) {
-        launch_intersect_tile_kernel(
-            // inputs
-            means2d,
-            radii,
-            depths,
-            packed ? camera_ids : c10::nullopt,
-            packed ? gaussian_ids : c10::nullopt,
-            C,
-            tile_size,
-            tile_width,
-            tile_height,
-            cum_tiles_per_gauss,
-            // outputs
-            c10::nullopt, // tiles_per_gauss
-            at::optional<at::Tensor>(isect_ids),
-            at::optional<at::Tensor>(flatten_ids)
-        );
+        if (use_flashgs) {
+            launch_intersect_tile_kernel_flashgs(
+                // inputs
+                means2d,
+                radii,
+                depths,
+                conics.value(),     // Required for FlashGS
+                opacities.value(),  // Required for FlashGS
+                packed ? camera_ids : c10::nullopt,
+                packed ? gaussian_ids : c10::nullopt,
+                C,
+                tile_size,
+                tile_width,
+                tile_height,
+                cum_tiles_per_gauss,
+                // outputs
+                c10::nullopt, // tiles_per_gauss
+                at::optional<at::Tensor>(isect_ids),
+                at::optional<at::Tensor>(flatten_ids)
+            );
+        } else {
+            launch_intersect_tile_kernel(
+                // inputs
+                means2d,
+                radii,
+                depths,
+                packed ? camera_ids : c10::nullopt,
+                packed ? gaussian_ids : c10::nullopt,
+                C,
+                tile_size,
+                tile_width,
+                tile_height,
+                cum_tiles_per_gauss,
+                // outputs
+                c10::nullopt, // tiles_per_gauss
+                at::optional<at::Tensor>(isect_ids),
+                at::optional<at::Tensor>(flatten_ids)
+            );
+        }
     }
 
     // optionally sort the Gaussians by isect_ids

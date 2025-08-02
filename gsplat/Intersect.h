@@ -26,6 +26,26 @@ void launch_intersect_tile_kernel(
     at::optional<at::Tensor> flatten_ids      // [n_isects]
 );
 
+void launch_intersect_tile_kernel_flashgs(
+    // inputs
+    const at::Tensor means2d,                    // [C, N, 2] or [nnz, 2]
+    const at::Tensor radii,                      // [C, N, 2] or [nnz, 2]
+    const at::Tensor depths,                     // [C, N] or [nnz]
+    const at::Tensor conics,                     // [C, N, 3] or [nnz, 3] - ADD: conic sections
+    const at::Tensor opacities,                  // [C, N] or [nnz] - ADD: for power calculation
+    const at::optional<at::Tensor> camera_ids,   // [nnz]
+    const at::optional<at::Tensor> gaussian_ids, // [nnz]
+    const uint32_t C,
+    const uint32_t tile_size,
+    const uint32_t tile_width,
+    const uint32_t tile_height,
+    const at::optional<at::Tensor> cum_tiles_per_gauss, // [C, N] or [nnz]
+    // outputs
+    at::optional<at::Tensor> tiles_per_gauss, // [C, N] or [nnz]
+    at::optional<at::Tensor> isect_ids,       // [n_isects]
+    at::optional<at::Tensor> flatten_ids      // [n_isects]
+);
+
 void launch_intersect_offset_kernel(
     // inputs
     const at::Tensor isect_ids, // [n_isects]

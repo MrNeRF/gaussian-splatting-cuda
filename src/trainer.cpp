@@ -117,7 +117,7 @@ namespace gs {
 
         // Print render mode configuration
         std::cout << "Render mode: " << params.optimization.render_mode << std::endl;
-
+        std::cout << "Use flashgs: " << params.optimization.use_flashgs << std::endl;
         std::cout << "Visualization: " << (params.optimization.enable_viz ? "enabled" : "disabled") << std::endl;
     }
 
@@ -200,6 +200,7 @@ namespace gs {
                 1.0f,
                 false,
                 false,
+                params_.optimization.use_flashgs,
                 render_mode);
         };
 
@@ -337,6 +338,7 @@ namespace gs {
         progress_->complete();
         evaluator_->save_report();
         progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
+
 
         is_running_ = false;
         training_complete_ = true;

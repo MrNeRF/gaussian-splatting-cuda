@@ -182,16 +182,19 @@ void adam(
 
 // GS Tile Intersection
 std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
-    const at::Tensor means2d,                    // [C, N, 2] or [nnz, 2]
-    const at::Tensor radii,                      // [C, N, 2] or [nnz, 2]
-    const at::Tensor depths,                     // [C, N] or [nnz]
+    const at::Tensor means2d,                     // [C, N, 2] or [nnz, 2]
+    const at::Tensor radii,                       // [C, N, 2] or [nnz, 2]
+    const at::Tensor depths,                      // [C, N] or [nnz]
+    const at::optional<at::Tensor> conics,       // [C, N, 3] or [nnz, 3] - ADD: optional for FlashGS
+    const at::optional<at::Tensor> opacities,    // [C, N] or [nnz] - ADD: optional for FlashGS
     const at::optional<at::Tensor> camera_ids,   // [nnz]
     const at::optional<at::Tensor> gaussian_ids, // [nnz]
     const uint32_t C,
     const uint32_t tile_size,
     const uint32_t tile_width,
     const uint32_t tile_height,
-    const bool sort
+    const bool sort,
+    const bool use_flashgs = false
 );
 at::Tensor intersect_offset(
     const at::Tensor isect_ids, // [n_isects]
