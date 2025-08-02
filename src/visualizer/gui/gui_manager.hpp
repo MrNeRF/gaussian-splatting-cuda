@@ -61,6 +61,16 @@ namespace gs {
             // UI state only
             std::unordered_map<std::string, bool> window_states_;
             bool show_main_panel_ = true;
+            // Speed overlay state
+            bool speed_overlay_visible_ = false;
+            std::chrono::steady_clock::time_point speed_overlay_start_time_;
+            std::chrono::milliseconds speed_overlay_duration_;
+            float current_speed_;
+            float max_speed_;
+
+            // Method declarations to add to your GuiManager class:
+            void renderSpeedOverlay();
+            void showSpeedOverlay(float current_speed, float max_speed);
         };
     } // namespace gui
 } // namespace gs

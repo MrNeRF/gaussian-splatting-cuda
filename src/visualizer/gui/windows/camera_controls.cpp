@@ -57,6 +57,12 @@ namespace gs::gui::windows {
                 ImGui::TableNextColumn();
                 ImGui::Text("w, s, a, d keys");
 
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Increase/Decrease wasd speed");
+                ImGui::TableNextColumn();
+                ImGui::Text("Ctrl + +/-");
+
                 ImGui::EndTable();
             }
 
