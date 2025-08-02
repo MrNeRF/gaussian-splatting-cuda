@@ -194,6 +194,41 @@ namespace gs {
         return false;
     }
 
+    bool CameraController::handleWasd(const InputHandler::KeyEvent& event) {
+        const float ADVANCE_RATE = 1.0f;
+
+        float advance_rate = ADVANCE_RATE;
+
+        bool camera_changed = false;
+
+        if (input_handler_->isKeyPressed(GLFW_KEY_W)) {
+            viewport_.camera.advance_forward(advance_rate);
+            camera_changed = true;
+        }
+
+        if (input_handler_->isKeyPressed(GLFW_KEY_S)) {
+            viewport_.camera.advance_backward(advance_rate);
+            camera_changed = true;
+        }
+
+        if (input_handler_->isKeyPressed(GLFW_KEY_A)) {
+            viewport_.camera.advance_left(advance_rate);
+            camera_changed = true;
+        }
+
+        if (input_handler_->isKeyPressed(GLFW_KEY_D)) {
+            viewport_.camera.advance_right(advance_rate);
+            camera_changed = true;
+        }
+
+        if (camera_changed) {
+            publishCameraChanged();
+            return true;
+        }
+
+        return false;
+    }
+
     bool CameraController::handleKey(const InputHandler::KeyEvent& event) {
         if (!is_enabled_)
             return false;
@@ -201,44 +236,7 @@ namespace gs {
         if (handleSpeedChange(event)) {
             return true;
         }
-
-        const float ADVANCE_RATE = 1.0f;
-        const float ADVANCE_RATE_FINE_TUNE = 0.3f;
-
-        // Handle WASD movement (only if Ctrl is not pressed)
-        float advance_rate = 0.0f;
-        if (event.action == GLFW_PRESS) {
-            advance_rate = ADVANCE_RATE_FINE_TUNE;
-        } else if (event.action == GLFW_REPEAT) {
-            advance_rate = ADVANCE_RATE;
-        } else {
-            return false;
-        }
-
-        bool camera_changed = false;
-        switch (event.key) {
-        case GLFW_KEY_W:
-            viewport_.camera.advance_forward(advance_rate);
-            camera_changed = true;
-            break;
-        case GLFW_KEY_S:
-            viewport_.camera.advance_backward(advance_rate);
-            camera_changed = true;
-            break;
-        case GLFW_KEY_A:
-            viewport_.camera.advance_left(advance_rate);
-            camera_changed = true;
-            break;
-        case GLFW_KEY_D:
-            viewport_.camera.advance_right(advance_rate);
-            camera_changed = true;
-            break;
-        default:
-            return false;
-        }
-
-        if (camera_changed) {
-            publishCameraChanged();
+        if (handleWasd(event)) {
             return true;
         }
 
