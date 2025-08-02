@@ -61,7 +61,7 @@ namespace gs::gui::windows {
                 ImGui::TableNextColumn();
                 ImGui::Text("Increase/Decrease wasd speed");
                 ImGui::TableNextColumn();
-                ImGui::Text("Ctrl + '+/-'");
+                ImGui::Text("Ctrl + +/-");
 
                 ImGui::EndTable();
             }
