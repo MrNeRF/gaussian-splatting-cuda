@@ -20,7 +20,7 @@ namespace gs {
             float scaling_modifier = 1.0f;
             bool antialiasing = false;
             RenderMode render_mode = RenderMode::RGB;
-            const BoundingBox* crop_box = nullptr; // crop box
+            const geometry::BoundingBox* crop_box = nullptr; // crop box
         };
 
         struct RenderResult {
