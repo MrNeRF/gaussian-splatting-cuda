@@ -165,6 +165,29 @@ namespace gs {
         const float ADVANCE_RATE = 1.0f;
         const float ADVANCE_RATE_FINE_TUNE = 0.3f;
 
+        // Handle speed control first (Ctrl + Plus/Minus)
+        if (input_handler_ && input_handler_->isKeyPressed(GLFW_KEY_LEFT_CONTROL) ||
+            input_handler_->isKeyPressed(GLFW_KEY_RIGHT_CONTROL)) {
+
+            if (event.action == GLFW_PRESS) {
+                if (event.key == GLFW_KEY_EQUAL || event.key == GLFW_KEY_KP_ADD) {
+                    // Increase speed (Ctrl + '+' or Ctrl + '=')
+                    viewport_.camera.increaseWasdSpeed();
+                    // std::cout << "WASD Speed increased to: " << viewport_.camera.getWasdSpeed()
+                    //           << " (Max: " << viewport_.camera.getMaxWasdSpeed() << ")" << std::endl;
+                    return true;
+                } else if (event.key == GLFW_KEY_MINUS || event.key == GLFW_KEY_KP_SUBTRACT) {
+                    // Decrease speed (Ctrl + '-')
+                    viewport_.camera.decreaseWasdSpeed();
+                    // std::cout << "WASD Speed decreased to: " << viewport_.camera.getWasdSpeed()
+                    //           << " (Max: " << viewport_.camera.getMaxWasdSpeed() << ")" << std::endl;
+                    return true;
+                }
+            }
+            // If Ctrl is held but it's not +/-, don't process WASD movement
+            return false;
+            }
+
         float advance_rate = 0.0f;
         if (event.action == GLFW_PRESS) {
             advance_rate = ADVANCE_RATE_FINE_TUNE;
