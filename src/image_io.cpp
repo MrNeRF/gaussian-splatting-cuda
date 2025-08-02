@@ -12,6 +12,15 @@
 #include <iostream>
 #include <vector>
 
+std::tuple<int, int, int>
+get_image_info(std::filesystem::path p) {
+    int w, h, c;
+    int result = stbi_info(p.string().c_str(), &w, &h, &c);
+    if (!result)
+        throw std::runtime_error("stbi_info failed: " + p.string() + " : " + stbi_failure_reason());
+    return {w, h, c};
+}
+
 // Existing implementations...
 std::tuple<unsigned char*, int, int, int>
 load_image(std::filesystem::path p, int res_div) {

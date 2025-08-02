@@ -1,11 +1,13 @@
 #include "core/trainer.hpp"
 #include "core/rasterizer.hpp"
+#include "core/fast_rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
 #include "visualizer/detail.hpp"
 #include <chrono>
 #include <iostream>
 #include <numeric>
 #include <torch/torch.h>
+#include <cuda_runtime.h>
 
 namespace gs {
 
@@ -52,12 +54,12 @@ namespace gs {
 
         // Regularization terms
         if (opt_params.opacity_reg > 0.0f) {
-            auto opacity_l1 = torch::abs(splatData.get_opacity()).mean();
+            auto opacity_l1 = splatData.get_opacity().mean();
             loss += opt_params.opacity_reg * opacity_l1;
         }
 
         if (opt_params.scale_reg > 0.0f) {
-            auto scale_l1 = torch::abs(splatData.get_scaling()).mean();
+            auto scale_l1 = splatData.get_scaling().mean();
             loss += opt_params.scale_reg * scale_l1;
         }
         // Total variation loss for bilateral grid
@@ -76,6 +78,28 @@ namespace gs {
 
         if (!torch::cuda::is_available()) {
             throw std::runtime_error("CUDA is not available – aborting.");
+        }
+
+        // Figure out whether dataset images can be cached in VRAM
+        // TODO: this is a crude heuristic that should be improved
+        constexpr size_t mib = 1024 * 1024; // 1 MiB
+        constexpr size_t padding = 512 * mib; // 512 MiB padding for safety
+        constexpr size_t min_bytes_remaining = 12288 * mib; // at least 12 GiB should be left for model, rendering, optimizer, etc.
+        constexpr size_t max_bytes_dataset = 8192 * mib; // max 8 GiB for dataset images
+        size_t free_mem_bytes = 0, total_mem_bytes = 0;
+        cudaError_t err = cudaMemGetInfo(&free_mem_bytes, &total_mem_bytes);
+        if (err != cudaSuccess) {
+            throw std::runtime_error("Failed to get CUDA memory info: " + std::string(cudaGetErrorString(err)));
+        }
+        const size_t num_bytes_dataset = dataset->get_num_bytes();
+        std::cout << "Free VRAM: " << (free_mem_bytes / mib) << " MiB, Dataset size: " << (num_bytes_dataset / mib) << " MiB" << std::endl;
+        const bool cache_dataset = (free_mem_bytes > min_bytes_remaining + num_bytes_dataset + padding) &&
+                                   (num_bytes_dataset < max_bytes_dataset);
+        if (cache_dataset) {
+            std::cout << "Images will be cached in VRAM" << std::endl;
+            dataset->enable_image_caching();
+        } else {
+            std::cout << "Images will be loaded from disk on demand" << std::endl;
         }
 
         // Handle dataset split based on evaluation flag
@@ -105,8 +129,7 @@ namespace gs {
         // Initialize bilateral grid if enabled
         initialize_bilateral_grid();
 
-        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
-        background_ = background_.to(torch::kCUDA);
+        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
         progress_ = std::make_unique<TrainingProgress>(
             params.optimization.iterations,
@@ -193,14 +216,18 @@ namespace gs {
 
         // Use the render mode from parameters
         auto render_fn = [this, &cam, render_mode]() {
-            return gs::rasterize(
+            // return gs::rasterize(
+            //     *cam,
+            //     strategy_->get_model(),
+            //     background_,
+            //     1.0f,
+            //     false,
+            //     false,
+            //     render_mode);
+            return gs::fast_rasterize(
                 *cam,
                 strategy_->get_model(),
-                background_,
-                1.0f,
-                false,
-                false,
-                render_mode);
+                background_);
         };
 
         RenderOutput r_output;
@@ -222,9 +249,9 @@ namespace gs {
                                           strategy_->get_model(),
                                           params_.optimization);
 
-        current_loss_ = loss.item<float>();
-
         loss.backward();
+
+        current_loss_ = loss.item<float>();
 
         {
             torch::NoGradGuard no_grad;
@@ -265,7 +292,7 @@ namespace gs {
             }
         }
 
-        progress_->update(iter, loss.item<float>(),
+        progress_->update(iter, current_loss_,
                           static_cast<int>(strategy_->get_model().size()),
                           strategy_->is_refining(iter));
 
@@ -275,7 +302,7 @@ namespace gs {
                 std::lock_guard<std::mutex> lock(viewer_->info_->mtx);
                 info->updateProgress(iter, params_.optimization.iterations);
                 info->updateNumSplats(static_cast<size_t>(strategy_->get_model().size()));
-                info->updateLoss(loss.item<float>());
+                info->updateLoss(current_loss_);
             }
 
             if (viewer_->notifier_) {
@@ -311,10 +338,10 @@ namespace gs {
 
         bool should_continue = true;
 
+        auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
         for (int epoch = 0; epoch < epochs_needed && should_continue; ++epoch) {
-            auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
-
-            for (auto& batch : *train_dataloader) {
+            for (auto dataloader_iter = train_dataloader->begin(); dataloader_iter != train_dataloader->end(); ++dataloader_iter) {
+                auto& batch = *dataloader_iter;
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera;
                 torch::Tensor gt_image = std::move(camera_with_image.image);

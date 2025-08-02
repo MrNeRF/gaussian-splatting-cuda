@@ -400,5 +400,14 @@ SplatData SplatData::init_model_from_pointcloud(const gs::param::TrainingParamet
     std::cout << "  - sh0 shape: " << sh0.sizes() << std::endl;
     std::cout << "  - shN shape: " << shN.sizes() << std::endl;
 
-    return SplatData(params.optimization.sh_degree, means, sh0, shN, scaling, rotation, opacity, scene_scale);
+    return SplatData(
+        params.optimization.sh_degree,
+        means.contiguous(),
+        sh0.contiguous(),
+        shN.contiguous(),
+        scaling.contiguous(),
+        rotation.contiguous(),
+        opacity.contiguous(),
+        scene_scale
+    );
 }

@@ -287,6 +287,15 @@ std::tuple<at::Tensor, at::Tensor> relocation(
     const int n_max
 );
 
+void add_noise(
+    at::Tensor raw_opacities, // [N]
+    at::Tensor raw_scales,    // [N, 3]
+    at::Tensor raw_quats,     // [N, 4]
+    at::Tensor noise,         // [N, 3]
+    at::Tensor means,         // [N, 3]
+    const float current_lr
+);
+
 // Use uncented transform to project 3D gaussians to 2D. (none differentiable)
 // https://arxiv.org/abs/2412.12507
 std::tuple<

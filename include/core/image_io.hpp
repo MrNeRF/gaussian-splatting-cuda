@@ -10,6 +10,8 @@
 #include <torch/torch.h>
 #include <vector>
 
+std::tuple<int, int, int>
+get_image_info(std::filesystem::path p);
 // Existing functions
 std::tuple<unsigned char*, int, int, int>
 load_image(std::filesystem::path p, int res_div = -1);

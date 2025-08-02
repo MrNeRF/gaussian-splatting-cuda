@@ -2,6 +2,7 @@
 
 #include "core/istrategy.hpp"
 #include "core/selective_adam.hpp"
+#include "core/fused_adam.hpp"
 #include <memory>
 #include <torch/torch.h>
 
