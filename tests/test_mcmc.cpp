@@ -36,7 +36,6 @@ protected:
         setupTestCamera();
     }
 
-
     void setupTestCamera() {
         // Create a test camera
         auto R = torch::eye(3, torch::kFloat32);
@@ -49,8 +48,8 @@ protected:
         test_camera = std::make_unique<Camera>(
             R, T, fov2focal(fov, width),
             fov2focal(fov, height),
-            0.5*width,
-            0.5*height,
+            0.5 * width,
+            0.5 * height,
             torch::empty({0}, torch::kFloat32),
             torch::empty({0}, torch::kFloat32),
             gsplat::CameraModelType::PINHOLE,

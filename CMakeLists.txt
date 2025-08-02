@@ -156,7 +156,8 @@ set(HOST_SOURCES
         src/bilateral_grid.cpp
         src/selective_adam.cpp
         src/training_setup.cpp
-        src/bounding_box.cpp
+        src/geometry/bounding_box.cpp
+        src/geometry/euclidean_transform.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
@@ -387,6 +388,7 @@ if(BUILD_TESTS)
             tests/test_numerical_gradients.cpp
             tests/test_garden_data.cpp
             tests/torch_impl.cpp
+            tests/test_geometry.cpp
     )
 
     add_executable(gaussian_tests ${TEST_SOURCES})
