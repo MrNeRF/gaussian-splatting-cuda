@@ -11,9 +11,9 @@ total_start=$(date +%s)
 # Initialize array to store individual times
 declare -A scene_times
 
-USE_FLASHGS_ARG=""
-if [[ "$@" == *"--use-flashgs"* ]]; then
-    USE_FLASHGS_ARG="--use-flashgs"
+USE_PRECISE_INTERSECTION_ARG=""
+if [[ "$@" == *"--use-precise-intersection"* ]]; then
+    USE_PRECISE_INTERSECTION_ARG="--use-precise-intersection"
 fi
 
 for SCENE in $SCENE_LIST;
@@ -37,8 +37,7 @@ do
         -d $SCENE_DIR/$SCENE/ \
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
-        --iter 20000 $USE_FLASHGS_ARG
-    #--iter 30000
+        --iter 30000 $USE_PRECISE_INTERSECTION_ARG
     
     # End timer for this scene
     scene_end=$(date +%s)

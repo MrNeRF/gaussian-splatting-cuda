@@ -111,7 +111,7 @@ namespace gs {
                     {"init_scaling", defaults.init_scaling, "Initial scaling value for new Gaussians"},
                     {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
                     {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
-                    {"use_flashgs", defaults.use_flashgs, "Use flashgs optimization"},
+                    {"use_precise_intersection", defaults.use_precise_intersection, "Enable precise tile intersection of gaussian ellipsoids"},
                     {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
                     {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
                     {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
@@ -328,8 +328,8 @@ namespace gs {
             if (json.contains("selective_adam")) {
                 params.selective_adam = json["selective_adam"];
             }
-            if (json.contains("use_flashgs")) {
-                params.use_flashgs = json["use_flashgs"];
+            if (json.contains("use_precise_intersection")) {
+                params.use_precise_intersection = json["use_precise_intersection"];
             }
             return params;
         }
@@ -390,7 +390,7 @@ namespace gs {
             opt_json["init_scaling"] = params.optimization.init_scaling;
             opt_json["max_cap"] = params.optimization.max_cap;
             opt_json["render_mode"] = params.optimization.render_mode;
-            opt_json["use_flashgs"] = params.optimization.use_flashgs;
+            opt_json["use_precise_intersection"] = params.optimization.use_precise_intersection;
             opt_json["eval_steps"] = params.optimization.eval_steps;
             opt_json["save_steps"] = params.optimization.save_steps;
             opt_json["enable_eval"] = params.optimization.enable_eval;

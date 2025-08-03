@@ -49,7 +49,7 @@ namespace gs {
         float scaling_modifier,
         bool packed,
         bool antialiased,
-        bool use_flashgs,
+        bool use_precise_intersection,
         RenderMode render_mode) {
 
         // Ensure we don't use packed mode (not supported in this implementation)
@@ -220,12 +220,12 @@ namespace gs {
 
         const auto isect_results = gsplat::intersect_tile(
             means2d, radii, depths, 
-            use_flashgs ? std::make_optional(conics.squeeze(0)) : std::nullopt,    // Pass conics if FlashGS
-            use_flashgs ? std::make_optional(final_opacities.squeeze(0)) : std::nullopt, // Pass opacities if FlashGS
+            use_precise_intersection ? std::make_optional(conics.squeeze(0)) : std::nullopt,
+            use_precise_intersection ? std::make_optional(final_opacities.squeeze(0)) : std::nullopt,
             {}, {},
             1, tile_size, tile_width, tile_height,
             true,
-            use_flashgs
+            use_precise_intersection
         );
 
         const auto tiles_per_gauss = std::get<0>(isect_results);

@@ -33,7 +33,7 @@ namespace gs {
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
             bool enable_save_eval_images = false;             // Save during evaluation images
             bool enable_viz = false;                          // Enable visualization during training
-            bool use_flashgs = false;                         // Use flashgs optimization
+            bool use_precise_intersection = false;            // Enable precise tile intersection of gaussian ellipsoids
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
 
             // Bilateral grid parameters

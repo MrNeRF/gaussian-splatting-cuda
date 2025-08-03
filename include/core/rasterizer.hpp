@@ -62,7 +62,7 @@ namespace gs {
         float scaling_modifier = 1.0,
         bool packed = false,
         bool antialiased = false,
-        bool use_flashgs = false,
+        bool use_precise_intersection = false,
         RenderMode render_mode = RenderMode::RGB);
 
 } // namespace gs

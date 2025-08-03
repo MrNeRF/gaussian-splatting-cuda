@@ -416,7 +416,7 @@ namespace gs {
                     1.0f,
                     false,
                     false,
-                    _params.optimization.use_flashgs,
+                    _params.optimization.use_precise_intersection,
                     stringToRenderMode(_params.optimization.render_mode));
 
                 // Only compute metrics if we have RGB output

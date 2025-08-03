@@ -114,10 +114,11 @@ namespace gs {
 
         // Initialize the evaluator - it handles all metrics internally
         evaluator_ = std::make_unique<metrics::MetricsEvaluator>(params);
+        
+        std::cout << "Use precise intersection: " << params.optimization.use_precise_intersection << std::endl;
 
         // Print render mode configuration
         std::cout << "Render mode: " << params.optimization.render_mode << std::endl;
-        std::cout << "Use flashgs: " << params.optimization.use_flashgs << std::endl;
         std::cout << "Visualization: " << (params.optimization.enable_viz ? "enabled" : "disabled") << std::endl;
     }
 
@@ -200,7 +201,7 @@ namespace gs {
                 1.0f,
                 false,
                 false,
-                params_.optimization.use_flashgs,
+                params_.optimization.use_precise_intersection,
                 render_mode);
         };
 

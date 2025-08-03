@@ -16,8 +16,8 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
     const at::Tensor means2d,                     // [C, N, 2] or [nnz, 2]
     const at::Tensor radii,                       // [C, N, 2] or [nnz, 2]
     const at::Tensor depths,                      // [C, N] or [nnz]
-    const at::optional<at::Tensor> conics,       // [C, N, 3] or [nnz, 3] - ADD: optional for FlashGS
-    const at::optional<at::Tensor> opacities,    // [C, N] or [nnz] - ADD: optional for FlashGS
+    const at::optional<at::Tensor> conics,       // [C, N, 3] or [nnz, 3] - only for --use-precise-intersection
+    const at::optional<at::Tensor> opacities,    // [C, N] or [nnz] - only for --use-precise-intersection
     const at::optional<at::Tensor> camera_ids,   // [nnz]
     const at::optional<at::Tensor> gaussian_ids, // [nnz]
     const uint32_t C,
@@ -25,18 +25,17 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
     const uint32_t tile_width,
     const uint32_t tile_height,
     const bool sort,
-    const bool use_flashgs
+    const bool use_precise_intersection
 ) {
     DEVICE_GUARD(means2d);
     CHECK_INPUT(means2d);
     CHECK_INPUT(radii);
     CHECK_INPUT(depths);
 
-    // FlashGS validation
-    if (use_flashgs) {
+    if (use_precise_intersection) {
         TORCH_CHECK(
             conics.has_value() && opacities.has_value(),
-            "When use_flashgs is true, conics and opacities must be provided."
+            "When use_precise_intersection is true, conics and opacities must be provided."
         );
         CHECK_INPUT(conics.value());
         CHECK_INPUT(opacities.value());
@@ -71,14 +70,14 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
     at::Tensor cum_tiles_per_gauss;
 
     if (n_elements) {
-        if (use_flashgs) {
-            launch_intersect_tile_kernel_flashgs(
+        if (use_precise_intersection) {
+            launch_intersect_tile_kernel_precise(
                 // inputs
                 means2d,
                 radii,
                 depths,
-                conics.value(),     // Required for FlashGS
-                opacities.value(),  // Required for FlashGS
+                conics.value(),
+                opacities.value(),
                 packed ? camera_ids : c10::nullopt,
                 packed ? gaussian_ids : c10::nullopt,
                 C,
@@ -122,14 +121,14 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
     at::Tensor flatten_ids =
         at::empty({n_isects}, depths.options().dtype(at::kInt));
     if (n_isects) {
-        if (use_flashgs) {
-            launch_intersect_tile_kernel_flashgs(
+        if (use_precise_intersection) {
+            launch_intersect_tile_kernel_precise(
                 // inputs
                 means2d,
                 radii,
                 depths,
-                conics.value(),     // Required for FlashGS
-                opacities.value(),  // Required for FlashGS
+                conics.value(),
+                opacities.value(),
                 packed ? camera_ids : c10::nullopt,
                 packed ? gaussian_ids : c10::nullopt,
                 C,

@@ -15,7 +15,7 @@ namespace gsplat {
 
 namespace cg = cooperative_groups;
 
-// FlashGS precise ellipsoid-to-tile intersection helper functions
+// Precise ellipsoid-to-tile intersection helper functions
 __forceinline__ __device__ bool segment_intersect_ellipse(float a, float b, float c, float d, float l, float r)
 {
     float delta = b * b - 4.0f * a * c;
@@ -164,9 +164,9 @@ __global__ void intersect_tile_kernel(
     }
 }
 
-// FlashGS kernel with precise ellipsoid-to-tile intersection testing
+// Precise ellipsoid-to-tile intersection testing
 template <typename scalar_t>
-__global__ void intersect_tile_kernel_flashgs(
+__global__ void intersect_tile_kernel_precise(
     // if the data is [C, N, ...] or [nnz, ...] (packed)
     const bool packed,
     // parallelize over C * N, only used if packed is False
@@ -180,8 +180,8 @@ __global__ void intersect_tile_kernel_flashgs(
     const scalar_t *__restrict__ means2d,            // [C, N, 2] or [nnz, 2]
     const int32_t *__restrict__ radii,               // [C, N, 2] or [nnz, 2]
     const scalar_t *__restrict__ depths,             // [C, N] or [nnz]
-    const scalar_t *__restrict__ conics,             // [C, N, 3] or [nnz, 3] - ADD: conic sections
-    const scalar_t *__restrict__ opacities,          // [C, N] or [nnz] - ADD: for power calculation
+    const scalar_t *__restrict__ conics,             // [C, N, 3] or [nnz, 3]
+    const scalar_t *__restrict__ opacities,          // [C, N] or [nnz]
     const int64_t *__restrict__ cum_tiles_per_gauss, // [C, N] or [nnz]
     const uint32_t tile_size,
     const uint32_t tile_width,
@@ -388,13 +388,13 @@ void launch_intersect_tile_kernel(
     );
 }
 
-void launch_intersect_tile_kernel_flashgs(
+void launch_intersect_tile_kernel_precise(
     // inputs
     const at::Tensor means2d,                    // [C, N, 2] or [nnz, 2]
     const at::Tensor radii,                      // [C, N, 2] or [nnz, 2]
     const at::Tensor depths,                     // [C, N] or [nnz]
-    const at::Tensor conics,                     // [C, N, 3] or [nnz, 3] - ADD: conic sections
-    const at::Tensor opacities,                  // [C, N] or [nnz] - ADD: for power calculation
+    const at::Tensor conics,                     // [C, N, 3] or [nnz, 3]
+    const at::Tensor opacities,                  // [C, N] or [nnz]
     const at::optional<at::Tensor> camera_ids,   // [nnz]
     const at::optional<at::Tensor> gaussian_ids, // [nnz]
     const uint32_t C,
@@ -441,9 +441,9 @@ void launch_intersect_tile_kernel_flashgs(
 
     AT_DISPATCH_FLOATING_TYPES(
         means2d.scalar_type(),
-        "intersect_tile_kernel_flashgs",
+        "intersect_tile_kernel_precise",
         [&]() {
-            intersect_tile_kernel_flashgs<scalar_t>
+            intersect_tile_kernel_precise<scalar_t>
                 <<<grid,
                    threads,
                    shmem_size,
