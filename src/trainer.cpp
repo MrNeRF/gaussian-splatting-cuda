@@ -12,9 +12,6 @@
 
 namespace gs {
 
-    using clock = std::chrono::steady_clock;
-    clock::time_point t0;
-
     static inline
     float compute_chi(
         const torch::Tensor& dft_map,
@@ -367,8 +364,123 @@ namespace gs {
 
         bool should_continue = true;
 
-        t0 = clock::now();
+        // This is DashGS specific code for adaptive resolution training
+        // const float chi_scale_factor = 4.0;
+        // const int num_reso_samples = 6;
 
+        // torch::Tensor dft_map;
+        // float max_reso = std::numeric_limits<float>::infinity();
+
+        // auto dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
+        // for (auto& batch : *dataloader) {
+
+        //     torch::Tensor img = std::move(batch[0].data.image); // [C, H, W]
+
+        //     torch::Tensor dft = torch::abs(torch::fft::fftshift(torch::fft::fft2(img), {-2, -1})).sum(0);
+
+        //     if (!dft_map.defined())
+        //         dft_map = dft.clone();
+        //     else
+        //         dft_map += dft;
+
+        //     float chi_max = dft.sum().item<float>();
+        //     float chi_min = chi_max / chi_scale_factor;
+        //     float reso = compute_reso(dft, chi_min);
+        //     max_reso = std::min(max_reso, reso);
+
+        // }
+
+        // dft_map /= train_dataset_size_;
+        // float chi_max = dft_map.sum().item<float>();
+        // // float chi_min = chi_max / chi_scale_factor;
+        // float chi_min = compute_chi(dft_map, max_reso);
+        // // float max_reso = compute_reso(dft_map, chi_min);
+
+        // std::vector<float> resos;
+        // std::vector<int> begin_idxs;
+        // for (int i = 0; i <= num_reso_samples; i++) {
+
+        //     float chi = (chi_max - chi_min) * float(i) / num_reso_samples + chi_min;
+
+        //     float reso = compute_reso(dft_map, chi);
+        //     int begin_index = params_.optimization.stop_refine * (std::log(chi) - std::log(chi_min)) / (std::log(chi_max) - std::log(chi_min));
+
+        //     resos.push_back(reso);
+        //     begin_idxs.push_back(std::max(0, begin_index));
+
+        //     std::cout << reso << " " << begin_index << std::endl;
+
+        // }
+        // int curr_reso_idx = 0;
+        // float curr_reso = resos[0];
+
+        // auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
+
+        // for(int i=0; i<epochs_needed; i++) {
+
+        //     for (auto& batch : *train_dataloader) {
+        //         auto camera_with_image = batch[0].data;
+        //         Camera* cam = camera_with_image.camera;
+        //         torch::Tensor gt_image = std::move(camera_with_image.image);
+
+        //         if ( curr_reso_idx < num_reso_samples && iter >= begin_idxs[curr_reso_idx + 1]) {
+        //             curr_reso_idx++;
+        //             curr_reso = resos[curr_reso_idx];
+        //         }
+        //         float reso = 1;
+        //         if (curr_reso_idx < num_reso_samples) {
+        //             float r0 = resos[curr_reso_idx];
+        //             float r1 = resos[curr_reso_idx + 1];
+        //             int i0 = begin_idxs[curr_reso_idx];
+        //             int i1 = begin_idxs[curr_reso_idx + 1];
+        //             float denom = float(iter - i0) / float(i1 - i0) * (1.0 / (r1 * r1) - 1.0 / (r0 * r0)) + 1.0 / (r0 * r0);
+        //             reso = int(1.0 / std::sqrt(denom));
+        //             // reso = 1.0 / std::sqrt(denom);
+        //         } else {
+        //             reso = 1;
+        //         }
+
+        //         torch::Tensor resized_image;
+        //         if (reso > 1) {
+        //             int input_h = gt_image.sizes()[1];
+        //             int input_w = gt_image.sizes()[2];
+
+        //             int output_h = int(input_h / reso);
+        //             int output_w = int(input_w / reso);
+        //             cam->set_image_height(output_h);
+        //             cam->set_image_width(output_w);
+
+        //             resized_image = LanczosResampling(
+        //                 gt_image.permute({1, 2, 0}), 
+        //                 output_h, 
+        //                 output_w, 
+        //                 2
+        //             ).permute({2, 0, 1});
+        //         } else {
+        //             int input_h = gt_image.sizes()[1];
+        //             int input_w = gt_image.sizes()[2];
+
+        //             cam->set_image_height(input_h);
+        //             cam->set_image_width(input_w);
+        //             resized_image = gt_image;
+        //         }
+
+        //         should_continue = train_step(
+        //             iter,
+        //             camera_with_image.camera,
+        //             resized_image,
+        //             render_mode,
+        //             reso
+        //         );
+
+        //         if (!should_continue) {
+        //             break;
+        //         }
+
+        //         ++iter;
+        //     }
+        // }
+        
         auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
 
         for (int epoch = 0; epoch < epochs_needed && should_continue; ++epoch) {

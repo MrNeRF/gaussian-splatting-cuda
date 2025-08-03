@@ -31,7 +31,7 @@
   "tv_loss_weight": 10.0,
   "steps_scaler": 1,
   "selective_adam": true,
-  "update_shN_after_every": 8,
+  "update_shN_after_every": 1,
   "do_batch_update_after": 5000,
   "use_visibility_mask": false
 }
