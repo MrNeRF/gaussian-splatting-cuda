@@ -40,23 +40,32 @@ namespace gs {
                 return *this;
             }
 
+            Options& amsgrad(bool amsgrad) {
+                amsgrad_ = amsgrad;
+                return *this;
+            }
+
             double lr() const { return lr_; }
             const std::tuple<double, double>& betas() const { return betas_; }
             double eps() const { return eps_; }
             double weight_decay() const { return weight_decay_; }
+            bool amsgrad() const { return amsgrad_; }
 
         private:
             double lr_ = 1e-3;
             std::tuple<double, double> betas_ = std::make_tuple(0.9, 0.999);
             double eps_ = 1e-8;
             double weight_decay_ = 0;
+            bool amsgrad_ = false;
         };
 
         struct AdamParamState : public torch::optim::OptimizerParamState {
             torch::Tensor exp_avg;
             torch::Tensor exp_avg_sq;
             torch::Tensor max_exp_avg_sq; // For amsgrad variant (not used currently)
+            torch::Tensor grad_accum;
             int64_t step_count = 0;
+            int64_t micro_count = 0; // For accumulating gradients over multiple steps
 
             void serialize(torch::serialize::OutputArchive& archive) const override {
                 archive.write("exp_avg", exp_avg);
@@ -69,14 +78,26 @@ namespace gs {
         };
 
         explicit SelectiveAdam(std::vector<torch::optim::OptimizerParamGroup> param_groups,
-                               std::unique_ptr<Options> options)
+                               std::unique_ptr<Options> options,
+                               int update_shN_after_every,
+                               int do_batch_update_after,
+                               bool use_visibility_mask)
             : Optimizer(std::move(param_groups),
-                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
+                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))),
+                        update_shN_after_every_(update_shN_after_every),
+                        do_batch_update_after_(do_batch_update_after),
+                        use_visibility_mask_(use_visibility_mask){}
 
         explicit SelectiveAdam(std::vector<torch::Tensor> params,
-                               std::unique_ptr<Options> options)
+                               std::unique_ptr<Options> options,
+                               int update_shN_after_every,
+                               int do_batch_update_after,
+                               bool use_visibility_mask)
             : Optimizer({torch::optim::OptimizerParamGroup(std::move(params))},
-                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
+                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))),
+                        update_shN_after_every_(update_shN_after_every),
+                        do_batch_update_after_(do_batch_update_after),
+                        use_visibility_mask_(use_visibility_mask) {}
 
         // Override the base class step() with proper signature
         torch::Tensor step(LossClosure closure = nullptr) override;
@@ -85,9 +106,13 @@ namespace gs {
          * @brief Perform optimization step with visibility mask
          * @param visibility_mask Boolean tensor indicating which elements to update
          */
-        void step(const torch::Tensor& visibility_mask);
+        void step(const int iter, const torch::Tensor& visibility_mask);
 
     private:
+        int update_shN_after_every_;
+        int do_batch_update_after_;
+        bool use_visibility_mask_;
+
         const Options& options() const {
             return static_cast<const Options&>(defaults());
         }

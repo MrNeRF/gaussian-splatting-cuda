@@ -8,7 +8,8 @@
 #include <iostream>
 #include <random>
 
-void MCMC::ExponentialLR::step() {
+void MCMC::ExponentialLR::step(float reso) {
+
     if (param_group_index_ >= 0) {
         auto& group = optimizer_.param_groups()[param_group_index_];
 
@@ -32,10 +33,12 @@ void MCMC::ExponentialLR::step() {
             }
         }
     }
+
 }
 
 MCMC::MCMC(SplatData&& splat_data)
     : _splat_data(std::move(splat_data)) {
+        _Pinit = _splat_data.size();
 }
 
 torch::Tensor MCMC::multinomial_sample(const torch::Tensor& weights, int n, bool replacement) {
@@ -200,7 +203,7 @@ int MCMC::relocate_gs() {
     return n_dead;
 }
 
-int MCMC::add_new_gs() {
+int MCMC::add_new_gs(int iter, float reso) {
     // Add this check at the beginning
     torch::NoGradGuard no_grad;
     if (!_optimizer) {
@@ -210,6 +213,7 @@ int MCMC::add_new_gs() {
 
     const int current_n = _splat_data.size();
     const int n_target = std::min(_params->max_cap, static_cast<int>(1.05f * current_n));
+    // const int n_target = float(_Pinit) + float(_params->max_cap - _Pinit) / (std::pow(reso, 2.0f - float(iter) / float(_params->stop_refine)));
     const int n_new = std::max(0, n_target - current_n);
 
     if (n_new == 0)
@@ -438,7 +442,7 @@ void MCMC::inject_noise() {
     _splat_data.means().add_(noise);
 }
 
-void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
+void MCMC::post_backward(int iter, gs::RenderOutput& render_output, float reso) {
     // Store visibility mask for selective adam
     if (_params->selective_adam) {
         _last_visibility_mask = render_output.visibility;
@@ -456,7 +460,7 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
         relocate_gs();
 
         // Add new Gaussians
-        add_new_gs();
+        add_new_gs(iter, reso);
 
         c10::cuda::CUDACachingAllocator::emptyCache();
     }
@@ -465,12 +469,12 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     inject_noise();
 }
 
-void MCMC::step(int iter) {
+void MCMC::step(int iter, float reso) {
     if (iter < _params->iterations) {
         if (_params->selective_adam && _last_visibility_mask.defined()) {
             auto* selective_adam = dynamic_cast<gs::SelectiveAdam*>(_optimizer.get());
             if (selective_adam) {
-                selective_adam->step(_last_visibility_mask);
+                selective_adam->step(iter, _last_visibility_mask);
             } else {
                 _optimizer->step();
             }
@@ -478,7 +482,7 @@ void MCMC::step(int iter) {
             _optimizer->step();
         }
         _optimizer->zero_grad(true);
-        _scheduler->step();
+        _scheduler->step(reso);
     }
 }
 
@@ -535,7 +539,10 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
 
         auto global_options = std::make_unique<Options>(0.f);
         global_options->eps(1e-15);
-        _optimizer = std::make_unique<gs::SelectiveAdam>(std::move(groups), std::move(global_options));
+        _optimizer = std::make_unique<gs::SelectiveAdam>(std::move(groups), std::move(global_options), 
+                                                        _params->update_shN_after_every,
+                                                        _params->do_batch_update_after,
+                                                        _params->use_visibility_mask);
     } else {
         using torch::optim::AdamOptions;
         std::vector<torch::optim::OptimizerParamGroup> groups;

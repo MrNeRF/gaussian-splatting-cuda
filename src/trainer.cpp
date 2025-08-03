@@ -6,8 +6,52 @@
 #include <iostream>
 #include <numeric>
 #include <torch/torch.h>
+#include <chrono>
+#include "rasterizer_tgs.cpp"
+#include "kernels/lanczos.cuh"
 
 namespace gs {
+
+    using clock = std::chrono::steady_clock;
+    clock::time_point t0;
+
+    static inline
+    float compute_chi(
+        const torch::Tensor& dft_map,
+        float reso
+    ) {
+        int H = dft_map.size(-2);
+        int W = dft_map.size(-1);
+        int win_h = std::max(1, int(H / reso));
+        int win_w = std::max(1, int(W / reso));
+
+        int c0 = (H + 1) >> 1;
+        int c1 = (W + 1) >> 1;
+
+        using namespace torch::indexing;
+        auto crop = dft_map.index({
+            Slice(c0 - win_h / 2, c0 + win_h / 2),
+            Slice(c1 - win_w / 2, c1 + win_w / 2)
+        });
+
+        return crop.sum().item<float>();
+    }
+
+    static inline
+    float compute_reso(
+        const torch::Tensor& dft_map,
+        float target_chi,
+        int iters = 20
+    ) {
+        float L = 0.f, R = 1.f, mid = 0.f;
+        for (int i = 0; i < iters; ++i) {
+            mid = 0.5f * (L + R);
+            float chi = compute_chi(dft_map, 1.f / mid);
+            if (chi < target_chi) L = mid;
+            else R = mid;
+        }
+        return 1.f / mid;
+    }
 
     static inline torch::Tensor ensure_4d(const torch::Tensor& image) {
         return image.dim() == 3 ? image.unsqueeze(0) : image;
@@ -169,7 +213,7 @@ namespace gs {
         }
     }
 
-    bool Trainer::train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode) {
+    bool Trainer::train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode, float reso = 1) {
         current_iteration_ = iter;
 
         // Check control requests at the beginning
@@ -193,7 +237,15 @@ namespace gs {
 
         // Use the render mode from parameters
         auto render_fn = [this, &cam, render_mode]() {
-            return gs::rasterize(
+            // return gs::rasterize(
+            //     *cam,
+            //     strategy_->get_model(),
+            //     background_,
+            //     1.0f,
+            //     false,
+            //     false,
+            //     render_mode);
+            return tgs::rasterize(
                 *cam,
                 strategy_->get_model(),
                 background_,
@@ -236,6 +288,10 @@ namespace gs {
                                                     strategy_->get_model(),
                                                     val_dataset_,
                                                     background_);
+
+                const auto t1   = clock::now();
+                const double diff = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+
                 std::cout << metrics.to_string() << std::endl;
             }
 
@@ -248,8 +304,8 @@ namespace gs {
             }
 
             auto do_strategy = [&]() {
-                strategy_->post_backward(iter, r_output);
-                strategy_->step(iter);
+                strategy_->post_backward(iter, r_output, reso);
+                strategy_->step(iter, reso);
             };
 
             if (viewer_) {
@@ -311,8 +367,11 @@ namespace gs {
 
         bool should_continue = true;
 
+        t0 = clock::now();
+
+        auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
+
         for (int epoch = 0; epoch < epochs_needed && should_continue; ++epoch) {
-            auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
 
             for (auto& batch : *train_dataloader) {
                 auto camera_with_image = batch[0].data;

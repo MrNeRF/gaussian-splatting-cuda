@@ -244,6 +244,14 @@ torch::Tensor SplatData::get_shs() const {
     return torch::cat({_sh0, _shN}, 1);
 }
 
+torch::Tensor SplatData::get_sh0() const {
+    return _sh0;
+}
+
+torch::Tensor SplatData::get_shN() const {
+    return _shN;
+}
+
 // Utility method
 void SplatData::increment_sh_degree() {
     if (_active_sh_degree < _max_sh_degree) {

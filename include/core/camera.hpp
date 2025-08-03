@@ -29,10 +29,22 @@ public:
 
     // Load image from disk and return it
     torch::Tensor load_and_get_image(int resolution = -1);
+    torch::Tensor load_image_cache(int resolution = -1);
+
+    void set_image_height(const int& height) { _image_height = height;}
+    void set_image_width(const int& width) { _image_width = width; }
 
     // Accessors - now return const references to avoid copies
     const torch::Tensor& world_view_transform() const {
         return _world_view_transform;
+    }
+
+    const torch::Tensor& projmat() const {
+        return _projmat;
+    }
+
+    const torch::Tensor& campos() const {
+        return _campos;
     }
 
     torch::Tensor K() const;
@@ -41,14 +53,22 @@ public:
     int image_width() const noexcept { return _image_width; }
     float FoVx() const noexcept { return _FoVx; }
     float FoVy() const noexcept { return _FoVy; }
+    float tanfovx() const noexcept { return _tanfovx; }
+    float tanfovy() const noexcept { return _tanfovy; }
     const std::string& image_name() const noexcept { return _image_name; }
     int uid() const noexcept { return _uid; }
+
+    // Variables to determine where to cache the image tensors
+    bool cache_on_gpu = false;
+    bool cache_on_cpu = false;
 
 private:
     // IDs
     int _uid = -1;
     float _FoVx = 0.f;
     float _FoVy = 0.f;
+    float _tanfovx = 0.f;
+    float _tanfovy = 0.f;
 
     // Image info
     std::string _image_name;
@@ -58,4 +78,9 @@ private:
 
     // GPU tensors (computed on demand)
     torch::Tensor _world_view_transform;
+    torch::Tensor _projmat;
+    torch::Tensor _campos;
+
+    // Dynamically cache image tensor
+    torch::Tensor _image_cache;
 };

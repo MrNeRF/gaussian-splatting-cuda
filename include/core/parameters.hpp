@@ -45,6 +45,9 @@ namespace gs {
 
             int steps_scaler = 1;
             bool selective_adam = false; // Use Selective Adam optimizer
+            int update_shN_after_every = 16; // Update shN every N steps
+            int do_batch_update_after = 16; // Perform batch updates after N steps
+            bool use_visibility_mask = false; // Use visibility mask in selective adam
         };
 
         struct DatasetConfig {

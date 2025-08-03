@@ -58,7 +58,7 @@ namespace gs {
     private:
         // Protected method for processing a single training step
         // Returns true if training should continue
-        bool train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode);
+        bool train_step(int iter, Camera* cam, torch::Tensor gt_image, RenderMode render_mode, float reso);
 
         // Protected method for computing loss
         torch::Tensor compute_loss(const RenderOutput& render_output,

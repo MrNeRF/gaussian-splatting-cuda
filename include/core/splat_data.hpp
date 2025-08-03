@@ -42,6 +42,8 @@ public:
     torch::Tensor get_rotation() const;
     torch::Tensor get_scaling() const;
     torch::Tensor get_shs() const;
+    torch::Tensor get_sh0() const;
+    torch::Tensor get_shN() const;
 
     // Simple inline getters
     inline int get_active_sh_degree() const { return _active_sh_degree; }

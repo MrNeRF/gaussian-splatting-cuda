@@ -68,6 +68,7 @@ configure_file(
 )
 
 add_subdirectory(gsplat)
+add_subdirectory(taminggs)
 
 # =============================================================================
 # HOST LIBRARY - Compiled with g++ (fast!)
@@ -89,6 +90,8 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
+        src/rasterizer_tgs.cpp
+        src/rasterizer_tgs_autograd.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
@@ -98,8 +101,9 @@ target_include_directories(gaussian_host
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
-        ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
+        ${CMAKE_CURRENT_SOURCE_DIR}/gsplat   # Add gsplat headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/taminggs # Add taminggs headers
+        ${CUDAToolkit_INCLUDE_DIRS}          # Add CUDA headers for interop
         PRIVATE
         ${Python3_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
@@ -116,9 +120,10 @@ target_link_libraries(gaussian_host
         Threads::Threads
         taywee::args
         Python3::Python
-        gsplat_backend  # Link to gsplat
+        gsplat_backend   # Link to gsplat
+        taminggs_backend # Link to tamings
         ${OPENGL_LIBRARIES}
-        CUDA::cudart    # Add CUDA runtime for interop
+        CUDA::cudart     # Add CUDA runtime for interop
 )
 if(UNIX)
     target_link_libraries(gaussian_host PUBLIC dl)
@@ -151,6 +156,8 @@ set(KERNEL_SOURCES
         kernels/bilateral_grid_forward.cu
         kernels/bilateral_grid_backward.cu
         kernels/bilateral_grid_tv.cu
+        kernels/lanczos.cu
+        kernels/tgs_adam.cu
 )
 
 # Add CUDA-OpenGL interop kernels if supported
@@ -251,6 +258,7 @@ target_include_directories(${PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
+        ${CMAKE_CURRENT_SOURCE_DIR}/taminggs
         ${Python3_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
@@ -261,6 +269,7 @@ set(MAIN_LINK_LIBRARIES
         gaussian_host
         gaussian_kernels
         gsplat_backend
+        taminggs_backend
         Python3::Python
         ${OPENGL_LIBRARIES}
         CUDA::cudart
@@ -330,6 +339,7 @@ endfunction()
 configure_build_type(gaussian_host)
 configure_build_type(gaussian_kernels)
 configure_build_type(gsplat_backend)
+configure_build_type(taminggs_backend)
 if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
     configure_build_type(gaussian_visualizer)
 endif()
@@ -372,6 +382,7 @@ if(BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
             ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
+            ${CMAKE_CURRENT_SOURCE_DIR}/taminggs
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
             ${Python3_INCLUDE_DIRS}
             ${CUDAToolkit_INCLUDE_DIRS}
@@ -382,6 +393,7 @@ if(BUILD_TESTS)
             gaussian_host
             gaussian_kernels
             gsplat_backend
+            taminggs_backend
             GTest::gtest
             GTest::gtest_main
             Python3::Python
