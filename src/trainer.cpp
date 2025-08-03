@@ -159,6 +159,10 @@ namespace gs {
         }
 
         if (params.optimization.pose_optimization != "none") {
+            if (params.optimization.enable_eval) {
+                throw std::runtime_error("Evaluating with pose optimization is not supported yet. "
+                                         "Please disable pose optimization or evaluation.");
+            }
             if (params.optimization.pose_optimization == "direct") {
                 poseopt_module_ = std::make_unique<gs::DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
             } else if (params.optimization.pose_optimization == "mlp") {
