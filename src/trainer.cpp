@@ -286,9 +286,6 @@ namespace gs {
                                                     val_dataset_,
                                                     background_);
 
-                const auto t1   = clock::now();
-                const double diff = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-
                 std::cout << metrics.to_string() << std::endl;
             }
 
