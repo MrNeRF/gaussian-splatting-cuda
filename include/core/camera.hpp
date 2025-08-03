@@ -30,12 +30,32 @@ public:
     // Load image from disk and return it
     torch::Tensor load_and_get_image(int resolution = -1);
 
+    // Get number of bytes in the image file
+    size_t get_num_bytes_from_file() const;
+
     // Accessors - now return const references to avoid copies
     const torch::Tensor& world_view_transform() const {
         return _world_view_transform;
     }
+    const torch::Tensor& cam_position() const {
+        return _cam_position;
+    }
+
+    void enable_image_caching() {
+        _cache_enabled = true;
+    }
 
     torch::Tensor K() const;
+
+    std::tuple<float, float, float, float> get_intrinsics() const {
+            const float tanfovx = std::tan(_FoVx * 0.5f);
+        const float tanfovy = std::tan(_FoVy * 0.5f);
+        const float fx = _image_width / (2.f * tanfovx);
+        const float fy = _image_height / (2.f * tanfovy);
+        const float cx = _image_width / 2.0f;
+        const float cy = _image_height / 2.0f;
+        return std::make_tuple(fx, fy, cx, cy);
+    }
 
     int image_height() const noexcept { return _image_height; }
     int image_width() const noexcept { return _image_width; }
@@ -58,4 +78,9 @@ private:
 
     // GPU tensors (computed on demand)
     torch::Tensor _world_view_transform;
+    torch::Tensor _cam_position;
+
+    // Optional image caching in VRAM
+    bool _cache_enabled = false;
+    torch::Tensor _image_cache = torch::empty({0});
 };

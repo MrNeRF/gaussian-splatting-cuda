@@ -33,4 +33,24 @@ std::tuple<at::Tensor, at::Tensor> relocation(
     return std::make_tuple(new_opacities, new_scales);
 }
 
+void add_noise(
+    at::Tensor raw_opacities, // [N]
+    at::Tensor raw_scales,    // [N, 3]
+    at::Tensor raw_quats,     // [N, 4]
+    at::Tensor noise,         // [N, 3]
+    at::Tensor means,         // [N, 3]
+    const float current_lr
+) {
+    DEVICE_GUARD(raw_opacities);
+    CHECK_INPUT(raw_opacities);
+    CHECK_INPUT(raw_scales);
+    CHECK_INPUT(raw_quats);
+    CHECK_INPUT(noise);
+    CHECK_INPUT(means);
+
+    launch_add_noise_kernel(
+        raw_opacities, raw_scales, raw_quats, noise, means, current_lr
+    );
+}
+
 } // namespace gsplat

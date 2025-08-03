@@ -68,6 +68,7 @@ configure_file(
 )
 
 add_subdirectory(gsplat)
+add_subdirectory(fastgs)
 
 # =============================================================================
 # HOST LIBRARY - Compiled with g++ (fast!)
@@ -83,12 +84,15 @@ set(HOST_SOURCES
         src/trainer.cpp
         src/argument_parser.cpp
         src/rasterizer.cpp
+        src/fast_rasterizer.cpp
         src/metrics.cpp
         src/rasterizer_autograd.cpp
+        src/fast_rasterizer_autograd.cpp
         src/viewer.cpp
         src/external/tinyply.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
+        src/fused_adam.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
@@ -99,6 +103,7 @@ target_include_directories(gaussian_host
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/fastgs  # Add fastgs headers
         ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
         PRIVATE
         ${Python3_INCLUDE_DIRS}
@@ -117,6 +122,7 @@ target_link_libraries(gaussian_host
         taywee::args
         Python3::Python
         gsplat_backend  # Link to gsplat
+        fastgs_backend  # Link to fastgs
         ${OPENGL_LIBRARIES}
         CUDA::cudart    # Add CUDA runtime for interop
 )
@@ -251,6 +257,7 @@ target_include_directories(${PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
+        ${CMAKE_CURRENT_SOURCE_DIR}/fastgs
         ${Python3_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
@@ -261,6 +268,7 @@ set(MAIN_LINK_LIBRARIES
         gaussian_host
         gaussian_kernels
         gsplat_backend
+        fastgs_backend
         Python3::Python
         ${OPENGL_LIBRARIES}
         CUDA::cudart
@@ -330,6 +338,7 @@ endfunction()
 configure_build_type(gaussian_host)
 configure_build_type(gaussian_kernels)
 configure_build_type(gsplat_backend)
+configure_build_type(fastgs_backend)
 if(CUDA_GL_INTEROP_FOUND AND TARGET gaussian_visualizer)
     configure_build_type(gaussian_visualizer)
 endif()
