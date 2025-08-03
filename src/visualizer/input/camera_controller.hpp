@@ -21,6 +21,8 @@ namespace gs {
         bool handleMouseButton(const InputHandler::MouseButtonEvent& event);
         bool handleMouseMove(const InputHandler::MouseMoveEvent& event);
         bool handleMouseScroll(const InputHandler::MouseScrollEvent& event);
+        bool handleSpeedChange(const InputHandler::KeyEvent& event);
+        bool handleWasd(const InputHandler::KeyEvent& event);
         bool handleKey(const InputHandler::KeyEvent& event);
 
         // Publish camera changed event
