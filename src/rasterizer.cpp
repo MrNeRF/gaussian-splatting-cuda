@@ -236,10 +236,10 @@ namespace gs {
             isect_ids, 1, tile_width, tile_height);
         isect_offsets = isect_offsets.reshape({1, tile_height, tile_width});
 
-        // Debug prints for tile statistics (every 100 iterations)
+        // Debug prints for tile statistics
         static int debug_counter = 0;
         debug_counter++;
-        if (debug_counter % 100 == 0) {
+        if (debug_counter % 500 == 0) {
             // Calculate statistics about gaussians per tile
             auto offsets_cpu = isect_offsets.to(torch::kCPU);
             auto offsets_data = offsets_cpu.data_ptr<int32_t>();

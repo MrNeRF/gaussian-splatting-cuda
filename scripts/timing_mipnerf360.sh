@@ -2,8 +2,7 @@
 
 SCENE_DIR="data"
 RESULT_DIR="results/benchmark"
-#SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
-SCENE_LIST="bicycle"
+SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
 
 # Start total timer
 total_start=$(date +%s)
