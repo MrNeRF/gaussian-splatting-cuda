@@ -42,7 +42,6 @@
   "pause_refine_after_reset": 0,
   "revised_opacity": false,
   "steps_scaler": 0,
-  "skip_intermediate": false,
   "antialiasing": false,
   "selective_adam": false
 }
