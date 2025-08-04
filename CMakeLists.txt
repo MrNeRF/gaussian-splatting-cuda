@@ -158,6 +158,7 @@ set(HOST_SOURCES
         src/training_setup.cpp
         src/geometry/bounding_box.cpp
         src/geometry/euclidean_transform.cpp
+        src/poseopt.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
