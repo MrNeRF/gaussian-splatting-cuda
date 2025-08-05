@@ -27,6 +27,7 @@ namespace gs::visualizer {
             const RenderSettings& settings;
             const RenderBoundingBox* crop_box;
             const ViewportRegion* viewport_region = nullptr;
+            bool has_focus = false; // Indicates if the viewport has focus for input handling
         };
 
         RenderingManager();
@@ -48,6 +49,7 @@ namespace gs::visualizer {
     private:
         void initializeShaders();
         void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, const Viewport& render_viewport);
+        void drawFocusIndicator(const RenderContext& context);
         void drawCropBox(const RenderContext& context, const Viewport& render_viewport);
 
         RenderSettings settings_;

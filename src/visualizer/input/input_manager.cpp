@@ -41,8 +41,21 @@ namespace gs::visualizer {
         bool imgui_wants_keyboard = ImGui::GetIO().WantCaptureKeyboard;
         bool any_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
 
-        // GUI gets priority only when it explicitly wants input
-        if (imgui_wants_mouse || imgui_wants_keyboard || any_window_hovered) {
+        // Check if mouse is clicking in viewport
+        bool mouse_clicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) ||
+                             ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+                             ImGui::IsMouseClicked(ImGuiMouseButton_Middle);
+
+        // If clicking and viewport has focus (from hover), force viewport input
+        if (mouse_clicked && viewport_focus_check_ && viewport_focus_check_()) {
+            // Force viewport to get input on this click
+            input_handler_->setInputConsumer(InputHandler::InputConsumer::Viewport);
+
+            // Clear ImGui's capture flags so it doesn't steal this click
+            if (!any_window_hovered) {
+                ImGui::GetIO().WantCaptureMouse = false;
+            }
+        } else if (imgui_wants_mouse || imgui_wants_keyboard || any_window_hovered) {
             input_handler_->setInputConsumer(InputHandler::InputConsumer::GUI);
         } else {
             // Default to viewport when GUI doesn't need input

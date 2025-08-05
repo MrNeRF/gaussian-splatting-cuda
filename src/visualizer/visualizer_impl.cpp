@@ -208,6 +208,8 @@ namespace gs::visualizer {
 
     void VisualizerImpl::update() {
         window_manager_->updateWindowSize();
+
+        // Update the main viewport with window size
         viewport_.windowSize = window_manager_->getWindowSize();
         viewport_.frameBufferSize = window_manager_->getFramebufferSize();
 
@@ -265,16 +267,10 @@ namespace gs::visualizer {
                 std::cout << "Main Viewport WorkPos: (" << main_viewport->WorkPos.x << ", " << main_viewport->WorkPos.y << ")" << std::endl;
             }
 
-            // Convert from window coordinates to framebuffer coordinates
-            // The issue is that ImGui gives us coordinates relative to the OS window,
-            // but OpenGL viewport needs coordinates relative to the OpenGL framebuffer
-
-            // Get the main viewport to calculate the offset
-            const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-
-            // Calculate the position relative to the framebuffer (not the window)
-            viewport_region.x = pos.x - main_viewport->Pos.x;
-            viewport_region.y = pos.y - main_viewport->Pos.y;
+            // The pos and size are already relative to the window!
+            // We just need to pass them directly to the rendering
+            viewport_region.x = pos.x;
+            viewport_region.y = pos.y;
             viewport_region.width = size.x;
             viewport_region.height = size.y;
 
@@ -286,7 +282,8 @@ namespace gs::visualizer {
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
             .crop_box = crop_box_ptr,
-            .viewport_region = has_viewport_region ? &viewport_region : nullptr};
+            .viewport_region = has_viewport_region ? &viewport_region : nullptr,
+            .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 

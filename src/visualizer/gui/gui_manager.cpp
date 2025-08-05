@@ -204,8 +204,37 @@ namespace gs::gui {
         // Get the viewport region for 3D rendering
         updateViewportRegion();
 
-        // Update focus state
+        // Update viewport focus based on mouse position - ADD THIS LINE
         updateViewportFocus();
+
+        // Draw viewport focus indicator
+        if (viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
+            ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+
+            // The viewport_pos_ is already relative to the window, so we just need to add the window position
+            const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+            ImVec2 screen_pos = ImVec2(
+                main_viewport->WorkPos.x + viewport_pos_.x,
+                main_viewport->WorkPos.y + viewport_pos_.y);
+
+            // Animated glow
+            float time = static_cast<float>(ImGui::GetTime());
+            float pulse = (sin(time * 3.0f) + 1.0f) * 0.5f;
+
+            // Outer glow
+            draw_list->AddRect(
+                screen_pos,
+                ImVec2(screen_pos.x + viewport_size_.x, screen_pos.y + viewport_size_.y),
+                IM_COL32(51, 153, 255, 127 + (int)(pulse * 76)), // Blue with pulsing alpha
+                0.0f, 0, 3.0f);
+
+            // Inner highlight
+            draw_list->AddRect(
+                ImVec2(screen_pos.x + 1, screen_pos.y + 1),
+                ImVec2(screen_pos.x + viewport_size_.x - 1, screen_pos.y + viewport_size_.y - 1),
+                IM_COL32(102, 204, 255, 76 + (int)(pulse * 50)),
+                0.0f, 0, 1.0f);
+        }
 
         // End frame
         ImGui::Render();
@@ -221,26 +250,78 @@ namespace gs::gui {
     }
 
     void GuiManager::updateViewportRegion() {
-        // Find the central node (viewport area)
-        ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
-        ImGuiDockNode* central_node = ImGui::DockBuilderGetCentralNode(dockspace_id);
+        const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
 
-        if (central_node && central_node->IsVisible) {
-            viewport_pos_ = ImVec2(central_node->Pos.x, central_node->Pos.y);
-            viewport_size_ = ImVec2(central_node->Size.x, central_node->Size.y);
-        } else {
-            // Fallback to full window
-            const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-            viewport_pos_ = main_viewport->WorkPos;
-            viewport_size_ = main_viewport->WorkSize;
+        // Start with full window
+        float left = 0;
+        float top = 0;
+        float right = main_viewport->WorkSize.x;
+        float bottom = main_viewport->WorkSize.y;
+
+        // Find our docked windows and calculate the remaining space
+        ImGuiWindow* settings_window = ImGui::FindWindowByName("Rendering Settings");
+        ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene");
+
+        if (settings_window && settings_window->DockNode && settings_window->Active) {
+            // Settings panel is on the left
+            float panel_right = settings_window->Pos.x + settings_window->Size.x - main_viewport->WorkPos.x;
+            left = std::max(left, panel_right);
+        }
+
+        if (scene_window && scene_window->DockNode && scene_window->Active) {
+            // Scene panel is on the right
+            float panel_left = scene_window->Pos.x - main_viewport->WorkPos.x;
+            right = std::min(right, panel_left);
+        }
+
+        // Store relative to window
+        viewport_pos_ = ImVec2(left, top);
+        viewport_size_ = ImVec2(right - left, bottom - top);
+
+        static int debug_counter = 0;
+        if (debug_counter++ % 60 == 0) {
+            std::cout << "=== VIEWPORT CALCULATION ===" << std::endl;
+            std::cout << "Settings window: " << (settings_window && settings_window->Active ? "Active" : "Inactive") << std::endl;
+            std::cout << "Scene window: " << (scene_window && scene_window->Active ? "Active" : "Inactive") << std::endl;
+            std::cout << "Calculated viewport: Pos(" << viewport_pos_.x << ", " << viewport_pos_.y
+                      << ") Size(" << viewport_size_.x << ", " << viewport_size_.y << ")" << std::endl;
         }
     }
 
     void GuiManager::updateViewportFocus() {
-        // Viewport has focus unless ImGui explicitly wants input
-        viewport_has_focus_ = !ImGui::GetIO().WantCaptureMouse &&
-                              !ImGui::GetIO().WantCaptureKeyboard &&
-                              !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+        // Check if mouse is in viewport area
+        ImVec2 mouse_pos = ImGui::GetMousePos();
+        const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+
+        // Convert mouse position to window-relative coordinates
+        float mouse_x = mouse_pos.x - main_viewport->WorkPos.x;
+        float mouse_y = mouse_pos.y - main_viewport->WorkPos.y;
+
+        // Check if mouse is within viewport bounds
+        bool mouse_in_viewport = (mouse_x >= viewport_pos_.x &&
+                                  mouse_x < viewport_pos_.x + viewport_size_.x &&
+                                  mouse_y >= viewport_pos_.y &&
+                                  mouse_y < viewport_pos_.y + viewport_size_.y);
+
+        // Check if ImGui wants input
+        bool imgui_wants_input = ImGui::GetIO().WantCaptureMouse ||
+                                 ImGui::GetIO().WantCaptureKeyboard ||
+                                 ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+
+        // Special handling for clicks - if clicking in viewport, it gets focus immediately
+        bool mouse_clicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) ||
+                             ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+                             ImGui::IsMouseClicked(ImGuiMouseButton_Middle);
+
+        if (mouse_clicked && mouse_in_viewport && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+            // Clicking in viewport gives it focus immediately
+            viewport_has_focus_ = true;
+            // Tell ImGui we don't want this mouse event
+            ImGui::GetIO().WantCaptureMouse = false;
+        } else {
+            // Normal focus rules: viewport has focus when mouse is over it and ImGui doesn't want input
+            viewport_has_focus_ = mouse_in_viewport && !imgui_wants_input;
+        }
     }
 
     ImVec2 GuiManager::getViewportPos() const {

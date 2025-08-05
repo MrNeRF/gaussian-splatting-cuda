@@ -42,36 +42,6 @@ namespace gs::visualizer {
             initialize();
         }
 
-        // Debug: Print viewport region info
-        if (context.viewport_region) {
-            static int frame_count = 0;
-            if (frame_count++ % 60 == 0) { // Print every 60 frames
-                std::cout << "\n=== RENDER VIEWPORT ===" << std::endl;
-                std::cout << "Viewport Region - X: " << context.viewport_region->x
-                          << ", Y: " << context.viewport_region->y
-                          << ", Width: " << context.viewport_region->width
-                          << ", Height: " << context.viewport_region->height << std::endl;
-
-                // Check if values are reasonable
-                if (context.viewport_region->x < 0 || context.viewport_region->y < 0) {
-                    std::cout << "WARNING: Negative viewport coordinates!" << std::endl;
-                }
-                if (context.viewport_region->width <= 0 || context.viewport_region->height <= 0) {
-                    std::cout << "WARNING: Invalid viewport dimensions!" << std::endl;
-                }
-                if (context.viewport_region->x + context.viewport_region->width > context.viewport.frameBufferSize.x ||
-                    context.viewport_region->y + context.viewport_region->height > context.viewport.frameBufferSize.y) {
-                    std::cout << "WARNING: Viewport extends beyond framebuffer!" << std::endl;
-                }
-            }
-        } else {
-            static bool warned = false;
-            if (!warned) {
-                std::cout << "WARNING: No viewport region provided!" << std::endl;
-                warned = true;
-            }
-        }
-
         // Clear the entire window first
         glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -91,6 +61,77 @@ namespace gs::visualizer {
         if (settings_.show_crop_box && context.crop_box) {
             drawCropBox(context, context.viewport);
         }
+
+        // Draw focus indicator if viewport has focus
+        if (context.has_focus && context.viewport_region) {
+            drawFocusIndicator(context);
+        }
+    }
+
+    void RenderingManager::drawFocusIndicator(const RenderContext& context) {
+        // Save current OpenGL state
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
+
+        // Setup for 2D overlay rendering
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // Set viewport to full window for overlay
+        glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
+
+        // Use immediate mode for simple border (or you could use a shader)
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        glOrtho(0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y, 0, -1, 1);
+
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
+
+        // Draw border
+        float x = context.viewport_region->x;
+        float y = context.viewport_region->y;
+        float w = context.viewport_region->width;
+        float h = context.viewport_region->height;
+
+        // Animated glow effect
+        float time = static_cast<float>(glfwGetTime());
+        float glow = (sin(time * 3.0f) + 1.0f) * 0.5f;
+
+        glLineWidth(3.0f);
+        glBegin(GL_LINE_LOOP);
+        glColor4f(0.2f, 0.6f, 1.0f, 0.5f + glow * 0.3f); // Blue glow
+        glVertex2f(x, y);
+        glVertex2f(x + w, y);
+        glVertex2f(x + w, y + h);
+        glVertex2f(x, y + h);
+        glEnd();
+
+        // Inner glow
+        glLineWidth(1.0f);
+        float inset = 1.0f;
+        glBegin(GL_LINE_LOOP);
+        glColor4f(0.4f, 0.8f, 1.0f, 0.3f + glow * 0.2f);
+        glVertex2f(x + inset, y + inset);
+        glVertex2f(x + w - inset, y + inset);
+        glVertex2f(x + w - inset, y + h - inset);
+        glVertex2f(x + inset, y + h - inset);
+        glEnd();
+
+        // Restore matrices
+        glPopMatrix();
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);
+
+        // Restore OpenGL state
+        if (depth_test_enabled)
+            glEnable(GL_DEPTH_TEST);
+        if (!blend_enabled)
+            glDisable(GL_BLEND);
     }
 
     void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, const Viewport& render_viewport) {
@@ -103,11 +144,18 @@ namespace gs::visualizer {
             render_crop_box = const_cast<RenderBoundingBox*>(context.crop_box);
         }
 
-        // Build render request
+        // Build render request with the viewport region dimensions if available
+        glm::ivec2 render_size = render_viewport.windowSize;
+        if (context.viewport_region) {
+            render_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+        }
+
         RenderingPipeline::RenderRequest request{
             .view_rotation = render_viewport.getRotationMatrix(),
             .view_translation = render_viewport.getTranslation(),
-            .viewport_size = render_viewport.windowSize,
+            .viewport_size = render_size,
             .fov = settings_.fov,
             .scaling_modifier = settings_.scaling_modifier,
             .antialiasing = settings_.antialiasing,
@@ -131,7 +179,7 @@ namespace gs::visualizer {
         }
 
         if (result.valid) {
-            RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_viewport.windowSize);
+            RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_size);
             screen_renderer_->render(quad_shader_, render_viewport);
         }
     }
