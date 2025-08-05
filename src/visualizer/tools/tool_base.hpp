@@ -1,11 +1,8 @@
 #pragma once
 
 #include "input/input_handler.hpp"
-#include "input/input_priority.hpp"
-#include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
 
 // Forward declaration for GLFW
 struct GLFWwindow;
@@ -82,20 +79,8 @@ namespace gs::visualizer {
         virtual void render(const ToolContext& ctx) {}
         virtual void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) = 0;
 
-        // Input handling - tools can override these to register handlers
-        virtual void registerInputHandlers(InputHandler& handler) {}
-        virtual void unregisterInputHandlers(InputHandler& handler) {
-            for (auto id : handler_ids_) {
-                handler.removeHandler(id);
-            }
-            handler_ids_.clear();
-        }
-
     protected:
         virtual void onEnabledChanged(bool enabled) {}
-
-        // Store handler IDs for cleanup
-        std::vector<InputHandler::HandlerId> handler_ids_;
 
     private:
         bool enabled_ = false;
