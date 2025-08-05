@@ -86,6 +86,21 @@ namespace gs {
         if (!is_enabled_)
             return;
 
+        // Check if viewport still has focus
+        if (!isViewportFocused() && (is_panning_ || is_rotating_ || is_orbiting_)) {
+            // Lost focus while dragging - stop all operations
+            is_panning_ = false;
+            is_rotating_ = false;
+            is_orbiting_ = false;
+
+            // Force publish final position
+            events::ui::CameraMove{
+                .rotation = viewport_.getRotationMatrix(),
+                .translation = viewport_.getTranslation()}
+                .emit();
+            return;
+        }
+
         glm::vec2 current_pos(event.position);
         bool camera_changed = false;
 
