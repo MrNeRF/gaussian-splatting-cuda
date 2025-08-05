@@ -14,6 +14,93 @@ Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/iss
 
 This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself – each contributing **$300**. [@toshas](https://github.com/toshas) and [@ChrisAtKIRI](https://x.com/ChrisAtKIRI) are each contributing **$200**. Finally, [@JulienBlanchon](https://x.com/JulienBlanchon) and [Drew Moffitt](https://www.linkedin.com/in/drew-moffitt-gisp-0a4522157?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app) are each contributing **$100**.
 
+# Bounty Solution
+
+This is a solution for [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135).
+It implements improvements that reduce the training from the original 49m 50s to **20m 30s**, a speedup by over **2.4x**.
+To get the time below 20 minutes, I also added an *optional* trick that sacrifices some quality to get the time down to *19m 27s*.
+
+## Changes
+
+The key changes can be summarized as follows:
+
+### New Rasterizer
+- Instead of the modular gsplat implementation, the new implementation tries to use as few CUDA kernels as possible.
+- I redid all the math for the forward and backward pass to skip all unnecessary computations.
+- All activation functions of the Gaussians' parameters are fused into the respective kernels of the forward and backward pass.
+- I implemented an improved version of the kernel for the blending backward pass based on Taming 3DGS.
+- I separated the sorting into depth and tile sorting passes similar to how it is done in Splatshop.
+- I integrated tile-based culling and load balancing based on StopThePop.
+- Also see `fastgs/rasterization/README.md`
+
+### MCMC Densification
+- After every training iteration, MCMC adds noise to the position of each Gaussian. I fused the required operations into a single kernel.
+- The functions for adding and relocating Gaussians could be fused too, but because they do not happen that often during training, the benefit would be small. Therefore, I did not do so and only fixed a few inefficiencies in the libtorch implementation.
+- Gaussians are now also "dead" when the quaternion used to represent their rotation has a squared norm below `1e-8` as optimization and rendering would then be numerically unstable anyway. The new rasterizer also culls such Gaussians during training.
+- Like most 3DGS implementations, the old implementation used to call the libtorch equivalent of `torch.cuda.empty_cache()` after every densification step to solve memory fragmentation issues. This slightly slows down training as temporary memory is first freed and then reallocated. Enabling the torch memory allocator's setting `expandable_segments:True` allows to get rid of this.
+- I removed the `abs()` calls in the opacity and scale regularization losses as they are unnecessary because the Gaussians' opacity and scale are always positive after applying the respective activations.
+
+### Optimizer
+- The libtorch Adam implementation is slow because it launches all operations for each update step as separate CUDA kernels. I implemented a fused version of the Adam optimizer step that is significantly faster.
+- During the first 1000 iterations, the higher-degree SH coefficients will not be used and therefore always have zero gradients. Therefore, the optimizer step for those can be skipped for a small speedup.
+- (optional) Between iteration 1000 and 25000, the expensive update for higher-degree SH coefficients can be batched over two iterations to achieve a small speed up. This is disabled by default as it seems to slightly reduce quality in my tests.
+
+### Data Loading
+- The torch dataloader was re-created after every epoch. Now only the random sampler is reset, which avoids unnecessary overhead.
+- Image normalization to the [0, 1] range was done on the CPU. Doing it after uploading to the GPU is much faster.
+- Images were always loaded from disk, which is actually not that bad with a torch dataloader that uses multiple worker threads, but it has some overhead. Now, heuristics are used to determine whether the dataset fits into GPU memory. If yes, images are cached in VRAM.
+- Since the VRAM needed for storing the view matrices and camera positions for all views is negligible, they are now precomputed and stored in VRAM. Example: 10k views -> 0.76 MB (could be lower as I store the full 4x4 view matrix instead of just the relevant 3x4 part)
+
+## Evaluation
+
+Timings are quite consistent across runs as long as one does not touch the PC during benchmarking.
+```
+=========================================
+BENCHMARK SUMMARY
+=========================================
+garden         : 00h 02m 28s
+bicycle        : 00h 02m 14s
+stump          : 00h 02m 20s
+bonsai         : 00h 03m 17s
+counter        : 00h 03m 35s
+kitchen        : 00h 03m 42s
+room           : 00h 02m 54s
+-----------------------------------------
+Total time: 0h 20m 30s
+=========================================
+```
+With the optional SH trick enabled, training is slightly faster and the total is below 20 minutes:
+```
+=========================================
+BENCHMARK SUMMARY
+=========================================
+garden         : 00h 02m 18s
+bicycle        : 00h 02m 06s
+stump          : 00h 02m 11s
+bonsai         : 00h 03m 07s
+counter        : 00h 03m 25s
+kitchen        : 00h 03m 35s
+room           : 00h 02m 45s
+-----------------------------------------
+Total time: 0h 19m 27s
+=========================================
+```
+
+Here are the average quality metrics that I got with the original implementation and the new one without and with the optional SH trick enabled.
+Note that metric computation still uses gsplat to render the images. This highlights that the new rasterizer used during training is not required during inference to obtain high quality.
+
+| Version              | PSNR      | SSIM     | LPIPS    |
+|----------------------|-----------|----------| -------- |
+| original             | 29.235601 | 0.879749 | 0.227879 |
+| solution             | 29.277397 | 0.879477 | 0.228021 |
+| solution w/ SH trick | 29.226835 | 0.879472 | 0.228022 |
+
+I spent a lot of time on making sure the new implementation does not reduce quality.
+Note that the results in this table do not confirm that the new implementation is strictly better than the original one.
+There are small differences in terms of how things are computed in a numerically stable manner in the rasterizer.
+However, this did not make a measurable difference in practice.
+The main problem when repeatedly testing both the original and the new implementation is that metrics fluctuate between runs making it impossible to tell which implementation achieves better quality.
+
 ## Agenda (this summer)
 1. Improve the viewer, i.e., better camera controls, more interactive features.
 2. Migrate UI from Dear ImGui to [RmlUi](https://github.com/mikke89/RmlUi).

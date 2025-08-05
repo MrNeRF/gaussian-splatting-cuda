@@ -1,19 +1,18 @@
 #include "core/camera.hpp"
 #include "core/image_io.hpp"
+#include <torch/torch.h>
+
+using torch::indexing::None;
+using torch::indexing::Slice;
 
 namespace gs {
-
     static torch::Tensor world_to_view(const torch::Tensor& R, const torch::Tensor& t) {
-        torch::Tensor Rt = torch::eye(4, torch::TensorOptions().dtype(torch::kFloat32).device(R.device()));
+        torch::Tensor w2c = torch::eye(4, torch::TensorOptions().dtype(torch::kFloat32).device(R.device()));
+        w2c.index_put_({Slice(0, 3), Slice(0, 3)}, R);
 
-        Rt.index_put_({torch::indexing::Slice(0, 3),
-                       torch::indexing::Slice(0, 3)},
-                      R.t());
+        w2c.index_put_({Slice(0, 3), 3}, t);
 
-        Rt.index_put_({3, torch::indexing::Slice(0, 3)}, t);
-
-        auto pinned_options = torch::TensorOptions().dtype(torch::kFloat32).pinned_memory(true);
-        return Rt.t().unsqueeze(0).to(pinned_options);
+        return w2c.to(torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA)).unsqueeze(0).contiguous();
     }
 
     Camera::Camera(const torch::Tensor& R,
@@ -42,6 +41,11 @@ namespace gs {
           _image_width(camera_width),
           _image_height(camera_height),
           _world_view_transform{world_to_view(R, T)} {
+
+        auto c2w = torch::inverse(_world_view_transform.squeeze());
+        _cam_position = c2w.index({Slice(None, 3), 3}).contiguous().squeeze();
+        _FoVx = focal2fov(_focal_x, _camera_width);
+        _FoVy = focal2fov(_focal_y, _camera_height);
     }
 
     torch::Tensor Camera::K() const {
@@ -57,6 +61,8 @@ namespace gs {
     }
 
     torch::Tensor Camera::load_and_get_image(int resolution) {
+        if (_image_cache.size(0) > 0)
+            return _image_cache;
         unsigned char* data;
         int w, h, c;
 
@@ -74,17 +80,20 @@ namespace gs {
         auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
 
         torch::Tensor image = torch::from_blob(
-                                  data,
-                                  {h, w, c},
-                                  {w * c, c, 1},
-                                  pinned_options)
-                                  .to(torch::kFloat32)
+                                  data, {h, w, c}, {w * c, c, 1}, pinned_options)
                                   .permute({2, 0, 1})
-                                  .clone() /
+                                  .to(torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA), /*non_blocking=*/true) /
                               255.0f;
 
         free_image(data);
+        if (_cache_enabled)
+            _image_cache = image;
         return image.to(torch::kCUDA, /*non_blocking=*/true);
     }
 
+    size_t Camera::get_num_bytes_from_file() const {
+        auto [w, h, c] = get_image_info(_image_path);
+        size_t num_bytes = w * h * c * sizeof(float);
+        return num_bytes;
+    }
 } // namespace gs

@@ -20,4 +20,13 @@ void launch_relocation_kernel(
     at::Tensor new_scales     // [N, 3]
 );
 
+void launch_add_noise_kernel(
+    at::Tensor raw_opacities, // [N]
+    at::Tensor raw_scales,    // [N, 3]
+    at::Tensor raw_quats,     // [N, 4]
+    at::Tensor noise,         // [N, 3]
+    at::Tensor means,         // [N, 3]
+    const float current_lr
+);
+
 }
