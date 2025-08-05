@@ -7,7 +7,6 @@
 #include <expected>
 #include <numeric>
 #include <print>
-#include <torch/torch.h>
 
 namespace gs {
 
