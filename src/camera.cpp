@@ -41,6 +41,11 @@ namespace gs {
           _image_width(camera_width),
           _image_height(camera_height),
           _world_view_transform{world_to_view(R, T)} {
+
+        auto c2w = torch::inverse(_world_view_transform.squeeze());
+        _cam_position = c2w.index({Slice(None, 3), 3}).contiguous().squeeze();
+        _FoVx = focal2fov(_focal_x, _camera_width);
+        _FoVy = focal2fov(_focal_y, _camera_height);
     }
 
     torch::Tensor Camera::K() const {

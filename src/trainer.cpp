@@ -289,15 +289,7 @@ namespace gs {
 
             // Use the render mode from parameters
             auto render_fn = [this, &cam, render_mode]() {
-                // return gs::rasterize(
-                //     *cam,
-                //     strategy_->get_model(),
-                //     background_,
-                //     1.0f,
-                //     false,
-                //     false,
-                //     render_mode);
-                return gs::fast_rasterize(
+                return fast_rasterize(
                     *cam,
                     strategy_->get_model(),
                     background_);
