@@ -99,8 +99,6 @@ RUN git clone https://github.com/microsoft/vcpkg.git ${HOME}/vcpkg && \
 RUN echo 'export VCPKG_ROOT=$HOME/vcpkg' >> $HOME/.bashrc && \
     echo 'export PATH=$VCPKG_ROOT:$PATH' >> $HOME/.bashrc
 
-
-
 RUN wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.1%2Bcu128.zip && \
     unzip libtorch-cxx11-abi-shared-with-deps-2.7.1+cu128.zip -d ${HOME} && \
     rm libtorch-cxx11-abi-shared-with-deps-2.7.1+cu128.zip
@@ -109,8 +107,6 @@ RUN wget https://github.com/Kitware/CMake/releases/download/v4.0.3/cmake-4.0.3-l
     chmod +x cmake-4.0.3-linux-x86_64.sh && \
     sudo ./cmake-4.0.3-linux-x86_64.sh --skip-license --prefix=/usr/local && \
     rm cmake-4.0.3-linux-x86_64.sh
-
-
 
 # Modified from https://github.com/jmhardison/dockercolorlogo
 RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
