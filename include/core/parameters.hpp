@@ -2,6 +2,7 @@
 // All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 #pragma once
 
+#include <expected>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -30,21 +31,36 @@ namespace gs {
             int max_cap = 1000000;
             std::vector<size_t> eval_steps = {7'000, 30'000}; // Steps to evaluate the model
             std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
+            bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
-            bool enable_save_eval_images = false;             // Save during evaluation images
-            bool enable_viz = false;                          // Enable visualization during training
+            bool enable_save_eval_images = true;              // Save during evaluation images
+            bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
+            std::string strategy = "default";                 // Optimization strategy: mcmc, default.
+            bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
 
             // Bilateral grid parameters
             bool use_bilateral_grid = false;
             int bilateral_grid_X = 16;
             int bilateral_grid_Y = 16;
             int bilateral_grid_W = 8;
-            float bilateral_grid_lr = 2e-3;
-            float tv_loss_weight = 10.0f;
+            float bilateral_grid_lr = 2e-3f;
+            float tv_loss_weight = 10.f;
 
-            int steps_scaler = 1;
+            // Default strategy specific parameters
+            float prune_opacity = 0.005f;
+            float grow_scale3d = 0.01f;
+            float grow_scale2d = 0.05f;
+            float prune_scale3d = 0.1f;
+            float prune_scale2d = 0.15f;
+            size_t stop_refine_scale2d = 0;
+            size_t reset_every = 3'000;
+            size_t pause_refine_after_reset = 0;
+            bool revised_opacity = false;
+
+            float steps_scaler = 0.f;    // If < 0, step size scaling is disabled
             bool selective_adam = false; // Use Selective Adam optimizer
+            bool antialiasing = false;   // Enable antialiasing in rendering
         };
 
         struct DatasetConfig {
@@ -58,12 +74,17 @@ namespace gs {
         struct TrainingParameters {
             DatasetConfig dataset;
             OptimizationParameters optimization;
+
+            // Viewer mode specific
+            std::filesystem::path ply_path = "";
         };
 
-        OptimizationParameters read_optim_params_from_json();
+        // Modern C++23 functions returning expected values
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_json();
 
         // Save training parameters to JSON
-        void save_training_parameters_to_json(const TrainingParameters& params,
-                                              const std::filesystem::path& output_path);
+        std::expected<void, std::string> save_training_parameters_to_json(
+            const TrainingParameters& params,
+            const std::filesystem::path& output_path);
     } // namespace param
 } // namespace gs

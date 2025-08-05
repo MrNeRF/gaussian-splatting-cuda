@@ -464,6 +464,8 @@ void MCMC::inject_noise() {
         current_lr);
 }
 
+void MCMC::pre_backward(gs::RenderOutput& render_output) {}
+
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     // Store visibility mask for selective adam
     if (_params->selective_adam) {

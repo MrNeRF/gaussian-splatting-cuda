@@ -1,19 +1,23 @@
-// Copyright (c) 2023 Janusch Patas.
+// Copyright (c) 2025 Janusch Patas.
 
 #include "core/argument_parser.hpp"
 #include "core/parameters.hpp"
 #include <args.hxx>
+#include <expected>
 #include <filesystem>
-#include <iostream>
+#include <format>
+#include <print>
 #include <set>
 
 namespace {
 
-    constexpr int HELP_EXIT_CODE = 0;
-    constexpr int ERROR_EXIT_CODE = -1;
-    constexpr int SUCCESS_EXIT_CODE = 1;
+    enum class ParseResult {
+        Success,
+        Help
+    };
 
     const std::set<std::string> VALID_RENDER_MODES = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
+    const std::set<std::string> VALID_STRATEGIES = {"mcmc", "default"};
 
     void scale_steps_vector(std::vector<size_t>& steps, size_t scaler) {
         std::set<size_t> unique_steps(steps.begin(), steps.end());
@@ -25,132 +29,213 @@ namespace {
         steps.assign(unique_steps.begin(), unique_steps.end());
     }
 
-    int parse_arguments(const std::vector<std::string>& args,
-                        gs::param::TrainingParameters& params) {
+    std::expected<std::tuple<ParseResult, std::function<void()>>, std::string> parse_arguments(
+        const std::vector<std::string>& args,
+        gs::param::TrainingParameters& params) {
 
-        ::args::ArgumentParser parser(
-            "3D Gaussian Splatting CUDA Implementation\n",
-            "Lightning-fast CUDA implementation of 3D Gaussian Splatting algorithm.");
-
-        // Define all arguments
-        ::args::HelpFlag help(parser, "help", "Display help menu", {'h', "help"});
-        ::args::CompletionFlag completion(parser, {"complete"});
-
-        // Required arguments
-        ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to training data", {'d', "data-path"});
-        ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to output", {'o', "output-path"});
-
-        // Optional value arguments
-        ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
-        ::args::ValueFlag<int> resolution(parser, "resolution", "Set resolution", {'r', "resolution"});
-        ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
-        ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
-        ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
-        ::args::ValueFlag<int> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
-        ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "SH degree interval", {"sh-degree-interval"});
-        ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
-
-        // Optional flag arguments
-        ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
-        ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
-        ::args::Flag enable_viz(parser, "viz", "Enable visualization during training", {'v', "viz"});
-        ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
-        ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
-        ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
-
-        // Parse arguments
         try {
-            parser.Prog(args.front());
-            parser.ParseArgs(std::vector<std::string>(args.begin() + 1, args.end()));
-        } catch (const ::args::Help&) {
-            std::cout << parser;
-            return HELP_EXIT_CODE;
-        } catch (const ::args::Completion& e) {
-            std::cout << e.what();
-            return HELP_EXIT_CODE;
-        } catch (const ::args::ParseError& e) {
-            std::cerr << e.what() << "\n"
-                      << parser;
-            return ERROR_EXIT_CODE;
-        }
+            ::args::ArgumentParser parser(
+                "3D Gaussian Splatting CUDA Implementation\n",
+                "Lightning-fast CUDA implementation of 3D Gaussian Splatting algorithm.\n\n"
+                "Usage:\n"
+                "  Training:  gs_cuda --data-path <path> --output-path <path> [options]\n"
+                "  Viewing:   gs_cuda --view <path_to_ply> [options]\n");
 
-        // Show help if no arguments provided
-        if (args.size() == 1) {
-            std::cout << parser;
-            return HELP_EXIT_CODE;
-        }
+            // Define all arguments
+            ::args::HelpFlag help(parser, "help", "Display help menu", {'h', "help"});
+            ::args::CompletionFlag completion(parser, {"complete"});
 
-        // Check if just displaying help
-        if (args.size() == 2 && (args[1] == "-h" || args[1] == "--help")) {
-            return HELP_EXIT_CODE;
-        }
+            // PLY viewing mode
+            ::args::ValueFlag<std::string> view_ply(parser, "ply_file", "View a PLY file", {'v', "view"});
 
-        // Validate required arguments - check if flags were provided
-        if (!data_path || !output_path) {
-            std::cerr << "ERROR: Both --data-path and --output-path are required\n"
-                      << "\n"
-                      << parser;
-            return ERROR_EXIT_CODE;
-        }
+            // Training mode arguments
+            ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to training data", {'d', "data-path"});
+            ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to output", {'o', "output-path"});
 
-        // Set required parameters
-        params.dataset.data_path = ::args::get(data_path);
-        params.dataset.output_path = ::args::get(output_path);
+            // Optional value arguments
+            ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
+            ::args::ValueFlag<int> resolution(parser, "resolution", "Set resolution", {'r', "resolution"});
+            ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
+            ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
+            ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
+            ::args::ValueFlag<float> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
+            ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "SH degree interval", {"sh-degree-interval"});
+            ::args::ValueFlag<int> sh_degree(parser, "sh_degree", "Max SH degree [1-3]", {"sh-degree"});
+            ::args::ValueFlag<float> min_opacity(parser, "min_opacity", "Minimum opacity threshold", {"min-opacity"});
+            ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
+            ::args::ValueFlag<std::string> strategy(parser, "strategy", "Optimization strategy: mcmc, default", {"strategy"});
 
-        // Create output directory
-        std::filesystem::create_directories(params.dataset.output_path);
+            // Optional flag arguments
+            ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
+            ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
+            ::args::Flag headless(parser, "headless", "Disable visualization during training", {"headless"});
+            ::args::Flag antialiasing(parser, "antialiasing", "Enable antialiasing", {'a', "antialiasing"});
+            ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
+            ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
+            ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
+            ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
+            ::args::Flag preload_to_ram(parser, "preload_to_ram", "Load the entire dataset into RAM at startup for maximum performance (uses more RAM)", {"preload-to-ram"});
 
-        // Lambdas for compact argument processing
-        auto setVal = [](auto& flag, auto& target) {
-            if (flag)
-                target = ::args::get(flag);
-        };
-
-        auto setFlag = [](auto& flag, auto& target) {
-            if (flag)
-                target = true;
-        };
-
-        // Process all optional arguments compactly
-        auto& opt = params.optimization;
-        auto& ds = params.dataset;
-
-        // Value arguments
-        setVal(iterations, opt.iterations);
-        setVal(resolution, ds.resolution);
-        setVal(max_cap, opt.max_cap);
-        setVal(images_folder, ds.images);
-        setVal(test_every, ds.test_every);
-        setVal(steps_scaler, opt.steps_scaler);
-        setVal(sh_degree_interval, opt.sh_degree_interval);
-
-        // Flag arguments
-        setFlag(use_bilateral_grid, opt.use_bilateral_grid);
-        setFlag(enable_eval, opt.enable_eval);
-        setFlag(enable_viz, opt.enable_viz);
-        setFlag(selective_adam, opt.selective_adam);
-        setFlag(enable_save_eval_images, opt.enable_save_eval_images);
-
-        // Special case: validate render mode
-        if (render_mode) {
-            const auto mode = ::args::get(render_mode);
-            if (VALID_RENDER_MODES.find(mode) == VALID_RENDER_MODES.end()) {
-                std::cerr << "ERROR: Invalid render mode '" << mode
-                          << "'. Valid modes are: RGB, D, ED, RGB_D, RGB_ED\n";
-                return ERROR_EXIT_CODE;
+            // Parse arguments
+            try {
+                parser.Prog(args.front());
+                parser.ParseArgs(std::vector<std::string>(args.begin() + 1, args.end()));
+            } catch (const ::args::Help&) {
+                std::print("{}", parser.Help());
+                return std::make_tuple(ParseResult::Help, std::function<void()>{});
+            } catch (const ::args::Completion& e) {
+                std::print("{}", e.what());
+                return std::make_tuple(ParseResult::Help, std::function<void()>{});
+            } catch (const ::args::ParseError& e) {
+                return std::unexpected(std::format("Parse error: {}\n{}", e.what(), parser.Help()));
             }
-            opt.render_mode = mode;
-        }
 
-        return SUCCESS_EXIT_CODE;
+            // Check if explicitly displaying help
+            if (help) {
+                return std::make_tuple(ParseResult::Help, std::function<void()>{});
+            }
+
+            // NO ARGUMENTS = VIEWER MODE (empty)
+            if (args.size() == 1) {
+                return std::make_tuple(ParseResult::Success, std::function<void()>{});
+            }
+
+            // Check for viewer mode with PLY
+            if (view_ply) {
+                const auto ply_path = ::args::get(view_ply);
+                if (!ply_path.empty()) {
+                    params.ply_path = ply_path;
+
+                    // Check if PLY file exists
+                    if (!std::filesystem::exists(params.ply_path)) {
+                        return std::unexpected(std::format("PLY file does not exist: {}", params.ply_path.string()));
+                    }
+                }
+
+                return std::make_tuple(ParseResult::Success, std::function<void()>{});
+            }
+
+            // Training mode
+            bool has_data_path = data_path && !::args::get(data_path).empty();
+            bool has_output_path = output_path && !::args::get(output_path).empty();
+
+            // If headless mode, require data path
+            if (headless && !has_data_path) {
+                return std::unexpected(std::format(
+                    "ERROR: Headless mode requires --data-path\n\n{}",
+                    parser.Help()));
+            }
+
+            // If both paths provided, it's training mode
+            if (has_data_path && has_output_path) {
+                params.dataset.data_path = ::args::get(data_path);
+                params.dataset.output_path = ::args::get(output_path);
+
+                // Create output directory
+                std::error_code ec;
+                std::filesystem::create_directories(params.dataset.output_path, ec);
+                if (ec) {
+                    return std::unexpected(std::format(
+                        "Failed to create output directory '{}': {}",
+                        params.dataset.output_path.string(), ec.message()));
+                }
+            } else if (has_data_path != has_output_path) {
+                return std::unexpected(std::format(
+                    "ERROR: Training mode requires both --data-path and --output-path\n\n{}",
+                    parser.Help()));
+            }
+
+            // Validate render mode if provided
+            if (render_mode) {
+                const auto mode = ::args::get(render_mode);
+                if (VALID_RENDER_MODES.find(mode) == VALID_RENDER_MODES.end()) {
+                    return std::unexpected(std::format(
+                        "ERROR: Invalid render mode '{}'. Valid modes are: RGB, D, ED, RGB_D, RGB_ED",
+                        mode));
+                }
+            }
+            if (strategy) {
+                const auto strat = ::args::get(strategy);
+                if (VALID_STRATEGIES.find(strat) == VALID_STRATEGIES.end()) {
+                    return std::unexpected(std::format(
+                        "ERROR: Invalid optimization strategy '{}'. Valid strategies are: mcmc, default",
+                        strat));
+                }
+            }
+
+            // Create lambda to apply command line overrides after JSON loading
+            auto apply_cmd_overrides = [&params,
+                                        // Capture values, not references
+                                        iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
+                                        resolution_val = resolution ? std::optional<int>(::args::get(resolution)) : std::optional<int>(),
+                                        max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
+                                        images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
+                                        test_every_val = test_every ? std::optional<int>(::args::get(test_every)) : std::optional<int>(),
+                                        steps_scaler_val = steps_scaler ? std::optional<float>(::args::get(steps_scaler)) : std::optional<float>(),
+                                        sh_degree_interval_val = sh_degree_interval ? std::optional<int>(::args::get(sh_degree_interval)) : std::optional<int>(),
+                                        sh_degree_val = sh_degree ? std::optional<int>(::args::get(sh_degree)) : std::optional<int>(),
+                                        min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
+                                        render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
+                                        strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
+                                        // Capture flag states
+                                        preload_to_ram_flag = bool(preload_to_ram),
+                                        use_bilateral_grid_flag = bool(use_bilateral_grid),
+                                        enable_eval_flag = bool(enable_eval),
+                                        headless_flag = bool(headless),
+                                        antialiasing_flag = bool(antialiasing),
+                                        selective_adam_flag = bool(selective_adam),
+                                        enable_save_eval_images_flag = bool(enable_save_eval_images),
+                                        skip_intermediate_saving_flag = bool(skip_intermediate_saving)]() {
+                auto& opt = params.optimization;
+                auto& ds = params.dataset;
+
+                // Simple lambdas to apply if flag/value exists
+                auto setVal = [](const auto& flag, auto& target) {
+                    if (flag)
+                        target = *flag;
+                };
+
+                auto setFlag = [](bool flag, auto& target) {
+                    if (flag)
+                        target = true;
+                };
+
+                // Apply all overrides
+                setVal(iterations_val, opt.iterations);
+                setVal(resolution_val, ds.resolution);
+                setVal(max_cap_val, opt.max_cap);
+                setVal(images_folder_val, ds.images);
+                setVal(test_every_val, ds.test_every);
+                setVal(steps_scaler_val, opt.steps_scaler);
+                setVal(sh_degree_interval_val, opt.sh_degree_interval);
+                setVal(sh_degree_val, opt.sh_degree);
+                setVal(min_opacity_val, opt.min_opacity);
+                setVal(render_mode_val, opt.render_mode);
+                setVal(strategy_val, opt.strategy);
+
+                setFlag(preload_to_ram_flag, opt.preload_to_ram);
+                setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
+                setFlag(enable_eval_flag, opt.enable_eval);
+                setFlag(headless_flag, opt.headless);
+                setFlag(antialiasing_flag, opt.antialiasing);
+                setFlag(selective_adam_flag, opt.selective_adam);
+                setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
+                setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
+            };
+
+            return std::make_tuple(ParseResult::Success, apply_cmd_overrides);
+
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Unexpected error during argument parsing: {}", e.what()));
+        }
     }
 
     void apply_step_scaling(gs::param::TrainingParameters& params) {
         auto& opt = params.optimization;
-        const size_t scaler = opt.steps_scaler;
+        const float scaler = opt.steps_scaler;
 
-        if (scaler > 1) {
-            std::cout << "Scaling training steps by factor: " << scaler << std::endl;
+        if (scaler > 0) {
+            std::println("Scaling training steps by factor: {}", scaler);
 
             opt.iterations *= scaler;
             opt.start_refine *= scaler;
@@ -170,19 +255,41 @@ namespace {
 } // anonymous namespace
 
 // Public interface
-gs::param::TrainingParameters gs::args::parse_args_and_params(int argc, const char* const argv[]) {
-    gs::param::TrainingParameters params;
-    params.optimization = gs::param::read_optim_params_from_json();
+std::expected<std::unique_ptr<gs::param::TrainingParameters>, std::string>
+gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
-    const int result = parse_arguments(convert_args(argc, argv), params);
+    auto params = std::make_unique<gs::param::TrainingParameters>();
 
-    if (result < 0) {
-        throw std::runtime_error("Failed to parse arguments");
-    } else if (result == 0) {
+    // Parse command line arguments
+    auto parse_result = parse_arguments(convert_args(argc, argv), *params);
+    if (!parse_result) {
+        return std::unexpected(parse_result.error());
+    }
+
+    auto [result, apply_overrides] = *parse_result;
+
+    // Handle help case
+    if (result == ParseResult::Help) {
         std::exit(0);
     }
 
-    apply_step_scaling(params);
+    // Training mode - load JSON first
+    if (!params->dataset.data_path.empty()) {
+        auto opt_params_result = gs::param::read_optim_params_from_json();
+        if (!opt_params_result) {
+            return std::unexpected(std::format("Failed to load optimization parameters: {}",
+                                               opt_params_result.error()));
+        }
+        params->optimization = *opt_params_result;
+    }
+
+    // Apply command line overrides
+    if (apply_overrides) {
+        apply_overrides();
+    }
+
+    // Apply step scaling
+    apply_step_scaling(*params);
 
     return params;
 }

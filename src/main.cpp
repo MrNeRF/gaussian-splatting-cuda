@@ -1,104 +1,62 @@
+#include "core/application.hpp"
 #include "core/argument_parser.hpp"
-#include "core/dataset.hpp"
-#include "core/mcmc.hpp"
-#include "core/parameters.hpp"
-#include "core/trainer.hpp"
-#include "visualizer/detail.hpp"
-#include <iostream>
-#include <memory>
-#include <thread>
+#include "core/training_setup.hpp"
+#include <print>
 #include <c10/cuda/CUDAAllocatorConfig.h>
 
 int main(int argc, char* argv[]) {
-    try {
+    //----------------------------------------------------------------------
+    // 0. Set CUDA caching allocator settings to avoid fragmentation issues
+    // This avoids the need to repeatedly call emptyCache() after
+    // densification steps. We manually call the proper function here
+    // instead of setting the environment variable hoping that this then
+    // also works on Windows. Setting the environment variable using
+    // setenv("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True", 1);
+    // would work on Linux but not on Windows, so we use the C++ API.
+    // Should this break in the future, we can always revert to the old
+    // approach of calling emptyCache() after each densification step.
+    //----------------------------------------------------------------------
+    c10::cuda::CUDACachingAllocator::setAllocatorSettings("expandable_segments:True");
 
-        //----------------------------------------------------------------------
-        // 0. Set CUDA caching allocator settings to avoid fragmentation issues
-        // This avoids the need to repeatedly call emptyCache() after
-        // densification steps. We manually call the proper function here
-        // instead of setting the environment variable hoping that this then
-        // also works on Windows. Setting the environment variable using
-        // setenv("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True", 1);
-        // would work on Linux but not on Windows, so we use the C++ API.
-        // Should this break in the future, we can always revert to the old
-        // approach of calling emptyCache() after each densification step.
-        //----------------------------------------------------------------------
-        c10::cuda::CUDACachingAllocator::setAllocatorSettings("expandable_segments:True");
+    auto params_result = gs::args::parse_args_and_params(argc, argv);
+    if (!params_result) {
+        std::println(stderr, "Error: {}", params_result.error());
+        return -1;
+    }
+    auto params = std::move(*params_result);
+    // no gui
+    if (params->optimization.headless) {
+        if (params->dataset.data_path.empty()) {
+            std::println(stderr, "Error: Headless mode requires --data-path");
+            return -1;
+        }
 
-        //----------------------------------------------------------------------
-        // 1. Parse arguments and load parameters in one step
-        //----------------------------------------------------------------------
-        const auto params = gs::args::parse_args_and_params(argc, argv);
+        std::println("Starting headless training...");
 
-        //----------------------------------------------------------------------
-        // 2. Save training configuration to output directory
-        //----------------------------------------------------------------------
-        gs::param::save_training_parameters_to_json(params, params.dataset.output_path);
+        // Save config
+        auto save_result = gs::param::save_training_parameters_to_json(*params, params->dataset.output_path);
+        if (!save_result) {
+            std::println(stderr, "Error saving config: {}", save_result.error());
+            return -1;
+        }
 
-        //----------------------------------------------------------------------
-        // 3. Create dataset from COLMAP
-        //----------------------------------------------------------------------
-        auto [dataset, scene_center] = create_dataset_from_colmap(params.dataset);
+        auto setup_result = gs::setupTraining(*params);
+        if (!setup_result) {
+            std::println(stderr, "Error: {}", setup_result.error());
+            return -1;
+        }
 
-        //----------------------------------------------------------------------
-        // 4. Model initialisation
-        //----------------------------------------------------------------------
-        auto splat_data = SplatData::init_model_from_pointcloud(params, scene_center);
-
-        //----------------------------------------------------------------------
-        // 5. Create strategy
-        //----------------------------------------------------------------------
-        auto strategy = std::make_unique<MCMC>(std::move(splat_data));
-
-        //----------------------------------------------------------------------
-        // 6. Create trainer
-        //----------------------------------------------------------------------
-        auto trainer = std::make_unique<gs::Trainer>(dataset, std::move(strategy), params);
-
-        //----------------------------------------------------------------------
-        // 7. Start training based on visualization mode
-        //----------------------------------------------------------------------
-        if (params.optimization.enable_viz) {
-            // GUI Mode: Create viewer and run it in main thread
-            auto viewer = trainer->create_and_get_viewer();
-            if (viewer) {
-                // Start training in a separate thread
-                std::thread training_thread([&trainer]() {
-                    try {
-                        trainer->train();
-                    } catch (const std::exception& e) {
-                        std::cerr << "Training thread error: " << e.what() << std::endl;
-                    }
-                });
-
-                // Run GUI in main thread (blocking)
-                viewer->run();
-
-                // After viewer closes, ensure training is stopped
-                if (trainer->is_running()) {
-                    std::cout << "Main: Requesting training stop..." << std::endl;
-                    trainer->request_stop();
-                }
-
-                // Wait for training thread to complete
-                if (training_thread.joinable()) {
-                    std::cout << "Main: Waiting for training thread to finish..." << std::endl;
-                    training_thread.join();
-                    std::cout << "Main: Training thread finished." << std::endl;
-                }
-            } else {
-                std::cerr << "Failed to create viewer" << std::endl;
-                return -1;
-            }
-        } else {
-            // Headless Mode: Run training in main thread
-            trainer->train();
+        auto train_result = setup_result->trainer->train();
+        if (!train_result) {
+            std::println(stderr, "Training error: {}", train_result.error());
+            return -1;
         }
 
         return 0;
-
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return -1;
     }
+
+    // gui app
+    std::println("Starting viewer mode...");
+    gs::Application app;
+    return app.run(std::move(params));
 }

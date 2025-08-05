@@ -125,3 +125,49 @@ inline void compare_tensors(const torch::Tensor& a, const torch::Tensor& b,
     std::cout << "  Relative error: " << (diff / (a.abs() + 1e-8)).mean().item<float>() << std::endl;
     std::cout << std::resetiosflags(std::ios::fixed);
 }
+
+// Print the matrix nicely for debugging
+inline void PrintTorchMat(const torch::Tensor& mat) {
+    if (mat.dim() != 2) {
+        throw std::invalid_argument("PrintMat: Tensor must be 2-dimensional.");
+    }
+
+    const auto rows = mat.size(0);
+    const auto cols = mat.size(1);
+
+    std::cout << "Torch Matrix (" << rows << "x" << cols << "):" << std::endl;
+    for (int i = 0; i < rows; ++i) {
+        std::cout << "[ ";
+        for (int j = 0; j < cols; ++j) {
+            std::cout << std::fixed << std::setprecision(6) << std::setw(10)
+                      << mat[i][j].item<float>();
+            if (j < cols - 1)
+                std::cout << ", ";
+        }
+        std::cout << " ]" << std::endl;
+    }
+}
+
+template <typename MatType>
+inline void PrintGLMMat(const MatType& mat) {
+    static_assert(std::is_same<MatType, glm::mat2>::value ||
+                      std::is_same<MatType, glm::mat3>::value ||
+                      std::is_same<MatType, glm::mat4>::value,
+                  "PrintGLMMat: Only glm::mat2, mat3, and mat4 are supported.");
+
+    constexpr int cols = MatType::col_type::length();
+    constexpr int rows = MatType::length();
+
+    std::cout << "GLM Matrix (" << rows << "x" << cols << "):" << std::endl;
+
+    for (int i = 0; i < rows; ++i) {
+        std::cout << "[ ";
+        for (int j = 0; j < cols; ++j) {
+            std::cout << std::fixed << std::setprecision(6) << std::setw(10)
+                      << mat[j][i]; // GLM stores matrices in column-major order
+            if (j < cols - 1)
+                std::cout << ", ";
+        }
+        std::cout << " ]" << std::endl;
+    }
+}

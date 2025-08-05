@@ -8,11 +8,13 @@
     {
       "name": "imgui",
       "features": [
+        "docking-experimental",
         "glfw-binding",
         "opengl3-binding"
       ]
     },
     "nlohmann-json",
+    "spdlog",
     "tbb"
   ]
 }

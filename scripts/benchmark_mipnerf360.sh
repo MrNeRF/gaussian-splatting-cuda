@@ -24,6 +24,8 @@ do
         --images images_${DATA_FACTOR} \
         --test-every 8 \
         --eval \
+        --headless \
+	--preload-to-ram \
         --save-eval-images
 
     echo "Completed $SCENE"
