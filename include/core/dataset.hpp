@@ -100,6 +100,27 @@ namespace gs {
 
         Split get_split() const { return _split; }
 
+        size_t get_num_bytes() const {
+            if (_cameras.empty()) {
+                return 0;
+            }
+            size_t total_bytes = 0;
+            for (const auto& cam : _cameras) {
+                total_bytes += cam->get_num_bytes_from_file();
+            }
+            // Adjust for resolution factor if specified
+            if (_datasetConfig.resolution > 0) {
+                total_bytes /= _datasetConfig.resolution * _datasetConfig.resolution;
+            }
+            return total_bytes;
+        }
+
+        void enable_image_caching() const {
+            for (const auto& cam : _cameras) {
+                cam->enable_image_caching();
+            }
+        }
+
     private:
         std::vector<std::shared_ptr<Camera>> _cameras;
         const gs::param::DatasetConfig& _datasetConfig;

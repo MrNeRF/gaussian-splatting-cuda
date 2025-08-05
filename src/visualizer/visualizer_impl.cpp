@@ -259,21 +259,6 @@ namespace gs::visualizer {
             ImVec2 pos = gui_manager_->getViewportPos();
             ImVec2 size = gui_manager_->getViewportSize();
 
-            // Debug output
-            static int debug_counter = 0;
-            if (debug_counter++ % 60 == 0) {
-                std::cout << "\n=== VIEWPORT DEBUG ===" << std::endl;
-                std::cout << "ImGui Viewport Pos: (" << pos.x << ", " << pos.y << ")" << std::endl;
-                std::cout << "ImGui Viewport Size: (" << size.x << ", " << size.y << ")" << std::endl;
-                std::cout << "Window Size: " << viewport_.windowSize.x << " x " << viewport_.windowSize.y << std::endl;
-                std::cout << "Framebuffer Size: " << viewport_.frameBufferSize.x << " x " << viewport_.frameBufferSize.y << std::endl;
-
-                // Get main viewport info
-                const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-                std::cout << "Main Viewport Pos: (" << main_viewport->Pos.x << ", " << main_viewport->Pos.y << ")" << std::endl;
-                std::cout << "Main Viewport WorkPos: (" << main_viewport->WorkPos.x << ", " << main_viewport->WorkPos.y << ")" << std::endl;
-            }
-
             // The pos and size are already relative to the window!
             // We just need to pass them directly to the rendering
             viewport_region.x = pos.x;
