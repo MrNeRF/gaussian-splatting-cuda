@@ -1,7 +1,5 @@
 #include "tools/crop_box_tool.hpp"
 #include "core/events.hpp"
-#include "gui/ui_context.hpp"
-#include "gui/ui_widgets.hpp"
 
 // clang-format off
 #include <glad/glad.h>
@@ -44,67 +42,6 @@ namespace gs::visualizer {
         }
 
         drawControls(ui_ctx);
-    }
-
-    void CropBoxTool::registerInputHandlers(InputHandler& handler) {
-        // Clear any existing handlers
-        unregisterInputHandlers(handler);
-
-        // Register mouse button handler for clicking on crop box handles
-        handler_ids_.push_back(
-            handler.addMouseButtonHandler(
-                [this](const InputHandler::MouseButtonEvent& event) {
-                    if (!isEnabled() || !shouldShowBox())
-                        return false;
-
-                    if (event.action == GLFW_PRESS && event.button == GLFW_MOUSE_BUTTON_LEFT) {
-                        // Check if clicking on any handle
-                        if (isMouseOverHandle(event.position)) {
-                            startDragging(event.position);
-                            return true; // Consume event
-                        }
-                    } else if (event.action == GLFW_RELEASE && event.button == GLFW_MOUSE_BUTTON_LEFT) {
-                        if (is_dragging_) {
-                            stopDragging();
-                            return true; // Consume event
-                        }
-                    }
-                    return false;
-                },
-                InputPriority::Tools));
-
-        // Register mouse move handler for dragging
-        handler_ids_.push_back(
-            handler.addMouseMoveHandler(
-                [this](const InputHandler::MouseMoveEvent& event) {
-                    if (!isEnabled() || !is_dragging_)
-                        return false;
-
-                    updateDragging(event.position);
-                    return true; // Consume event while dragging
-                },
-                InputPriority::Tools));
-
-        // Register key handler for quick toggles
-        handler_ids_.push_back(
-            handler.addKeyHandler(
-                [this](const InputHandler::KeyEvent& event) {
-                    if (!isEnabled() || event.action != GLFW_PRESS)
-                        return false;
-
-                    // Ctrl+B to toggle crop box visibility
-                    if (event.key == GLFW_KEY_B && (event.mods & GLFW_MOD_CONTROL)) {
-                        show_crop_box_ = !show_crop_box_;
-                        events::tools::CropBoxSettingsChanged{
-                            .show_box = show_crop_box_,
-                            .use_box = use_crop_box_}
-                            .emit();
-                        return true;
-                    }
-
-                    return false;
-                },
-                InputPriority::Tools));
     }
 
     void CropBoxTool::onEnabledChanged(bool enabled) {

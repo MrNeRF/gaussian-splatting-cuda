@@ -1,6 +1,7 @@
 #include "rendering/rendering_manager.hpp"
 #include "internal/resource_paths.hpp"
 #include "training/training_manager.hpp"
+#include <iostream>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "rendering/cuda_gl_interop.hpp"
@@ -41,18 +42,58 @@ namespace gs::visualizer {
             initialize();
         }
 
-        // Clear with a dark background
+        // Debug: Print viewport region info
+        if (context.viewport_region) {
+            static int frame_count = 0;
+            if (frame_count++ % 60 == 0) { // Print every 60 frames
+                std::cout << "\n=== RENDER VIEWPORT ===" << std::endl;
+                std::cout << "Viewport Region - X: " << context.viewport_region->x
+                          << ", Y: " << context.viewport_region->y
+                          << ", Width: " << context.viewport_region->width
+                          << ", Height: " << context.viewport_region->height << std::endl;
+
+                // Check if values are reasonable
+                if (context.viewport_region->x < 0 || context.viewport_region->y < 0) {
+                    std::cout << "WARNING: Negative viewport coordinates!" << std::endl;
+                }
+                if (context.viewport_region->width <= 0 || context.viewport_region->height <= 0) {
+                    std::cout << "WARNING: Invalid viewport dimensions!" << std::endl;
+                }
+                if (context.viewport_region->x + context.viewport_region->width > context.viewport.frameBufferSize.x ||
+                    context.viewport_region->y + context.viewport_region->height > context.viewport.frameBufferSize.y) {
+                    std::cout << "WARNING: Viewport extends beyond framebuffer!" << std::endl;
+                }
+            }
+        } else {
+            static bool warned = false;
+            if (!warned) {
+                std::cout << "WARNING: No viewport region provided!" << std::endl;
+                warned = true;
+            }
+        }
+
+        // Clear the entire window first
+        glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        drawSceneFrame(context, scene_manager);
+        // Now render to the viewport region
+        if (context.viewport_region) {
+            glViewport(
+                static_cast<GLint>(context.viewport_region->x),
+                static_cast<GLint>(context.viewport_region->y),
+                static_cast<GLsizei>(context.viewport_region->width),
+                static_cast<GLsizei>(context.viewport_region->height));
+        }
+
+        drawSceneFrame(context, scene_manager, context.viewport);
 
         if (settings_.show_crop_box && context.crop_box) {
-            drawCropBox(context);
+            drawCropBox(context, context.viewport);
         }
     }
 
-    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager) {
+    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, const Viewport& render_viewport) {
         if (!scene_manager->hasScene()) {
             return;
         }
@@ -64,9 +105,9 @@ namespace gs::visualizer {
 
         // Build render request
         RenderingPipeline::RenderRequest request{
-            .view_rotation = context.viewport.getRotationMatrix(),
-            .view_translation = context.viewport.getTranslation(),
-            .viewport_size = context.viewport.windowSize,
+            .view_rotation = render_viewport.getRotationMatrix(),
+            .view_translation = render_viewport.getTranslation(),
+            .viewport_size = render_viewport.windowSize,
             .fov = settings_.fov,
             .scaling_modifier = settings_.scaling_modifier,
             .antialiasing = settings_.antialiasing,
@@ -90,13 +131,13 @@ namespace gs::visualizer {
         }
 
         if (result.valid) {
-            RenderingPipeline::uploadToScreen(result, *screen_renderer_, context.viewport.windowSize);
-            screen_renderer_->render(quad_shader_, context.viewport);
+            RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_viewport.windowSize);
+            screen_renderer_->render(quad_shader_, render_viewport);
         }
     }
 
-    void RenderingManager::drawCropBox(const RenderContext& context) {
-        auto& reso = context.viewport.windowSize;
+    void RenderingManager::drawCropBox(const RenderContext& context, const Viewport& render_viewport) {
+        auto& reso = render_viewport.windowSize;
 
         if (reso.x <= 0 || reso.y <= 0) {
             return;
@@ -116,7 +157,7 @@ namespace gs::visualizer {
                 0.1f,
                 1000.0f);
 
-            glm::mat4 view = context.viewport.getViewMatrix();
+            glm::mat4 view = render_viewport.getViewMatrix();
             crop_box->render(view, projection);
         }
     }

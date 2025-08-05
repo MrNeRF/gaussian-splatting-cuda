@@ -237,13 +237,10 @@ namespace gs::gui {
     }
 
     void GuiManager::updateViewportFocus() {
-        // Check if mouse is in viewport area and no ImGui window is hovered
-        bool mouse_in_viewport = isMouseInViewport();
-        bool imgui_wants_mouse = ImGui::GetIO().WantCaptureMouse;
-        bool any_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
-
-        // Viewport has focus if mouse is in viewport and ImGui doesn't want the mouse
-        viewport_has_focus_ = mouse_in_viewport && !imgui_wants_mouse && !any_window_hovered;
+        // Viewport has focus unless ImGui explicitly wants input
+        viewport_has_focus_ = !ImGui::GetIO().WantCaptureMouse &&
+                              !ImGui::GetIO().WantCaptureKeyboard &&
+                              !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
     }
 
     ImVec2 GuiManager::getViewportPos() const {

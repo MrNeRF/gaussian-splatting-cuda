@@ -16,12 +16,17 @@ namespace gs::visualizer {
         bool use_crop_box = false;
     };
 
+    struct ViewportRegion {
+        float x, y, width, height;
+    };
+
     class RenderingManager {
     public:
         struct RenderContext {
             const Viewport& viewport;
             const RenderSettings& settings;
             const RenderBoundingBox* crop_box;
+            const ViewportRegion* viewport_region = nullptr;
         };
 
         RenderingManager();
@@ -42,8 +47,8 @@ namespace gs::visualizer {
 
     private:
         void initializeShaders();
-        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager);
-        void drawCropBox(const RenderContext& context);
+        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, const Viewport& render_viewport);
+        void drawCropBox(const RenderContext& context, const Viewport& render_viewport);
 
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;

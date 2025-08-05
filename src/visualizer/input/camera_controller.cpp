@@ -16,46 +16,12 @@ namespace gs {
           viewport_focus_check_(viewport_focus_check) {}
 
     CameraController::~CameraController() {
-        // Clean up our handlers
-        if (input_handler_) {
-            for (auto id : handler_ids_) {
-                input_handler_->removeHandler(id);
-            }
-        }
+        // No cleanup needed - input handler manages callbacks now
     }
 
     void CameraController::connectToInputHandler(InputHandler& input_handler) {
         // Store reference to input handler for checking key states
         input_handler_ = &input_handler;
-
-        // Register all handlers with Camera priority
-        handler_ids_.push_back(
-            input_handler.addMouseButtonHandler(
-                [this](const InputHandler::MouseButtonEvent& event) {
-                    return handleMouseButton(event);
-                },
-                InputPriority::Camera));
-
-        handler_ids_.push_back(
-            input_handler.addMouseMoveHandler(
-                [this](const InputHandler::MouseMoveEvent& event) {
-                    return handleMouseMove(event);
-                },
-                InputPriority::Camera));
-
-        handler_ids_.push_back(
-            input_handler.addMouseScrollHandler(
-                [this](const InputHandler::MouseScrollEvent& event) {
-                    return handleMouseScroll(event);
-                },
-                InputPriority::Camera));
-
-        handler_ids_.push_back(
-            input_handler.addKeyHandler(
-                [this](const InputHandler::KeyEvent& event) {
-                    return handleKey(event);
-                },
-                InputPriority::Camera));
     }
 
     bool CameraController::isViewportFocused() const {
@@ -76,22 +42,19 @@ namespace gs {
         }
     }
 
-    bool CameraController::handleMouseButton(const InputHandler::MouseButtonEvent& event) {
+    void CameraController::handleMouseButton(const InputHandler::MouseButtonEvent& event) {
         if (!is_enabled_ || !isViewportFocused())
-            return false;
+            return;
 
         if (event.action == GLFW_PRESS) {
             viewport_.camera.initScreenPos(glm::vec2(event.position));
 
             if (event.button == GLFW_MOUSE_BUTTON_LEFT) {
                 is_panning_ = true;
-                return true;
             } else if (event.button == GLFW_MOUSE_BUTTON_RIGHT) {
                 is_rotating_ = true;
-                return true;
             } else if (event.button == GLFW_MOUSE_BUTTON_MIDDLE) {
                 is_orbiting_ = true;
-                return true;
             }
         } else if (event.action == GLFW_RELEASE) {
             if (event.button == GLFW_MOUSE_BUTTON_LEFT && is_panning_) {
@@ -101,7 +64,6 @@ namespace gs {
                     .rotation = viewport_.getRotationMatrix(),
                     .translation = viewport_.getTranslation()}
                     .emit();
-                return true;
             } else if (event.button == GLFW_MOUSE_BUTTON_RIGHT && is_rotating_) {
                 is_rotating_ = false;
                 // Force publish on mouse release
@@ -109,7 +71,6 @@ namespace gs {
                     .rotation = viewport_.getRotationMatrix(),
                     .translation = viewport_.getTranslation()}
                     .emit();
-                return true;
             } else if (event.button == GLFW_MOUSE_BUTTON_MIDDLE && is_orbiting_) {
                 is_orbiting_ = false;
                 // Force publish on mouse release
@@ -117,16 +78,13 @@ namespace gs {
                     .rotation = viewport_.getRotationMatrix(),
                     .translation = viewport_.getTranslation()}
                     .emit();
-                return true;
             }
         }
-
-        return false;
     }
 
-    bool CameraController::handleMouseMove(const InputHandler::MouseMoveEvent& event) {
+    void CameraController::handleMouseMove(const InputHandler::MouseMoveEvent& event) {
         if (!is_enabled_)
-            return false;
+            return;
 
         glm::vec2 current_pos(event.position);
         bool camera_changed = false;
@@ -144,19 +102,16 @@ namespace gs {
 
         if (camera_changed) {
             publishCameraChanged();
-            return true;
         }
-
-        return false;
     }
 
-    bool CameraController::handleMouseScroll(const InputHandler::MouseScrollEvent& event) {
+    void CameraController::handleMouseScroll(const InputHandler::MouseScrollEvent& event) {
         if (!is_enabled_ || !isViewportFocused())
-            return false;
+            return;
 
         float delta = static_cast<float>(event.yoffset);
         if (std::abs(delta) < 1.0e-2f)
-            return false;
+            return;
 
         // Check if R key is pressed for roll using the input handler
         if (input_handler_ && input_handler_->isKeyPressed(GLFW_KEY_R)) {
@@ -166,7 +121,6 @@ namespace gs {
         }
 
         publishCameraChanged();
-        return true;
     }
 
     bool CameraController::handleSpeedChange(const InputHandler::KeyEvent& event) {
@@ -244,21 +198,15 @@ namespace gs {
         return false;
     }
 
-    bool CameraController::handleKey(const InputHandler::KeyEvent& event) {
+    void CameraController::handleKey(const InputHandler::KeyEvent& event) {
         if (!is_enabled_)
-            return false;
+            return;
 
         // Speed changes work even when viewport isn't focused (global shortcuts)
-        if (handleSpeedChange(event)) {
-            return true;
-        }
+        handleSpeedChange(event);
 
         // WASD only works when viewport is focused
-        if (handleWasd(event)) {
-            return true;
-        }
-
-        return false;
+        handleWasd(event);
     }
 
 } // namespace gs

@@ -191,9 +191,6 @@ namespace gs::visualizer {
                 // The actual loading is now handled by DataLoadingService via events
                 events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
 
-                if (gui_manager_) {
-                    gui_manager_->showScriptingConsole(true);
-                }
                 return true;
             });
 
@@ -219,6 +216,10 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::render() {
+        // Update input routing based on current focus
+        if (input_manager_) {
+            input_manager_->updateInputRouting();
+        }
         // Update rendering settings from state manager
         RenderSettings settings = rendering_manager_->getSettings();
 
@@ -242,11 +243,50 @@ namespace gs::visualizer {
             crop_box_ptr = crop_box.get();
         }
 
+        // Get viewport region from GUI
+        ViewportRegion viewport_region;
+        bool has_viewport_region = false;
+        if (gui_manager_) {
+            ImVec2 pos = gui_manager_->getViewportPos();
+            ImVec2 size = gui_manager_->getViewportSize();
+
+            // Debug output
+            static int debug_counter = 0;
+            if (debug_counter++ % 60 == 0) {
+                std::cout << "\n=== VIEWPORT DEBUG ===" << std::endl;
+                std::cout << "ImGui Viewport Pos: (" << pos.x << ", " << pos.y << ")" << std::endl;
+                std::cout << "ImGui Viewport Size: (" << size.x << ", " << size.y << ")" << std::endl;
+                std::cout << "Window Size: " << viewport_.windowSize.x << " x " << viewport_.windowSize.y << std::endl;
+                std::cout << "Framebuffer Size: " << viewport_.frameBufferSize.x << " x " << viewport_.frameBufferSize.y << std::endl;
+
+                // Get main viewport info
+                const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+                std::cout << "Main Viewport Pos: (" << main_viewport->Pos.x << ", " << main_viewport->Pos.y << ")" << std::endl;
+                std::cout << "Main Viewport WorkPos: (" << main_viewport->WorkPos.x << ", " << main_viewport->WorkPos.y << ")" << std::endl;
+            }
+
+            // Convert from window coordinates to framebuffer coordinates
+            // The issue is that ImGui gives us coordinates relative to the OS window,
+            // but OpenGL viewport needs coordinates relative to the OpenGL framebuffer
+
+            // Get the main viewport to calculate the offset
+            const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+
+            // Calculate the position relative to the framebuffer (not the window)
+            viewport_region.x = pos.x - main_viewport->Pos.x;
+            viewport_region.y = pos.y - main_viewport->Pos.y;
+            viewport_region.width = size.x;
+            viewport_region.height = size.y;
+
+            has_viewport_region = true;
+        }
+
         // Render
         RenderingManager::RenderContext context{
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
-            .crop_box = crop_box_ptr};
+            .crop_box = crop_box_ptr,
+            .viewport_region = has_viewport_region ? &viewport_region : nullptr};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 

@@ -18,17 +18,19 @@ namespace gs {
         // Setup input handlers
         void connectToInputHandler(InputHandler& input_handler);
 
+        // Handle input events
+        void handleMouseButton(const InputHandler::MouseButtonEvent& event);
+        void handleMouseMove(const InputHandler::MouseMoveEvent& event);
+        void handleMouseScroll(const InputHandler::MouseScrollEvent& event);
+        void handleKey(const InputHandler::KeyEvent& event);
+
     private:
         // Check if viewport is focused
         bool isViewportFocused() const;
 
         // Input event handlers
-        bool handleMouseButton(const InputHandler::MouseButtonEvent& event);
-        bool handleMouseMove(const InputHandler::MouseMoveEvent& event);
-        bool handleMouseScroll(const InputHandler::MouseScrollEvent& event);
         bool handleSpeedChange(const InputHandler::KeyEvent& event);
         bool handleWasd(const InputHandler::KeyEvent& event);
-        bool handleKey(const InputHandler::KeyEvent& event);
 
         // Publish camera changed event
         void publishCameraChanged();
@@ -36,9 +38,6 @@ namespace gs {
         Viewport& viewport_;
         InputHandler* input_handler_ = nullptr; // Store reference for key state queries
         std::function<bool()> viewport_focus_check_;
-
-        // Handler IDs for cleanup
-        std::vector<InputHandler::HandlerId> handler_ids_;
 
         // State
         bool is_panning_ = false;

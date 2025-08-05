@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
-#include <vector>
 
 namespace gs::visualizer {
 
@@ -17,12 +16,15 @@ namespace gs::visualizer {
         using GuiActiveCheck = std::function<bool()>;
 
         explicit InputManager(GLFWwindow* window, Viewport& viewport);
-        ~InputManager();
+        ~InputManager() = default;
 
         // Setup
         void initialize();
         void setupCallbacks(GuiActiveCheck gui_check, FileDropCallback file_drop);
         void setViewportFocusCheck(std::function<bool()> focus_check);
+
+        // Update input routing based on focus
+        void updateInputRouting();
 
         // Getters
         InputHandler* getInputHandler() { return input_handler_.get(); }
@@ -39,11 +41,8 @@ namespace gs::visualizer {
         FileDropCallback file_drop_callback_;
         std::function<bool()> viewport_focus_check_;
 
-        // Handler IDs for cleanup
-        std::vector<InputHandler::HandlerId> gui_handler_ids_;
-
         void setupInputHandlers();
-        bool handleFileDrop(const InputHandler::FileDropEvent& event);
+        void handleFileDrop(const InputHandler::FileDropEvent& event);
     };
 
 } // namespace gs::visualizer
