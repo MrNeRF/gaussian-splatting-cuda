@@ -316,12 +316,50 @@ Extract it to the `data` folder in the project root.
   - Multiplies iterations, refinement steps, and evaluation/save intervals
   - Creates multiple scaled checkpoints for each original step
 
+- **`--strategy [STRATEGY]`**  
+  Optimization strategy to use (default: `mcmc`)
+  - Options: `mcmc`, `default`
+
 ### MCMC-Specific Options
 
 - **`--max-cap [NUM]`**  
   Maximum number of Gaussians for MCMC strategy (default: 1000000)
   - Controls the upper limit of Gaussian splats during training
   - Useful for memory-constrained environments
+
+### Default Strategy-Specific Options
+
+- **`--prune_opacity [NUM]`**  
+  Gaussians with opacity below this threshold will be pruned (default: 0.005)
+  - Also used to determine the threshold for opacity reset
+
+- **`--grow_scale3d [NUM]`**  
+  Multiplier of the scene scale used to decide growth behavior (default: 0.01)
+  - A higher value leads to more duplicates
+  - A smaller value leads to more splits
+
+- **`--grow_scale2d [NUM]`**  
+  Gaussians with radius above this value will be split (default: 0.05)
+
+- **`--prune_scale3d [NUM]`**  
+  Multiplier of the scene scale used to decide pruning behavior (default: 0.1)
+  - Gaussians with scale below the scene scale multiplied by this value will be pruned
+
+- **`--prune_scale2d [NUM]`**  
+  Gaussians with radius above this value will be pruned (default: 0.15)
+
+- **`--stop_refine_scale2d [NUM]`**  
+  Stop refining Gaussians based on radius after this iteration (default: 0)
+
+- **`--reset_every [NUM]`**  
+  Reset opacity every N-th iteration (default: 3000)
+  - Pruning based on scale and radius starts only after `iter > reset_every`
+
+- **`--pause_refine_after_reset [NUM]`**  
+  Pause refining Gaussians until this number of steps after reset (default: 0)
+
+- **`--revised_opacity`**  
+  Whether to use revised opacity heuristic from arXiv:2404.06109 (default: false)
 
 ### Dataset Configuration
 
