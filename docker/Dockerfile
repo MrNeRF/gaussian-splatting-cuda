@@ -1,5 +1,5 @@
 ARG CUDA_VERSION
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -32,7 +32,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     nano \
     htop \
+    ninja-build \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository ppa:ubuntu-toolchain-r/test && \
+    apt-get update && \
+    apt-get install -y \
+        gcc-14 \
+        g++-14 \
+        gfortran-14 && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 60 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 60 && \
+    update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-14 60 && \
+    update-alternatives --set gcc /usr/bin/gcc-14 && \
+    update-alternatives --set g++ /usr/bin/g++-14 && \
+    update-alternatives --set gfortran /usr/bin/gfortran-14
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
@@ -83,6 +99,8 @@ RUN git clone https://github.com/microsoft/vcpkg.git ${HOME}/vcpkg && \
 RUN echo 'export VCPKG_ROOT=$HOME/vcpkg' >> $HOME/.bashrc && \
     echo 'export PATH=$VCPKG_ROOT:$PATH' >> $HOME/.bashrc
 
+
+
 RUN wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.1%2Bcu128.zip && \
     unzip libtorch-cxx11-abi-shared-with-deps-2.7.1+cu128.zip -d ${HOME} && \
     rm libtorch-cxx11-abi-shared-with-deps-2.7.1+cu128.zip
@@ -91,6 +109,8 @@ RUN wget https://github.com/Kitware/CMake/releases/download/v4.0.3/cmake-4.0.3-l
     chmod +x cmake-4.0.3-linux-x86_64.sh && \
     sudo ./cmake-4.0.3-linux-x86_64.sh --skip-license --prefix=/usr/local && \
     rm cmake-4.0.3-linux-x86_64.sh
+
+
 
 # Modified from https://github.com/jmhardison/dockercolorlogo
 RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
@@ -112,5 +132,6 @@ RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
     echo 'printf "\n${colorwhite}Welcome to gaussian-splatting-cuda dev container!${colornormal}\n"' >> ${HOME}/.docker_whale && \
     echo "bash \$HOME/.docker_whale" >> ${HOME}/.bashrc
 
+WORKDIR /home/${USERNAME}/projects/gaussian-splatting-cuda
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
