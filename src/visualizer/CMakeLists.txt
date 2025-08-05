@@ -43,6 +43,7 @@ add_library(gs_visualizer OBJECT
 
         # Training integration
         training/training_manager.cpp
+        rendering/render_coordinate_axes.cpp
 )
 
 
