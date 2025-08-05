@@ -34,9 +34,10 @@ namespace gs {
                 GetModuleFileNameA(nullptr, executablePathWindows, MAX_PATH);
                 std::filesystem::path executablePath = std::filesystem::path(executablePathWindows);
                 std::filesystem::path parentDir = executablePath;
-                do {
+                while (!parentDir.empty() && !std::filesystem::exists(parentDir / "parameter" / filename))
+                {
                     parentDir = parentDir.parent_path();
-                } while (!parentDir.empty() && !std::filesystem::exists(parentDir / "parameter" / filename));
+                } 
 
                 if (parentDir.empty()) {
                     throw std::runtime_error("could not find " + (std::filesystem::path("parameter") / filename).string());
