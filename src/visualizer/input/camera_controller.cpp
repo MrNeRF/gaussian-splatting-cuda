@@ -11,6 +11,10 @@
 
 namespace gs {
 
+    CameraController::CameraController(Viewport& viewport, std::function<bool()> viewport_focus_check)
+        : viewport_(viewport),
+          viewport_focus_check_(viewport_focus_check) {}
+
     CameraController::~CameraController() {
         // Clean up our handlers
         if (input_handler_) {
@@ -54,6 +58,13 @@ namespace gs {
                 InputPriority::Camera));
     }
 
+    bool CameraController::isViewportFocused() const {
+        if (viewport_focus_check_) {
+            return viewport_focus_check_();
+        }
+        return true; // Default to focused if no check function
+    }
+
     void CameraController::publishCameraChanged() {
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_camera_publish_time_) >= camera_publish_interval_ms_) {
@@ -66,7 +77,7 @@ namespace gs {
     }
 
     bool CameraController::handleMouseButton(const InputHandler::MouseButtonEvent& event) {
-        if (!is_enabled_)
+        if (!is_enabled_ || !isViewportFocused())
             return false;
 
         if (event.action == GLFW_PRESS) {
@@ -140,7 +151,7 @@ namespace gs {
     }
 
     bool CameraController::handleMouseScroll(const InputHandler::MouseScrollEvent& event) {
-        if (!is_enabled_)
+        if (!is_enabled_ || !isViewportFocused())
             return false;
 
         float delta = static_cast<float>(event.yoffset);
@@ -195,6 +206,10 @@ namespace gs {
     }
 
     bool CameraController::handleWasd(const InputHandler::KeyEvent& event) {
+        // Only handle WASD if viewport is focused
+        if (!isViewportFocused())
+            return false;
+
         const float ADVANCE_RATE = 1.0f;
 
         float advance_rate = ADVANCE_RATE;
@@ -233,9 +248,12 @@ namespace gs {
         if (!is_enabled_)
             return false;
 
+        // Speed changes work even when viewport isn't focused (global shortcuts)
         if (handleSpeedChange(event)) {
             return true;
         }
+
+        // WASD only works when viewport is focused
         if (handleWasd(event)) {
             return true;
         }

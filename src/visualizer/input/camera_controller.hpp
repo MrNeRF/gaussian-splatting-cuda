@@ -4,19 +4,24 @@
 #include "input/input_handler.hpp"
 #include "internal/viewport.hpp"
 #include <chrono>
+#include <functional>
 #include <vector>
 
 namespace gs {
 
     class CameraController {
     public:
-        explicit CameraController(Viewport& viewport) : viewport_(viewport) {}
+        explicit CameraController(Viewport& viewport,
+                                  std::function<bool()> viewport_focus_check = nullptr);
         ~CameraController();
 
         // Setup input handlers
         void connectToInputHandler(InputHandler& input_handler);
 
     private:
+        // Check if viewport is focused
+        bool isViewportFocused() const;
+
         // Input event handlers
         bool handleMouseButton(const InputHandler::MouseButtonEvent& event);
         bool handleMouseMove(const InputHandler::MouseMoveEvent& event);
@@ -30,6 +35,7 @@ namespace gs {
 
         Viewport& viewport_;
         InputHandler* input_handler_ = nullptr; // Store reference for key state queries
+        std::function<bool()> viewport_focus_check_;
 
         // Handler IDs for cleanup
         std::vector<InputHandler::HandlerId> handler_ids_;

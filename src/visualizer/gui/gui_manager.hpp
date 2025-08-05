@@ -50,11 +50,13 @@ namespace gs {
             ImVec2 getViewportPos() const;
             ImVec2 getViewportSize() const;
             bool isMouseInViewport() const;
+            bool isViewportFocused() const;
 
         private:
             void setupEventHandlers();
             void applyDefaultStyle();
             void updateViewportRegion();
+            void updateViewportFocus();
 
             // Core dependencies
             visualizer::VisualizerImpl* viewer_;
@@ -78,6 +80,7 @@ namespace gs {
             // Viewport region tracking
             ImVec2 viewport_pos_;
             ImVec2 viewport_size_;
+            bool viewport_has_focus_;
 
             // Method declarations
             void renderSpeedOverlay();

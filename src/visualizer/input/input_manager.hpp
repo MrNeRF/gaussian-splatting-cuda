@@ -22,6 +22,7 @@ namespace gs::visualizer {
         // Setup
         void initialize();
         void setupCallbacks(GuiActiveCheck gui_check, FileDropCallback file_drop);
+        void setViewportFocusCheck(std::function<bool()> focus_check);
 
         // Getters
         InputHandler* getInputHandler() { return input_handler_.get(); }
@@ -36,6 +37,7 @@ namespace gs::visualizer {
 
         GuiActiveCheck gui_active_check_;
         FileDropCallback file_drop_callback_;
+        std::function<bool()> viewport_focus_check_;
 
         // Handler IDs for cleanup
         std::vector<InputHandler::HandlerId> gui_handler_ids_;

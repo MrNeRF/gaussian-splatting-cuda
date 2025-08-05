@@ -23,8 +23,8 @@ namespace gs::visualizer {
         // Create input handler
         input_handler_ = std::make_unique<InputHandler>(window_);
 
-        // Create camera controller
-        camera_controller_ = std::make_unique<CameraController>(viewport_);
+        // Create camera controller with viewport focus check
+        camera_controller_ = std::make_unique<CameraController>(viewport_, viewport_focus_check_);
         camera_controller_->connectToInputHandler(*input_handler_);
     }
 
@@ -32,6 +32,16 @@ namespace gs::visualizer {
         gui_active_check_ = gui_check;
         file_drop_callback_ = file_drop;
         setupInputHandlers();
+    }
+
+    void InputManager::setViewportFocusCheck(std::function<bool()> focus_check) {
+        viewport_focus_check_ = focus_check;
+        // Update camera controller if it exists
+        if (camera_controller_) {
+            // Recreate camera controller with new focus check
+            camera_controller_ = std::make_unique<CameraController>(viewport_, viewport_focus_check_);
+            camera_controller_->connectToInputHandler(*input_handler_);
+        }
     }
 
     void InputManager::setupInputHandlers() {

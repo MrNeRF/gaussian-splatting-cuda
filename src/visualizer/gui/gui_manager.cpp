@@ -38,6 +38,9 @@ namespace gs::gui {
         speed_overlay_visible_ = false;
         speed_overlay_duration_ = std::chrono::milliseconds(3000); // 3 seconds
 
+        // Initialize focus state
+        viewport_has_focus_ = false;
+
         setupEventHandlers();
     }
 
@@ -201,6 +204,9 @@ namespace gs::gui {
         // Get the viewport region for 3D rendering
         updateViewportRegion();
 
+        // Update focus state
+        updateViewportFocus();
+
         // End frame
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -230,6 +236,16 @@ namespace gs::gui {
         }
     }
 
+    void GuiManager::updateViewportFocus() {
+        // Check if mouse is in viewport area and no ImGui window is hovered
+        bool mouse_in_viewport = isMouseInViewport();
+        bool imgui_wants_mouse = ImGui::GetIO().WantCaptureMouse;
+        bool any_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+
+        // Viewport has focus if mouse is in viewport and ImGui doesn't want the mouse
+        viewport_has_focus_ = mouse_in_viewport && !imgui_wants_mouse && !any_window_hovered;
+    }
+
     ImVec2 GuiManager::getViewportPos() const {
         return viewport_pos_;
     }
@@ -244,6 +260,10 @@ namespace gs::gui {
                mouse_pos.y >= viewport_pos_.y &&
                mouse_pos.x < viewport_pos_.x + viewport_size_.x &&
                mouse_pos.y < viewport_pos_.y + viewport_size_.y;
+    }
+
+    bool GuiManager::isViewportFocused() const {
+        return viewport_has_focus_;
     }
 
     void GuiManager::renderSpeedOverlay() {
