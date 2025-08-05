@@ -294,7 +294,6 @@ namespace gs::visualizer {
             world_to_user = coord_axes.get();
         }
 
-
         // Render
         RenderingManager::RenderContext context{
             .viewport = viewport_,
@@ -344,7 +343,6 @@ namespace gs::visualizer {
         }
         return nullptr;
     }
-
 
     std::shared_ptr<const RenderCoordinateAxes> VisualizerImpl::getAxes() const {
         if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
