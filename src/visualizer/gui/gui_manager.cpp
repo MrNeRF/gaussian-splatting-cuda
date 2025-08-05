@@ -1,6 +1,8 @@
 #include "gui/gui_manager.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
+#include "gui/panels/tools_panel.hpp"
+#include "gui/panels/training_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "gui/windows/camera_controls.hpp"
 #include "gui/windows/file_browser.hpp"
@@ -96,12 +98,54 @@ namespace gs::gui {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Get viewport
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        // Create main dockspace
+        const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(main_viewport->WorkPos);
+        ImGui::SetNextWindowSize(main_viewport->WorkSize);
+        ImGui::SetNextWindowViewport(main_viewport->ID);
 
-        // Define layout dimensions
-        const float left_panel_width = 250.0f;  // Slimmer Rendering Settings panel
-        const float right_panel_width = 200.0f; // Even slimmer Scene panel
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking |
+                                        ImGuiWindowFlags_NoTitleBar |
+                                        ImGuiWindowFlags_NoCollapse |
+                                        ImGuiWindowFlags_NoResize |
+                                        ImGuiWindowFlags_NoMove |
+                                        ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                        ImGuiWindowFlags_NoNavFocus |
+                                        ImGuiWindowFlags_NoBackground;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+        ImGui::Begin("DockSpace", nullptr, window_flags);
+        ImGui::PopStyleVar(3);
+
+        // DockSpace ID
+        ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+
+        // Create dockspace
+        ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+
+        // Set up default layout on first run
+        static bool first_time = true;
+        if (first_time) {
+            first_time = false;
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, main_viewport->WorkSize);
+
+            ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.2f, nullptr, &dockspace_id);
+            ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.2f, nullptr, &dockspace_id);
+
+            // Dock windows
+            ImGui::DockBuilderDockWindow("Rendering Settings", dock_id_left);
+            ImGui::DockBuilderDockWindow("Scene", dock_id_right);
+
+            ImGui::DockBuilderFinish(dockspace_id);
+        }
+
+        ImGui::End();
 
         // Create context for this frame
         UIContext ctx{
@@ -110,21 +154,35 @@ namespace gs::gui {
             .file_browser = file_browser_.get(),
             .window_states = &window_states_};
 
-        // Draw the main panel (Rendering Settings) with proper positioning
+        // Draw docked panels
         if (show_main_panel_) {
-            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(ImVec2(left_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
-            panels::DrawMainPanel(ctx);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
+            if (ImGui::Begin("Rendering Settings", &show_main_panel_)) {
+                // Draw contents without the manual sizing/positioning
+                panels::DrawWindowControls(ctx);
+                ImGui::Separator();
+                widgets::DrawModeStatus(ctx);
+                ImGui::Separator();
+                panels::DrawRenderingSettings(ctx);
+                ImGui::Separator();
+                if (viewer_->getTrainer()) {
+                    panels::DrawTrainingControls(ctx);
+                    ImGui::Separator();
+                }
+                panels::DrawProgressInfo(ctx);
+                ImGui::Separator();
+                panels::DrawToolsPanel(ctx);
+            }
+            ImGui::End();
+            ImGui::PopStyleColor();
         }
 
-        // Draw Scene panel with proper positioning
+        // Draw Scene panel
         if (window_states_["scene_panel"]) {
-            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - right_panel_width, viewport->WorkPos.y), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(ImVec2(right_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
             scene_panel_->render(&window_states_["scene_panel"]);
         }
 
-        // Render floating windows (these should remain movable)
+        // Render floating windows (these remain movable)
         if (window_states_["console"]) {
             console_->render(&window_states_["console"]);
         }
@@ -140,6 +198,9 @@ namespace gs::gui {
         // Render speed overlay if visible
         renderSpeedOverlay();
 
+        // Get the viewport region for 3D rendering
+        updateViewportRegion();
+
         // End frame
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -151,6 +212,38 @@ namespace gs::gui {
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(backup_current_context);
         }
+    }
+
+    void GuiManager::updateViewportRegion() {
+        // Find the central node (viewport area)
+        ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+        ImGuiDockNode* central_node = ImGui::DockBuilderGetCentralNode(dockspace_id);
+
+        if (central_node && central_node->IsVisible) {
+            viewport_pos_ = ImVec2(central_node->Pos.x, central_node->Pos.y);
+            viewport_size_ = ImVec2(central_node->Size.x, central_node->Size.y);
+        } else {
+            // Fallback to full window
+            const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+            viewport_pos_ = main_viewport->WorkPos;
+            viewport_size_ = main_viewport->WorkSize;
+        }
+    }
+
+    ImVec2 GuiManager::getViewportPos() const {
+        return viewport_pos_;
+    }
+
+    ImVec2 GuiManager::getViewportSize() const {
+        return viewport_size_;
+    }
+
+    bool GuiManager::isMouseInViewport() const {
+        ImVec2 mouse_pos = ImGui::GetMousePos();
+        return mouse_pos.x >= viewport_pos_.x &&
+               mouse_pos.y >= viewport_pos_.y &&
+               mouse_pos.x < viewport_pos_.x + viewport_size_.x &&
+               mouse_pos.y < viewport_pos_.y + viewport_size_.y;
     }
 
     void GuiManager::renderSpeedOverlay() {

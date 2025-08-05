@@ -76,7 +76,7 @@ namespace gs::gui {
 
                 // Query current scene info
                 events::query::SceneInfo response;
-                auto handler = events::query::SceneInfo::when([&response](const auto& r) {
+                events::query::SceneInfo::when([&response](const auto& r) {
                     response = r;
                 });
                 events::query::GetSceneInfo{}.emit();
@@ -332,21 +332,11 @@ namespace gs::gui {
     void ScenePanel::render(bool* p_open) {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
 
-        // Simplified flags - positioning is handled in GuiManager::render()
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove |
-                                 ImGuiWindowFlags_NoResize |
-                                 ImGuiWindowFlags_NoCollapse |
-                                 ImGuiWindowFlags_NoTitleBar; // Add this for consistency
-
-        if (!ImGui::Begin("Scene", p_open, flags)) {
+        if (!ImGui::Begin("Scene", p_open)) {
             ImGui::End();
             ImGui::PopStyleColor();
             return;
         }
-
-        // Add a custom title
-        ImGui::Text("Scene");
-        ImGui::Separator();
 
         // Make buttons smaller to fit the narrow panel
         float button_width = ImGui::GetContentRegionAvail().x;
