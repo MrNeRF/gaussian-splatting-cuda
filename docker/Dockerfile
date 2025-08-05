@@ -131,7 +131,5 @@ RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
     echo 'printf "          \\\____\\\______/               \n"' >> ${HOME}/.docker_whale && \
     echo 'printf "\n${colorwhite}Welcome to gaussian-splatting-cuda dev container!${colornormal}\n"' >> ${HOME}/.docker_whale && \
     echo "bash \$HOME/.docker_whale" >> ${HOME}/.bashrc
-
-WORKDIR /home/${USERNAME}/projects/gaussian-splatting-cuda
-
+    
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
