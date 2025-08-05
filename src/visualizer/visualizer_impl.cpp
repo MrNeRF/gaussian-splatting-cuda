@@ -4,6 +4,8 @@
 #include "core/model_providers.hpp"
 #include "tools/crop_box_tool.hpp"
 
+#include <tools/world_transform_tool.hpp>
+
 namespace gs::visualizer {
 
     VisualizerImpl::VisualizerImpl(const ViewerOptions& options)
@@ -227,6 +229,12 @@ namespace gs::visualizer {
             settings.use_crop_box = false;
         }
 
+        if (auto* world_trans = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
+            settings.show_coord_axes = world_trans->ShouldShowAxes();
+        } else {
+            settings.show_coord_axes = false;
+        }
+
         settings.antialiasing = state_manager_->isAntiAliasingEnabled();
         settings.fov = state_manager_->getRenderingConfig()->getFovDegrees();
         settings.scaling_modifier = state_manager_->getRenderingConfig()->getScalingModifier();
@@ -294,8 +302,8 @@ namespace gs::visualizer {
     }
 
     std::shared_ptr<RenderCoordinateAxes> VisualizerImpl::getAxes() const {
-        if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
-            return crop_tool->getAxes();
+        if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
+            return world_transform->getAxes();
         }
         return nullptr;
     }

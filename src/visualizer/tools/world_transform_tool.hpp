@@ -30,12 +30,14 @@ namespace gs::visualizer {
         // World box specific methods
         std::shared_ptr<gs::RenderCoordinateAxes> getAxes() { return coordinate_axes_; }
 
+        bool ShouldShowAxes() const {return  show_axes_;}
+
     protected:
         void onEnabledChanged(bool enabled) override;
 
     private:
         glm::vec3 translation_;
-        glm::vec3 angles_rad_;
+        glm::vec3 angles_deg_;
 
         void setupEventHandlers();
         void drawControls(const gs::gui::UIContext& ui_ctx);
@@ -43,7 +45,7 @@ namespace gs::visualizer {
         std::shared_ptr<gs::RenderCoordinateAxes> coordinate_axes_;
 
         // UI state
-        bool show_axes_ = true;
+        bool show_axes_ = false;
         float line_width_ = 2.0f;
         float axes_size_ = 2.0f;
 

@@ -52,7 +52,7 @@ namespace gs::visualizer {
         if (settings_.show_crop_box && context.crop_box) {
             drawCropBox(context);
         }
-        if (true && context.coord_axes) {
+        if (settings_.show_coord_axes && context.coord_axes) {
             drawCoordAxes(context);
         }
     }

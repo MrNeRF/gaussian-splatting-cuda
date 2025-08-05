@@ -5,7 +5,7 @@
 
 namespace gs::visualizer {
 
-    WorldTransformTool::WorldTransformTool() : translation_(0.0f), angles_rad_(0.0f) {
+    WorldTransformTool::WorldTransformTool() : translation_(0.0f), angles_deg_(0.0f) {
         coordinate_axes_ = std::make_shared<RenderCoordinateAxes>();
         setupEventHandlers();
     }
@@ -47,10 +47,21 @@ namespace gs::visualizer {
 
     void WorldTransformTool::setupEventHandlers() {
         using namespace events;
+        // Listen for axes settings changes
+        tools::AxesSettingsChanged::when([this](const auto& e) {
+            show_axes_ = e.show_axes;
+        });
+    }
+
+    float wrapAngle(float angle) {
+        angle = fmod(angle, 360.0f);
+        if (angle < 0)
+            angle += 360.0f;
+        return angle;
     }
 
     void WorldTransformTool::drawControls(const gs::gui::UIContext& ui_ctx) {
-        if (!ImGui::CollapsingHeader("World Transform Box")) {
+        if (!ImGui::CollapsingHeader("World Transform")) {
             return;
         }
 
@@ -61,10 +72,10 @@ namespace gs::visualizer {
         }
 
         if (settings_changed) {
-            // events::tools::CropBoxSettingsChanged{
-            //     .show_box = show_crop_box_,
-            //     .use_box = use_crop_box_}
-            //     .emit();
+
+            events::tools::AxesSettingsChanged{
+                .show_axes = show_axes_}
+                .emit();
         }
 
         if (show_axes_) {
@@ -84,14 +95,37 @@ namespace gs::visualizer {
                 coordinate_axes_->setSize(2);
                 coordinate_axes_->setLineWidth(3);
             }
+        }
+        bool world_rot_changed = false;
+        bool world_trans_changed = false;
 
-            // Rotation controls
-            if (ImGui::TreeNode("Rotation")) {
-                ImGui::Text("Ctrl+click for faster steps");
-                ImGui::Text("Rotatate w.r.t world axes");
+        // Rotation controls
+        if (ImGui::TreeNode("Rotation")) {
+            ImGui::Text("Ctrl+click for faster steps");
+            ImGui::Text("Rotatate w.r.t world axes (Deg) ");
+            const float step = 0.1f;
+            const float step_fast = 1.0f;
 
-                ImGui::TreePop();
-            }
+            // Trans X
+            ImGui::Text("RotX:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110);
+            world_rot_changed |= ImGui::InputFloat("RotX", &angles_deg_[0], step, step_fast, "%.3f");
+            angles_deg_[0] = wrapAngle(angles_deg_[0]);
+
+            ImGui::Text("RotY:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110);
+            world_rot_changed |= ImGui::InputFloat("RotY", &angles_deg_[1], step, step_fast, "%.3f");
+            angles_deg_[1] = wrapAngle(angles_deg_[1]);
+
+            ImGui::Text("RotZ:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110);
+            world_rot_changed |= ImGui::InputFloat("RotZ", &angles_deg_[2], step, step_fast, "%.3f");
+            angles_deg_[2] = wrapAngle(angles_deg_[2]);
+
+            ImGui::TreePop();
         }
 
         // Translation controls
@@ -99,7 +133,6 @@ namespace gs::visualizer {
             ImGui::Text("Ctrl+click for faster steps");
             ImGui::Text("Trans w.r.t to world axes");
 
-            bool world_trans_changed = false;
             const float min_range = -8.0f;
             const float max_range = 8.0f;
             const float step = 0.01f;
@@ -126,20 +159,8 @@ namespace gs::visualizer {
             world_trans_changed |= ImGui::InputFloat("TransZ", &translation_[2], step, step_fast, "%.3f");
             translation_[2] = std::clamp(translation_[2], min_range, max_range);
 
-            if (world_trans_changed) {
-                // bounding_box_->setBounds(
-                //     glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
-                //     glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
-                //
-                // events::ui::CropBoxChanged{
-                //     .min_bounds = bounding_box_->getMinBounds(),
-                //     .max_bounds = bounding_box_->getMaxBounds(),
-                //     .enabled = use_crop_box_}
-                //     .emit();
-            }
-
             ImGui::Text("Translations: (%.3f, %.3f, %.3f)", translation_.x, translation_.y, translation_.z);
-            ImGui::Text("Angles: (%.3f, %.3f, %.3f)", angles_rad_.x, angles_rad_.y, angles_rad_.z);
+            ImGui::Text("Angles: (%.3f, %.3f, %.3f)", angles_deg_.x, angles_deg_.y, angles_deg_.z);
 
             ImGui::TreePop();
         }
