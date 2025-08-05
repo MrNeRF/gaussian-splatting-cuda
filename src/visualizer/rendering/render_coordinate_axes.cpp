@@ -8,7 +8,7 @@ namespace gs {
     const glm::vec3 RenderCoordinateAxes::Y_AXIS_COLOR = glm::vec3(0.0f, 1.0f, 0.0f); // Green
     const glm::vec3 RenderCoordinateAxes::Z_AXIS_COLOR = glm::vec3(0.0f, 0.0f, 1.0f); // Blue
 
-    RenderCoordinateAxes::RenderCoordinateAxes() : size_(1.0f),
+    RenderCoordinateAxes::RenderCoordinateAxes() : size_(2.0f),
                                                    line_width_(3.0f),
                                                    initialized_(false),
                                                    VAO_(0),
