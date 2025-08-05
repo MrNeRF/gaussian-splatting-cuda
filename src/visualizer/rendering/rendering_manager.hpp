@@ -6,6 +6,10 @@
 #include "scene/scene_manager.hpp"
 #include <memory>
 
+namespace gs {
+    class RenderCoordinateAxes;
+}
+
 namespace gs::visualizer {
 
     struct RenderSettings {
@@ -22,6 +26,7 @@ namespace gs::visualizer {
             const Viewport& viewport;
             const RenderSettings& settings;
             const RenderBoundingBox* crop_box;
+            const RenderCoordinateAxes* coord_axes;
         };
 
         RenderingManager();

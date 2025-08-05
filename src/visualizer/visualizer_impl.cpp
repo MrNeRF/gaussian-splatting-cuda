@@ -237,11 +237,18 @@ namespace gs::visualizer {
             crop_box_ptr = crop_box.get();
         }
 
+        // Get crop box for rendering
+        RenderCoordinateAxes* coord_axes_ptr = nullptr;
+        if (auto coord_axes = getAxes()) {
+            coord_axes_ptr = coord_axes.get();
+        }
+
         // Render
         RenderingManager::RenderContext context{
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
-            .crop_box = crop_box_ptr};
+            .crop_box = crop_box_ptr,
+            .coord_axes = coord_axes_ptr};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 
@@ -281,6 +288,13 @@ namespace gs::visualizer {
     std::shared_ptr<RenderBoundingBox> VisualizerImpl::getCropBox() const {
         if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
             return crop_tool->getBoundingBox();
+        }
+        return nullptr;
+    }
+
+    std::shared_ptr<RenderCoordinateAxes> VisualizerImpl::getAxes() const {
+        if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
+            return crop_tool->getAxes();
         }
         return nullptr;
     }

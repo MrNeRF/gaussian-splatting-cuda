@@ -15,6 +15,11 @@ namespace gs::visualizer {
 
     CropBoxTool::CropBoxTool() {
         bounding_box_ = std::make_shared<RenderBoundingBox>();
+        coordinate_axes_ = std::make_shared<RenderCoordinateAxes>();
+
+        // // Hide Z-axis if needed
+        // coordinate_axes_->setAxisVisible(2, false);
+
         setupEventHandlers();
     }
 

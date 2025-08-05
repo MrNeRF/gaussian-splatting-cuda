@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rendering/render_bounding_box.hpp"
+#include "rendering/render_coordinate_axes.hpp"
 #include "tools/tool_base.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -28,6 +29,8 @@ namespace gs::visualizer {
 
         // Crop box specific methods
         std::shared_ptr<gs::RenderBoundingBox> getBoundingBox() { return bounding_box_; }
+        std::shared_ptr<gs::RenderCoordinateAxes> getAxes() { return coordinate_axes_; }
+
         bool shouldShowBox() const { return show_crop_box_; }
         bool shouldUseBox() const { return use_crop_box_; }
 
@@ -48,6 +51,7 @@ namespace gs::visualizer {
         void stopDragging();
 
         std::shared_ptr<gs::RenderBoundingBox> bounding_box_;
+        std::shared_ptr<gs::RenderCoordinateAxes> coordinate_axes_;
 
         // UI state
         bool show_crop_box_ = false;

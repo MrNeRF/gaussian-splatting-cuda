@@ -1,4 +1,6 @@
 #include "rendering/rendering_manager.hpp"
+#include "rendering/render_coordinate_axes.hpp"
+
 #include "internal/resource_paths.hpp"
 #include "training/training_manager.hpp"
 
@@ -108,16 +110,26 @@ namespace gs::visualizer {
             crop_box->init();
         }
 
-        if (crop_box->isInitialized()) {
-            auto fov_rad = glm::radians(settings_.fov);
-            auto projection = glm::perspective(
-                static_cast<float>(fov_rad),
-                static_cast<float>(reso.x) / reso.y,
-                0.1f,
-                1000.0f);
+        auto coord_axes = const_cast<RenderCoordinateAxes*>(context.coord_axes);
 
-            glm::mat4 view = context.viewport.getViewMatrix();
+        if (!coord_axes->isInitialized()) {
+            coord_axes->init();
+        }
+
+        auto fov_rad = glm::radians(settings_.fov);
+        auto projection = glm::perspective(
+            static_cast<float>(fov_rad),
+            static_cast<float>(reso.x) / reso.y,
+            0.1f,
+            1000.0f);
+        glm::mat4 view = context.viewport.getViewMatrix();
+
+        if (crop_box->isInitialized()) {
             crop_box->render(view, projection);
+        }
+
+        if (coord_axes->isInitialized()) {
+            coord_axes->render(view, projection);
         }
     }
 
