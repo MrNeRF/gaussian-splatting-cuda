@@ -1,7 +1,9 @@
 #include "core/trainer.hpp"
+#include "core/fast_rasterizer.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <chrono>
+#include <cuda_runtime.h>
 #include <expected>
 #include <numeric>
 #include <print>
@@ -302,6 +304,28 @@ namespace gs {
             throw std::runtime_error("CUDA is not available – aborting.");
         }
 
+        // Figure out whether dataset images can be cached in VRAM
+        // TODO: this is a crude heuristic that should be improved
+        constexpr size_t mib = 1024 * 1024;                 // 1 MiB
+        constexpr size_t padding = 512 * mib;               // 512 MiB padding for safety
+        constexpr size_t min_bytes_remaining = 12288 * mib; // at least 12 GiB should be left for model, rendering, optimizer, etc.
+        constexpr size_t max_bytes_dataset = 8192 * mib;    // max 8 GiB for dataset images
+        size_t free_mem_bytes = 0, total_mem_bytes = 0;
+        cudaError_t err = cudaMemGetInfo(&free_mem_bytes, &total_mem_bytes);
+        if (err != cudaSuccess) {
+            throw std::runtime_error("Failed to get CUDA memory info: " + std::string(cudaGetErrorString(err)));
+        }
+        const size_t num_bytes_dataset = dataset->get_num_bytes();
+        std::cout << "Free VRAM: " << (free_mem_bytes / mib) << " MiB, Dataset size: " << (num_bytes_dataset / mib) << " MiB" << std::endl;
+        const bool cache_dataset = (free_mem_bytes > min_bytes_remaining + num_bytes_dataset + padding) &&
+                                   (num_bytes_dataset < max_bytes_dataset);
+        if (cache_dataset) {
+            std::cout << "Images will be cached in VRAM" << std::endl;
+            dataset->enable_image_caching();
+        } else {
+            std::cout << "Images will be loaded from disk on demand" << std::endl;
+        }
+
         // Handle dataset split based on evaluation flag
         if (params.optimization.enable_eval) {
             // Create train/val split
@@ -343,8 +367,7 @@ namespace gs {
             throw std::runtime_error(result.error());
         }
 
-        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
-        background_ = background_.to(torch::kCUDA);
+        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
         // Create progress bar based on headless flag
         if (params.optimization.headless) {
@@ -454,14 +477,10 @@ namespace gs {
 
             // Use the render mode from parameters
             auto render_fn = [this, &cam, render_mode]() {
-                return gs::rasterize(
+                return fast_rasterize(
                     *cam,
                     strategy_->get_model(),
-                    background_,
-                    1.0f,
-                    false,
-                    params_.optimization.antialiasing,
-                    render_mode);
+                    background_);
             };
 
             RenderOutput r_output = render_fn();

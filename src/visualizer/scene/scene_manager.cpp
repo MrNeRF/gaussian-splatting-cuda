@@ -111,7 +111,7 @@ namespace gs {
                 .scaling_modifier = cmd.scaling_modifier,
                 .antialiasing = cmd.antialiasing,
                 .render_mode = static_cast<RenderMode>(cmd.render_mode),
-                .crop_box = static_cast<const BoundingBox*>(cmd.crop_box)};
+                .crop_box = static_cast<const geometry::BoundingBox*>(cmd.crop_box)};
 
             auto result = render(request);
 

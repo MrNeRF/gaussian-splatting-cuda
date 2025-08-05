@@ -419,7 +419,15 @@ namespace gs {
             std::cout << std::format("  - sh0 shape: {}\n", tensor_sizes_to_string(sh0.sizes()));
             std::cout << std::format("  - shN shape: {}\n", tensor_sizes_to_string(shN.sizes()));
 
-            return SplatData(params.optimization.sh_degree, means, sh0, shN, scaling, rotation, opacity, scene_scale);
+            return SplatData(
+                params.optimization.sh_degree,
+                means.contiguous(),
+                sh0.contiguous(),
+                shN.contiguous(),
+                scaling.contiguous(),
+                rotation.contiguous(),
+                opacity.contiguous(),
+                scene_scale);
 
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to initialize SplatData: {}", e.what()));
@@ -439,4 +447,3 @@ namespace gs {
         //_max_radii2D is not required;
     }
 }
-

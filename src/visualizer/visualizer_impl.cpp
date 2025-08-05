@@ -83,6 +83,8 @@ namespace gs::visualizer {
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
         });
+
+        // Remove input manager setup from here - it's not created yet!
     }
 
     void VisualizerImpl::setupEventHandlers() {
@@ -179,16 +181,22 @@ namespace gs::visualizer {
         input_manager_ = std::make_unique<InputManager>(window_manager_->getWindow(), viewport_);
         input_manager_->initialize();
 
-        // NOW set up input callbacks after input_manager_ is created
+        // Set viewport focus check
+        input_manager_->setViewportFocusCheck([this]() {
+            return gui_manager_ && gui_manager_->isViewportFocused();
+        });
+
+        // Set position check for mouse events
+        input_manager_->setPositionCheck([this](double x, double y) {
+            return gui_manager_ && gui_manager_->isPositionInViewport(x, y);
+        });
+
+        // Set up input callbacks after input_manager_ is created
         input_manager_->setupCallbacks(
             [this]() { return gui_manager_ && gui_manager_->isAnyWindowActive(); },
             [this](const std::filesystem::path& path, bool is_dataset) {
                 // The actual loading is now handled by DataLoadingService via events
                 events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
-
-                if (gui_manager_) {
-                    gui_manager_->showScriptingConsole(true);
-                }
                 return true;
             });
 
@@ -206,6 +214,8 @@ namespace gs::visualizer {
 
     void VisualizerImpl::update() {
         window_manager_->updateWindowSize();
+
+        // Update the main viewport with window size
         viewport_.windowSize = window_manager_->getWindowSize();
         viewport_.frameBufferSize = window_manager_->getFramebufferSize();
 
@@ -214,6 +224,10 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::render() {
+        // Update input routing based on current focus
+        if (input_manager_) {
+            input_manager_->updateInputRouting();
+        }
         // Update rendering settings from state manager
         RenderSettings settings = rendering_manager_->getSettings();
 
@@ -237,11 +251,30 @@ namespace gs::visualizer {
             crop_box_ptr = crop_box.get();
         }
 
+        // Get viewport region from GUI
+        ViewportRegion viewport_region;
+        bool has_viewport_region = false;
+        if (gui_manager_) {
+            ImVec2 pos = gui_manager_->getViewportPos();
+            ImVec2 size = gui_manager_->getViewportSize();
+
+            // The pos and size are already relative to the window!
+            // We just need to pass them directly to the rendering
+            viewport_region.x = pos.x;
+            viewport_region.y = pos.y;
+            viewport_region.width = size.x;
+            viewport_region.height = size.y;
+
+            has_viewport_region = true;
+        }
+
         // Render
         RenderingManager::RenderContext context{
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
-            .crop_box = crop_box_ptr};
+            .crop_box = crop_box_ptr,
+            .viewport_region = has_viewport_region ? &viewport_region : nullptr,
+            .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 

@@ -133,6 +133,7 @@ configure_file(
 
 # Add gsplat subdirectory
 add_subdirectory(gsplat)
+add_subdirectory(fastgs)
 
 # =============================================================================
 # HOST LIBRARY - Core functionality
@@ -151,12 +152,16 @@ set(HOST_SOURCES
         src/splat_data.cpp
         src/trainer.cpp
         src/rasterizer.cpp
+        src/fast_rasterizer.cpp
         src/metrics.cpp
         src/rasterizer_autograd.cpp
+        src/fast_rasterizer_autograd.cpp
         src/bilateral_grid.cpp
         src/selective_adam.cpp
+        src/fused_adam.cpp
         src/training_setup.cpp
-        src/bounding_box.cpp
+        src/geometry/bounding_box.cpp
+        src/geometry/euclidean_transform.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
@@ -166,6 +171,7 @@ target_include_directories(gaussian_host
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/fastgs  # Add fastgs headers
         ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
         PRIVATE
         ${Python3_INCLUDE_DIRS}
@@ -181,6 +187,7 @@ target_link_libraries(gaussian_host
         Threads::Threads
         Python3::Python
         gsplat_backend  # Link to gsplat
+        fastgs_backend  # Link to fastgs
         CUDA::cudart    # Add CUDA runtime for interop
         spdlog::spdlog
 )
@@ -297,6 +304,7 @@ target_include_directories(${PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
+        ${CMAKE_CURRENT_SOURCE_DIR}/fastgs
         ${Python3_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
@@ -309,6 +317,7 @@ target_link_libraries(${PROJECT_NAME}
         gs_loader        # Loader module
         gs_visualizer    # Visualizer module
         gsplat_backend
+        fastgs_backend
         Python3::Python
         ${OPENGL_LIBRARIES}
         CUDA::cudart
@@ -367,6 +376,7 @@ endfunction()
 configure_build_type(gaussian_host)
 configure_build_type(gaussian_kernels)
 configure_build_type(gsplat_backend)
+configure_build_type(fastgs_backend)
 configure_build_type(${PROJECT_NAME})
 
 # =============================================================================
@@ -387,6 +397,7 @@ if(BUILD_TESTS)
             tests/test_numerical_gradients.cpp
             tests/test_garden_data.cpp
             tests/torch_impl.cpp
+            tests/test_geometry.cpp
     )
 
     add_executable(gaussian_tests ${TEST_SOURCES})

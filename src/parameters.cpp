@@ -247,10 +247,11 @@ namespace gs {
 
         /**
          * @brief Read optimization parameters from JSON file
+         * @param[in] strategy Optimization strategy to load parameters for
          * @return Expected OptimizationParameters or error message
          */
-        std::expected<OptimizationParameters, std::string> read_optim_params_from_json() {
-            auto json_result = read_json_file(get_config_path("optimization_params.json"));
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_json(const std::string strategy) {
+            auto json_result = read_json_file(get_config_path(strategy + "_optimization_params.json"));
             if (!json_result) {
                 return std::unexpected(json_result.error());
             }

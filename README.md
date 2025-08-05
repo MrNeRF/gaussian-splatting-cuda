@@ -4,19 +4,21 @@
 [![Website](https://img.shields.io/badge/Website-mrnerf.com-blue)](https://mrnerf.com)
 [![Papers](https://img.shields.io/badge/Papers-Awesome%203DGS-orange)](https://mrnerf.github.io/awesome-3D-gaussian-splatting/)
 
-A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, built upon the [gsplat](https://github.com/nerfstudio-project/gsplat) rasterization backend.
+A high-performance C++ and CUDA implementation of 3D Gaussian Splatting.
 
 <img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="80%"/>
 
-## 🏆 Competition
+## 🏆 Competition (done)
 Reduce training time by half and win **the $1500 prize**!  
 Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135)
 
 This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself – each contributing **$300**. [@toshas](https://github.com/toshas) and [@ChrisAtKIRI](https://x.com/ChrisAtKIRI) are each contributing **$200**. Finally, [@JulienBlanchon](https://x.com/JulienBlanchon) and [Drew Moffitt](https://www.linkedin.com/in/drew-moffitt-gisp-0a4522157?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app) are each contributing **$100**.
 
+Winning [pr](https://github.com/MrNeRF/gaussian-splatting-cuda/pull/245).
+
 ## Agenda (this summer)
 1. Improve the viewer, i.e., better camera controls, more interactive features.
-2. Migrate UI from Dear ImGui to [RmlUi](https://github.com/mikke89/RmlUi).
+2. Migrate UI from Dear ImGui to [RmlUi](https://github.com/mikke89/RmlUi). (Well, let's see)
 3. Support SuperSplat-like editing features, just more interactive.
 
 Contributions are very welcome!
@@ -287,6 +289,23 @@ Download the dataset from the original repository:
 
 Extract it to the `data` folder in the project root.
 
+## Configuration
+
+The configuration is determined by command-line arguments and JSON files located in the `parameter/` directory.
+
+```mermaid
+flowchart LR
+  S@{ shape: sm-circ, label: "Start" }
+  S --> P[Parse command-line arguments]
+  P --> C{--strategy mcmc?}
+  C -.->|Yes| M[(mcmc_optimization_params.json)]
+  M -.-> L[Load]
+  C -.->|No| D[(default_optimization_params.json)]
+  D -.-> L
+  L --> O[Override parameters]
+  P --> O
+```
+
 ## Command-Line Options
 
 ### Required Options
@@ -316,12 +335,50 @@ Extract it to the `data` folder in the project root.
   - Multiplies iterations, refinement steps, and evaluation/save intervals
   - Creates multiple scaled checkpoints for each original step
 
+- **`--strategy [STRATEGY]`**  
+  Optimization strategy to use (default: `mcmc`)
+  - Options: `mcmc`, `default`
+
 ### MCMC-Specific Options
 
 - **`--max-cap [NUM]`**  
   Maximum number of Gaussians for MCMC strategy (default: 1000000)
   - Controls the upper limit of Gaussian splats during training
   - Useful for memory-constrained environments
+
+### Default Strategy-Specific Options
+
+- **`--prune_opacity [NUM]`**  
+  Gaussians with opacity below this threshold will be pruned (default: 0.005)
+  - Also used to determine the threshold for opacity reset
+
+- **`--grow_scale3d [NUM]`**  
+  Multiplier of the scene scale used to decide growth behavior (default: 0.01)
+  - A higher value leads to more duplicates
+  - A smaller value leads to more splits
+
+- **`--grow_scale2d [NUM]`**  
+  Gaussians with radius above this value will be split (default: 0.05)
+
+- **`--prune_scale3d [NUM]`**  
+  Multiplier of the scene scale used to decide pruning behavior (default: 0.1)
+  - Gaussians with scale below the scene scale multiplied by this value will be pruned
+
+- **`--prune_scale2d [NUM]`**  
+  Gaussians with radius above this value will be pruned (default: 0.15)
+
+- **`--stop_refine_scale2d [NUM]`**  
+  Stop refining Gaussians based on radius after this iteration (default: 0)
+
+- **`--reset_every [NUM]`**  
+  Reset opacity every N-th iteration (default: 3000)
+  - Pruning based on scale and radius starts only after `iter > reset_every`
+
+- **`--pause_refine_after_reset [NUM]`**  
+  Pause refining Gaussians until this number of steps after reset (default: 0)
+
+- **`--revised_opacity`**  
+  Whether to use revised opacity heuristic from arXiv:2404.06109 (default: false)
 
 ### Dataset Configuration
 
@@ -420,7 +477,7 @@ Training with step scaling for multiple checkpoints:
 
 The implementation uses JSON configuration files located in the `parameter/` directory:
 
-### `optimization_params.json`
+### `{strategy}_optimization_params.json`
 Controls training hyperparameters including:
 - Learning rates for different components
 - Regularization weights

@@ -4,33 +4,47 @@
 #include "input/input_handler.hpp"
 #include "internal/viewport.hpp"
 #include <chrono>
+#include <functional>
 #include <vector>
 
 namespace gs {
 
     class CameraController {
     public:
-        explicit CameraController(Viewport& viewport) : viewport_(viewport) {}
+        explicit CameraController(Viewport& viewport,
+                                  std::function<bool()> viewport_focus_check = nullptr);
         ~CameraController();
 
         // Setup input handlers
         void connectToInputHandler(InputHandler& input_handler);
 
+        // Position-based check for mouse clicks
+        void setPositionCheckCallback(std::function<bool(double, double)> callback) {
+            position_check_callback_ = callback;
+        }
+
+        // Handle input events
+        void handleMouseButton(const InputHandler::MouseButtonEvent& event);
+        void handleMouseMove(const InputHandler::MouseMoveEvent& event);
+        void handleMouseScroll(const InputHandler::MouseScrollEvent& event);
+        void handleKey(const InputHandler::KeyEvent& event);
+
     private:
+        // Check if viewport is focused
+        bool isViewportFocused() const;
+        bool isPositionInViewport(double x, double y) const;
+
         // Input event handlers
-        bool handleMouseButton(const InputHandler::MouseButtonEvent& event);
-        bool handleMouseMove(const InputHandler::MouseMoveEvent& event);
-        bool handleMouseScroll(const InputHandler::MouseScrollEvent& event);
-        bool handleKey(const InputHandler::KeyEvent& event);
+        bool handleSpeedChange(const InputHandler::KeyEvent& event);
+        bool handleWasd(const InputHandler::KeyEvent& event);
 
         // Publish camera changed event
         void publishCameraChanged();
 
         Viewport& viewport_;
         InputHandler* input_handler_ = nullptr; // Store reference for key state queries
-
-        // Handler IDs for cleanup
-        std::vector<InputHandler::HandlerId> handler_ids_;
+        std::function<bool()> viewport_focus_check_;
+        std::function<bool(double, double)> position_check_callback_;
 
         // State
         bool is_panning_ = false;
