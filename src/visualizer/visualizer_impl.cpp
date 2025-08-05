@@ -247,9 +247,13 @@ namespace gs::visualizer {
         }
 
         // Get crop box for rendering
-        RenderCoordinateAxes* coord_axes_ptr = nullptr;
+        const RenderCoordinateAxes* coord_axes_ptr = nullptr;
         if (auto coord_axes = getAxes()) {
             coord_axes_ptr = coord_axes.get();
+        }
+        const geometry::EuclideanTransform* world_to_user = nullptr;
+        if (auto coord_axes = getWorldToUser()) {
+            world_to_user = coord_axes.get();
         }
 
         // Render
@@ -257,7 +261,8 @@ namespace gs::visualizer {
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
             .crop_box = crop_box_ptr,
-            .coord_axes = coord_axes_ptr};
+            .coord_axes = coord_axes_ptr,
+            .world_to_user = world_to_user};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 
@@ -301,9 +306,19 @@ namespace gs::visualizer {
         return nullptr;
     }
 
-    std::shared_ptr<RenderCoordinateAxes> VisualizerImpl::getAxes() const {
+    std::shared_ptr<const RenderCoordinateAxes> VisualizerImpl::getAxes() const {
         if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
             return world_transform->getAxes();
+        }
+        return nullptr;
+    }
+
+    std::shared_ptr<const geometry::EuclideanTransform> VisualizerImpl::getWorldToUser() const {
+        if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
+            if (world_transform->IsTrivialTrans()) {
+                return nullptr;
+            }
+            return world_transform->GetTransform();
         }
         return nullptr;
     }

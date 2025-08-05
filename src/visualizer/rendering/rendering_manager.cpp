@@ -57,20 +57,56 @@ namespace gs::visualizer {
         }
     }
 
+	// case world to user is defined - we shift view matrix and crop box 
+	// this is a trick so we dont have to transform the actual gaussians
+    void TransformViewAndCropBox(glm::mat3& rot, glm::vec3 trans, geometry::BoundingBox& bb,
+                                 const geometry::BoundingBox* render_crop_box, const geometry::EuclideanTransform& world_to_user) {
+        glm::mat4 T = glm::mat4(1.0f); // identity
+        T[0] = glm::vec4(rot[0], 0.0f);
+        T[1] = glm::vec4(rot[1], 0.0f);
+        T[2] = glm::vec4(rot[2], 0.0f);
+        T[3] = glm::vec4(trans, 1.0f); // translation
+        geometry::EuclideanTransform view_cam_to_world(T);
+
+        view_cam_to_world = world_to_user * view_cam_to_world;
+
+        rot = view_cam_to_world.getRotationMat();
+        trans = view_cam_to_world.getTranslation();
+
+        if (render_crop_box) {
+            bb = *render_crop_box;
+            auto world_2_box = bb.getworld2BBox();
+            bb.setworld2BBox(world_2_box * world_to_user);
+            render_crop_box = &bb;
+        }
+    }
+
     void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager) {
         if (!scene_manager->hasScene()) {
             return;
         }
 
-        RenderBoundingBox* render_crop_box = nullptr;
+        const geometry::BoundingBox* render_crop_box = nullptr;
         if (settings_.use_crop_box && context.crop_box) {
             render_crop_box = const_cast<RenderBoundingBox*>(context.crop_box);
         }
 
+        auto rot = context.viewport.getRotationMatrix();
+        auto trans = context.viewport.getTranslation();
+        geometry::BoundingBox bb;
+
+        // shift view matrix and cropbox in case world to user is defined
+        if (context.world_to_user) {
+            TransformViewAndCropBox(rot, trans, bb, render_crop_box, *context.world_to_user);
+            if (render_crop_box) {
+                render_crop_box = &bb;
+            }
+        }
+
         // Build render request
         RenderingPipeline::RenderRequest request{
-            .view_rotation = context.viewport.getRotationMatrix(),
-            .view_translation = context.viewport.getTranslation(),
+            .view_rotation = rot,
+            .view_translation = trans,
             .viewport_size = context.viewport.windowSize,
             .fov = settings_.fov,
             .scaling_modifier = settings_.scaling_modifier,

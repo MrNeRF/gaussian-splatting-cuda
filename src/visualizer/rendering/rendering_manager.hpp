@@ -28,6 +28,7 @@ namespace gs::visualizer {
             const RenderSettings& settings;
             const RenderBoundingBox* crop_box;
             const RenderCoordinateAxes* coord_axes;
+            const geometry::EuclideanTransform* world_to_user;
         };
 
         RenderingManager();

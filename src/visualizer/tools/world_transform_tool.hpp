@@ -28,9 +28,11 @@ namespace gs::visualizer {
         void registerInputHandlers(InputHandler& handler) override;
 
         // World box specific methods
-        std::shared_ptr<gs::RenderCoordinateAxes> getAxes() { return coordinate_axes_; }
+        std::shared_ptr<const gs::RenderCoordinateAxes> getAxes() { return coordinate_axes_; }
 
-        bool ShouldShowAxes() const {return  show_axes_;}
+        [[nodiscard]] bool ShouldShowAxes() const { return show_axes_; }
+        [[nodiscard]] bool IsTrivialTrans() const;
+        [[nodiscard]] std::shared_ptr<const geometry::EuclideanTransform> GetTransform();
 
     protected:
         void onEnabledChanged(bool enabled) override;
@@ -43,6 +45,7 @@ namespace gs::visualizer {
         void drawControls(const gs::gui::UIContext& ui_ctx);
 
         std::shared_ptr<gs::RenderCoordinateAxes> coordinate_axes_;
+        std::shared_ptr<geometry::EuclideanTransform> world_to_user;
 
         // UI state
         bool show_axes_ = false;

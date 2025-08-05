@@ -54,7 +54,8 @@ namespace gs::visualizer {
 
         // Compatibility method for crop box
         std::shared_ptr<RenderBoundingBox> getCropBox() const;
-        std::shared_ptr<RenderCoordinateAxes> getAxes() const;
+        std::shared_ptr<const RenderCoordinateAxes> getAxes() const;
+        std::shared_ptr<const geometry::EuclideanTransform> getWorldToUser() const;
 
         // GUI needs these for compatibility
         std::shared_ptr<TrainingInfo> info_;

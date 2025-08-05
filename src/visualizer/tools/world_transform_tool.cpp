@@ -7,6 +7,7 @@ namespace gs::visualizer {
 
     WorldTransformTool::WorldTransformTool() : translation_(0.0f), angles_deg_(0.0f) {
         coordinate_axes_ = std::make_shared<RenderCoordinateAxes>();
+        world_to_user = std::make_shared<geometry::EuclideanTransform>();
         setupEventHandlers();
     }
 
@@ -77,6 +78,12 @@ namespace gs::visualizer {
                 .show_axes = show_axes_}
                 .emit();
         }
+        if (ImGui::Button("Reset to Default")) {
+            coordinate_axes_->setSize(2);
+            coordinate_axes_->setLineWidth(3);
+            translation_ = glm::vec3{0};
+            angles_deg_ = glm::vec3{0};
+        }
 
         if (show_axes_) {
             float available_width = ImGui::GetContentRegionAvail().x;
@@ -89,11 +96,6 @@ namespace gs::visualizer {
             }
             if (ImGui::SliderFloat("Axes Size", &axes_size_, 0.5f, 10.0f)) {
                 coordinate_axes_->setSize(axes_size_);
-            }
-
-            if (ImGui::Button("Reset to Default")) {
-                coordinate_axes_->setSize(2);
-                coordinate_axes_->setLineWidth(3);
             }
         }
         bool world_rot_changed = false;
@@ -165,5 +167,15 @@ namespace gs::visualizer {
             ImGui::TreePop();
         }
     }
+
+    bool WorldTransformTool::IsTrivialTrans() const {
+        return translation_ == glm::vec3(0.0f) && angles_deg_ == glm::vec3(0.0f);
+    }
+
+    [[nodiscard]] std::shared_ptr<const geometry::EuclideanTransform> WorldTransformTool::GetTransform() {
+        *world_to_user = {angles_deg_, translation_};
+        return world_to_user;
+    }
+
 
 } // namespace gs::visualizer
