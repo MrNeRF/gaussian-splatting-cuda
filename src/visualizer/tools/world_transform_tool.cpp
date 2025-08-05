@@ -105,8 +105,8 @@ namespace gs::visualizer {
         if (ImGui::TreeNode("Rotation")) {
             ImGui::Text("Ctrl+click for faster steps");
             ImGui::Text("Rotatate w.r.t world axes (Deg) ");
-            const float step = 0.1f;
-            const float step_fast = 1.0f;
+            const float step = 1.0f;
+            const float step_fast = 5.0f;
 
             // Trans X
             ImGui::Text("RotX:");
@@ -173,9 +173,8 @@ namespace gs::visualizer {
     }
 
     [[nodiscard]] std::shared_ptr<const geometry::EuclideanTransform> WorldTransformTool::GetTransform() {
-        *world_to_user = {angles_deg_, translation_};
+        *world_to_user = {glm::radians(angles_deg_), translation_};
         return world_to_user;
     }
-
 
 } // namespace gs::visualizer

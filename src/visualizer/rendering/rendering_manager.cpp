@@ -57,9 +57,9 @@ namespace gs::visualizer {
         }
     }
 
-	// case world to user is defined - we shift view matrix and crop box 
-	// this is a trick so we dont have to transform the actual gaussians
-    void TransformViewAndCropBox(glm::mat3& rot, glm::vec3 trans, geometry::BoundingBox& bb,
+    // case world to user is defined - we shift view matrix and crop box
+    // this is a trick so we dont have to transform the actual gaussians
+    void TransformViewAndCropBox(glm::mat3& rot, glm::vec3& trans, geometry::BoundingBox& bb,
                                  const geometry::BoundingBox* render_crop_box, const geometry::EuclideanTransform& world_to_user) {
         glm::mat4 T = glm::mat4(1.0f); // identity
         T[0] = glm::vec4(rot[0], 0.0f);
@@ -76,7 +76,7 @@ namespace gs::visualizer {
         if (render_crop_box) {
             bb = *render_crop_box;
             auto world_2_box = bb.getworld2BBox();
-            bb.setworld2BBox(world_2_box * world_to_user);
+            bb.setworld2BBox(world_2_box * world_to_user.inv());
             render_crop_box = &bb;
         }
     }
