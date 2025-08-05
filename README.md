@@ -287,6 +287,23 @@ Download the dataset from the original repository:
 
 Extract it to the `data` folder in the project root.
 
+## Configuration
+
+The configuration is determined by command-line arguments and JSON files located in the `parameter/` directory.
+
+```mermaid
+flowchart LR
+  S@{ shape: sm-circ, label: "Start" }
+  S --> P[Parse command-line arguments]
+  P --> C{--strategy mcmc?}
+  C -.->|Yes| M[(mcmc_optimization_params.json)]
+  M -.-> L[Load]
+  C -.->|No| D[(default_optimization_params.json)]
+  D -.-> L
+  L --> O[Override parameters]
+  P --> O
+```
+
 ## Command-Line Options
 
 ### Required Options
@@ -458,7 +475,7 @@ Training with step scaling for multiple checkpoints:
 
 The implementation uses JSON configuration files located in the `parameter/` directory:
 
-### `optimization_params.json`
+### `{strategy}_optimization_params.json`
 Controls training hyperparameters including:
 - Learning rates for different components
 - Regularization weights
