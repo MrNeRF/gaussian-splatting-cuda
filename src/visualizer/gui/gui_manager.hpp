@@ -51,6 +51,7 @@ namespace gs {
             ImVec2 getViewportSize() const;
             bool isMouseInViewport() const;
             bool isViewportFocused() const;
+            bool isPositionInViewport(double x, double y) const;
 
         private:
             void setupEventHandlers();
