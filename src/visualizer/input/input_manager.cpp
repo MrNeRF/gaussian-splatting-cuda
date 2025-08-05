@@ -9,6 +9,10 @@ namespace gs::visualizer {
           viewport_(viewport) {
     }
 
+    InputManager::~InputManager() {
+        // Cleanup handled automatically by unique_ptr
+    }
+
     void InputManager::initialize() {
         // Create input handler
         input_handler_ = std::make_unique<InputHandler>(window_);
@@ -16,6 +20,11 @@ namespace gs::visualizer {
         // Create camera controller with viewport focus check
         camera_controller_ = std::make_unique<CameraController>(viewport_, viewport_focus_check_);
         camera_controller_->connectToInputHandler(*input_handler_);
+
+        // Pass position check to camera controller
+        if (position_check_) {
+            camera_controller_->setPositionCheckCallback(position_check_);
+        }
 
         setupInputHandlers();
     }
@@ -27,39 +36,42 @@ namespace gs::visualizer {
 
     void InputManager::setViewportFocusCheck(std::function<bool()> focus_check) {
         viewport_focus_check_ = focus_check;
+
         // Update camera controller if it exists
         if (camera_controller_) {
             // Recreate camera controller with new focus check
             camera_controller_ = std::make_unique<CameraController>(viewport_, viewport_focus_check_);
             camera_controller_->connectToInputHandler(*input_handler_);
+
+            // Reapply position check if it exists
+            if (position_check_) {
+                camera_controller_->setPositionCheckCallback(position_check_);
+            }
+        }
+    }
+
+    void InputManager::setPositionCheck(std::function<bool(double, double)> check) {
+        position_check_ = check;
+
+        // Pass to input handler for viewport detection
+        if (input_handler_) {
+            input_handler_->setViewportCheckCallback(check);
+        }
+
+        // Also pass to camera controller
+        if (camera_controller_) {
+            camera_controller_->setPositionCheckCallback(check);
         }
     }
 
     void InputManager::updateInputRouting() {
-        // Check ImGui state
-        bool imgui_wants_mouse = ImGui::GetIO().WantCaptureMouse;
-        bool imgui_wants_keyboard = ImGui::GetIO().WantCaptureKeyboard;
-        bool any_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+        // Simple focus-based routing for keyboard and scroll
+        bool viewport_has_focus = viewport_focus_check_ ? viewport_focus_check_() : false;
 
-        // Check if mouse is clicking in viewport
-        bool mouse_clicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) ||
-                             ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
-                             ImGui::IsMouseClicked(ImGuiMouseButton_Middle);
-
-        // If clicking and viewport has focus (from hover), force viewport input
-        if (mouse_clicked && viewport_focus_check_ && viewport_focus_check_()) {
-            // Force viewport to get input on this click
+        if (viewport_has_focus && !ImGui::GetIO().WantCaptureKeyboard) {
             input_handler_->setInputConsumer(InputHandler::InputConsumer::Viewport);
-
-            // Clear ImGui's capture flags so it doesn't steal this click
-            if (!any_window_hovered) {
-                ImGui::GetIO().WantCaptureMouse = false;
-            }
-        } else if (imgui_wants_mouse || imgui_wants_keyboard || any_window_hovered) {
-            input_handler_->setInputConsumer(InputHandler::InputConsumer::GUI);
         } else {
-            // Default to viewport when GUI doesn't need input
-            input_handler_->setInputConsumer(InputHandler::InputConsumer::Viewport);
+            input_handler_->setInputConsumer(InputHandler::InputConsumer::GUI);
         }
     }
 
