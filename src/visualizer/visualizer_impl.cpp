@@ -290,7 +290,9 @@ namespace gs::visualizer {
             .settings = rendering_manager_->getSettings(),
             .crop_box = crop_box_ptr,
             .coord_axes = coord_axes_ptr,
-            .world_to_user = world_to_user};
+            .world_to_user = world_to_user,
+            .viewport_region = has_viewport_region ? &viewport_region : nullptr,
+            .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 
