@@ -46,11 +46,6 @@ namespace gs::visualizer {
                 std::println("Failed to initialize tool '{}'", tool_name);
                 return false;
             }
-
-            // Register input handlers
-            if (auto* input_handler = visualizer_->input_manager_->getInputHandler()) {
-                tool->registerInputHandlers(*input_handler);
-            }
         }
 
         active_tools_.push_back(std::move(tool));
@@ -69,11 +64,6 @@ namespace gs::visualizer {
                                [&](const auto& tool) { return tool->getName() == tool_name; });
 
         if (it != active_tools_.end()) {
-            // Unregister input handlers
-            if (auto* input_handler = visualizer_->input_manager_->getInputHandler()) {
-                (*it)->unregisterInputHandlers(*input_handler);
-            }
-
             (*it)->shutdown();
             active_tools_.erase(it);
 
@@ -86,13 +76,6 @@ namespace gs::visualizer {
     }
 
     void ToolManager::removeAllTools() {
-        // Unregister all input handlers
-        if (auto* input_handler = visualizer_->input_manager_->getInputHandler()) {
-            for (auto& tool : active_tools_) {
-                tool->unregisterInputHandlers(*input_handler);
-            }
-        }
-
         for (auto& tool : active_tools_) {
             tool->shutdown();
         }
@@ -122,23 +105,11 @@ namespace gs::visualizer {
             if (!tool->initialize(*this)) {
                 std::println("Warning: Failed to initialize tool '{}'", tool->getName());
             }
-
-            // Register input handlers
-            if (auto* input_handler = visualizer_->input_manager_->getInputHandler()) {
-                tool->registerInputHandlers(*input_handler);
-            }
         }
         initialized_ = true;
     }
 
     void ToolManager::shutdown() {
-        // Unregister all input handlers
-        if (auto* input_handler = visualizer_->input_manager_->getInputHandler()) {
-            for (auto& tool : active_tools_) {
-                tool->unregisterInputHandlers(*input_handler);
-            }
-        }
-
         for (auto& tool : active_tools_) {
             tool->shutdown();
         }
@@ -202,25 +173,12 @@ namespace gs::visualizer {
         tools::ToolEnabled::when([this](const auto& e) {
             if (auto* tool = getTool(e.tool_name)) {
                 tool->setEnabled(true);
-
-                // Re-register input handlers when enabled
-                if (initialized_) {
-                    if (auto* input_handler = visualizer_->input_manager_->getInputHandler()) {
-                        tool->unregisterInputHandlers(*input_handler); // Clear old ones first
-                        tool->registerInputHandlers(*input_handler);
-                    }
-                }
             }
         });
 
         tools::ToolDisabled::when([this](const auto& e) {
             if (auto* tool = getTool(e.tool_name)) {
                 tool->setEnabled(false);
-
-                // Unregister input handlers when disabled
-                if (auto* input_handler = visualizer_->input_manager_->getInputHandler()) {
-                    tool->unregisterInputHandlers(*input_handler);
-                }
             }
         });
     }
