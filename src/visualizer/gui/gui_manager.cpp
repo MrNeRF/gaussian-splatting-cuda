@@ -277,15 +277,6 @@ namespace gs::gui {
         // Store relative to window
         viewport_pos_ = ImVec2(left, top);
         viewport_size_ = ImVec2(right - left, bottom - top);
-
-        static int debug_counter = 0;
-        if (debug_counter++ % 60 == 0) {
-            std::cout << "=== VIEWPORT CALCULATION ===" << std::endl;
-            std::cout << "Settings window: " << (settings_window && settings_window->Active ? "Active" : "Inactive") << std::endl;
-            std::cout << "Scene window: " << (scene_window && scene_window->Active ? "Active" : "Inactive") << std::endl;
-            std::cout << "Calculated viewport: Pos(" << viewport_pos_.x << ", " << viewport_pos_.y
-                      << ") Size(" << viewport_size_.x << ", " << viewport_size_.y << ")" << std::endl;
-        }
     }
 
     void GuiManager::updateViewportFocus() {
