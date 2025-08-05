@@ -23,9 +23,6 @@ namespace gs::visualizer {
         void render(const ToolContext& ctx) override;
         void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) override;
 
-        // Input handling
-        void registerInputHandlers(InputHandler& handler) override;
-
         // Crop box specific methods
         std::shared_ptr<gs::RenderBoundingBox> getBoundingBox() { return bounding_box_; }
         bool shouldShowBox() const { return show_crop_box_; }
@@ -38,8 +35,6 @@ namespace gs::visualizer {
         void setupEventHandlers();
         void drawControls(const gs::gui::UIContext& ui_ctx);
         void updateRotationMatrix(float delta_x, float delta_y, float delta_z);
-        glm::mat4 orthonormalizeRotation(const glm::mat4& matrix);
-        static float wrapAngle(float angle);
 
         // Input handling helpers
         bool isMouseOverHandle(const glm::dvec2& mouse_pos) const;

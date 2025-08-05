@@ -46,9 +46,17 @@ namespace gs {
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
             void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
 
+            // Viewport region access
+            ImVec2 getViewportPos() const;
+            ImVec2 getViewportSize() const;
+            bool isMouseInViewport() const;
+            bool isViewportFocused() const;
+
         private:
             void setupEventHandlers();
             void applyDefaultStyle();
+            void updateViewportRegion();
+            void updateViewportFocus();
 
             // Core dependencies
             visualizer::VisualizerImpl* viewer_;
@@ -61,6 +69,7 @@ namespace gs {
             // UI state only
             std::unordered_map<std::string, bool> window_states_;
             bool show_main_panel_ = true;
+
             // Speed overlay state
             bool speed_overlay_visible_ = false;
             std::chrono::steady_clock::time_point speed_overlay_start_time_;
@@ -68,7 +77,12 @@ namespace gs {
             float current_speed_;
             float max_speed_;
 
-            // Method declarations to add to your GuiManager class:
+            // Viewport region tracking
+            ImVec2 viewport_pos_;
+            ImVec2 viewport_size_;
+            bool viewport_has_focus_;
+
+            // Method declarations
             void renderSpeedOverlay();
             void showSpeedOverlay(float current_speed, float max_speed);
         };
