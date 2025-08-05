@@ -26,7 +26,7 @@ void DefaultStrategy::pre_backward(gs::RenderOutput& render_output) {
     }
 }
 
-void DefaultStrategy::update_state(gs::RenderOutput& render_output, bool packed) {
+void DefaultStrategy::update_state(gs::RenderOutput& render_output) {
     torch::Tensor grads;
     if (_key_for_gradient == "means2d") {
         grads = _absgrad
@@ -62,19 +62,13 @@ void DefaultStrategy::update_state(gs::RenderOutput& render_output, bool packed)
     // Update the running state
     torch::Tensor gaussian_ids;
     torch::Tensor radii;
-    if (packed) {
-        throw std::runtime_error("Packed mode is not supported in this implementation");
-        // TODO: Implement packed mode
-        // gs_ids = info["gaussian_ids"]  # [nnz]
-        // radii = info["radii"].max(dim=-1).values  # [nnz]
-    } else {
-        // grads is [C, N, 2]
-        // Currently, render_output.radii has a shape of [..., N], assuming C = 1
-        const torch::Tensor valid_mask = render_output.radii > 0;  // [N]
-        gaussian_ids = valid_mask.nonzero().squeeze(-1);           // [nnz]
-        grads = grads.squeeze(0).index_select(0, gaussian_ids);    // [nnz, 2]
-        radii = render_output.radii.index_select(0, gaussian_ids); // [nnz]
-    }
+
+    // grads is [C, N, 2]
+    // Currently, render_output.radii has a shape of [..., N], assuming C = 1
+    const torch::Tensor valid_mask = render_output.radii > 0;  // [N]
+    gaussian_ids = valid_mask.nonzero().squeeze(-1);           // [nnz]
+    grads = grads.squeeze(0).index_select(0, gaussian_ids);    // [nnz, 2]
+    radii = render_output.radii.index_select(0, gaussian_ids); // [nnz]
 
     _grad2d.index_add_(0, gaussian_ids, grads.norm(2, -1));
     _count.index_add_(0, gaussian_ids, torch::ones_like(gaussian_ids, torch::kFloat32));
@@ -444,7 +438,7 @@ void DefaultStrategy::reset_opacity() {
     strategy::update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data, {5});
 }
 
-void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output, bool packed) {
+void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
     // Store visibility mask for selective adam
     if (_params->selective_adam) {
         _last_visibility_mask = render_output.visibility;
@@ -460,7 +454,7 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output, b
         return;
     }
 
-    update_state(render_output, packed);
+    update_state(render_output);
 
     if (is_refining(iter)) {
         const auto [num_duplicates, num_splits] = grow_gs(iter);
