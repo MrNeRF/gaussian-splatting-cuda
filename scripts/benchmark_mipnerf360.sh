@@ -26,7 +26,8 @@ do
         --eval \
         --headless \
 	--preload-to-ram \
-        --save-eval-images
+        --save-eval-images \
+        --strategy mcmc
 
     echo "Completed $SCENE"
     echo
