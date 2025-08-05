@@ -1,13 +1,13 @@
 #include "core/trainer.hpp"
-#include "core/rasterizer.hpp"
 #include "core/fast_rasterizer.hpp"
+#include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <chrono>
+#include <cuda_runtime.h>
 #include <expected>
 #include <numeric>
-#include <torch/torch.h>
-#include <cuda_runtime.h>
 #include <print>
+#include <torch/torch.h>
 
 namespace gs {
 
@@ -120,10 +120,10 @@ namespace gs {
 
         // Figure out whether dataset images can be cached in VRAM
         // TODO: this is a crude heuristic that should be improved
-        constexpr size_t mib = 1024 * 1024; // 1 MiB
-        constexpr size_t padding = 512 * mib; // 512 MiB padding for safety
+        constexpr size_t mib = 1024 * 1024;                 // 1 MiB
+        constexpr size_t padding = 512 * mib;               // 512 MiB padding for safety
         constexpr size_t min_bytes_remaining = 12288 * mib; // at least 12 GiB should be left for model, rendering, optimizer, etc.
-        constexpr size_t max_bytes_dataset = 8192 * mib; // max 8 GiB for dataset images
+        constexpr size_t max_bytes_dataset = 8192 * mib;    // max 8 GiB for dataset images
         size_t free_mem_bytes = 0, total_mem_bytes = 0;
         cudaError_t err = cudaMemGetInfo(&free_mem_bytes, &total_mem_bytes);
         if (err != cudaSuccess) {
@@ -287,21 +287,21 @@ namespace gs {
                 return StepResult::Stop;
             }
 
-        // Use the render mode from parameters
-        auto render_fn = [this, &cam, render_mode]() {
-            // return gs::rasterize(
-            //     *cam,
-            //     strategy_->get_model(),
-            //     background_,
-            //     1.0f,
-            //     false,
-            //     false,
-            //     render_mode);
-            return gs::fast_rasterize(
-                *cam,
-                strategy_->get_model(),
-                background_);
-        };
+            // Use the render mode from parameters
+            auto render_fn = [this, &cam, render_mode]() {
+                // return gs::rasterize(
+                //     *cam,
+                //     strategy_->get_model(),
+                //     background_,
+                //     1.0f,
+                //     false,
+                //     false,
+                //     render_mode);
+                return gs::fast_rasterize(
+                    *cam,
+                    strategy_->get_model(),
+                    background_);
+            };
 
             RenderOutput r_output = render_fn();
 

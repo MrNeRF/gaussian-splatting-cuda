@@ -152,27 +152,27 @@ namespace fast_gs::rasterization::kernels {
         const float not_in_y_range = y_above + static_cast<float>(mean.y > rect_max.y);
 
         // let's hope the compiler optimizes this properly
-        if (not_in_y_range + not_in_x_range == 0.0f) return true;
-        else {
-            const float2 closest_corner = make_float2(
-                lerp(rect_max.x, rect_min.x, x_left),
-                lerp(rect_max.y, rect_min.y, y_above)
-            );
-            const float2 diff = mean - closest_corner;
-
-            const float2 d = make_float2(
-                copysignf(static_cast<float>(config::tile_width - 1), x_min_diff),
-                copysignf(static_cast<float>(config::tile_height - 1), y_min_diff)
-            );
-            const float2 t = make_float2(
-                not_in_y_range * __saturatef((d.x * conic.x * diff.x + d.x * conic.y * diff.y) / (d.x * conic.x * d.x)),
-                not_in_x_range * __saturatef((d.y * conic.y * diff.x + d.y * conic.z * diff.y) / (d.y * conic.z * d.y))
-            );
-            const float2 max_contribution_point = closest_corner + t * d;
-            const float2 delta = mean - max_contribution_point;
-            const float max_power_in_tile = 0.5f * (conic.x * delta.x * delta.x + conic.z * delta.y * delta.y) + conic.y * delta.x * delta.y;
-            return max_power_in_tile <= power_threshold;
+        if (not_in_y_range + not_in_x_range == 0.0f) {
+            return true;
         }
+        const float2 closest_corner = make_float2(
+            fast_lerp(rect_max.x, rect_min.x, x_left),
+            fast_lerp(rect_max.y, rect_min.y, y_above)
+        );
+        const float2 diff = mean - closest_corner;
+
+        const float2 d = make_float2(
+            copysignf(static_cast<float>(config::tile_width - 1), x_min_diff),
+            copysignf(static_cast<float>(config::tile_height - 1), y_min_diff)
+        );
+        const float2 t = make_float2(
+            not_in_y_range * __saturatef((d.x * conic.x * diff.x + d.x * conic.y * diff.y) / (d.x * conic.x * d.x)),
+            not_in_x_range * __saturatef((d.y * conic.y * diff.x + d.y * conic.z * diff.y) / (d.y * conic.z * d.y))
+        );
+        const float2 max_contribution_point = closest_corner + t * d;
+        const float2 delta = mean - max_contribution_point;
+        const float max_power_in_tile = 0.5f * (conic.x * delta.x * delta.x + conic.z * delta.y * delta.y) + conic.y * delta.x * delta.y;
+        return max_power_in_tile <= power_threshold;
     }
 
     // based on https://github.com/r4dl/StopThePop-Rasterization/blob/d8cad09919ff49b11be3d693d1e71fa792f559bb/cuda_rasterizer/stopthepop/stopthepop_common.cuh#L177

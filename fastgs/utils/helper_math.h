@@ -1224,7 +1224,7 @@ inline __host__ __device__ uint4 max(uint4 a, uint4 b)
 // - linear interpolation between a and b, based on value t in [0, 1] range
 ////////////////////////////////////////////////////////////////////////////////
 
-inline __device__ __host__ float lerp(float a, float b, float t)
+inline __device__ __host__ float fast_lerp(float a, float b, float t)
 {
     return a + t*(b-a);
 }

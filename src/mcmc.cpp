@@ -40,7 +40,7 @@ void MCMC::ExponentialLR::step() {
     }
 }
 
-MCMC::MCMC(SplatData&& splat_data)
+MCMC::MCMC(gs::SplatData&& splat_data)
     : _splat_data(std::move(splat_data)) {
 }
 

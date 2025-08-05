@@ -52,20 +52,20 @@ namespace gs {
         float get_scene_scale() const { return _scene_scale; }
         int64_t size() const { return _means.size(0); }
 
-    // Raw tensor access for optimization (inline for performance)
-    inline torch::Tensor& means() { return _means; }
-    inline const torch::Tensor& means() const { return _means; }
-    inline torch::Tensor& opacity_raw() { return _opacity; }
-    inline const torch::Tensor& opacity_raw() const { return _opacity; }
-    inline torch::Tensor& rotation_raw() { return _rotation; }
-    inline const torch::Tensor& rotation_raw() const { return _rotation; }
-    inline torch::Tensor& scaling_raw() { return _scaling; }
-    inline const torch::Tensor& scaling_raw() const { return _scaling; }
-    inline torch::Tensor& sh0() { return _sh0; }
-    inline const torch::Tensor& sh0() const { return _sh0; }
-    inline torch::Tensor& shN() { return _shN; }
-    inline const torch::Tensor& shN() const { return _shN; }
-    inline torch::Tensor& max_radii2D() { return _max_radii2D; }
+        // Raw tensor access for optimization (inline for performance)
+        inline torch::Tensor& means() { return _means; }
+        inline const torch::Tensor& means() const { return _means; }
+        inline torch::Tensor& opacity_raw() { return _opacity; }
+        inline const torch::Tensor& opacity_raw() const { return _opacity; }
+        inline torch::Tensor& rotation_raw() { return _rotation; }
+        inline const torch::Tensor& rotation_raw() const { return _rotation; }
+        inline torch::Tensor& scaling_raw() { return _scaling; }
+        inline const torch::Tensor& scaling_raw() const { return _scaling; }
+        inline torch::Tensor& sh0() { return _sh0; }
+        inline const torch::Tensor& sh0() const { return _sh0; }
+        inline torch::Tensor& shN() { return _shN; }
+        inline const torch::Tensor& shN() const { return _shN; }
+        inline torch::Tensor& max_radii2D() { return _max_radii2D; }
 
         // Utility methods
         void increment_sh_degree();

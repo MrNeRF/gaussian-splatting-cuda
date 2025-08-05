@@ -32,8 +32,7 @@ namespace gs {
             settings.center_x,
             settings.center_y,
             settings.near_plane,
-            settings.far_plane
-        );
+            settings.far_plane);
 
         auto image = std::get<0>(outputs);
         auto per_primitive_buffers = std::get<1>(outputs);
@@ -47,25 +46,21 @@ namespace gs {
         int instance_primitive_indices_selector = std::get<9>(outputs);
 
         // Save for backward
-        ctx->save_for_backward({
-            image,
-            means,
-            scales_raw,
-            rotations_raw,
-            sh_coefficients_rest,
-            per_primitive_buffers,
-            per_tile_buffers,
-            per_instance_buffers,
-            per_bucket_buffers,
-            densification_info
-        });
-        ctx->mark_non_differentiable({
-            per_primitive_buffers,
-            per_tile_buffers,
-            per_instance_buffers,
-            per_bucket_buffers,
-            densification_info
-        });
+        ctx->save_for_backward({image,
+                                means,
+                                scales_raw,
+                                rotations_raw,
+                                sh_coefficients_rest,
+                                per_primitive_buffers,
+                                per_tile_buffers,
+                                per_instance_buffers,
+                                per_bucket_buffers,
+                                densification_info});
+        ctx->mark_non_differentiable({per_primitive_buffers,
+                                      per_tile_buffers,
+                                      per_instance_buffers,
+                                      per_bucket_buffers,
+                                      densification_info});
 
         ctx->saved_data["w2c"] = settings.w2c;
         ctx->saved_data["cam_position"] = settings.cam_position;
@@ -134,8 +129,7 @@ namespace gs {
             ctx->saved_data["n_instances"].toInt(),
             ctx->saved_data["n_buckets"].toInt(),
             ctx->saved_data["primitive_primitive_indices_selector"].toInt(),
-            ctx->saved_data["instance_primitive_indices_selector"].toInt()
-        );
+            ctx->saved_data["instance_primitive_indices_selector"].toInt());
 
         auto grad_means = std::get<0>(outputs);
         auto grad_scales_raw = std::get<1>(outputs);

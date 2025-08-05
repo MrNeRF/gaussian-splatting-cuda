@@ -64,11 +64,13 @@ namespace gs {
                 state.step_count++;
 
                 // Higher degree SH coefficients are not used in the first 1000 iterations so this is a free speed up
-                if (i == 3 && iteration <= 1000) continue;
-                
+                if (i == 3 && iteration <= 1000)
+                    continue;
+
                 if constexpr (SKIP_SH_STEPS) {
                     // Skip every second step during training except for the last 5000 iterations
-                    if (i == 3 && (iteration % 2 != 0 && iteration <= 25000)) continue;
+                    if (i == 3 && (iteration % 2 != 0 && iteration <= 25000))
+                        continue;
                 }
 
                 auto bias_correction1_rcp = 1.0 / (1.0 - std::pow(beta1, state.step_count));
@@ -85,8 +87,7 @@ namespace gs {
                     static_cast<float>(beta2),
                     static_cast<float>(eps),
                     static_cast<float>(bias_correction1_rcp),
-                    static_cast<float>(bias_correction2_sqrt_rcp)
-                );
+                    static_cast<float>(bias_correction2_sqrt_rcp));
             }
         }
     }
@@ -99,7 +100,8 @@ namespace gs {
                 ++i;
                 for (auto& p : group.params()) {
                     // We want to keep accumulating if the optimizer step was skipped
-                    if (i == 3 && (iteration % 2 != 0 && iteration <= 25000)) continue;
+                    if (i == 3 && (iteration % 2 != 0 && iteration <= 25000))
+                        continue;
                     if (p.mutable_grad().defined()) {
                         p.mutable_grad().detach_();
                         if (set_to_none)
@@ -109,7 +111,8 @@ namespace gs {
                     }
                 }
             }
-        } else Optimizer::zero_grad(set_to_none);
+        } else
+            Optimizer::zero_grad(set_to_none);
     }
 
 } // namespace gs

@@ -1,8 +1,8 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
 #include "core/training_setup.hpp"
-#include <print>
 #include <c10/cuda/CUDAAllocatorConfig.h>
+#include <print>
 
 int main(int argc, char* argv[]) {
     //----------------------------------------------------------------------

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "rasterization_api.h"
-#include "core/rasterizer.hpp"
 #include "core/camera.hpp"
+#include "core/rasterizer.hpp"
 #include "core/splat_data.hpp"
+#include "rasterization_api.h"
 #include <torch/torch.h>
 
 namespace gs {
