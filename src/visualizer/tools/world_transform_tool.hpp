@@ -13,7 +13,7 @@ namespace gs::visualizer {
         WorldTransformTool();
         ~WorldTransformTool() override;
 
-        std::string_view getName() const override { return "World Transform Box"; }
+        std::string_view getName() const override { return "World Transform"; }
         std::string_view getDescription() const override {
             return "Transform World coordinates";
         }
@@ -43,8 +43,7 @@ namespace gs::visualizer {
         std::shared_ptr<gs::RenderCoordinateAxes> coordinate_axes_;
 
         // UI state
-        bool show_crop_box_ = false;
-        bool use_crop_box_ = false;
+        bool show_axes_ = true;
         float line_width_ = 2.0f;
         float axes_size_ = 2.0f;
 

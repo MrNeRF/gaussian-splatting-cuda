@@ -34,6 +34,7 @@ namespace gs::visualizer {
         tool_manager_ = std::make_unique<ToolManager>(this);
         tool_manager_->registerBuiltinTools();
         tool_manager_->addTool("Crop Box"); // Add crop box by default
+        tool_manager_->addTool("World Transform");
 
         // Create support components
         gui_manager_ = std::make_unique<gui::GuiManager>(this);

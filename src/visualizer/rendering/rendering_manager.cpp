@@ -52,6 +52,9 @@ namespace gs::visualizer {
         if (settings_.show_crop_box && context.crop_box) {
             drawCropBox(context);
         }
+        if (true && context.coord_axes) {
+            drawCoordAxes(context);
+        }
     }
 
     void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager) {
@@ -110,25 +113,41 @@ namespace gs::visualizer {
             crop_box->init();
         }
 
+        if (crop_box->isInitialized()) {
+            auto fov_rad = glm::radians(settings_.fov);
+            auto projection = glm::perspective(
+                static_cast<float>(fov_rad),
+                static_cast<float>(reso.x) / reso.y,
+                0.1f,
+                1000.0f);
+            glm::mat4 view = context.viewport.getViewMatrix();
+
+            crop_box->render(view, projection);
+        }
+    }
+
+    void RenderingManager::drawCoordAxes(const RenderContext& context) {
+        auto& reso = context.viewport.windowSize;
+
+        if (reso.x <= 0 || reso.y <= 0) {
+            return;
+        }
+
         auto coord_axes = const_cast<RenderCoordinateAxes*>(context.coord_axes);
 
         if (!coord_axes->isInitialized()) {
             coord_axes->init();
         }
 
-        auto fov_rad = glm::radians(settings_.fov);
-        auto projection = glm::perspective(
-            static_cast<float>(fov_rad),
-            static_cast<float>(reso.x) / reso.y,
-            0.1f,
-            1000.0f);
-        glm::mat4 view = context.viewport.getViewMatrix();
-
-        if (crop_box->isInitialized()) {
-            crop_box->render(view, projection);
-        }
-
         if (coord_axes->isInitialized()) {
+            auto fov_rad = glm::radians(settings_.fov);
+            auto projection = glm::perspective(
+                static_cast<float>(fov_rad),
+                static_cast<float>(reso.x) / reso.y,
+                0.1f,
+                1000.0f);
+            glm::mat4 view = context.viewport.getViewMatrix();
+
             coord_axes->render(view, projection);
         }
     }

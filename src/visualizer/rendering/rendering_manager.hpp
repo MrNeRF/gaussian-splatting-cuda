@@ -18,6 +18,7 @@ namespace gs::visualizer {
         bool antialiasing = false;
         bool show_crop_box = false;
         bool use_crop_box = false;
+        bool show_coord_axes = false;
     };
 
     class RenderingManager {
@@ -49,6 +50,8 @@ namespace gs::visualizer {
         void initializeShaders();
         void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager);
         void drawCropBox(const RenderContext& context);
+        void drawCoordAxes(const RenderContext& context);
+
 
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;

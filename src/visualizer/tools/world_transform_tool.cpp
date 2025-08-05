@@ -5,7 +5,7 @@
 
 namespace gs::visualizer {
 
-    WorldTransformTool::WorldTransformTool(): translation_(0.0f), angles_rad_(0.0f){
+    WorldTransformTool::WorldTransformTool() : translation_(0.0f), angles_rad_(0.0f) {
         coordinate_axes_ = std::make_shared<RenderCoordinateAxes>();
         setupEventHandlers();
     }
@@ -49,7 +49,6 @@ namespace gs::visualizer {
         using namespace events;
     }
 
-
     void WorldTransformTool::drawControls(const gs::gui::UIContext& ui_ctx) {
         if (!ImGui::CollapsingHeader("World Transform Box")) {
             return;
@@ -57,11 +56,7 @@ namespace gs::visualizer {
 
         bool settings_changed = false;
 
-        if (ImGui::Checkbox("Show World Transform Box", &show_crop_box_)) {
-            settings_changed = true;
-        }
-
-        if (ImGui::Checkbox("Use World Transform Box", &use_crop_box_)) {
+        if (ImGui::Checkbox("Show Coord Axes", &show_axes_)) {
             settings_changed = true;
         }
 
@@ -72,9 +67,7 @@ namespace gs::visualizer {
             //     .emit();
         }
 
-        if (show_crop_box_ && coordinate_axes_->isInitialized()) {
-            // Appearance controls
-
+        if (show_axes_) {
             float available_width = ImGui::GetContentRegionAvail().x;
             float button_width = 120.0f;
             float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
@@ -95,63 +88,60 @@ namespace gs::visualizer {
             // Rotation controls
             if (ImGui::TreeNode("Rotation")) {
                 ImGui::Text("Ctrl+click for faster steps");
-                ImGui::Text("Rotation with respect to orignal world XYZ");
+                ImGui::Text("Rotatate w.r.t world axes");
 
                 ImGui::TreePop();
             }
+        }
 
-            // Translation controls
-            if (ImGui::TreeNode("translation")) {
-                ImGui::Text("Ctrl+click for faster steps");
-                ImGui::Text("Translation with respect to orignal world XYZ");
+        // Translation controls
+        if (ImGui::TreeNode("translation")) {
+            ImGui::Text("Ctrl+click for faster steps");
+            ImGui::Text("Trans w.r.t to world axes");
 
-                bool world_trans_changed = false;
-                const float min_range = -8.0f;
-                const float max_range = 8.0f;
-                const float step = 0.01f;
-                const float step_fast = 0.1f;
+            bool world_trans_changed = false;
+            const float min_range = -8.0f;
+            const float max_range = 8.0f;
+            const float step = 0.01f;
+            const float step_fast = 0.1f;
 
-                // Trans X
-                ImGui::Text("X:");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(110);
-                world_trans_changed |= ImGui::InputFloat("TransX", &translation_[0], step, step_fast, "%.3f");
-                translation_[0] = std::clamp(translation_[0], min_range, max_range);
+            // Trans X
+            ImGui::Text("X:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110);
+            world_trans_changed |= ImGui::InputFloat("TransX", &translation_[0], step, step_fast, "%.3f");
+            translation_[0] = std::clamp(translation_[0], min_range, max_range);
 
+            // Trans Y
+            ImGui::Text("Y:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110);
+            world_trans_changed |= ImGui::InputFloat("TransY", &translation_[1], step, step_fast, "%.3f");
+            translation_[1] = std::clamp(translation_[1], min_range, max_range);
 
-                // Trans Y
-                ImGui::Text("Y:");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(110);
-                world_trans_changed |= ImGui::InputFloat("TransY", &translation_[1], step, step_fast, "%.3f");
-                translation_[1] = std::clamp(translation_[1], min_range, max_range);
+            // Trans Z
+            ImGui::Text("Z:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110);
+            world_trans_changed |= ImGui::InputFloat("TransZ", &translation_[2], step, step_fast, "%.3f");
+            translation_[2] = std::clamp(translation_[2], min_range, max_range);
 
-                // Trans Z
-                ImGui::Text("Z:");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(110);
-                world_trans_changed |= ImGui::InputFloat("TransZ", &translation_[2], step, step_fast, "%.3f");
-                translation_[2] = std::clamp(translation_[2], min_range, max_range);
-
-
-                if (world_trans_changed) {
-                    // bounding_box_->setBounds(
-                    //     glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
-                    //     glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
-                    //
-                    // events::ui::CropBoxChanged{
-                    //     .min_bounds = bounding_box_->getMinBounds(),
-                    //     .max_bounds = bounding_box_->getMaxBounds(),
-                    //     .enabled = use_crop_box_}
-                    //     .emit();
-                }
-
-
-                ImGui::Text("Translations: (%.3f, %.3f, %.3f)", translation_.x, translation_.y, translation_.z);
-                ImGui::Text("Angles: (%.3f, %.3f, %.3f)", angles_rad_.x, angles_rad_.y, angles_rad_.z);
-
-                ImGui::TreePop();
+            if (world_trans_changed) {
+                // bounding_box_->setBounds(
+                //     glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
+                //     glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
+                //
+                // events::ui::CropBoxChanged{
+                //     .min_bounds = bounding_box_->getMinBounds(),
+                //     .max_bounds = bounding_box_->getMaxBounds(),
+                //     .enabled = use_crop_box_}
+                //     .emit();
             }
+
+            ImGui::Text("Translations: (%.3f, %.3f, %.3f)", translation_.x, translation_.y, translation_.z);
+            ImGui::Text("Angles: (%.3f, %.3f, %.3f)", angles_rad_.x, angles_rad_.y, angles_rad_.z);
+
+            ImGui::TreePop();
         }
     }
 
