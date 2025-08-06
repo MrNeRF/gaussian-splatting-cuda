@@ -119,7 +119,6 @@ namespace fast_gs::rasterization {
         uint* bucket_offsets;
         uint* max_n_contributions;
         uint* n_contributions;
-        float* final_transmittances;
     
         static PerTileBuffers from_blob(char*& blob, size_t n_tiles) {
             PerTileBuffers buffers;
@@ -128,7 +127,6 @@ namespace fast_gs::rasterization {
             obtain(blob, buffers.bucket_offsets, n_tiles, 128);
             obtain(blob, buffers.max_n_contributions, n_tiles, 128);
             obtain(blob, buffers.n_contributions, n_tiles * config::block_size_blend, 128);
-            obtain(blob, buffers.final_transmittances, n_tiles * config::block_size_blend, 128);
             cub::DeviceScan::InclusiveSum(
                 nullptr, buffers.cub_workspace_size,
                 buffers.n_buckets, buffers.bucket_offsets,

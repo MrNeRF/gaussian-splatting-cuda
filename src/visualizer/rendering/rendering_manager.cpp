@@ -1,7 +1,8 @@
 #include "rendering/rendering_manager.hpp"
+#include "rendering/render_coordinate_axes.hpp"
+
 #include "internal/resource_paths.hpp"
 #include "training/training_manager.hpp"
-#include <iostream>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "rendering/cuda_gl_interop.hpp"
@@ -61,10 +62,37 @@ namespace gs::visualizer {
         if (settings_.show_crop_box && context.crop_box) {
             drawCropBox(context, context.viewport);
         }
+        if (settings_.show_coord_axes && context.coord_axes) {
+            drawCoordAxes(context);
+        }
 
         // Draw focus indicator if viewport has focus
         if (context.has_focus && context.viewport_region) {
             drawFocusIndicator(context);
+        }
+    }
+
+    // case world to user is defined - we shift view matrix and crop box
+    // this is a trick so we dont have to transform the actual gaussians
+    void TransformViewAndCropBox(glm::mat3& rot, glm::vec3& trans, geometry::BoundingBox& bb,
+                                 const geometry::BoundingBox* render_crop_box, const geometry::EuclideanTransform& world_to_user) {
+        glm::mat4 T = glm::mat4(1.0f); // identity
+        T[0] = glm::vec4(rot[0], 0.0f);
+        T[1] = glm::vec4(rot[1], 0.0f);
+        T[2] = glm::vec4(rot[2], 0.0f);
+        T[3] = glm::vec4(trans, 1.0f); // translation
+        geometry::EuclideanTransform view_cam_to_world(T);
+
+        view_cam_to_world = world_to_user * view_cam_to_world;
+
+        rot = view_cam_to_world.getRotationMat();
+        trans = view_cam_to_world.getTranslation();
+
+        if (render_crop_box) {
+            bb = *render_crop_box;
+            auto world_2_box = bb.getworld2BBox();
+            bb.setworld2BBox(world_2_box * world_to_user.inv());
+            render_crop_box = &bb;
         }
     }
 
@@ -139,9 +167,21 @@ namespace gs::visualizer {
             return;
         }
 
-        RenderBoundingBox* render_crop_box = nullptr;
+        const geometry::BoundingBox* render_crop_box = nullptr;
         if (settings_.use_crop_box && context.crop_box) {
             render_crop_box = const_cast<RenderBoundingBox*>(context.crop_box);
+        }
+
+        auto rot = render_viewport.getRotationMatrix();
+        auto trans = render_viewport.getTranslation();
+        geometry::BoundingBox bb;
+
+        // shift view matrix and cropbox in case world to user is defined
+        if (context.world_to_user) {
+            TransformViewAndCropBox(rot, trans, bb, render_crop_box, *context.world_to_user);
+            if (render_crop_box) {
+                render_crop_box = &bb;
+            }
         }
 
         // Build render request with the viewport region dimensions if available
@@ -153,8 +193,8 @@ namespace gs::visualizer {
         }
 
         RenderingPipeline::RenderRequest request{
-            .view_rotation = render_viewport.getRotationMatrix(),
-            .view_translation = render_viewport.getTranslation(),
+            .view_rotation = rot,
+            .view_translation = trans,
             .viewport_size = render_size,
             .fov = settings_.fov,
             .scaling_modifier = settings_.scaling_modifier,
@@ -180,7 +220,7 @@ namespace gs::visualizer {
 
         if (result.valid) {
             RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_size);
-            screen_renderer_->render(quad_shader_, render_viewport);
+            screen_renderer_->render(quad_shader_);
         }
     }
 
@@ -207,6 +247,32 @@ namespace gs::visualizer {
 
             glm::mat4 view = render_viewport.getViewMatrix();
             crop_box->render(view, projection);
+        }
+    }
+
+    void RenderingManager::drawCoordAxes(const RenderContext& context) {
+        auto& reso = context.viewport.windowSize;
+
+        if (reso.x <= 0 || reso.y <= 0) {
+            return;
+        }
+
+        auto coord_axes = const_cast<RenderCoordinateAxes*>(context.coord_axes);
+
+        if (!coord_axes->isInitialized()) {
+            coord_axes->init();
+        }
+
+        if (coord_axes->isInitialized()) {
+            auto fov_rad = glm::radians(settings_.fov);
+            auto projection = glm::perspective(
+                static_cast<float>(fov_rad),
+                static_cast<float>(reso.x) / reso.y,
+                0.1f,
+                1000.0f);
+            glm::mat4 view = context.viewport.getViewMatrix();
+
+            coord_axes->render(view, projection);
         }
     }
 

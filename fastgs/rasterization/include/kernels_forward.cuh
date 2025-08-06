@@ -355,9 +355,8 @@ namespace fast_gs::rasterization::kernels::forward {
         const float2* primitive_mean2d,
         const float4* primitive_conic_opacity,
         const float3* primitive_color,
-        const float3* bg_color,
         float* image,
-        float* tile_final_transmittances,
+        float* alpha_map,
         uint* tile_max_n_contributions,
         uint* tile_n_contributions,
         uint* bucket_tile_index,
@@ -435,13 +434,11 @@ namespace fast_gs::rasterization::kernels::forward {
         if (inside) {
             const int pixel_idx = width * pixel_coords.y + pixel_coords.x;
             const int n_pixels = width * height;
-            // apply background color
-            color_pixel += transmittance * bg_color[0];
             // store results
             image[pixel_idx] = color_pixel.x;
             image[pixel_idx + n_pixels] = color_pixel.y;
             image[pixel_idx + n_pixels * 2] = color_pixel.z;
-            tile_final_transmittances[pixel_idx] = transmittance;
+            alpha_map[pixel_idx] = 1.0f - transmittance;
             tile_n_contributions[pixel_idx] = n_contributions;
         }
 
