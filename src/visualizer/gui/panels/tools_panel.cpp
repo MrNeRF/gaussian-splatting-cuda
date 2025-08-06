@@ -138,6 +138,8 @@ namespace gs::gui::panels {
             if (tool_name == "Crop Box") {
                 return "[□]"; // Box icon
             }
+
+            return "[?]"; // Default icon
         }
 
     } // namespace detail

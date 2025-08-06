@@ -73,14 +73,14 @@ namespace gs::visualizer {
             }
         }
 
-        virtual bool initialize(const ToolContext& ctx) { return true; }
+        virtual bool initialize([[maybe_unused]] const ToolContext& ctx) { return true; }
         virtual void shutdown() {}
-        virtual void update(const ToolContext& ctx) {}
-        virtual void render(const ToolContext& ctx) {}
+        virtual void update([[maybe_unused]] const ToolContext& ctx) {}
+        virtual void render([[maybe_unused]] const ToolContext& ctx) {}
         virtual void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) = 0;
 
     protected:
-        virtual void onEnabledChanged(bool enabled) {}
+        virtual void onEnabledChanged([[maybe_unused]] bool enabled) {}
 
     private:
         bool enabled_ = false;

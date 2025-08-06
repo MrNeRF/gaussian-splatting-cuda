@@ -180,7 +180,7 @@ namespace gs::visualizer {
 
         if (result.valid) {
             RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_size);
-            screen_renderer_->render(quad_shader_, render_viewport);
+            screen_renderer_->render(quad_shader_);
         }
     }
 
