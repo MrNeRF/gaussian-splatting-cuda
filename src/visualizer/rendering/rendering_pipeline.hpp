@@ -24,10 +24,13 @@ namespace gs {
         };
 
         struct RenderResult {
-            torch::Tensor image; // [C, H, W] format
-            torch::Tensor depth; // Optional depth
+            torch::Tensor image = torch::Tensor();
+            torch::Tensor depth = torch::Tensor();
             bool valid = false;
+
+            RenderResult(bool v = false) : image(), depth(), valid(v) {}
         };
+
 
         RenderingPipeline();
 

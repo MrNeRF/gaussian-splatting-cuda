@@ -14,7 +14,7 @@ private:
     int update_frequency_;
 
 public:
-    TrainingProgress(int total_iterations, int update_frequency = 100, bool enable_early_stopping = false)
+    TrainingProgress(int total_iterations, int update_frequency = 100)
         : total_iterations_(total_iterations),
           update_frequency_(update_frequency) {
 

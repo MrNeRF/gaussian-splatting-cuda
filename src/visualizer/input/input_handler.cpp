@@ -103,7 +103,7 @@ namespace gs {
         }
     }
 
-    void InputHandler::cursorPosCallback(GLFWwindow* window, double x, double y) {
+    void InputHandler::cursorPosCallback([[maybe_unused]] GLFWwindow* window, double x, double y) {
         if (!instance_ || !instance_->enabled_)
             return;
 
@@ -133,7 +133,7 @@ namespace gs {
         }
     }
 
-    void InputHandler::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+    void InputHandler::scrollCallback([[maybe_unused]] GLFWwindow* window, double xoffset, double yoffset) {
         if (!instance_ || !instance_->enabled_)
             return;
 
@@ -160,7 +160,7 @@ namespace gs {
         }
     }
 
-    void InputHandler::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    void InputHandler::keyCallback([[maybe_unused]] GLFWwindow* window, int key, int scancode, int action, int mods) {
         if (!instance_ || !instance_->enabled_)
             return;
 
@@ -194,7 +194,7 @@ namespace gs {
         }
     }
 
-    void InputHandler::dropCallback(GLFWwindow* window, int count, const char** paths) {
+    void InputHandler::dropCallback([[maybe_unused]] GLFWwindow* window, int count, const char** paths) {
         if (!instance_ || !instance_->enabled_)
             return;
 

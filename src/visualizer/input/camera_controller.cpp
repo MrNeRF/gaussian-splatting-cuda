@@ -140,7 +140,7 @@ namespace gs {
         publishCameraChanged();
     }
 
-    bool CameraController::handleSpeedChange(const InputHandler::KeyEvent& event) {
+    bool CameraController::handleSpeedChange([[maybe_unused]] const InputHandler::KeyEvent& event) {
         // Handle speed control first (Ctrl + Plus/Minus)
         if (input_handler_ && (input_handler_->isKeyPressed(GLFW_KEY_LEFT_CONTROL) ||
                                input_handler_->isKeyPressed(GLFW_KEY_RIGHT_CONTROL))) {
@@ -175,7 +175,7 @@ namespace gs {
         return false;
     }
 
-    bool CameraController::handleWasd(const InputHandler::KeyEvent& event) {
+    bool CameraController::handleWasd([[maybe_unused]] const InputHandler::KeyEvent& event) {
         // Only handle WASD if viewport is focused
         if (!isViewportFocused())
             return false;

@@ -5,7 +5,7 @@
 
 namespace gs::gui::panels {
 
-    void DrawTrainingControls(const UIContext& ctx) {
+    void DrawTrainingControls([[maybe_unused]] const UIContext& ctx) {
         ImGui::Text("Training Control");
         ImGui::Separator();
 
@@ -16,7 +16,7 @@ namespace gs::gui::panels {
         bool has_response = false;
 
         // Set up a one-time handler for the response
-        auto handler = events::query::TrainerState::when([&response, &has_response](const auto& r) {
+        [[maybe_unused]] auto handler = events::query::TrainerState::when([&response, &has_response](const auto& r) {
             response = r;
             has_response = true;
         });
