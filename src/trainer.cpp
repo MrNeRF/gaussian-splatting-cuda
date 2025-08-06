@@ -229,19 +229,26 @@ namespace gs {
             auto loss = (1.0f - opt_params.lambda_dssim) * l1_loss + opt_params.lambda_dssim * ssim_loss;
             
         
-        if (outOfMaskAlphaPenalty>0) {
-                /* auto opacity = splatData.get_opacity(); 
-                loss = outsideMaskOpacityPenalty(loss,
-                                                render_output,
-                                                weights,
-                                                opacity,
-                                                outOfMaskAlphaPenalty);*/
+            if (outOfMaskAlphaPenalty > 0) {
+                if (!render_output.image.defined() || render_output.image.numel() == 0) {
+                    printf("Image failed!\n");
+                } else if (!render_output.alpha.defined() || render_output.alpha.numel() == 0) {
+                    //printf("Alpha failed!\n");
+                }
+                else {
+                    /* auto opacity = splatData.get_opacity();
+                    loss = outsideMaskOpacityPenalty(loss,
+                                                    render_output,
+                                                    weights,
+                                                    opacity,
+                                                    outOfMaskAlphaPenalty);*/
 
-                loss = pixelBasedOpacityPenalty(loss,
-                                                render_output.alpha.squeeze(0), // Squeeze to [H, W] if needed
-                                                weights,
-                                                outOfMaskAlphaPenalty);
-        }
+                    loss = pixelBasedOpacityPenalty(loss,
+                                                    render_output.alpha.squeeze(0), // Squeeze to [H, W] if needed
+                                                    weights,
+                                                    outOfMaskAlphaPenalty);
+                }
+            }
         
 
             return loss;
