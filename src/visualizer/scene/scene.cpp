@@ -69,12 +69,12 @@ namespace gs {
 
     RenderingPipeline::RenderResult Scene::render(const RenderingPipeline::RenderRequest& request) {
         if (!hasModel() || !pipeline_) {
-            return RenderingPipeline::RenderResult{.valid = false};
+            return RenderingPipeline::RenderResult(false);
         }
 
         const SplatData* model = getModel();
         if (!model) {
-            return RenderingPipeline::RenderResult{.valid = false};
+            return RenderingPipeline::RenderResult(false);
         }
 
         return pipeline_->render(*model, request);

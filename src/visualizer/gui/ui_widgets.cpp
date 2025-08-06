@@ -81,7 +81,7 @@ namespace gs::gui::widgets {
         bool has_response = false;
 
         // Set up a one-time handler for the response
-        auto handler = events::query::SceneInfo::when([&response, &has_response](const auto& r) {
+        [[maybe_unused]] auto handler = events::query::SceneInfo::when([&response, &has_response](const auto& r) {
             response = r;
             has_response = true;
         });
@@ -129,8 +129,8 @@ namespace gs::gui::widgets {
         }
     }
 
-    std::string executeConsoleCommand(const std::string& command,
-                                      visualizer::VisualizerImpl* viewer) {
+    std::string executeConsoleCommand([[maybe_unused]] const std::string& command,
+                                      [[maybe_unused]] visualizer::VisualizerImpl* viewer) {
         // This is now handled in visualizer_impl.cpp
         return "Command execution moved to visualizer";
     }

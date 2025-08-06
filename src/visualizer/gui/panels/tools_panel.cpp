@@ -144,6 +144,8 @@ namespace gs::gui::panels {
             } else {
                 std::println(stderr, "Warning: tool_name '{}' has no icon", tool_name);
             }
+
+            return "[?]"; // Default icon
         }
 
     } // namespace detail
