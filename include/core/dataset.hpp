@@ -83,11 +83,10 @@ namespace gs {
             if (!_image_cache.empty() && _image_cache.size() > index) {
                 // Get tensors directly from RAM cache
                 return {{cam.get(), _image_cache[index]}, torch::empty({})};
-            } else {
-                // Fallback to loading from disk if not preloaded
-                torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
-                return {{cam.get(), std::move(image)}, torch::empty({})};
             }
+            // Fallback to loading from disk if not preloaded
+            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
+            return {{cam.get(), std::move(image)}, torch::empty({})};
         }
 
         torch::optional<size_t> size() const override {
