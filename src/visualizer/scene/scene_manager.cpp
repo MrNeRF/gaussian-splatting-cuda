@@ -183,7 +183,7 @@ namespace gs {
         const RenderingPipeline::RenderRequest& request) {
 
         if (!scene_) {
-            return RenderingPipeline::RenderResult{.valid = false};
+            return RenderingPipeline::RenderResult(false);
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();

@@ -8,7 +8,7 @@ usage() {
     echo "  -c       Stop and clean up"
     echo "  -h       Show this help message"
     echo
-    echo "If a CUDA version is passed as a final positional argument (e.g. 12.4.0), it overrides auto-detection."
+    echo "If a CUDA version is passed as a final positional argument (e.g. 12.8.0), it overrides auto-detection."
 }
 
 # --- Default: auto-detect CUDA version
@@ -16,7 +16,7 @@ detected_cuda=$(nvcc --version 2>/dev/null | grep -oP 'release \K[0-9]+\.[0-9]+'
 if [[ -n "$detected_cuda" ]]; then
     CUDA_VERSION="${detected_cuda}.0" # Needed because nvcc returns version without patch
 else
-    CUDA_VERSION="11.8.0"
+    CUDA_VERSION="12.8.0"
 fi
 
 # --- Flags
