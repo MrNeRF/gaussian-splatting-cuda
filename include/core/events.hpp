@@ -58,6 +58,8 @@ namespace gs {
             EVENT(CropBoxSettingsChanged,
                   bool show_box;
                   bool use_box;);
+            EVENT(AxesSettingsChanged,
+                  bool show_axes;);
         } // namespace tools
         // ============================================================================
         // State - Notifications about what has happened
@@ -231,7 +233,7 @@ namespace gs {
     public:
         Response send(const Request& req, std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
             // Subscribe to response
-            auto handler = Response::when([this](const Response& r) {
+            [[maybe_unused]] auto handler = Response::when([this](const Response& r) {
                 std::lock_guard lock(mutex_);
                 response_ = r;
                 cv_.notify_one();

@@ -6,6 +6,10 @@
 #include "scene/scene_manager.hpp"
 #include <memory>
 
+namespace gs {
+    class RenderCoordinateAxes;
+}
+
 namespace gs::visualizer {
 
     struct RenderSettings {
@@ -14,6 +18,7 @@ namespace gs::visualizer {
         bool antialiasing = false;
         bool show_crop_box = false;
         bool use_crop_box = false;
+        bool show_coord_axes = false;
     };
 
     struct ViewportRegion {
@@ -26,6 +31,8 @@ namespace gs::visualizer {
             const Viewport& viewport;
             const RenderSettings& settings;
             const RenderBoundingBox* crop_box;
+            const RenderCoordinateAxes* coord_axes;
+            const geometry::EuclideanTransform* world_to_user;
             const ViewportRegion* viewport_region = nullptr;
             bool has_focus = false; // Indicates if the viewport has focus for input handling
         };
@@ -51,6 +58,10 @@ namespace gs::visualizer {
         void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, const Viewport& render_viewport);
         void drawFocusIndicator(const RenderContext& context);
         void drawCropBox(const RenderContext& context, const Viewport& render_viewport);
+        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager);
+        void drawCropBox(const RenderContext& context);
+        void drawCoordAxes(const RenderContext& context);
+
 
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;

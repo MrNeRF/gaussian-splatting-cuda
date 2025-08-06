@@ -18,7 +18,7 @@ namespace gs::visualizer {
 
     CropBoxTool::~CropBoxTool() = default;
 
-    bool CropBoxTool::initialize(const ToolContext& ctx) {
+    bool CropBoxTool::initialize([[maybe_unused]] const ToolContext& ctx) {
         // Bounding box OpenGL resources are initialized lazily on first render
         return true;
     }
@@ -27,16 +27,16 @@ namespace gs::visualizer {
         // Cleanup handled by destructors
     }
 
-    void CropBoxTool::update(const ToolContext& ctx) {
+    void CropBoxTool::update([[maybe_unused]] const ToolContext& ctx) {
         // Nothing to update per frame for crop box
     }
 
-    void CropBoxTool::render(const ToolContext& ctx) {
+    void CropBoxTool::render([[maybe_unused]] const ToolContext& ctx) {
         // Rendering is handled by the rendering manager based on our state
         // This method could be used for tool-specific overlays if needed
     }
 
-    void CropBoxTool::renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) {
+    void CropBoxTool::renderUI([[maybe_unused]] const gs::gui::UIContext& ui_ctx, [[maybe_unused]] bool* p_open) {
         if (!isEnabled()) {
             return;
         }
@@ -68,7 +68,7 @@ namespace gs::visualizer {
         });
     }
 
-    bool CropBoxTool::isMouseOverHandle(const glm::dvec2& mouse_pos) const {
+    bool CropBoxTool::isMouseOverHandle([[maybe_unused]] const glm::dvec2& mouse_pos) const {
         // For now, just return false
         return false;
     }
@@ -119,7 +119,7 @@ namespace gs::visualizer {
         current_handle_ = DragHandle::None;
     }
 
-    void CropBoxTool::drawControls(const gs::gui::UIContext& ui_ctx) {
+    void CropBoxTool::drawControls([[maybe_unused]] const gs::gui::UIContext& ui_ctx) {
         if (!ImGui::CollapsingHeader("Crop Box")) {
             return;
         }
