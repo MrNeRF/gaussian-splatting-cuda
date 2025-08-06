@@ -47,7 +47,7 @@ namespace gs {
         settings.near_plane = near_plane;
         settings.far_plane = far_plane;
 
-        auto [image, alpha] = FastGSRasterize::apply(
+        auto raster_outputs = FastGSRasterize::apply(
             means,
             raw_scales,
             raw_rotations,
@@ -60,7 +60,8 @@ namespace gs {
         RenderOutput output;
 
         // TODO: background color is always black, let's save some time here
-        output.image = image;
+        output.image = raster_outputs[0];
+        output.alpha = raster_outputs[1];
         // output.image = image + (1.0f - alpha) * bg_color.unsqueeze(-1).unsqueeze(-1);
 
         // TODO: if the background color is blended into the image, the resulting image has alpha=1 everywhere

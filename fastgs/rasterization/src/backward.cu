@@ -19,7 +19,6 @@ void fast_gs::rasterization::backward(
     const float3* sh_coefficients_rest,
     const float4* w2c,
     const float3* cam_position,
-    const float3* bg_color,
     char* per_primitive_buffers_blob,
     char* per_tile_buffers_blob,
     char* per_instance_buffers_blob,
