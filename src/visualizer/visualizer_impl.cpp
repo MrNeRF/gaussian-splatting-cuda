@@ -276,6 +276,15 @@ namespace gs::visualizer {
 
             has_viewport_region = true;
         }
+        // Get coord axes and world 2 user for rendering
+        const RenderCoordinateAxes* coord_axes_ptr = nullptr;
+        if (auto coord_axes = getAxes()) {
+            coord_axes_ptr = coord_axes.get();
+        }
+        const geometry::EuclideanTransform* world_to_user = nullptr;
+        if (auto coord_axes = getWorldToUser()) {
+            world_to_user = coord_axes.get();
+        }
 
         // Render
         RenderingManager::RenderContext context{
