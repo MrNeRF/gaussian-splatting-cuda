@@ -36,7 +36,7 @@ namespace gs {
             bool enable_save_eval_images = true;              // Save during evaluation images
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
-            std::string strategy = "default";                 // Optimization strategy: mcmc, default.
+            std::string strategy = "mcmc";                    // Optimization strategy: mcmc, default.
             bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
 
             // Bilateral grid parameters
