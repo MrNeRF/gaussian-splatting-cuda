@@ -10,7 +10,9 @@
 
 void fast_gs::rasterization::backward(
     const float* grad_image,
+    const float* grad_alpha,
     const float* image,
+    const float* alpha,
     const float3* means,
     const float3* scales_raw,
     const float4* rotations_raw,
@@ -63,10 +65,10 @@ void fast_gs::rasterization::backward(
         per_primitive_buffers.mean2d,
         per_primitive_buffers.conic_opacity,
         per_primitive_buffers.color,
-        bg_color,
         grad_image,
+        grad_alpha,
         image,
-        per_tile_buffers.final_transmittances,
+        alpha,
         per_tile_buffers.max_n_contributions,
         per_tile_buffers.n_contributions,
         per_bucket_buffers.tile_index,

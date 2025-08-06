@@ -37,7 +37,6 @@ namespace gs {
         fast_gs::rasterization::FastGSSettings settings;
         settings.w2c = viewpoint_camera.world_view_transform();
         settings.cam_position = viewpoint_camera.cam_position();
-        settings.bg_color = bg_color;
         settings.active_sh_bases = active_sh_bases;
         settings.width = width;
         settings.height = height;
@@ -48,7 +47,7 @@ namespace gs {
         settings.near_plane = near_plane;
         settings.far_plane = far_plane;
 
-        torch::Tensor image = FastGSRasterize::apply(
+        auto [image, alpha] = FastGSRasterize::apply(
             means,
             raw_scales,
             raw_rotations,
@@ -56,10 +55,17 @@ namespace gs {
             sh0,
             shN,
             densification_info,
-            settings)[0];
+            settings);
 
         RenderOutput output;
+
+        // TODO: background color is always black, let's save some time here
         output.image = image;
+        // output.image = image + (1.0f - alpha) * bg_color.unsqueeze(-1).unsqueeze(-1);
+
+        // TODO: if the background color is blended into the image, the resulting image has alpha=1 everywhere
+        // output.alpha = torch::ones_like(alpha);
+
         return output;
     }
 
