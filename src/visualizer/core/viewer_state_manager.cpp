@@ -81,9 +81,13 @@ namespace gs::visualizer {
 
         // Listen for training progress
         state::TrainingProgress::when([this](const auto& event) {
-            training_info_->updateProgress(event.iteration, event.num_gaussians);
+            training_info_->updateProgress(event.iteration, training_info_->total_iterations_);
             training_info_->updateNumSplats(event.num_gaussians);
             training_info_->updateLoss(event.loss);
+        });
+
+        state::TrainingStarted::when([this](const auto& event) {
+            training_info_->total_iterations_ = event.total_iterations;
         });
     }
 

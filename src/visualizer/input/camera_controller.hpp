@@ -18,6 +18,11 @@ namespace gs {
         // Setup input handlers
         void connectToInputHandler(InputHandler& input_handler);
 
+        // Position-based check for mouse clicks
+        void setPositionCheckCallback(std::function<bool(double, double)> callback) {
+            position_check_callback_ = callback;
+        }
+
         // Handle input events
         void handleMouseButton(const InputHandler::MouseButtonEvent& event);
         void handleMouseMove(const InputHandler::MouseMoveEvent& event);
@@ -27,6 +32,7 @@ namespace gs {
     private:
         // Check if viewport is focused
         bool isViewportFocused() const;
+        bool isPositionInViewport(double x, double y) const;
 
         // Input event handlers
         bool handleSpeedChange(const InputHandler::KeyEvent& event);
@@ -38,6 +44,7 @@ namespace gs {
         Viewport& viewport_;
         InputHandler* input_handler_ = nullptr; // Store reference for key state queries
         std::function<bool()> viewport_focus_check_;
+        std::function<bool(double, double)> position_check_callback_;
 
         // State
         bool is_panning_ = false;

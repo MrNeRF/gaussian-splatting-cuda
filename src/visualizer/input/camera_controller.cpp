@@ -31,6 +31,14 @@ namespace gs {
         return true; // Default to focused if no check function
     }
 
+    bool CameraController::isPositionInViewport(double x, double y) const {
+        if (position_check_callback_) {
+            return position_check_callback_(x, y);
+        }
+        // Fallback to regular focus check
+        return isViewportFocused();
+    }
+
     void CameraController::publishCameraChanged() {
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_camera_publish_time_) >= camera_publish_interval_ms_) {
@@ -43,20 +51,28 @@ namespace gs {
     }
 
     void CameraController::handleMouseButton(const InputHandler::MouseButtonEvent& event) {
-        if (!is_enabled_ || !isViewportFocused())
+        if (!is_enabled_)
             return;
 
         if (event.action == GLFW_PRESS) {
-            viewport_.camera.initScreenPos(glm::vec2(event.position));
+            // Check if the mouse position is in the viewport
+            bool in_viewport = isPositionInViewport(event.position.x, event.position.y);
 
-            if (event.button == GLFW_MOUSE_BUTTON_LEFT) {
-                is_panning_ = true;
-            } else if (event.button == GLFW_MOUSE_BUTTON_RIGHT) {
-                is_rotating_ = true;
-            } else if (event.button == GLFW_MOUSE_BUTTON_MIDDLE) {
-                is_orbiting_ = true;
+            if (in_viewport) {
+                // Initialize camera position
+                viewport_.camera.initScreenPos(glm::vec2(event.position));
+
+                // Start the appropriate interaction
+                if (event.button == GLFW_MOUSE_BUTTON_LEFT) {
+                    is_panning_ = true;
+                } else if (event.button == GLFW_MOUSE_BUTTON_RIGHT) {
+                    is_rotating_ = true;
+                } else if (event.button == GLFW_MOUSE_BUTTON_MIDDLE) {
+                    is_orbiting_ = true;
+                }
             }
         } else if (event.action == GLFW_RELEASE) {
+            // Always handle our own releases
             if (event.button == GLFW_MOUSE_BUTTON_LEFT && is_panning_) {
                 is_panning_ = false;
                 // Force publish on mouse release to ensure final position is sent
@@ -86,6 +102,7 @@ namespace gs {
         if (!is_enabled_)
             return;
 
+        // Always handle mouse movement if we're actively dragging
         glm::vec2 current_pos(event.position);
         bool camera_changed = false;
 
@@ -129,7 +146,7 @@ namespace gs {
                                input_handler_->isKeyPressed(GLFW_KEY_RIGHT_CONTROL))) {
 
             if (input_handler_->isKeyPressed(GLFW_KEY_EQUAL) ||
-                input_handler_->isKeyPressed(event.key == GLFW_KEY_KP_ADD)) {
+                input_handler_->isKeyPressed(GLFW_KEY_KP_ADD)) {
                 // Increase speed (Ctrl + '+' or Ctrl + '=')
                 viewport_.camera.increaseWasdSpeed();
 
@@ -155,7 +172,6 @@ namespace gs {
                 return true;
             }
         }
-        // If Ctrl is held but it's not +/-, don't process WASD movement
         return false;
     }
 
@@ -165,9 +181,7 @@ namespace gs {
             return false;
 
         const float ADVANCE_RATE = 1.0f;
-
         float advance_rate = ADVANCE_RATE;
-
         bool camera_changed = false;
 
         if (input_handler_->isKeyPressed(GLFW_KEY_W)) {

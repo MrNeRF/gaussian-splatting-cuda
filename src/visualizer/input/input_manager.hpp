@@ -16,12 +16,13 @@ namespace gs::visualizer {
         using GuiActiveCheck = std::function<bool()>;
 
         explicit InputManager(GLFWwindow* window, Viewport& viewport);
-        ~InputManager() = default;
+        ~InputManager();
 
         // Setup
         void initialize();
         void setupCallbacks(GuiActiveCheck gui_check, FileDropCallback file_drop);
         void setViewportFocusCheck(std::function<bool()> focus_check);
+        void setPositionCheck(std::function<bool(double, double)> check);
 
         // Update input routing based on focus
         void updateInputRouting();
@@ -40,6 +41,7 @@ namespace gs::visualizer {
         GuiActiveCheck gui_active_check_;
         FileDropCallback file_drop_callback_;
         std::function<bool()> viewport_focus_check_;
+        std::function<bool(double, double)> position_check_;
 
         void setupInputHandlers();
         void handleFileDrop(const InputHandler::FileDropEvent& event);

@@ -40,8 +40,8 @@ namespace fast_gs::rasterization::kernels::forward {
         const float fy,
         const float cx,
         const float cy,
-        const float near,
-        const float far)
+        const float near_, // near and far are macros in windowns
+        const float far_)
     {
         auto primitive_idx = cg::this_grid().thread_rank();
         bool active = true;
@@ -58,7 +58,7 @@ namespace fast_gs::rasterization::kernels::forward {
         // z culling
         const float4 w2c_r3 = w2c[2];
         const float depth = w2c_r3.x * mean3d.x + w2c_r3.y * mean3d.y + w2c_r3.z * mean3d.z + w2c_r3.w;
-        if (depth < near || depth > far) active = false;
+        if (depth < near_ || depth > far_) active = false;
 
         // early exit if whole warp is inactive
         if (__ballot_sync(0xffffffffu, active) == 0) return;
