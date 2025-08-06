@@ -7,14 +7,15 @@ namespace fast_gs::rasterization {
 
     void backward(
         const float* grad_image,
+        const float* grad_alpha,
         const float* image,
+        const float* alpha,
         const float3* means,
         const float3* scales_raw,
         const float4* rotations_raw,
         const float3* sh_coefficients_rest,
         const float4* w2c,
         const float3* cam_position,
-        const float3* bg_color,
         char* per_primitive_buffers_blob,
         char* per_tile_buffers_blob,
         char* per_instance_buffers_blob,
