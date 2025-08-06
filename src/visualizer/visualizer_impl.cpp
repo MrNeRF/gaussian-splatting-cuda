@@ -4,6 +4,8 @@
 #include "core/model_providers.hpp"
 #include "tools/crop_box_tool.hpp"
 
+#include <tools/world_transform_tool.hpp>
+
 namespace gs::visualizer {
 
     VisualizerImpl::VisualizerImpl(const ViewerOptions& options)
@@ -34,6 +36,7 @@ namespace gs::visualizer {
         tool_manager_ = std::make_unique<ToolManager>(this);
         tool_manager_->registerBuiltinTools();
         tool_manager_->addTool("Crop Box"); // Add crop box by default
+        tool_manager_->addTool("World Transform");
 
         // Create support components
         gui_manager_ = std::make_unique<gui::GuiManager>(this);
@@ -240,6 +243,12 @@ namespace gs::visualizer {
             settings.use_crop_box = false;
         }
 
+        if (auto* world_trans = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
+            settings.show_coord_axes = world_trans->ShouldShowAxes();
+        } else {
+            settings.show_coord_axes = false;
+        }
+
         settings.antialiasing = state_manager_->isAntiAliasingEnabled();
         settings.fov = state_manager_->getRenderingConfig()->getFovDegrees();
         settings.scaling_modifier = state_manager_->getRenderingConfig()->getScalingModifier();
@@ -267,12 +276,23 @@ namespace gs::visualizer {
 
             has_viewport_region = true;
         }
+        // Get coord axes and world 2 user for rendering
+        const RenderCoordinateAxes* coord_axes_ptr = nullptr;
+        if (auto coord_axes = getAxes()) {
+            coord_axes_ptr = coord_axes.get();
+        }
+        const geometry::EuclideanTransform* world_to_user = nullptr;
+        if (auto coord_axes = getWorldToUser()) {
+            world_to_user = coord_axes.get();
+        }
 
         // Render
         RenderingManager::RenderContext context{
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
             .crop_box = crop_box_ptr,
+            .coord_axes = coord_axes_ptr,
+            .world_to_user = world_to_user,
             .viewport_region = has_viewport_region ? &viewport_region : nullptr,
             .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
 
@@ -314,6 +334,23 @@ namespace gs::visualizer {
     std::shared_ptr<RenderBoundingBox> VisualizerImpl::getCropBox() const {
         if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
             return crop_tool->getBoundingBox();
+        }
+        return nullptr;
+    }
+
+    std::shared_ptr<const RenderCoordinateAxes> VisualizerImpl::getAxes() const {
+        if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
+            return world_transform->getAxes();
+        }
+        return nullptr;
+    }
+
+    std::shared_ptr<const geometry::EuclideanTransform> VisualizerImpl::getWorldToUser() const {
+        if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
+            if (world_transform->IsTrivialTrans()) {
+                return nullptr;
+            }
+            return world_transform->GetTransform();
         }
         return nullptr;
     }

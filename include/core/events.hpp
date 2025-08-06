@@ -58,6 +58,8 @@ namespace gs {
             EVENT(CropBoxSettingsChanged,
                   bool show_box;
                   bool use_box;);
+            EVENT(AxesSettingsChanged,
+                  bool show_axes;);
         } // namespace tools
         // ============================================================================
         // State - Notifications about what has happened
