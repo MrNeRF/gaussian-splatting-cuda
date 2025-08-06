@@ -1,6 +1,8 @@
 #include "gui/gui_manager.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
+#include "gui/panels/tools_panel.hpp"
+#include "gui/panels/training_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "gui/windows/camera_controls.hpp"
 #include "gui/windows/file_browser.hpp"
@@ -35,6 +37,9 @@ namespace gs::gui {
         // Initialize speed overlay state
         speed_overlay_visible_ = false;
         speed_overlay_duration_ = std::chrono::milliseconds(3000); // 3 seconds
+
+        // Initialize focus state
+        viewport_has_focus_ = false;
 
         setupEventHandlers();
     }
@@ -94,14 +99,67 @@ namespace gs::gui {
         // Start frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
+
+        // Check if mouse is in viewport before ImGui processes the frame
+        ImVec2 mouse_pos = ImGui::GetMousePos();
+        bool mouse_in_viewport = isPositionInViewport(mouse_pos.x, mouse_pos.y);
+
         ImGui::NewFrame();
 
-        // Get viewport
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        // Prevent ImGui from capturing right/middle mouse buttons when in viewport
+        if (mouse_in_viewport && (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+                                  ImGui::IsMouseDown(ImGuiMouseButton_Middle))) {
+            ImGui::GetIO().WantCaptureMouse = false;
+        }
 
-        // Define layout dimensions
-        const float left_panel_width = 250.0f;  // Slimmer Rendering Settings panel
-        const float right_panel_width = 200.0f; // Even slimmer Scene panel
+        // Create main dockspace
+        const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(main_viewport->WorkPos);
+        ImGui::SetNextWindowSize(main_viewport->WorkSize);
+        ImGui::SetNextWindowViewport(main_viewport->ID);
+
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking |
+                                        ImGuiWindowFlags_NoTitleBar |
+                                        ImGuiWindowFlags_NoCollapse |
+                                        ImGuiWindowFlags_NoResize |
+                                        ImGuiWindowFlags_NoMove |
+                                        ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                        ImGuiWindowFlags_NoNavFocus |
+                                        ImGuiWindowFlags_NoBackground;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+        ImGui::Begin("DockSpace", nullptr, window_flags);
+        ImGui::PopStyleVar(3);
+
+        // DockSpace ID
+        ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+
+        // Create dockspace
+        ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+
+        // Set up default layout on first run
+        static bool first_time = true;
+        if (first_time) {
+            first_time = false;
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, main_viewport->WorkSize);
+
+            ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.2f, nullptr, &dockspace_id);
+            ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.2f, nullptr, &dockspace_id);
+
+            // Dock windows
+            ImGui::DockBuilderDockWindow("Rendering Settings", dock_id_left);
+            ImGui::DockBuilderDockWindow("Scene", dock_id_right);
+
+            ImGui::DockBuilderFinish(dockspace_id);
+        }
+
+        ImGui::End();
 
         // Create context for this frame
         UIContext ctx{
@@ -110,21 +168,35 @@ namespace gs::gui {
             .file_browser = file_browser_.get(),
             .window_states = &window_states_};
 
-        // Draw the main panel (Rendering Settings) with proper positioning
+        // Draw docked panels
         if (show_main_panel_) {
-            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(ImVec2(left_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
-            panels::DrawMainPanel(ctx);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
+            if (ImGui::Begin("Rendering Settings", &show_main_panel_)) {
+                // Draw contents without the manual sizing/positioning
+                panels::DrawWindowControls(ctx);
+                ImGui::Separator();
+                widgets::DrawModeStatus(ctx);
+                ImGui::Separator();
+                panels::DrawRenderingSettings(ctx);
+                ImGui::Separator();
+                if (viewer_->getTrainer()) {
+                    panels::DrawTrainingControls(ctx);
+                    ImGui::Separator();
+                }
+                panels::DrawProgressInfo(ctx);
+                ImGui::Separator();
+                panels::DrawToolsPanel(ctx);
+            }
+            ImGui::End();
+            ImGui::PopStyleColor();
         }
 
-        // Draw Scene panel with proper positioning
+        // Draw Scene panel
         if (window_states_["scene_panel"]) {
-            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - right_panel_width, viewport->WorkPos.y), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(ImVec2(right_panel_width, viewport->WorkSize.y), ImGuiCond_Always);
             scene_panel_->render(&window_states_["scene_panel"]);
         }
 
-        // Render floating windows (these should remain movable)
+        // Render floating windows (these remain movable)
         if (window_states_["console"]) {
             console_->render(&window_states_["console"]);
         }
@@ -140,6 +212,41 @@ namespace gs::gui {
         // Render speed overlay if visible
         renderSpeedOverlay();
 
+        // Get the viewport region for 3D rendering
+        updateViewportRegion();
+
+        // Update viewport focus based on mouse position
+        updateViewportFocus();
+
+        // Draw viewport focus indicator
+        if (viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
+            ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+
+            // The viewport_pos_ is already relative to the window, so we just need to add the window position
+            const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+            ImVec2 screen_pos = ImVec2(
+                main_viewport->WorkPos.x + viewport_pos_.x,
+                main_viewport->WorkPos.y + viewport_pos_.y);
+
+            // Animated glow
+            float time = static_cast<float>(ImGui::GetTime());
+            float pulse = (sin(time * 3.0f) + 1.0f) * 0.5f;
+
+            // Outer glow
+            draw_list->AddRect(
+                screen_pos,
+                ImVec2(screen_pos.x + viewport_size_.x, screen_pos.y + viewport_size_.y),
+                IM_COL32(51, 153, 255, 127 + (int)(pulse * 76)), // Blue with pulsing alpha
+                0.0f, 0, 3.0f);
+
+            // Inner highlight
+            draw_list->AddRect(
+                ImVec2(screen_pos.x + 1, screen_pos.y + 1),
+                ImVec2(screen_pos.x + viewport_size_.x - 1, screen_pos.y + viewport_size_.y - 1),
+                IM_COL32(102, 204, 255, 76 + (int)(pulse * 50)),
+                0.0f, 0, 1.0f);
+        }
+
         // End frame
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -151,6 +258,106 @@ namespace gs::gui {
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(backup_current_context);
         }
+    }
+
+    void GuiManager::updateViewportRegion() {
+        const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+
+        // Start with full window
+        float left = 0;
+        float top = 0;
+        float right = main_viewport->WorkSize.x;
+        float bottom = main_viewport->WorkSize.y;
+
+        // Find our docked windows and calculate the remaining space
+        ImGuiWindow* settings_window = ImGui::FindWindowByName("Rendering Settings");
+        ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene");
+
+        if (settings_window && settings_window->DockNode && settings_window->Active) {
+            // Settings panel is on the left
+            float panel_right = settings_window->Pos.x + settings_window->Size.x - main_viewport->WorkPos.x;
+            left = std::max(left, panel_right);
+        }
+
+        if (scene_window && scene_window->DockNode && scene_window->Active) {
+            // Scene panel is on the right
+            float panel_left = scene_window->Pos.x - main_viewport->WorkPos.x;
+            right = std::min(right, panel_left);
+        }
+
+        // Store relative to window
+        viewport_pos_ = ImVec2(left, top);
+        viewport_size_ = ImVec2(right - left, bottom - top);
+    }
+
+    void GuiManager::updateViewportFocus() {
+        // Check if mouse is in viewport area
+        ImVec2 mouse_pos = ImGui::GetMousePos();
+        const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+
+        // Convert mouse position to window-relative coordinates
+        float mouse_x = mouse_pos.x - main_viewport->WorkPos.x;
+        float mouse_y = mouse_pos.y - main_viewport->WorkPos.y;
+
+        // Check if mouse is within viewport bounds
+        bool mouse_in_viewport = (mouse_x >= viewport_pos_.x &&
+                                  mouse_x < viewport_pos_.x + viewport_size_.x &&
+                                  mouse_y >= viewport_pos_.y &&
+                                  mouse_y < viewport_pos_.y + viewport_size_.y);
+
+        // Check if ImGui wants input
+        bool imgui_wants_input = ImGui::GetIO().WantCaptureMouse ||
+                                 ImGui::GetIO().WantCaptureKeyboard ||
+                                 ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+
+        // Special handling for clicks - if clicking in viewport, it gets focus immediately
+        bool mouse_clicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) ||
+                             ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+                             ImGui::IsMouseClicked(ImGuiMouseButton_Middle);
+
+        if (mouse_clicked && mouse_in_viewport && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+            // Clicking in viewport gives it focus immediately
+            viewport_has_focus_ = true;
+            // Tell ImGui we don't want this mouse event
+            ImGui::GetIO().WantCaptureMouse = false;
+        } else {
+            // Normal focus rules: viewport has focus when mouse is over it and ImGui doesn't want input
+            viewport_has_focus_ = mouse_in_viewport && !imgui_wants_input;
+        }
+    }
+
+    ImVec2 GuiManager::getViewportPos() const {
+        return viewport_pos_;
+    }
+
+    ImVec2 GuiManager::getViewportSize() const {
+        return viewport_size_;
+    }
+
+    bool GuiManager::isMouseInViewport() const {
+        ImVec2 mouse_pos = ImGui::GetMousePos();
+        return mouse_pos.x >= viewport_pos_.x &&
+               mouse_pos.y >= viewport_pos_.y &&
+               mouse_pos.x < viewport_pos_.x + viewport_size_.x &&
+               mouse_pos.y < viewport_pos_.y + viewport_size_.y;
+    }
+
+    bool GuiManager::isViewportFocused() const {
+        return viewport_has_focus_;
+    }
+
+    bool GuiManager::isPositionInViewport(double x, double y) const {
+        const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+
+        // Convert to window-relative coordinates
+        float rel_x = static_cast<float>(x) - main_viewport->WorkPos.x;
+        float rel_y = static_cast<float>(y) - main_viewport->WorkPos.y;
+
+        // Check if within viewport bounds
+        return (rel_x >= viewport_pos_.x &&
+                rel_x < viewport_pos_.x + viewport_size_.x &&
+                rel_y >= viewport_pos_.y &&
+                rel_y < viewport_pos_.y + viewport_size_.y);
     }
 
     void GuiManager::renderSpeedOverlay() {

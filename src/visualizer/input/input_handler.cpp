@@ -36,124 +36,30 @@ namespace gs {
         }
     }
 
-    InputHandler::HandlerId InputHandler::addMouseButtonHandler(MouseButtonCallback handler,
-                                                                InputPriority priority) {
-        HandlerId id = next_handler_id_++;
-
-        mouse_button_handlers_.push_back({.id = id,
-                                          .priority = priority,
-                                          .callback = std::move(handler)});
-
-        // Sort by priority (highest first)
-        std::sort(mouse_button_handlers_.begin(), mouse_button_handlers_.end(),
-                  [](const auto& a, const auto& b) {
-                      return has_higher_priority(a.priority, b.priority);
-                  });
-
-        return id;
+    void InputHandler::setGUICallbacks(
+        MouseButtonCallback mouse_button,
+        MouseMoveCallback mouse_move,
+        MouseScrollCallback mouse_scroll,
+        KeyCallback key) {
+        gui_callbacks_.mouse_button = mouse_button;
+        gui_callbacks_.mouse_move = mouse_move;
+        gui_callbacks_.mouse_scroll = mouse_scroll;
+        gui_callbacks_.key = key;
     }
 
-    InputHandler::HandlerId InputHandler::addMouseMoveHandler(MouseMoveCallback handler,
-                                                              InputPriority priority) {
-        HandlerId id = next_handler_id_++;
-
-        mouse_move_handlers_.push_back({.id = id,
-                                        .priority = priority,
-                                        .callback = std::move(handler)});
-
-        std::sort(mouse_move_handlers_.begin(), mouse_move_handlers_.end(),
-                  [](const auto& a, const auto& b) {
-                      return has_higher_priority(a.priority, b.priority);
-                  });
-
-        return id;
+    void InputHandler::setViewportCallbacks(
+        MouseButtonCallback mouse_button,
+        MouseMoveCallback mouse_move,
+        MouseScrollCallback mouse_scroll,
+        KeyCallback key) {
+        viewport_callbacks_.mouse_button = mouse_button;
+        viewport_callbacks_.mouse_move = mouse_move;
+        viewport_callbacks_.mouse_scroll = mouse_scroll;
+        viewport_callbacks_.key = key;
     }
 
-    InputHandler::HandlerId InputHandler::addMouseScrollHandler(MouseScrollCallback handler,
-                                                                InputPriority priority) {
-        HandlerId id = next_handler_id_++;
-
-        mouse_scroll_handlers_.push_back({.id = id,
-                                          .priority = priority,
-                                          .callback = std::move(handler)});
-
-        std::sort(mouse_scroll_handlers_.begin(), mouse_scroll_handlers_.end(),
-                  [](const auto& a, const auto& b) {
-                      return has_higher_priority(a.priority, b.priority);
-                  });
-
-        return id;
-    }
-
-    InputHandler::HandlerId InputHandler::addKeyHandler(KeyCallback handler,
-                                                        InputPriority priority) {
-        HandlerId id = next_handler_id_++;
-
-        key_handlers_.push_back({.id = id,
-                                 .priority = priority,
-                                 .callback = std::move(handler)});
-
-        std::sort(key_handlers_.begin(), key_handlers_.end(),
-                  [](const auto& a, const auto& b) {
-                      return has_higher_priority(a.priority, b.priority);
-                  });
-
-        return id;
-    }
-
-    InputHandler::HandlerId InputHandler::addFileDropHandler(FileDropCallback handler,
-                                                             InputPriority priority) {
-        HandlerId id = next_handler_id_++;
-
-        file_drop_handlers_.push_back({.id = id,
-                                       .priority = priority,
-                                       .callback = std::move(handler)});
-
-        std::sort(file_drop_handlers_.begin(), file_drop_handlers_.end(),
-                  [](const auto& a, const auto& b) {
-                      return has_higher_priority(a.priority, b.priority);
-                  });
-
-        return id;
-    }
-
-    void InputHandler::removeHandler(HandlerId id) {
-        // Remove from all handler vectors
-        auto remove_by_id = [id](auto& handlers) {
-            handlers.erase(
-                std::remove_if(handlers.begin(), handlers.end(),
-                               [id](const auto& h) { return h.id == id; }),
-                handlers.end());
-        };
-
-        remove_by_id(mouse_button_handlers_);
-        remove_by_id(mouse_move_handlers_);
-        remove_by_id(mouse_scroll_handlers_);
-        remove_by_id(key_handlers_);
-        remove_by_id(file_drop_handlers_);
-    }
-
-    void InputHandler::removeAllHandlers() {
-        mouse_button_handlers_.clear();
-        mouse_move_handlers_.clear();
-        mouse_scroll_handlers_.clear();
-        key_handlers_.clear();
-        file_drop_handlers_.clear();
-    }
-
-    void InputHandler::removeHandlersByPriority(InputPriority priority) {
-        auto remove_by_priority = [priority](auto& handlers) {
-            handlers.erase(
-                std::remove_if(handlers.begin(), handlers.end(),
-                               [priority](const auto& h) { return h.priority == priority; }),
-                handlers.end());
-        };
-
-        remove_by_priority(mouse_button_handlers_);
-        remove_by_priority(mouse_move_handlers_);
-        remove_by_priority(mouse_scroll_handlers_);
-        remove_by_priority(key_handlers_);
-        remove_by_priority(file_drop_handlers_);
+    void InputHandler::setFileDropCallback(FileDropCallback callback) {
+        file_drop_callback_ = callback;
     }
 
     bool InputHandler::isKeyPressed(int key) const {
@@ -166,51 +72,6 @@ namespace gs {
         std::lock_guard<std::mutex> lock(state_mutex_);
         auto it = mouse_button_states_.find(button);
         return it != mouse_button_states_.end() && it->second;
-    }
-
-    bool InputHandler::dispatchMouseButton(const MouseButtonEvent& event) {
-        for (const auto& handler : mouse_button_handlers_) {
-            if (handler.callback(event)) {
-                return true; // Event consumed
-            }
-        }
-        return false;
-    }
-
-    bool InputHandler::dispatchMouseMove(const MouseMoveEvent& event) {
-        for (const auto& handler : mouse_move_handlers_) {
-            if (handler.callback(event)) {
-                return true; // Event consumed
-            }
-        }
-        return false;
-    }
-
-    bool InputHandler::dispatchMouseScroll(const MouseScrollEvent& event) {
-        for (const auto& handler : mouse_scroll_handlers_) {
-            if (handler.callback(event)) {
-                return true; // Event consumed
-            }
-        }
-        return false;
-    }
-
-    bool InputHandler::dispatchKey(const KeyEvent& event) {
-        for (const auto& handler : key_handlers_) {
-            if (handler.callback(event)) {
-                return true; // Event consumed
-            }
-        }
-        return false;
-    }
-
-    bool InputHandler::dispatchFileDrop(const FileDropEvent& event) {
-        for (const auto& handler : file_drop_handlers_) {
-            if (handler.callback(event)) {
-                return true; // Event consumed
-            }
-        }
-        return false;
     }
 
     // GLFW Callbacks
@@ -233,7 +94,13 @@ namespace gs {
             instance_->mouse_button_states_[button] = (action == GLFW_PRESS);
         }
 
-        instance_->dispatchMouseButton(event);
+        // Send to both consumers - let them decide what to handle
+        if (instance_->viewport_callbacks_.mouse_button) {
+            instance_->viewport_callbacks_.mouse_button(event);
+        }
+        if (instance_->gui_callbacks_.mouse_button) {
+            instance_->gui_callbacks_.mouse_button(event);
+        }
     }
 
     void InputHandler::cursorPosCallback(GLFWwindow* window, double x, double y) {
@@ -257,7 +124,13 @@ namespace gs {
             .position = new_pos,
             .delta = delta};
 
-        instance_->dispatchMouseMove(event);
+        // Send to both consumers - let them decide what to handle
+        if (instance_->viewport_callbacks_.mouse_move) {
+            instance_->viewport_callbacks_.mouse_move(event);
+        }
+        if (instance_->gui_callbacks_.mouse_move) {
+            instance_->gui_callbacks_.mouse_move(event);
+        }
     }
 
     void InputHandler::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
@@ -268,7 +141,23 @@ namespace gs {
             .xoffset = xoffset,
             .yoffset = yoffset};
 
-        instance_->dispatchMouseScroll(event);
+        // Send to both consumers based on current consumer state
+        // Scroll should respect focus more strictly than mouse buttons
+        const Callbacks* callbacks = nullptr;
+        switch (instance_->current_consumer_) {
+        case InputConsumer::GUI:
+            callbacks = &instance_->gui_callbacks_;
+            break;
+        case InputConsumer::Viewport:
+            callbacks = &instance_->viewport_callbacks_;
+            break;
+        default:
+            return;
+        }
+
+        if (callbacks && callbacks->mouse_scroll) {
+            callbacks->mouse_scroll(event);
+        }
     }
 
     void InputHandler::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -287,7 +176,22 @@ namespace gs {
             instance_->key_states_[key] = (action == GLFW_PRESS || action == GLFW_REPEAT);
         }
 
-        instance_->dispatchKey(event);
+        // Route to appropriate consumer based on focus
+        const Callbacks* callbacks = nullptr;
+        switch (instance_->current_consumer_) {
+        case InputConsumer::GUI:
+            callbacks = &instance_->gui_callbacks_;
+            break;
+        case InputConsumer::Viewport:
+            callbacks = &instance_->viewport_callbacks_;
+            break;
+        default:
+            return;
+        }
+
+        if (callbacks && callbacks->key) {
+            callbacks->key(event);
+        }
     }
 
     void InputHandler::dropCallback(GLFWwindow* window, int count, const char** paths) {
@@ -303,7 +207,10 @@ namespace gs {
         FileDropEvent event{
             .paths = std::move(file_paths)};
 
-        instance_->dispatchFileDrop(event);
+        // File drops are always handled regardless of consumer
+        if (instance_->file_drop_callback_) {
+            instance_->file_drop_callback_(event);
+        }
     }
 
 } // namespace gs

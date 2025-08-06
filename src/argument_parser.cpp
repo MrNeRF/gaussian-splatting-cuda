@@ -161,6 +161,11 @@ namespace {
                         "ERROR: Invalid optimization strategy '{}'. Valid strategies are: mcmc, default",
                         strat));
                 }
+
+                // Unlike other parameters that will be set later as overrides,
+                // strategy must be set immediately to ensure correct JSON loading
+                // in `read_optim_params_from_json()`
+                params.optimization.strategy = strat;
             }
 
             // Create lambda to apply command line overrides after JSON loading
@@ -176,7 +181,6 @@ namespace {
                                         sh_degree_val = sh_degree ? std::optional<int>(::args::get(sh_degree)) : std::optional<int>(),
                                         min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
-                                        strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
                                         // Capture flag states
                                         preload_to_ram_flag = bool(preload_to_ram),
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
@@ -211,7 +215,6 @@ namespace {
                 setVal(sh_degree_val, opt.sh_degree);
                 setVal(min_opacity_val, opt.min_opacity);
                 setVal(render_mode_val, opt.render_mode);
-                setVal(strategy_val, opt.strategy);
 
                 setFlag(preload_to_ram_flag, opt.preload_to_ram);
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
@@ -275,7 +278,7 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
     // Training mode - load JSON first
     if (!params->dataset.data_path.empty()) {
-        auto opt_params_result = gs::param::read_optim_params_from_json();
+        auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
         if (!opt_params_result) {
             return std::unexpected(std::format("Failed to load optimization parameters: {}",
                                                opt_params_result.error()));

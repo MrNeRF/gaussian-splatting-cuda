@@ -1,5 +1,4 @@
 #include "input/input_manager.hpp"
-#include <algorithm>
 #include <imgui.h>
 #include <print>
 
@@ -11,81 +10,110 @@ namespace gs::visualizer {
     }
 
     InputManager::~InputManager() {
-        // Clean up our handlers
-        if (input_handler_) {
-            for (auto id : gui_handler_ids_) {
-                input_handler_->removeHandler(id);
-            }
-        }
+        // Cleanup handled automatically by unique_ptr
     }
 
     void InputManager::initialize() {
         // Create input handler
         input_handler_ = std::make_unique<InputHandler>(window_);
 
-        // Create camera controller
-        camera_controller_ = std::make_unique<CameraController>(viewport_);
+        // Create camera controller with viewport focus check
+        camera_controller_ = std::make_unique<CameraController>(viewport_, viewport_focus_check_);
         camera_controller_->connectToInputHandler(*input_handler_);
+
+        // Pass position check to camera controller
+        if (position_check_) {
+            camera_controller_->setPositionCheckCallback(position_check_);
+        }
+
+        setupInputHandlers();
     }
 
     void InputManager::setupCallbacks(GuiActiveCheck gui_check, FileDropCallback file_drop) {
         gui_active_check_ = gui_check;
         file_drop_callback_ = file_drop;
-        setupInputHandlers();
+    }
+
+    void InputManager::setViewportFocusCheck(std::function<bool()> focus_check) {
+        viewport_focus_check_ = focus_check;
+
+        // Update camera controller if it exists
+        if (camera_controller_) {
+            // Recreate camera controller with new focus check
+            camera_controller_ = std::make_unique<CameraController>(viewport_, viewport_focus_check_);
+            camera_controller_->connectToInputHandler(*input_handler_);
+
+            // Reapply position check if it exists
+            if (position_check_) {
+                camera_controller_->setPositionCheckCallback(position_check_);
+            }
+        }
+    }
+
+    void InputManager::setPositionCheck(std::function<bool(double, double)> check) {
+        position_check_ = check;
+
+        // Pass to input handler for viewport detection
+        if (input_handler_) {
+            input_handler_->setViewportCheckCallback(check);
+        }
+
+        // Also pass to camera controller
+        if (camera_controller_) {
+            camera_controller_->setPositionCheckCallback(check);
+        }
+    }
+
+    void InputManager::updateInputRouting() {
+        // Simple focus-based routing for keyboard and scroll
+        bool viewport_has_focus = viewport_focus_check_ ? viewport_focus_check_() : false;
+
+        if (viewport_has_focus && !ImGui::GetIO().WantCaptureKeyboard) {
+            input_handler_->setInputConsumer(InputHandler::InputConsumer::Viewport);
+        } else {
+            input_handler_->setInputConsumer(InputHandler::InputConsumer::GUI);
+        }
     }
 
     void InputManager::setupInputHandlers() {
         if (!input_handler_)
             return;
 
-        // Clear existing GUI handlers
-        for (auto id : gui_handler_ids_) {
-            input_handler_->removeHandler(id);
-        }
-        gui_handler_ids_.clear();
+        // Set viewport callbacks
+        input_handler_->setViewportCallbacks(
+            [this](const InputHandler::MouseButtonEvent& event) {
+                if (camera_controller_) {
+                    camera_controller_->handleMouseButton(event);
+                }
+            },
+            [this](const InputHandler::MouseMoveEvent& event) {
+                if (camera_controller_) {
+                    camera_controller_->handleMouseMove(event);
+                }
+            },
+            [this](const InputHandler::MouseScrollEvent& event) {
+                if (camera_controller_) {
+                    camera_controller_->handleMouseScroll(event);
+                }
+            },
+            [this](const InputHandler::KeyEvent& event) {
+                if (camera_controller_) {
+                    camera_controller_->handleKey(event);
+                }
+            });
 
-        // GUI gets highest priority for all mouse input
-        gui_handler_ids_.push_back(
-            input_handler_->addMouseButtonHandler(
-                [this](const InputHandler::MouseButtonEvent&) {
-                    return ImGui::GetIO().WantCaptureMouse;
-                },
-                InputPriority::GUI));
+        // GUI just uses ImGui's input handling, no special callbacks needed
 
-        gui_handler_ids_.push_back(
-            input_handler_->addMouseMoveHandler(
-                [this](const InputHandler::MouseMoveEvent&) {
-                    return ImGui::GetIO().WantCaptureMouse;
-                },
-                InputPriority::GUI));
-
-        gui_handler_ids_.push_back(
-            input_handler_->addMouseScrollHandler(
-                [this](const InputHandler::MouseScrollEvent&) {
-                    return ImGui::GetIO().WantCaptureMouse;
-                },
-                InputPriority::GUI));
-
-        // GUI gets highest priority for keyboard input
-        gui_handler_ids_.push_back(
-            input_handler_->addKeyHandler(
-                [this](const InputHandler::KeyEvent&) {
-                    return ImGui::GetIO().WantCaptureKeyboard;
-                },
-                InputPriority::GUI));
-
-        // File drop handler - high priority
-        gui_handler_ids_.push_back(
-            input_handler_->addFileDropHandler(
-                [this](const InputHandler::FileDropEvent& event) {
-                    return handleFileDrop(event);
-                },
-                InputPriority::System));
+        // File drop handler
+        input_handler_->setFileDropCallback(
+            [this](const InputHandler::FileDropEvent& event) {
+                handleFileDrop(event);
+            });
     }
 
-    bool InputManager::handleFileDrop(const InputHandler::FileDropEvent& event) {
+    void InputManager::handleFileDrop(const InputHandler::FileDropEvent& event) {
         if (!file_drop_callback_)
-            return false;
+            return;
 
         // Process each dropped file
         for (const auto& path_str : event.paths) {
@@ -103,7 +131,7 @@ namespace gs::visualizer {
                                                filepath.filename().string()),
                         .source = "InputManager"}
                         .emit();
-                    return true;
+                    return;
                 }
             }
 
@@ -136,12 +164,11 @@ namespace gs::visualizer {
                                                    filepath.filename().string()),
                             .source = "InputManager"}
                             .emit();
-                        return true;
+                        return;
                     }
                 }
             }
         }
-        return false;
     }
 
 } // namespace gs::visualizer
