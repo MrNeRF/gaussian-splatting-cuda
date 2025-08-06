@@ -57,6 +57,8 @@ namespace gs {
             // Apply only rotation to a vector (no translation)
             glm::vec3 transformVector(const glm::vec3& vector) const;
 
+            glm::mat3 getRotationMat() const;
+
         private:
             // Orthonormalize rotation matrix
             static glm::mat4 OrthonormalizeRotation(const glm::mat4& matrix);

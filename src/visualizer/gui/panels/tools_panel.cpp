@@ -105,10 +105,12 @@ namespace gs::gui::panels {
             const char* icon = GetToolIcon(tool->getName());
 
             // Draw checkbox with tool name
-            std::string label = std::format("{} {}", icon, tool->getName());
-            if (ImGui::Checkbox(label.c_str(), &enabled)) {
-                tool->setEnabled(enabled);
-                changed = true;
+            if (icon) {
+                std::string label = std::format("{} {}", icon, tool->getName());
+                if (ImGui::Checkbox(label.c_str(), &enabled)) {
+                    tool->setEnabled(enabled);
+                    changed = true;
+                }
             }
 
             // Remove this: ImGui::PopStyleColor();
@@ -137,6 +139,10 @@ namespace gs::gui::panels {
             // Using simple text icons for now, but could use FontAwesome or similar
             if (tool_name == "Crop Box") {
                 return "[□]"; // Box icon
+            } else if (tool_name == "World Transform") {
+                return ""; // Box icon
+            } else {
+                std::println(stderr, "Warning: tool_name '{}' has no icon", tool_name);
             }
         }
 
