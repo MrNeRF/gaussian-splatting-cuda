@@ -99,7 +99,18 @@ namespace gs::gui {
         // Start frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
+
+        // Check if mouse is in viewport before ImGui processes the frame
+        ImVec2 mouse_pos = ImGui::GetMousePos();
+        bool mouse_in_viewport = isPositionInViewport(mouse_pos.x, mouse_pos.y);
+
         ImGui::NewFrame();
+
+        // Prevent ImGui from capturing right/middle mouse buttons when in viewport
+        if (mouse_in_viewport && (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+                                  ImGui::IsMouseDown(ImGuiMouseButton_Middle))) {
+            ImGui::GetIO().WantCaptureMouse = false;
+        }
 
         // Create main dockspace
         const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
@@ -204,7 +215,7 @@ namespace gs::gui {
         // Get the viewport region for 3D rendering
         updateViewportRegion();
 
-        // Update viewport focus based on mouse position - ADD THIS LINE
+        // Update viewport focus based on mouse position
         updateViewportFocus();
 
         // Draw viewport focus indicator
@@ -333,6 +344,20 @@ namespace gs::gui {
 
     bool GuiManager::isViewportFocused() const {
         return viewport_has_focus_;
+    }
+
+    bool GuiManager::isPositionInViewport(double x, double y) const {
+        const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+
+        // Convert to window-relative coordinates
+        float rel_x = static_cast<float>(x) - main_viewport->WorkPos.x;
+        float rel_y = static_cast<float>(y) - main_viewport->WorkPos.y;
+
+        // Check if within viewport bounds
+        return (rel_x >= viewport_pos_.x &&
+                rel_x < viewport_pos_.x + viewport_size_.x &&
+                rel_y >= viewport_pos_.y &&
+                rel_y < viewport_pos_.y + viewport_size_.y);
     }
 
     void GuiManager::renderSpeedOverlay() {

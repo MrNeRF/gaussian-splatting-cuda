@@ -83,6 +83,8 @@ namespace gs::visualizer {
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
         });
+
+        // Remove input manager setup from here - it's not created yet!
     }
 
     void VisualizerImpl::setupEventHandlers() {
@@ -184,13 +186,17 @@ namespace gs::visualizer {
             return gui_manager_ && gui_manager_->isViewportFocused();
         });
 
-        // NOW set up input callbacks after input_manager_ is created
+        // Set position check for mouse events
+        input_manager_->setPositionCheck([this](double x, double y) {
+            return gui_manager_ && gui_manager_->isPositionInViewport(x, y);
+        });
+
+        // Set up input callbacks after input_manager_ is created
         input_manager_->setupCallbacks(
             [this]() { return gui_manager_ && gui_manager_->isAnyWindowActive(); },
             [this](const std::filesystem::path& path, bool is_dataset) {
                 // The actual loading is now handled by DataLoadingService via events
                 events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
-
                 return true;
             });
 

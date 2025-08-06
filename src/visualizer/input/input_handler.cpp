@@ -94,21 +94,12 @@ namespace gs {
             instance_->mouse_button_states_[button] = (action == GLFW_PRESS);
         }
 
-        // Route to appropriate consumer
-        const Callbacks* callbacks = nullptr;
-        switch (instance_->current_consumer_) {
-        case InputConsumer::GUI:
-            callbacks = &instance_->gui_callbacks_;
-            break;
-        case InputConsumer::Viewport:
-            callbacks = &instance_->viewport_callbacks_;
-            break;
-        default:
-            return;
+        // Send to both consumers - let them decide what to handle
+        if (instance_->viewport_callbacks_.mouse_button) {
+            instance_->viewport_callbacks_.mouse_button(event);
         }
-
-        if (callbacks && callbacks->mouse_button) {
-            callbacks->mouse_button(event);
+        if (instance_->gui_callbacks_.mouse_button) {
+            instance_->gui_callbacks_.mouse_button(event);
         }
     }
 
@@ -133,21 +124,12 @@ namespace gs {
             .position = new_pos,
             .delta = delta};
 
-        // Route to appropriate consumer
-        const Callbacks* callbacks = nullptr;
-        switch (instance_->current_consumer_) {
-        case InputConsumer::GUI:
-            callbacks = &instance_->gui_callbacks_;
-            break;
-        case InputConsumer::Viewport:
-            callbacks = &instance_->viewport_callbacks_;
-            break;
-        default:
-            return;
+        // Send to both consumers - let them decide what to handle
+        if (instance_->viewport_callbacks_.mouse_move) {
+            instance_->viewport_callbacks_.mouse_move(event);
         }
-
-        if (callbacks && callbacks->mouse_move) {
-            callbacks->mouse_move(event);
+        if (instance_->gui_callbacks_.mouse_move) {
+            instance_->gui_callbacks_.mouse_move(event);
         }
     }
 
@@ -159,7 +141,8 @@ namespace gs {
             .xoffset = xoffset,
             .yoffset = yoffset};
 
-        // Route to appropriate consumer
+        // Send to both consumers based on current consumer state
+        // Scroll should respect focus more strictly than mouse buttons
         const Callbacks* callbacks = nullptr;
         switch (instance_->current_consumer_) {
         case InputConsumer::GUI:
@@ -193,7 +176,7 @@ namespace gs {
             instance_->key_states_[key] = (action == GLFW_PRESS || action == GLFW_REPEAT);
         }
 
-        // Route to appropriate consumer
+        // Route to appropriate consumer based on focus
         const Callbacks* callbacks = nullptr;
         switch (instance_->current_consumer_) {
         case InputConsumer::GUI:
