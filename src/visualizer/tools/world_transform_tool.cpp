@@ -100,7 +100,7 @@ namespace gs::visualizer {
         // Rotation controls
         if (ImGui::TreeNode("Rotation")) {
             ImGui::Text("Ctrl+click for faster steps");
-            ImGui::Text("Rotatate w.r.t world axes (Deg) ");
+            ImGui::Text("Rotate w.r.t world axes (Deg) ");
             const float step = 1.0f;
             const float step_fast = 5.0f;
 
