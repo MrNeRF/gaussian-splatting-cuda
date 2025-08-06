@@ -84,27 +84,35 @@ namespace gs {
         // Use pinned memory for faster GPU transfer
         auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
 
+        auto deleter = [&](void* d) { free_image(static_cast<unsigned char*>(d)); };
+
         torch::Tensor image = torch::from_blob(
-                                  data, {h, w, c}, {w * c, c, 1}, pinned_options)
+                                  data,
+                                  {h, w, c},
+                                  {w * c, c, 1},
+                                  deleter,
+                                  pinned_options)
                                   .permute({2, 0, 1})
                                   .to(torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU), /*non_blocking=*/true) /
                               255.0f;
 
-        free_image(data);
         if (_cache_enabled)
             _image_cache = image;
         return image;
     }
     
     torch::Tensor Camera::load_and_get_attention_weights(int resolution) {
+        if (_weight_cache.size(0) > 0)
+            return _image_cache;
+
         if (_mask_path.empty())
-            return torch::Tensor(); // no mask available
+            return torch::Tensor();
 
         unsigned char* data;
         int w, h, c;
 
-        // Otherwise load synchronously
         auto result = load_image(_mask_path, resolution);
+        
         data = std::get<0>(result);
         w = std::get<1>(result);
         h = std::get<2>(result);
@@ -117,37 +125,40 @@ namespace gs {
         _image_width = w;
         _image_height = h;
 
-        // Use pinned memory for faster GPU transfer
+        // Use pinned memory for faster CPU to GPU transfer
         auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
 
-        torch::Tensor tmp = torch::from_blob(
-                                data,
-                                {h, w, c},
-                                {w * c, c, 1},
-                                pinned_options)
-                                .permute({2, 0, 1});
+        // Create the tensor on the CPU with a custom deleter to prevent memory leaks
+        torch::Tensor tmp_cpu = torch::from_blob(
+            data,
+            {h, w, c},
+            {w * c, c, 1},
+            // The deleter should come before the options
+            [&](void* d) { free_image(static_cast<unsigned char*>(d)); },
+            pinned_options);
 
-        auto channel0 = tmp.select(0, /*dim=*/0);
+        // Transfer the tensor to the GPU and permute in one go
+        torch::Tensor tmp_gpu = tmp_cpu.permute({2, 0, 1}).to(torch::kCUDA, /*non_blocking=*/true);
 
-        auto mask_cpu = channel0.clone().to(torch::kBool);
-        free_image(data);
+        // Perform all subsequent operations directly on the GPU
+        auto channel0_gpu = tmp_gpu.select(0, 0);
+        auto mask_gpu = channel0_gpu.clone().to(torch::kBool);
 
-        torch::Tensor inv = mask_cpu;
-        if (inv.dim() == 2) {
-            inv = inv.unsqueeze(0); // [1,H,W]
+        torch::Tensor inv_gpu = mask_gpu;
+        if (inv_gpu.dim() == 2) {
+            inv_gpu = inv_gpu.unsqueeze(0);
         }
-        // inv: true = invalid
-        // convert to float wo weights: 1 = invalid
-        torch::Tensor invF = inv.to(torch::kFloat32); // [B,H,W]
 
-        // Params
         const float invalidPixelWeight = 1.0f / 20.0f;
 
-        torch::Tensor W = torch::where(inv,
-                            torch::ones_like(invF, torch::kFloat),
-                            torch::full_like(invF, invalidPixelWeight, torch::kFloat));
+        torch::Tensor W_gpu = torch::where(inv_gpu,
+                                           torch::ones_like(inv_gpu, torch::kFloat),
+                                           torch::full_like(inv_gpu, invalidPixelWeight, torch::kFloat));
 
-        return W.to(torch::kCUDA, /*non_blocking=*/true);
+        if (_cache_enabled)
+            _weight_cache = W_gpu;
+
+        return W_gpu;
     }
 
     size_t Camera::get_num_bytes_from_file() const {

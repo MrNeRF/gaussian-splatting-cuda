@@ -110,6 +110,7 @@ namespace gs {
         // Optional image caching in VRAM
         bool _cache_enabled = false;
         torch::Tensor _image_cache = torch::empty({0});
+        torch::Tensor _weight_cache = torch::empty({0});
     };
     inline float focal2fov(float focal, int pixels) {
         return 2.0f * std::atan(pixels / (2.0f * focal));
