@@ -1,38 +1,53 @@
 ARG CUDA_VERSION
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 
 # --- Base packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    git \
-    ca-certificates \
-    gnupg2 \
-    lsb-release \
-    locales \
-    python3 \
-    python3-pip \
-    python3-full \
-    python3-dev \
-    sudo \
-    x11-apps \
-    zenity \
-    openssh-client \
-    wget \
-    unzip \
-    pkg-config \
-    zip \
-    libxinerama-dev \
-    libxcursor-dev \
-    xorg-dev \
-    libglu1-mesa-dev \
-    vim \
-    nano \
-    htop \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        git \
+        ca-certificates \
+        gnupg2 \
+        lsb-release \
+        locales \
+        python3 \
+        python3-pip \
+        python3-full \
+        python3-dev \
+        sudo \
+        x11-apps \
+        zenity \
+        openssh-client \
+        wget \
+        unzip \
+        pkg-config \
+        zip \
+        libxinerama-dev \
+        libxcursor-dev \
+        xorg-dev \
+        libglu1-mesa-dev \
+        vim \
+        nano \
+        htop \
+        ninja-build \
+        software-properties-common && \
+    add-apt-repository ppa:ubuntu-toolchain-r/test && \
+    apt-get update && \
+    apt-get install -y \
+        gcc-14 \
+        g++-14 \
+        gfortran-14 && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 60 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 60 && \
+    update-alternatives --install /usr/bin/gfortran gfortran /usr/bin/gfortran-14 60 && \
+    update-alternatives --set gcc /usr/bin/gcc-14 && \
+    update-alternatives --set g++ /usr/bin/g++-14 && \
+    update-alternatives --set gfortran /usr/bin/gfortran-14 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
@@ -111,6 +126,5 @@ RUN echo '#!/bin/sh' >> ${HOME}/.docker_whale && \
     echo 'printf "          \\\____\\\______/               \n"' >> ${HOME}/.docker_whale && \
     echo 'printf "\n${colorwhite}Welcome to gaussian-splatting-cuda dev container!${colornormal}\n"' >> ${HOME}/.docker_whale && \
     echo "bash \$HOME/.docker_whale" >> ${HOME}/.bashrc
-
-
+    
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

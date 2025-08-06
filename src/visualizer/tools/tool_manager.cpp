@@ -2,6 +2,8 @@
 #include "core/events.hpp"
 #include "tools/crop_box_tool.hpp"
 #include "visualizer_impl.hpp"
+#include "world_transform_tool.hpp"
+
 #include <algorithm>
 #include <print>
 
@@ -19,6 +21,7 @@ namespace gs::visualizer {
     void ToolManager::registerBuiltinTools() {
         // Register all built-in tools
         registry_.registerTool<CropBoxTool>();
+        registry_.registerTool<WorldTransformTool>();
 
         // Future tools would be registered here:
     }
