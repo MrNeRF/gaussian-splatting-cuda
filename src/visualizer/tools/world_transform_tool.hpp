@@ -1,6 +1,6 @@
 #pragma once
 
-#include "geometry//euclidean_transform.hpp"
+#include "geometry/euclidean_transform.hpp"
 #include "rendering/render_coordinate_axes.hpp"
 #include "tools/tool_base.hpp"
 #include <glm/glm.hpp>
