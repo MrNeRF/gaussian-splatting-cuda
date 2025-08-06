@@ -414,7 +414,7 @@ namespace gs {
             for (auto& batch : *val_dataloader) {
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera; // rasterize needs non-const Camera&
-                torch::Tensor gt_image = std::move(camera_with_image.image);
+                torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA);
 
                 // Render with configured mode
                 auto r_output = gs::rasterize(
