@@ -1,6 +1,5 @@
 #pragma once
 
-#include <atomic>
 #include <functional>
 #include <glm/glm.hpp>
 #include <mutex>
@@ -51,6 +50,9 @@ namespace gs {
         using KeyCallback = std::function<void(const KeyEvent&)>;
         using FileDropCallback = std::function<void(const FileDropEvent&)>;
 
+        // Viewport check callback
+        using ViewportCheckCallback = std::function<bool(double x, double y)>;
+
         explicit InputHandler(GLFWwindow* window);
         ~InputHandler();
 
@@ -77,6 +79,11 @@ namespace gs {
             KeyCallback key = nullptr);
 
         void setFileDropCallback(FileDropCallback callback);
+
+        // Set viewport check callback
+        void setViewportCheckCallback(ViewportCheckCallback callback) {
+            viewport_check_callback_ = callback;
+        }
 
         // Input state queries
         bool isKeyPressed(int key) const;
@@ -112,6 +119,7 @@ namespace gs {
         Callbacks gui_callbacks_;
         Callbacks viewport_callbacks_;
         FileDropCallback file_drop_callback_;
+        ViewportCheckCallback viewport_check_callback_;
 
         // Input state
         mutable std::mutex state_mutex_;

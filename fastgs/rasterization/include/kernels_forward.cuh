@@ -40,7 +40,7 @@ namespace fast_gs::rasterization::kernels::forward {
         const float fy,
         const float cx,
         const float cy,
-        const float near_, // near, far are macros in windows
+        const float near_, // near and far are macros in windowns
         const float far_)
     {
         auto primitive_idx = cg::this_grid().thread_rank();

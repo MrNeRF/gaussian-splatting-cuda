@@ -474,7 +474,7 @@ namespace gs {
 
                     auto camera_with_image = batch[0].data;
                     Camera* cam = camera_with_image.camera;
-                    torch::Tensor gt_image = std::move(camera_with_image.image);
+                    torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA);
 
                     auto step_result = train_step(iter, cam, gt_image, render_mode, stop_token);
                     if (!step_result) {

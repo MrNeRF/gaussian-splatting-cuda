@@ -86,6 +86,8 @@ namespace gs::visualizer {
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
         });
+
+        // Remove input manager setup from here - it's not created yet!
     }
 
     void VisualizerImpl::setupEventHandlers() {
@@ -187,16 +189,17 @@ namespace gs::visualizer {
             return gui_manager_ && gui_manager_->isViewportFocused();
         });
 
-        // NOW set up input callbacks after input_manager_ is created
+        // Set position check for mouse events
+        input_manager_->setPositionCheck([this](double x, double y) {
+            return gui_manager_ && gui_manager_->isPositionInViewport(x, y);
+        });
+
+        // Set up input callbacks after input_manager_ is created
         input_manager_->setupCallbacks(
             [this]() { return gui_manager_ && gui_manager_->isAnyWindowActive(); },
             [this](const std::filesystem::path& path, bool is_dataset) {
                 // The actual loading is now handled by DataLoadingService via events
                 events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
-
-                if (gui_manager_) {
-                    gui_manager_->showScriptingConsole(true);
-                }
                 return true;
             });
 
@@ -272,16 +275,6 @@ namespace gs::visualizer {
             viewport_region.height = size.y;
 
             has_viewport_region = true;
-        }
-
-        // Get coord axes and world 2 user for rendering
-        const RenderCoordinateAxes* coord_axes_ptr = nullptr;
-        if (auto coord_axes = getAxes()) {
-            coord_axes_ptr = coord_axes.get();
-        }
-        const geometry::EuclideanTransform* world_to_user = nullptr;
-        if (auto coord_axes = getWorldToUser()) {
-            world_to_user = coord_axes.get();
         }
 
         // Render

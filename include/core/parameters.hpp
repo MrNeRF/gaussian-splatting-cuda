@@ -36,7 +36,7 @@ namespace gs {
             bool enable_save_eval_images = true;              // Save during evaluation images
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
-            std::string strategy = "default";                 // Optimization strategy: mcmc, default.
+            std::string strategy = "mcmc";                    // Optimization strategy: mcmc, default.
             bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
 
             // Bilateral grid parameters
@@ -80,7 +80,7 @@ namespace gs {
         };
 
         // Modern C++23 functions returning expected values
-        std::expected<OptimizationParameters, std::string> read_optim_params_from_json();
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_json(const std::string strategy);
 
         // Save training parameters to JSON
         std::expected<void, std::string> save_training_parameters_to_json(

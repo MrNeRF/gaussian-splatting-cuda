@@ -33,7 +33,7 @@ std::tuple<int, int, int, int, int> fast_gs::rasterization::forward(
     const float fy,
     const float cx,
     const float cy,
-    const float near_,
+    const float near_,  // near and far are macros in windowns
     const float far_)
 {
     const dim3 grid(div_round_up(width, config::tile_width), div_round_up(height, config::tile_height), 1);
@@ -89,7 +89,7 @@ std::tuple<int, int, int, int, int> fast_gs::rasterization::forward(
         fy,
         cx,
         cy,
-        near_, // near, far are macros in windows
+        near_,
         far_
     );
     CHECK_CUDA(config::debug, "preprocess")
