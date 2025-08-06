@@ -703,7 +703,7 @@ namespace gs {
 
                     auto camera_with_image = batch[0].data;
                     Camera* cam = camera_with_image.camera;
-                    torch::Tensor gt_image = std::move(camera_with_image.image);
+                    torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA);
 
                      std::expected<Trainer::StepResult, std::string> step_result;
                     if (!params_.optimization.use_attention_mask || !camera_with_image.attentionMask.defined()) {

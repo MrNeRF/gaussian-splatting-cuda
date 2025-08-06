@@ -91,12 +91,12 @@ namespace gs {
                     return {{cam.get(), _image_cache[index], _attention_weights_cache[index]}, torch::empty({})};
                 else
                     return {{cam.get(), _image_cache[index], torch::Tensor()}, torch::empty({})};
-            } else {
-                // Fallback to loading from disk if not preloaded
-                torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
-                torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resolution);
-                return {{cam.get(), std::move(image), std::move(attention_weights)}, torch::empty({})};
             }
+            
+            // Fallback to loading from disk if not preloaded
+            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
+            torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resolution);
+            return {{cam.get(), std::move(image), std::move(attention_weights)}, torch::empty({})};
         }
 
         torch::optional<size_t> size() const override {

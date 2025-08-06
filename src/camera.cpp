@@ -87,13 +87,13 @@ namespace gs {
         torch::Tensor image = torch::from_blob(
                                   data, {h, w, c}, {w * c, c, 1}, pinned_options)
                                   .permute({2, 0, 1})
-                                  .to(torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA), /*non_blocking=*/true) /
+                                  .to(torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU), /*non_blocking=*/true) /
                               255.0f;
 
         free_image(data);
         if (_cache_enabled)
             _image_cache = image;
-        return image.to(torch::kCUDA, /*non_blocking=*/true);
+        return image;
     }
     
     torch::Tensor Camera::load_and_get_attention_weights(int resolution) {
