@@ -70,9 +70,6 @@ namespace gs::visualizer {
         if (context.has_focus && context.viewport_region) {
             drawFocusIndicator(context);
         }
-        if (settings_.show_coord_axes && context.coord_axes) {
-            drawCoordAxes(context);
-        }
     }
 
     // case world to user is defined - we shift view matrix and crop box
