@@ -37,7 +37,6 @@ namespace gs {
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
             std::string strategy = "mcmc";                    // Optimization strategy: mcmc, default.
-            bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
 
             // Bilateral grid parameters
             bool use_bilateral_grid = false;
@@ -58,9 +57,8 @@ namespace gs {
             size_t pause_refine_after_reset = 0;
             bool revised_opacity = false;
 
-            float steps_scaler = 0.f;    // If < 0, step size scaling is disabled
-            bool selective_adam = false; // Use Selective Adam optimizer
-            bool antialiasing = false;   // Enable antialiasing in rendering
+            float steps_scaler = 0.f;  // If < 0, step size scaling is disabled
+            bool antialiasing = false; // Enable antialiasing in rendering
         };
 
         struct DatasetConfig {
