@@ -55,10 +55,8 @@ namespace gs::visualizer {
 
     private:
         void initializeShaders();
-        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, const Viewport& render_viewport);
-        void drawFocusIndicator(const RenderContext& context);
-        void drawCropBox(const RenderContext& context, const Viewport& render_viewport);
         void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager);
+        void drawFocusIndicator(const RenderContext& context);
         void drawCropBox(const RenderContext& context);
         void drawCoordAxes(const RenderContext& context);
 

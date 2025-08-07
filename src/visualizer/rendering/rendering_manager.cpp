@@ -57,10 +57,10 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
-        drawSceneFrame(context, scene_manager, context.viewport);
+        drawSceneFrame(context, scene_manager);
 
         if (settings_.show_crop_box && context.crop_box) {
-            drawCropBox(context, context.viewport);
+            drawCropBox(context);
         }
         if (settings_.show_coord_axes && context.coord_axes) {
             drawCoordAxes(context);
@@ -162,11 +162,11 @@ namespace gs::visualizer {
             glDisable(GL_BLEND);
     }
 
-    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, const Viewport& render_viewport) {
+    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager) {
         if (!scene_manager->hasScene()) {
             return;
         }
-
+        const Viewport& render_viewport = context.viewport;
         const geometry::BoundingBox* render_crop_box = nullptr;
         if (settings_.use_crop_box && context.crop_box) {
             render_crop_box = const_cast<RenderBoundingBox*>(context.crop_box);
@@ -224,10 +224,16 @@ namespace gs::visualizer {
         }
     }
 
-    void RenderingManager::drawCropBox(const RenderContext& context, const Viewport& render_viewport) {
-        auto& reso = render_viewport.windowSize;
+    void RenderingManager::drawCropBox(const RenderContext& context) {
 
-        if (reso.x <= 0 || reso.y <= 0) {
+        glm::ivec2 render_size = context.viewport.windowSize;
+        if (context.viewport_region) {
+            render_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+        }
+
+        if (render_size.x <= 0 || render_size.y <= 0) {
             return;
         }
 
@@ -241,19 +247,25 @@ namespace gs::visualizer {
             auto fov_rad = glm::radians(settings_.fov);
             auto projection = glm::perspective(
                 static_cast<float>(fov_rad),
-                static_cast<float>(reso.x) / reso.y,
+                static_cast<float>(render_size.x) / render_size.y,
                 0.1f,
                 1000.0f);
 
-            glm::mat4 view = render_viewport.getViewMatrix();
+            glm::mat4 view = context.viewport.getViewMatrix();
             crop_box->render(view, projection);
         }
     }
 
     void RenderingManager::drawCoordAxes(const RenderContext& context) {
-        auto& reso = context.viewport.windowSize;
 
-        if (reso.x <= 0 || reso.y <= 0) {
+        glm::ivec2 render_size = context.viewport.windowSize;
+        if (context.viewport_region) {
+            render_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+        }
+
+        if (render_size.x <= 0 || render_size.y <= 0) {
             return;
         }
 
@@ -264,10 +276,11 @@ namespace gs::visualizer {
         }
 
         if (coord_axes->isInitialized()) {
+
             auto fov_rad = glm::radians(settings_.fov);
             auto projection = glm::perspective(
                 static_cast<float>(fov_rad),
-                static_cast<float>(reso.x) / reso.y,
+                static_cast<float>(render_size.x) / render_size.y,
                 0.1f,
                 1000.0f);
             glm::mat4 view = context.viewport.getViewMatrix();
