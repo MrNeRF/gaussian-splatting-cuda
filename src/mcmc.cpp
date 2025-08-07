@@ -8,7 +8,7 @@
 #include <random>
 
 #ifdef _WIN32
-    #include <c10/cuda/CUDACachingAllocator.h> //required for emptyCache
+#include <c10/cuda/CUDACachingAllocator.h> //required for emptyCache
 #endif
 
 void MCMC::ExponentialLR::step() {
@@ -377,10 +377,10 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
         // Add new Gaussians
         add_new_gs();
 
-        #ifdef _WIN32
-            // Windows doesn't support CUDACachingAllocator expandable_segments
-            c10::cuda::CUDACachingAllocator::emptyCache();
-        #endif
+#ifdef _WIN32
+        // Windows doesn't support CUDACachingAllocator expandable_segments
+        c10::cuda::CUDACachingAllocator::emptyCache();
+#endif
     }
 
     // Inject noise to positions

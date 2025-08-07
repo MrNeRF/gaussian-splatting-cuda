@@ -1,6 +1,5 @@
 #pragma once
 
-#include "core/selective_adam.hpp"
 #include <torch/torch.h>
 
 // Simple ExponentialLR implementation since C++ API is different
