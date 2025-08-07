@@ -108,8 +108,6 @@ namespace gs {
     }
     
     torch::Tensor Camera::load_and_get_attention_weights(int resolution) {
-        if (_weight_cache.size(0) > 0)
-            return _image_cache;
 
         if (_mask_path.empty())
             return torch::Tensor();
@@ -143,6 +141,8 @@ namespace gs {
             [&](void* d) { free_image(static_cast<unsigned char*>(d)); },
             pinned_options);
 
+            
+        at::cuda::CUDAStreamGuard guard(_stream);
         // Transfer the tensor to the GPU and permute in one go
         torch::Tensor tmp_gpu = tmp_cpu.permute({2, 0, 1}).to(torch::kCUDA, /*non_blocking=*/true);
 
@@ -161,8 +161,9 @@ namespace gs {
                                            torch::ones_like(inv_gpu, torch::kFloat),
                                            torch::full_like(inv_gpu, invalidPixelWeight, torch::kFloat));
 
-        if (_cache_enabled)
-            _weight_cache = W_gpu;
+        
+        // Ensure the transfer is complete before returning
+        _stream.synchronize();
 
         return W_gpu;
     }
