@@ -71,7 +71,6 @@ namespace {
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
             ::args::Flag headless(parser, "headless", "Disable visualization during training", {"headless"});
             ::args::Flag antialiasing(parser, "antialiasing", "Enable antialiasing", {'a', "antialiasing"});
-            ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
             ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
@@ -184,13 +183,11 @@ namespace {
                                         min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
                                         // Capture flag states
-                                        preload_to_ram_flag = bool(preload_to_ram),
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         use_attention_mask_flag = bool(use_attention_mask),
                                         enable_eval_flag = bool(enable_eval),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
-                                        selective_adam_flag = bool(selective_adam),
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
                                         skip_intermediate_saving_flag = bool(skip_intermediate_saving)]() {
                 auto& opt = params.optimization;
@@ -225,7 +222,6 @@ namespace {
                 setFlag(enable_eval_flag, opt.enable_eval);
                 setFlag(headless_flag, opt.headless);
                 setFlag(antialiasing_flag, opt.antialiasing);
-                setFlag(selective_adam_flag, opt.selective_adam);
                 setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
                 setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
             };

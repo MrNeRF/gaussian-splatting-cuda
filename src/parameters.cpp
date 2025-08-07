@@ -125,7 +125,6 @@ namespace gs {
                     {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
                     {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
                     {"skip_intermediate", defaults.skip_intermediate_saving, "Skip saving intermediate results and only save final output"},
-                    {"preload_to_ram", defaults.preload_to_ram, "Load the entire dataset into RAM at startup for maximum performance (uses more RAM)"},
                     {"use_bilateral_grid", defaults.use_bilateral_grid, "Enable bilateral grid for appearance modeling"},
                     {"bilateral_grid_X", defaults.bilateral_grid_X, "Bilateral grid X dimension"},
                     {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
@@ -143,8 +142,7 @@ namespace gs {
                     {"revised_opacity", defaults.revised_opacity, "Use revised opacity heuristic"},
                     {"steps_scaler", defaults.steps_scaler, "Scales the training steps and values"},
                     {"antialiasing", defaults.antialiasing, "Enables antialiasing"},
-                    {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
-                    {"selective_adam", defaults.selective_adam, "Selective Adam optimizer flag"}};
+                    {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -339,9 +337,6 @@ namespace gs {
                 if (json.contains("skip_intermediate")) {
                     params.skip_intermediate_saving = json["skip_intermediate"];
                 }
-                if (json.contains("preload_to_ram")) {
-                    params.preload_to_ram = json["preload_to_ram"];
-                }
                 if (json.contains("use_bilateral_grid")) {
                     params.use_bilateral_grid = json["use_bilateral_grid"];
                 }
@@ -399,9 +394,6 @@ namespace gs {
                 if (json.contains("sh_degree_interval")) {
                     params.sh_degree_interval = json["sh_degree_interval"];
                 }
-                if (json.contains("selective_adam")) {
-                    params.selective_adam = json["selective_adam"];
-                }
 
                 return params;
 
@@ -458,7 +450,6 @@ namespace gs {
                 opt_json["enable_save_eval_images"] = params.optimization.enable_save_eval_images;
                 opt_json["strategy"] = params.optimization.strategy;
                 opt_json["skip_intermediate"] = params.optimization.skip_intermediate_saving;
-                opt_json["preload_to_ram"] = params.optimization.preload_to_ram;
                 opt_json["use_bilateral_grid"] = params.optimization.use_bilateral_grid;
                 opt_json["bilateral_grid_X"] = params.optimization.bilateral_grid_X;
                 opt_json["bilateral_grid_Y"] = params.optimization.bilateral_grid_Y;
@@ -477,7 +468,6 @@ namespace gs {
                 opt_json["steps_scaler"] = params.optimization.steps_scaler;
                 opt_json["antialiasing"] = params.optimization.antialiasing;
                 opt_json["sh_degree_interval"] = params.optimization.sh_degree_interval;
-                opt_json["selective_adam"] = params.optimization.selective_adam;
 
                 json["optimization"] = opt_json;
 

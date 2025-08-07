@@ -2,9 +2,12 @@
 #include "core/fast_rasterizer.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
+#include <ATen/cuda/CUDAEvent.h>
+#include <atomic>
 #include <chrono>
 #include <cuda_runtime.h>
 #include <expected>
+#include <memory>
 #include <numeric>
 #include <print>
 
@@ -311,28 +314,6 @@ namespace gs {
             throw std::runtime_error("CUDA is not available – aborting.");
         }
 
-        // Figure out whether dataset images can be cached in VRAM
-        // TODO: this is a crude heuristic that should be improved
-        constexpr size_t mib = 1024 * 1024;                 // 1 MiB
-        constexpr size_t padding = 512 * mib;               // 512 MiB padding for safety
-        constexpr size_t min_bytes_remaining = 12288 * mib; // at least 12 GiB should be left for model, rendering, optimizer, etc.
-        constexpr size_t max_bytes_dataset = 8192 * mib;    // max 8 GiB for dataset images
-        size_t free_mem_bytes = 0, total_mem_bytes = 0;
-        cudaError_t err = cudaMemGetInfo(&free_mem_bytes, &total_mem_bytes);
-        if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to get CUDA memory info: " + std::string(cudaGetErrorString(err)));
-        }
-        const size_t num_bytes_dataset = dataset->get_num_bytes();
-        std::cout << "Free VRAM: " << (free_mem_bytes / mib) << " MiB, Dataset size: " << (num_bytes_dataset / mib) << " MiB" << std::endl;
-        const bool cache_dataset = (free_mem_bytes > min_bytes_remaining + num_bytes_dataset + padding) &&
-                                   (num_bytes_dataset < max_bytes_dataset);
-        if (cache_dataset) {
-            std::cout << "Images will be cached in VRAM" << std::endl;
-            dataset->enable_image_caching();
-        } else {
-            std::cout << "Images will be loaded from disk on demand" << std::endl;
-        }
-
         // Handle dataset split based on evaluation flag
         if (params.optimization.enable_eval) {
             // Create train/val split
@@ -351,18 +332,6 @@ namespace gs {
 
             std::println("Using all {} images for training (no evaluation)",
                          train_dataset_->size().value());
-        }
-
-        if (params_.optimization.preload_to_ram) {
-            std::cout << "Preload to RAM enabled. Caching datasets..." << std::endl;
-            if (train_dataset_) {
-                train_dataset_->preload_data();
-            }
-            if (val_dataset_) {
-                val_dataset_->preload_data();
-            }
-        } else {
-            std::cout << "Loading dataset from disk on-the-fly." << std::endl;
         }
 
         train_dataset_size_ = train_dataset_->size().value();
@@ -395,6 +364,11 @@ namespace gs {
     Trainer::~Trainer() {
         // Ensure training is stopped
         stop_requested_ = true;
+
+        // Wait for callback to finish if busy
+        if (callback_busy_.load()) {
+            callback_stream_.synchronize();
+        }
     }
 
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
@@ -572,7 +546,15 @@ namespace gs {
             loss.backward();
             loss_value += loss.item<float>();
 
+            // Store the loss value immediately
             current_loss_ = loss_value;
+
+            // Update progress synchronously if needed
+            if (progress_) {
+                progress_->update(iter, loss_value,
+                                  static_cast<int>(strategy_->get_model().size()),
+                                  strategy_->is_refining(iter));
+            }
 
             // Emit training progress event (throttled to reduce GUI updates)
             if (iter % 10 == 0 || iter == 1) { // Only update every 10 iterations
@@ -635,12 +617,6 @@ namespace gs {
                 }
             }
 
-            if (progress_) {
-                progress_->update(iter, current_loss_.load(),
-                                  static_cast<int>(strategy_->get_model().size()),
-                                  strategy_->is_refining(iter));
-            }
-
             // Return Continue if we should continue training
             if (iter < params_.optimization.iterations && !stop_requested_.load() && !stop_token.stop_requested()) {
                 return StepResult::Continue;
@@ -679,8 +655,7 @@ namespace gs {
 
         try {
             int iter = 1;
-            const int epochs_needed = (params_.optimization.iterations + train_dataset_size_ - 1) / train_dataset_size_;
-            const int num_workers = 4;
+            const int num_workers = 16;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
             if (progress_) {
@@ -689,59 +664,90 @@ namespace gs {
                                   strategy_->is_refining(iter));
             }
 
-            for (int epoch = 0; epoch < epochs_needed; ++epoch) {
+            // Use infinite dataloader to avoid epoch restarts
+            auto train_dataloader = create_infinite_dataloader_from_dataset(train_dataset_, num_workers);
+            auto loader = train_dataloader->begin();
+
+            // Single loop without epochs
+            while (iter <= params_.optimization.iterations) {
                 if (stop_token.stop_requested() || stop_requested_.load()) {
                     break;
                 }
 
-                auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
-
-                for (auto& batch : *train_dataloader) {
-                    if (stop_token.stop_requested() || stop_requested_.load()) {
-                        break;
-                    }
-
-                    auto camera_with_image = batch[0].data;
-                    Camera* cam = camera_with_image.camera;
-                    torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA);
-
-                     std::expected<Trainer::StepResult, std::string> step_result;
-                    if (!params_.optimization.use_attention_mask || !camera_with_image.attentionMask.defined()) {
-                        step_result = train_step(iter, cam, gt_image, torch::Tensor(), render_mode, false, stop_token);
-                    } else {
-                        torch::Tensor attention_image = std::move(camera_with_image.attentionMask);
-                        bool out_of_mask_penalty = true;
-                        step_result = train_step(iter, cam, gt_image, attention_image, render_mode, out_of_mask_penalty, stop_token);
-                    }
-                    if (!step_result) {
-                        return std::unexpected(step_result.error());
-                    }
-
-                    if (*step_result == StepResult::Stop) {
-                        goto training_complete; // Break out of nested loops
-                    }
-
-                    ++iter;
+                // Wait for previous callback if still running
+                if (callback_busy_.load()) {
+                    callback_stream_.synchronize();
                 }
+
+                auto& batch = *loader;
+                auto camera_with_image = batch[0].data;
+                Camera* cam = camera_with_image.camera;
+                torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA, /*non_blocking=*/true);
+
+
+                std::expected<Trainer::StepResult, std::string> step_result;
+                if (!params_.optimization.use_attention_mask || !camera_with_image.attentionMask.defined()) {
+                    step_result = train_step(iter, cam, gt_image, torch::Tensor(), render_mode, false, stop_token);
+                } else {
+                    torch::Tensor attention_image = std::move(camera_with_image.attentionMask);
+                    bool out_of_mask_penalty = true;
+                    step_result = train_step(iter, cam, gt_image, attention_image, render_mode, out_of_mask_penalty, stop_token);
+                }
+
+                
+                if (!step_result) {
+                    return std::unexpected(step_result.error());
+                }
+
+                if (*step_result == StepResult::Stop) {
+                    break;
+                }
+
+                // Launch callback for async progress update (except first iteration)
+                if (iter > 1 && callback_) {
+                    callback_busy_ = true;
+                    auto err = cudaLaunchHostFunc(
+                        callback_stream_.stream(),
+                        [](void* self) {
+                            auto* trainer = static_cast<Trainer*>(self);
+                            if (trainer->callback_) {
+                                trainer->callback_();
+                            }
+                            trainer->callback_busy_ = false;
+                        },
+                        this);
+                    if (err != cudaSuccess) {
+                        std::cerr << "Warning: Failed to launch callback: " << cudaGetErrorString(err) << std::endl;
+                        callback_busy_ = false;
+                    }
+                }
+
+                ++iter;
+                ++loader;
             }
 
-training_complete:
-            prune_after_training(0.8);
+            // Ensure callback is finished before final save
+            if (callback_busy_.load()) {
+                callback_stream_.synchronize();
+            }
+
+            training_complete:
+                prune_after_training(0.8);
             
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                strategy_->get_model().save_ply(final_path, iter, /*join=*/true);
+                strategy_->get_model().save_ply(final_path, iter - 1, /*join=*/true);
 
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
-                    .iteration = iter,
+                    .iteration = iter - 1,
                     .path = final_path}
                     .emit();
 
                 events::notify::Log{
                     .level = events::notify::Log::Level::Info,
-                    .message = std::format("Training completed. Final model saved at iteration {}", iter),
+                    .message = std::format("Training completed. Final model saved at iteration {}", iter - 1),
                     .source = "Trainer"}
                     .emit();
             }

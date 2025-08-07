@@ -1,5 +1,6 @@
 #include "core/camera.hpp"
 #include "core/image_io.hpp"
+#include <c10/cuda/CUDAGuard.h>
 #include <torch/torch.h>
 
 using torch::indexing::None;
@@ -63,12 +64,13 @@ namespace gs {
     }
 
     torch::Tensor Camera::load_and_get_image(int resolution) {
-        if (_image_cache.size(0) > 0)
-            return _image_cache;
+        // Use pinned memory for faster GPU transfer
+        auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
+
         unsigned char* data;
         int w, h, c;
 
-        // Otherwise load synchronously
+        // Load image synchronously
         auto result = load_image(_image_path, resolution);
         data = std::get<0>(result);
         w = std::get<1>(result);
@@ -81,23 +83,27 @@ namespace gs {
         _image_width = w;
         _image_height = h;
 
-        // Use pinned memory for faster GPU transfer
-        auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
-
-        auto deleter = [&](void* d) { free_image(static_cast<unsigned char*>(d)); };
-
+        // Create tensor from pinned memory and transfer asynchronously
         torch::Tensor image = torch::from_blob(
-                                  data,
-                                  {h, w, c},
-                                  {w * c, c, 1},
-                                  deleter,
-                                  pinned_options)
-                                  .permute({2, 0, 1})
-                                  .to(torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU), /*non_blocking=*/true) /
-                              255.0f;
+            data,
+            {h, w, c},
+            {w * c, c, 1},
+            pinned_options);
 
-        if (_cache_enabled)
-            _image_cache = image;
+        // Use the CUDA stream for async transfer
+        at::cuda::CUDAStreamGuard guard(_stream);
+
+        image = image.to(torch::kCUDA, /*non_blocking=*/true)
+                    .permute({2, 0, 1})
+                    .to(torch::kFloat32) /
+                255.0f;
+
+        // Free the original data
+        free_image(data);
+
+        // Ensure the transfer is complete before returning
+        _stream.synchronize();
+
         return image;
     }
     

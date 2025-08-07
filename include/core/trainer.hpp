@@ -7,6 +7,7 @@
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
 #include "core/training_progress.hpp"
+#include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <expected>
 #include <memory>
@@ -147,6 +148,12 @@ namespace gs {
         // Current training state
         std::atomic<int> current_iteration_{0};
         std::atomic<float> current_loss_{0.0f};
+
+        // Callback system for async operations
+        std::function<void()> callback_;
+        std::atomic<bool> callback_busy_{false};
+        at::cuda::CUDAStream callback_stream_ = at::cuda::getStreamFromPool(false);
+        at::cuda::CUDAEvent callback_launch_event_;
     };
 
 } // namespace gs
