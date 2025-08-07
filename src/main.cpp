@@ -16,7 +16,10 @@ int main(int argc, char* argv[]) {
     // Should this break in the future, we can always revert to the old
     // approach of calling emptyCache() after each densification step.
     //----------------------------------------------------------------------
-    c10::cuda::CUDACachingAllocator::setAllocatorSettings("expandable_segments:True");
+    #ifndef _WIN32
+        // Windows doesn't support CUDACachingAllocator expandable_segments
+        c10::cuda::CUDACachingAllocator::setAllocatorSettings("expandable_segments:True");
+    #endif
 
     auto params_result = gs::args::parse_args_and_params(argc, argv);
     if (!params_result) {
