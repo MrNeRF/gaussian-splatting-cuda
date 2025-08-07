@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.h"
+#include <c10/cuda/CUDAStream.h>
 #include <filesystem>
 #include <future>
 #include <string>
@@ -45,10 +46,6 @@ namespace gs {
         }
         const torch::Tensor& cam_position() const {
             return _cam_position;
-        }
-
-        void enable_image_caching() {
-            _cache_enabled = true;
         }
 
         torch::Tensor K() const;
@@ -102,9 +99,8 @@ namespace gs {
         torch::Tensor _world_view_transform;
         torch::Tensor _cam_position;
 
-        // Optional image caching in VRAM
-        bool _cache_enabled = false;
-        torch::Tensor _image_cache = torch::empty({0});
+        // CUDA stream for async operations
+        at::cuda::CUDAStream _stream = at::cuda::getStreamFromPool(false);
     };
     inline float focal2fov(float focal, int pixels) {
         return 2.0f * std::atan(pixels / (2.0f * focal));
