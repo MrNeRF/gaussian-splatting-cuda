@@ -30,7 +30,7 @@ namespace gs::visualizer {
         // This method could be used for tool-specific overlays if needed
     }
 
-    void WorldTransformTool::renderUI(const gui::UIContext& ui_ctx,[[maybe_unused]] bool* p_open) {
+    void WorldTransformTool::renderUI(const gui::UIContext& ui_ctx, [[maybe_unused]] bool* p_open) {
         if (!isEnabled()) {
             return;
         }

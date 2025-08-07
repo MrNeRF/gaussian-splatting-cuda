@@ -326,21 +326,6 @@ void DefaultStrategy::remove(const torch::Tensor is_prune) {
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
             }
             return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto new_exp_avg = selective_adam_state->exp_avg.index_select(0, sampled_idxs);
-            auto new_exp_avg_sq = selective_adam_state->exp_avg_sq.index_select(0, sampled_idxs);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto new_max_exp_avg_sq = selective_adam_state->max_exp_avg_sq.index_select(0, sampled_idxs);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
-            }
-            return new_state;
         }
         return nullptr;
     };
