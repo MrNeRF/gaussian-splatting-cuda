@@ -7,7 +7,7 @@ namespace gs::loader {
     /**
      * @brief Loader for Blender/NeRF dataset format (transforms.json)
      */
-    class BlenderLoader : public IDataLoader {
+    class BlenderLoader : public IImageDataLoader {
     public:
         BlenderLoader() = default;
         ~BlenderLoader() override = default;
@@ -20,6 +20,7 @@ namespace gs::loader {
         std::string name() const override;
         std::vector<std::string> supportedExtensions() const override;
         int priority() const override;
+        std::vector<std::filesystem::path> getImagesPaths(const std::filesystem::path& path) const override;
     };
 
 } // namespace gs::loader

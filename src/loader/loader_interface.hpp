@@ -53,4 +53,16 @@ namespace gs::loader {
         virtual int priority() const { return 0; }
     };
 
+    /**
+     * @brief Base interface for Image data loaders
+     *
+     */
+    class IImageDataLoader : public IDataLoader {
+        /**
+         * @brief gets a list of the data set images. if dataset no valid - return empty list
+         * @return vector of paths
+         */
+        virtual std::vector<std::filesystem::path> getImagesPaths(const std::filesystem::path& path) const = 0;
+    };
+
 } // namespace gs::loader

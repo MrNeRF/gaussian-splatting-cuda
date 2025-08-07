@@ -200,4 +200,26 @@ namespace gs::loader {
         return 5; // Medium priority
     }
 
+    std::vector<std::filesystem::path> BlenderLoader::getImagesPaths(const std::filesystem::path& path) const {
+        if (!canLoad(path)) {
+            return {};
+        }
+
+        try {
+            auto [camera_infos, scene_center] = read_transforms_cameras_and_images(path);
+
+            std::vector<std::filesystem::path> camera_paths;
+            camera_paths.reserve(camera_infos.size());
+            for (const auto& cam_info : camera_infos) {
+                camera_paths.push_back(cam_info._image_path);
+            }
+
+            return camera_paths;
+        } catch (std::runtime_error& e) {
+            // something unxpected happen thow
+            std::println("getImagesPaths unexpected error: {}", e.what());
+            return {};
+        }
+    }
+
 } // namespace gs::loader
