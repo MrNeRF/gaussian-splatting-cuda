@@ -5,7 +5,8 @@
 
 namespace gs::visualizer {
 
-    WorldTransformTool::WorldTransformTool() : translation_(0.0f), angles_deg_(0.0f) {
+    WorldTransformTool::WorldTransformTool() : translation_(0.0f),
+                                               angles_deg_(0.0f) {
         coordinate_axes_ = std::make_shared<RenderCoordinateAxes>();
         world_to_user = std::make_shared<geometry::EuclideanTransform>();
         setupEventHandlers();
@@ -13,7 +14,7 @@ namespace gs::visualizer {
 
     WorldTransformTool::~WorldTransformTool() = default;
 
-    bool WorldTransformTool::initialize(const ToolContext& ctx) {
+    bool WorldTransformTool::initialize([[maybe_unused]] const ToolContext& ctx) {
         return true;
     }
 
@@ -21,15 +22,15 @@ namespace gs::visualizer {
         // Cleanup handled by destructors
     }
 
-    void WorldTransformTool::update(const ToolContext& ctx) {
+    void WorldTransformTool::update([[maybe_unused]] const ToolContext& ctx) {
     }
 
-    void WorldTransformTool::render(const ToolContext& ctx) {
+    void WorldTransformTool::render([[maybe_unused]] const ToolContext& ctx) {
         // Rendering is handled by the rendering manager based on our state
         // This method could be used for tool-specific overlays if needed
     }
 
-    void WorldTransformTool::renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) {
+    void WorldTransformTool::renderUI(const gui::UIContext& ui_ctx,[[maybe_unused]] bool* p_open) {
         if (!isEnabled()) {
             return;
         }
@@ -57,7 +58,7 @@ namespace gs::visualizer {
         return angle;
     }
 
-    void WorldTransformTool::drawControls(const gs::gui::UIContext& ui_ctx) {
+    void WorldTransformTool::drawControls([[maybe_unused]] const gui::UIContext& ui_ctx) {
         if (!ImGui::CollapsingHeader("World Transform")) {
             return;
         }
