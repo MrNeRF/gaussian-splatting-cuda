@@ -43,11 +43,10 @@ namespace gs {
         glm::vec3 color_;
         float line_width_;
         bool initialized_;
-        
+
         // OpenGL resources
         std::unique_ptr<Shader> shader_;
         GLuint VAO_, VBO_, EBO_;
-
 
         // Cube geometry data
         std::vector<glm::vec3> vertices_;

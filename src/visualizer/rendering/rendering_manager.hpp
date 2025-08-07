@@ -60,7 +60,6 @@ namespace gs::visualizer {
         void drawCropBox(const RenderContext& context);
         void drawCoordAxes(const RenderContext& context);
 
-
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
         std::shared_ptr<Shader> quad_shader_;
