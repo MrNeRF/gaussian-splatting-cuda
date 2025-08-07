@@ -245,10 +245,10 @@ namespace fast_gs::rasterization::kernels::backward {
         const float2* primitive_mean2d,
         const float4* primitive_conic_opacity,
         const float3* primitive_color,
-        const float3* bg_color,
         const float* grad_image,
+        const float* grad_alpha_map,
         const float* image,
-        const float* tile_final_transmittances,
+        const float* alpha_map,
         const uint* tile_max_n_contributions,
         const uint* tile_n_contributions,
         const uint* bucket_tile_index,
@@ -301,7 +301,6 @@ namespace fast_gs::rasterization::kernels::backward {
         }
         
         // helpers
-        const float3 background = bg_color[0];
         const uint n_pixels = width * height;
 
         // gradient accumulation
@@ -334,9 +333,10 @@ namespace fast_gs::rasterization::kernels::backward {
                 const uint2 pixel_coords = {start_pixel_coords.x + local_idx % config::tile_width, start_pixel_coords.y + local_idx / config::tile_width};
                 const uint pixel_idx = width * pixel_coords.y + pixel_coords.x;
                 // final values from forward pass before background blend and the respective gradients
-                float3 color_pixel_w_bg, grad_color_pixel;
+                float3 color_pixel, grad_color_pixel;
+                float alpha_pixel, grad_alpha_pixel;
                 if (pixel_coords.x < width && pixel_coords.y < height) {
-                    color_pixel_w_bg = make_float3(
+                    color_pixel = make_float3(
                         image[pixel_idx],
                         image[n_pixels + pixel_idx],
                         image[2 * n_pixels + pixel_idx]
@@ -346,15 +346,16 @@ namespace fast_gs::rasterization::kernels::backward {
                         grad_image[n_pixels + pixel_idx],
                         grad_image[2 * n_pixels + pixel_idx]
                     );
+                    alpha_pixel = alpha_map[pixel_idx];
+                    grad_alpha_pixel = grad_alpha_map[pixel_idx];
                 }
-                const float final_transmittance = tile_final_transmittances[pixel_idx];
                 collected_color_pixel_after_transmittance[lane_idx] = make_float4(
-                    color_pixel_w_bg - final_transmittance * background - make_float3(color_transmittance),
+                    color_pixel - make_float3(color_transmittance),
                     color_transmittance.w
                 );
                 collected_grad_info_pixel[lane_idx] = make_float4(
                     grad_color_pixel,
-                    final_transmittance * -dot(grad_color_pixel, background)
+                    grad_alpha_pixel * (1.0f - alpha_pixel)
                 );
                 collected_last_contributor[lane_idx] = tile_n_contributions[pixel_idx];
                 __syncwarp();

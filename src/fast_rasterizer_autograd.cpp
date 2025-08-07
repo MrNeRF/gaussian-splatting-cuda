@@ -23,7 +23,6 @@ namespace gs {
             sh_coefficients_rest,
             settings.w2c,
             settings.cam_position,
-            settings.bg_color,
             settings.active_sh_bases,
             settings.width,
             settings.height,
@@ -35,18 +34,20 @@ namespace gs {
             settings.far_plane);
 
         auto image = std::get<0>(outputs);
-        auto per_primitive_buffers = std::get<1>(outputs);
-        auto per_tile_buffers = std::get<2>(outputs);
-        auto per_instance_buffers = std::get<3>(outputs);
-        auto per_bucket_buffers = std::get<4>(outputs);
-        int n_visible_primitives = std::get<5>(outputs);
-        int n_instances = std::get<6>(outputs);
-        int n_buckets = std::get<7>(outputs);
-        int primitive_primitive_indices_selector = std::get<8>(outputs);
-        int instance_primitive_indices_selector = std::get<9>(outputs);
+        auto alpha = std::get<1>(outputs);
+        auto per_primitive_buffers = std::get<2>(outputs);
+        auto per_tile_buffers = std::get<3>(outputs);
+        auto per_instance_buffers = std::get<4>(outputs);
+        auto per_bucket_buffers = std::get<5>(outputs);
+        int n_visible_primitives = std::get<6>(outputs);
+        int n_instances = std::get<7>(outputs);
+        int n_buckets = std::get<8>(outputs);
+        int primitive_primitive_indices_selector = std::get<9>(outputs);
+        int instance_primitive_indices_selector = std::get<10>(outputs);
 
         // Save for backward
         ctx->save_for_backward({image,
+                                alpha,
                                 means,
                                 scales_raw,
                                 rotations_raw,
@@ -64,7 +65,6 @@ namespace gs {
 
         ctx->saved_data["w2c"] = settings.w2c;
         ctx->saved_data["cam_position"] = settings.cam_position;
-        ctx->saved_data["bg_color"] = settings.bg_color;
         ctx->saved_data["active_sh_bases"] = settings.active_sh_bases;
         ctx->saved_data["width"] = settings.width;
         ctx->saved_data["height"] = settings.height;
@@ -80,7 +80,7 @@ namespace gs {
         ctx->saved_data["primitive_primitive_indices_selector"] = primitive_primitive_indices_selector;
         ctx->saved_data["instance_primitive_indices_selector"] = instance_primitive_indices_selector;
 
-        return {image};
+        return {image, alpha};
     }
 
     torch::autograd::tensor_list FastGSRasterize::backward(
@@ -88,23 +88,27 @@ namespace gs {
         torch::autograd::tensor_list grad_outputs) {
 
         auto grad_image = grad_outputs[0];
+        auto grad_alpha = grad_outputs[1];
 
         auto saved = ctx->get_saved_variables();
         const torch::Tensor& image = saved[0];
-        const torch::Tensor& means = saved[1];
-        const torch::Tensor& scales_raw = saved[2];
-        const torch::Tensor& rotations_raw = saved[3];
-        const torch::Tensor& sh_coefficients_rest = saved[4];
-        const torch::Tensor& per_primitive_buffers = saved[5];
-        const torch::Tensor& per_tile_buffers = saved[6];
-        const torch::Tensor& per_instance_buffers = saved[7];
-        const torch::Tensor& per_bucket_buffers = saved[8];
-        torch::Tensor densification_info = saved[9]; // FIXME: this apparently is not the orginal tensor due to libtorch being weird, but its not required with MCMC anyways
+        const torch::Tensor& alpha = saved[1];
+        const torch::Tensor& means = saved[2];
+        const torch::Tensor& scales_raw = saved[3];
+        const torch::Tensor& rotations_raw = saved[4];
+        const torch::Tensor& sh_coefficients_rest = saved[5];
+        const torch::Tensor& per_primitive_buffers = saved[6];
+        const torch::Tensor& per_tile_buffers = saved[7];
+        const torch::Tensor& per_instance_buffers = saved[8];
+        const torch::Tensor& per_bucket_buffers = saved[9];
+        torch::Tensor densification_info = saved[10]; // FIXME: this apparently is not the orginal tensor due to libtorch being weird, but its not required with MCMC anyways
 
         auto outputs = fast_gs::rasterization::backward_wrapper(
             densification_info,
             grad_image,
+            grad_alpha,
             image,
+            alpha,
             means,
             scales_raw,
             rotations_raw,
@@ -115,7 +119,6 @@ namespace gs {
             per_bucket_buffers,
             ctx->saved_data["w2c"].toTensor(),
             ctx->saved_data["cam_position"].toTensor(),
-            ctx->saved_data["bg_color"].toTensor(),
             ctx->saved_data["active_sh_bases"].toInt(),
             ctx->saved_data["width"].toInt(),
             ctx->saved_data["height"].toInt(),
