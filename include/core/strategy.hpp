@@ -1,7 +1,6 @@
 #pragma once
 
 #include "core/istrategy.hpp"
-#include "core/selective_adam.hpp"
 #include <memory>
 #include <torch/torch.h>
 // Add this include for OptimizerParamState
