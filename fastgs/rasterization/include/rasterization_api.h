@@ -8,7 +8,6 @@ namespace fast_gs::rasterization {
     struct FastGSSettings {
         torch::Tensor w2c;
         torch::Tensor cam_position;
-        torch::Tensor bg_color;
         int active_sh_bases;
         int width;
         int height;
@@ -20,7 +19,7 @@ namespace fast_gs::rasterization {
         float far_plane;
     };
 
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, int, int, int, int, int>
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, int, int, int, int, int>
     forward_wrapper(
         const torch::Tensor& means,
         const torch::Tensor& scales_raw,
@@ -30,7 +29,6 @@ namespace fast_gs::rasterization {
         const torch::Tensor& sh_coefficients_rest,
         const torch::Tensor& w2c,
         const torch::Tensor& cam_position,
-        const torch::Tensor& bg_color,
         const int active_sh_bases,
         const int width,
         const int height,
@@ -45,7 +43,9 @@ namespace fast_gs::rasterization {
     backward_wrapper(
         torch::Tensor& densification_info,
         const torch::Tensor& grad_image,
+        const torch::Tensor& grad_alpha,
         const torch::Tensor& image,
+        const torch::Tensor& alpha,
         const torch::Tensor& means,
         const torch::Tensor& scales_raw,
         const torch::Tensor& rotations_raw,
@@ -56,7 +56,6 @@ namespace fast_gs::rasterization {
         const torch::Tensor& per_bucket_buffers,
         const torch::Tensor& w2c,
         const torch::Tensor& cam_position,
-        const torch::Tensor& bg_color,
         const int active_sh_bases,
         const int width,
         const int height,

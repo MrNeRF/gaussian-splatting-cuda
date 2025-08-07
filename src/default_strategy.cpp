@@ -2,6 +2,7 @@
 #include "Ops.h"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/strategy.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
 
 DefaultStrategy::DefaultStrategy(gs::SplatData&& splat_data)
@@ -117,22 +118,6 @@ void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
             }
             return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto zeros_to_add = torch::zeros(new_shape, selective_adam_state->exp_avg.options());
-            auto new_exp_avg = torch::cat({selective_adam_state->exp_avg, zeros_to_add}, 0);
-            auto new_exp_avg_sq = torch::cat({selective_adam_state->exp_avg_sq, zeros_to_add}, 0);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto new_max_exp_avg_sq = torch::cat({selective_adam_state->max_exp_avg_sq, zeros_to_add}, 0);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
-            }
-            return new_state;
         }
         return nullptr;
     };
@@ -216,26 +201,6 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
                 auto rest_max_exp_avg_sq = adam_state->max_exp_avg_sq().index_select(0, rest_idxs);
                 auto new_max_exp_avg_sq = torch::cat({rest_max_exp_avg_sq, zeros_to_add}, 0);
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
-            }
-            return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto rest_exp_avg = selective_adam_state->exp_avg.index_select(0, rest_idxs);
-            auto rest_exp_avg_sq = selective_adam_state->exp_avg_sq.index_select(0, rest_idxs);
-
-            auto zeros_to_add = torch::zeros(zero_shape, selective_adam_state->exp_avg.options());
-            auto new_exp_avg = torch::cat({rest_exp_avg, zeros_to_add}, 0);
-            auto new_exp_avg_sq = torch::cat({rest_exp_avg_sq, zeros_to_add}, 0);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto rest_max_exp_avg_sq = selective_adam_state->max_exp_avg_sq.index_select(0, rest_idxs);
-                auto new_max_exp_avg_sq = torch::cat({rest_max_exp_avg_sq, zeros_to_add}, 0);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
             }
             return new_state;
         }
@@ -326,21 +291,6 @@ void DefaultStrategy::remove(const torch::Tensor is_prune) {
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
             }
             return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto new_exp_avg = selective_adam_state->exp_avg.index_select(0, sampled_idxs);
-            auto new_exp_avg_sq = selective_adam_state->exp_avg_sq.index_select(0, sampled_idxs);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto new_max_exp_avg_sq = selective_adam_state->max_exp_avg_sq.index_select(0, sampled_idxs);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
-            }
-            return new_state;
         }
         return nullptr;
     };
@@ -415,21 +365,6 @@ void DefaultStrategy::reset_opacity() {
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
             }
             return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto new_exp_avg = torch::zeros_like(selective_adam_state->exp_avg);
-            auto new_exp_avg_sq = torch::zeros_like(selective_adam_state->exp_avg_sq);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto new_max_exp_avg_sq = torch::zeros_like(selective_adam_state->max_exp_avg_sq);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
-            }
-            return new_state;
         }
 
         return nullptr;
@@ -439,11 +374,6 @@ void DefaultStrategy::reset_opacity() {
 }
 
 void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
-    // Store visibility mask for selective adam
-    if (_params->selective_adam) {
-        _last_visibility_mask = render_output.visibility;
-    }
-
     // Increment SH degree every 1000 iterations
     torch::NoGradGuard no_grad;
     if (iter % _params->sh_degree_interval == 0) {
@@ -476,16 +406,7 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
 
 void DefaultStrategy::step(int iter) {
     if (iter < _params->iterations) {
-        if (_params->selective_adam && _last_visibility_mask.defined()) {
-            auto* selective_adam = dynamic_cast<gs::SelectiveAdam*>(_optimizer.get());
-            if (selective_adam) {
-                selective_adam->step(_last_visibility_mask);
-            } else {
-                _optimizer->step();
-            }
-        } else {
-            _optimizer->step();
-        }
+        _optimizer->step();
         _optimizer->zero_grad(true);
         _scheduler->step();
     }

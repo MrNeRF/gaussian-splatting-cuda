@@ -103,6 +103,7 @@ namespace gs {
             TORCH_CHECK(false, "RGB must be [C, H, W] or [1, C, H, W], got ", rgb.sizes());
         }
 
+        rgb_processed = torch::clamp(rgb_processed, 0, 1);
         // Convert from [C, H, W] to [H, W, C]
         auto rgb_hwc = rgb_processed.permute({1, 2, 0}).contiguous();
 
