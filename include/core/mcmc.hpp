@@ -1,9 +1,6 @@
 #pragma once
 
-#include "core/fused_adam.hpp"
 #include "core/istrategy.hpp"
-#include "core/selective_adam.hpp"
-#include "core/strategy.hpp"
 #include <memory>
 #include <torch/torch.h>
 
