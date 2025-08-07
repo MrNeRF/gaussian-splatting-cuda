@@ -26,7 +26,6 @@
   "enable_save_eval_images": true,
   "use_bilateral_grid": false,
   "skip_intermediate": false,
-  "preload_to_ram": false,
   "bilateral_grid_X": 16,
   "bilateral_grid_Y": 16,
   "bilateral_grid_W": 8,
@@ -42,6 +41,5 @@
   "pause_refine_after_reset": 0,
   "revised_opacity": false,
   "steps_scaler": 0,
-  "antialiasing": false,
-  "selective_adam": false
+  "antialiasing": false
 }

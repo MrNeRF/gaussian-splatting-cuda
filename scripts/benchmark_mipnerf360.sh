@@ -39,7 +39,6 @@ do
         --test-every 8 \
         --eval \
         --headless \
-	--preload-to-ram \
         --save-eval-images \
         --strategy mcmc
 
