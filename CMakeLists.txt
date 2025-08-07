@@ -157,7 +157,6 @@ set(HOST_SOURCES
         src/rasterizer_autograd.cpp
         src/fast_rasterizer_autograd.cpp
         src/bilateral_grid.cpp
-        src/selective_adam.cpp
         src/fused_adam.cpp
         src/training_setup.cpp
         src/geometry/bounding_box.cpp

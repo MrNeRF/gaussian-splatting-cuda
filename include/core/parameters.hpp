@@ -57,9 +57,8 @@ namespace gs {
             size_t pause_refine_after_reset = 0;
             bool revised_opacity = false;
 
-            float steps_scaler = 0.f;    // If < 0, step size scaling is disabled
-            bool selective_adam = false; // Use Selective Adam optimizer
-            bool antialiasing = false;   // Enable antialiasing in rendering
+            float steps_scaler = 0.f;  // If < 0, step size scaling is disabled
+            bool antialiasing = false; // Enable antialiasing in rendering
         };
 
         struct DatasetConfig {
