@@ -32,7 +32,7 @@ namespace gs::visualizer {
         InputHandler* getInputHandler() { return input_handler_.get(); }
         CameraController* getCameraController() { return camera_controller_.get(); }
 
-        void setTrainingManger(std::shared_ptr<const TrainerManager> training_manger){ trainer_manager_ = training_manger;};
+        void setTrainingManager(std::shared_ptr<const TrainerManager> training_manager){ trainer_manager_ = training_manager;};
 
     private:
         GLFWwindow* window_;
