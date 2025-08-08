@@ -268,7 +268,7 @@ namespace gs {
         if (trainer_) {
             return trainer_->getCamById(camId);
         }
-        std::cerr << " getCamById trainer is not initilized " << std::endl;
+        std::cerr << " getCamById trainer is not initialized " << std::endl;
         return nullptr;
     }
 
