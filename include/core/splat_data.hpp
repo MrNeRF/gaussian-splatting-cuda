@@ -76,6 +76,10 @@ namespace gs {
         // Get attribute names for the PLY format
         std::vector<std::string> get_attribute_names() const;
 
+    public:
+        // Holds the magnitude of the screen space gradient
+        torch::Tensor _densification_info = torch::empty({0});
+
     private:
         int _active_sh_degree = 0;
         int _max_sh_degree = 0;

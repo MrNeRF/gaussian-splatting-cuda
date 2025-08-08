@@ -1,5 +1,6 @@
 #include "core/fast_rasterizer.hpp"
 #include "core/fast_rasterizer_autograd.hpp"
+#include "visualizer/core/command_processor.hpp"
 
 namespace gs {
 
@@ -8,7 +9,9 @@ namespace gs {
 
     RenderOutput fast_rasterize(
         Camera& viewpoint_camera,
-        const SplatData& gaussian_model,
+        SplatData& gaussian_model,
+        const param::TrainingParameters& params,
+        int iter,
         torch::Tensor& bg_color) {
 
         // Get camera parameters
@@ -47,6 +50,8 @@ namespace gs {
         // Create densification_info buffer
         output.means2d = torch::zeros({2, means.size(0)}, means.options());
 
+        const bool use_densifcation_info = params.optimization.strategy == "default" && params.optimization.stop_refine < iter;
+
         auto raster_outputs = FastGSRasterize::apply(
             means,
             raw_scales,
@@ -54,7 +59,7 @@ namespace gs {
             raw_opacities,
             sh0,
             shN,
-            output.means2d,
+            gaussian_model._densification_info,
             settings);
 
         output.image = raster_outputs[0];

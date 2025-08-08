@@ -28,40 +28,6 @@ void DefaultStrategy::pre_backward(gs::RenderOutput& render_output) {
     }
 }
 
-void DefaultStrategy::update_state(gs::RenderOutput& render_output) {
-    // densification_info (means2d) is [2, N] where:
-    // - Row 0: gradient magnitudes for each Gaussian
-    // - Row 1: visibility flags (0.0 or 1.0) for each Gaussian
-    torch::Tensor densification_info = render_output.means2d;
-
-    torch::Tensor grad_magnitudes = densification_info[0];  // [N]
-    torch::Tensor visibility_flags = densification_info[1]; // [N]
-
-    // Initialize state on the first run
-    const size_t num_gaussians = _splat_data.size();
-    const c10::Device device = densification_info.device();
-
-    if (!_grad2d.defined()) {
-        _grad2d = torch::zeros(num_gaussians, torch::kFloat32).to(device);
-    }
-    if (!_count.defined()) {
-        _count = torch::zeros(num_gaussians, torch::kFloat32).to(device);
-    }
-
-    // Find visible Gaussians where gradient magnitude > 0
-    const torch::Tensor valid_mask = grad_magnitudes > 0.0f;       // [N]
-    torch::Tensor gaussian_ids = valid_mask.nonzero().squeeze(-1); // [nnz]
-
-    if (gaussian_ids.numel() > 0) {
-        // Get gradients for visible Gaussians
-        torch::Tensor visible_grads = grad_magnitudes.index_select(0, gaussian_ids); // [nnz]
-
-        // Update the running state
-        _grad2d.index_add_(0, gaussian_ids, visible_grads);
-        _count.index_add_(0, gaussian_ids, torch::ones_like(gaussian_ids, torch::kFloat32));
-    }
-}
-
 bool DefaultStrategy::is_refining(int iter) const {
     return (iter > _params->start_refine &&
             iter % _params->refine_every == 0 &&
@@ -104,14 +70,6 @@ void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
     };
 
     strategy::update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data);
-
-    // Update the extra running state
-    if (_grad2d.defined()) {
-        _grad2d = torch::cat({_grad2d, _grad2d.index_select(0, sampled_idxs)});
-    }
-    if (_count.defined()) {
-        _count = torch::cat({_count, _count.index_select(0, sampled_idxs)});
-    }
 }
 
 void DefaultStrategy::split(const torch::Tensor is_split) {
@@ -192,20 +150,12 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
         v[0] = split_size;
         return v;
     };
-    if (_grad2d.defined()) {
-        _grad2d = torch::cat({_grad2d.index_select(0, rest_idxs),
-                              _grad2d.index_select(0, sampled_idxs).repeat(make_repeats(_grad2d))});
-    }
-    if (_count.defined()) {
-        _count = torch::cat({_count.index_select(0, rest_idxs),
-                             _count.index_select(0, sampled_idxs).repeat(make_repeats(_count))});
-    }
 }
 
 void DefaultStrategy::grow_gs(int iter) {
     torch::NoGradGuard no_grad;
 
-    const torch::Tensor grads = _grad2d / _count.clamp_min(1);
+    const torch::Tensor grads = _splat_data._densification_info[1] / torch::clamp_min(_splat_data._densification_info[0], 1.0f);
     const c10::Device device = grads.device();
 
     const torch::Tensor is_grad_high = grads > _params->grad_threshold;
@@ -264,14 +214,6 @@ void DefaultStrategy::remove(const torch::Tensor is_prune) {
     };
 
     strategy::update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data);
-
-    // Update the extra running state
-    if (_grad2d.defined()) {
-        _grad2d = _grad2d.index_select(0, sampled_idxs);
-    }
-    if (_count.defined()) {
-        _count = _count.index_select(0, sampled_idxs);
-    }
 }
 
 void DefaultStrategy::prune_gs(int iter) {
@@ -344,14 +286,9 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
         return;
     }
 
-    update_state(render_output);
-
     if (is_refining(iter)) {
         grow_gs(iter);
         prune_gs(iter);
-
-        _grad2d.zero_();
-        _count.zero_();
 
         c10::cuda::CUDACachingAllocator::emptyCache();
     }
@@ -359,6 +296,8 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
     if (iter % _params->reset_every == 0 && iter > 0) {
         reset_opacity();
     }
+
+    _splat_data._densification_info = torch::zeros({2, _splat_data.means().size(0)}, _splat_data.means().options());
 }
 
 void DefaultStrategy::step(int iter) {

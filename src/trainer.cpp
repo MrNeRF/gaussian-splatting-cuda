@@ -261,14 +261,11 @@ namespace gs {
             }
 
             // Use the render mode from parameters
-            auto render_fn = [this, &cam, render_mode]() {
-                return fast_rasterize(
-                    *cam,
-                    strategy_->get_model(),
-                    background_);
-            };
-
-            RenderOutput r_output = render_fn();
+            RenderOutput r_output = fast_rasterize(*cam,
+                                                   strategy_->get_model(),
+                                                   params_,
+                                                   iter,
+                                                   background_);
 
             // Apply bilateral grid if enabled
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {

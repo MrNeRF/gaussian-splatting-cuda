@@ -25,7 +25,6 @@ public:
 
 private:
     // Helper functions
-    void update_state(gs::RenderOutput& render_output);
     void duplicate(const torch::Tensor is_duplicated);
     void split(const torch::Tensor is_split);
     void grow_gs(int iter);
@@ -41,8 +40,4 @@ private:
 
     // Default strategy specific parameters
     const std::string _key_for_gradient = "means2d";
-
-    // State variables
-    torch::Tensor _grad2d;
-    torch::Tensor _count;
 };
