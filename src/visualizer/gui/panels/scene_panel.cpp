@@ -37,7 +37,7 @@ namespace gs::gui {
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
         // Load the image list from the dataset
         if (!event.path.empty()) {
-            loadImageList(event.path);
+            loadImageCams(event.path);
         }
     }
 
@@ -75,7 +75,7 @@ namespace gs::gui {
 
         if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
             if (!m_currentDatasetPath.empty()) {
-                loadImageList(m_currentDatasetPath);
+                loadImageCams(m_currentDatasetPath);
             }
         }
 
@@ -111,10 +111,13 @@ namespace gs::gui {
                 const auto& imagePath = m_imagePaths[i];
                 std::string filename = imagePath.filename().string();
 
+                // Create unique ID for ImGui by combining filename with index
+                std::string unique_id = std::format("{}##{}", filename, i);
+
                 // Check if this item is selected
                 bool is_selected = (m_selectedImageIndex == static_cast<int>(i));
 
-                if (ImGui::Selectable(filename.c_str(), is_selected)) {
+                if (ImGui::Selectable(unique_id.c_str(), is_selected)) {
                     m_selectedImageIndex = static_cast<int>(i);
                     onImageSelected(imagePath);
                 }
@@ -124,17 +127,34 @@ namespace gs::gui {
                     onImageDoubleClicked(i);
                 }
 
-                // Context menu for right-click
-                if (ImGui::BeginPopupContextItem()) {
-                    if (ImGui::MenuItem("Copy Path")) {
-                        ImGui::SetClipboardText(imagePath.string().c_str());
+                // Context menu for right-click - use unique ID
+                std::string context_menu_id = std::format("context_menu_{}", i);
+                if (ImGui::BeginPopupContextItem(context_menu_id.c_str())) {
+                    if (ImGui::MenuItem("Go to Cam View")) {
+                        // Get the camera data for this image
+                        auto cam_data_it = m_PathToCamData.find(imagePath);
+                        if (cam_data_it != m_PathToCamData.end()) {
+                            // Emit the new GoToCamView command event with camera data
+                            events::cmd::GoToCamView{
+                                .cam_data = cam_data_it->second
+                            }.emit();
 
-                        // Log the action
-                        events::notify::Log{
-                            .level = events::notify::Log::Level::Info,
-                            .message = std::format("Copied path to clipboard: {}", imagePath.string()),
-                            .source = "ScenePanel"}
-                            .emit();
+                            // Log the action
+                            events::notify::Log{
+                                .level = events::notify::Log::Level::Info,
+                                .message = std::format("Going to camera view for: {} (Camera ID: {})",
+                                                     imagePath.filename().string(),
+                                                     cam_data_it->second._camera_ID),
+                                .source = "ScenePanel"}
+                                .emit();
+                        } else {
+                            // Log warning if camera data not found
+                            events::notify::Log{
+                                .level = events::notify::Log::Level::Warning,
+                                .message = std::format("Camera data not found for: {}", imagePath.filename().string()),
+                                .source = "ScenePanel"}
+                                .emit();
+                        }
                     }
                     ImGui::EndPopup();
                 }
@@ -162,25 +182,32 @@ namespace gs::gui {
         }
     }
 
-    // get a list of all potential data sets images
-    std::vector<std::filesystem::path> getDataSetImages(const std::filesystem::path& path) {
-        // Use the ColmapLoader to get image paths
-        gs::loader::ColmapLoader colmap_loader = gs::loader::ColmapLoader();
-        std::vector<std::filesystem::path> images_path_names = colmap_loader.getImagesPaths(path);
+    void ScenePanel::loadImageCams(const std::filesystem::path& path) {
 
-        gs::loader::BlenderLoader blender_loader = gs::loader::BlenderLoader();
-        std::vector<std::filesystem::path> blender_path_names = blender_loader.getImagesPaths(path);
-        images_path_names.insert(images_path_names.end(), blender_path_names.begin(), blender_path_names.end());
-
-        return std::move(images_path_names);
-    }
-
-    void ScenePanel::loadImageList(const std::filesystem::path& path) {
         m_currentDatasetPath = path;
         m_imagePaths.clear();
+        m_PathToCamData.clear();
         m_selectedImageIndex = -1;
 
-        std::vector<std::filesystem::path> images_path_names = getDataSetImages(path);
+        // Use the ColmapLoader to get image paths
+        gs::loader::ColmapLoader colmap_loader = gs::loader::ColmapLoader();
+
+        std::vector<gs::loader::CameraData> colmap_cams = colmap_loader.getImagesCams(path);
+
+        std::vector<std::filesystem::path> images_path_names;
+        for (const auto& cam_info : colmap_cams) {
+            images_path_names.push_back(cam_info._image_path);
+            m_PathToCamData[cam_info._image_path] = cam_info;
+        }
+
+
+        gs::loader::BlenderLoader blender_loader = gs::loader::BlenderLoader();
+        std::vector<gs::loader::CameraData> blender_cams = colmap_loader.getImagesCams(path);
+        for (const auto& cam_info : blender_cams) {
+            images_path_names.push_back(cam_info._image_path);
+            m_PathToCamData[cam_info._image_path] = cam_info;
+        }
+
         // Store the image paths
         m_imagePaths = std::move(images_path_names);
 

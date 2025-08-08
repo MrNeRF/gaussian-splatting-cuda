@@ -1,12 +1,16 @@
 #pragma once
 
 #include "core/events.hpp"
+
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include <loader/loader.hpp>
+#include "loader/formats/colmap.hpp"
 
 namespace gs {
     namespace gui {
@@ -26,6 +30,9 @@ namespace gs {
 
             // Image list data
             std::vector<std::filesystem::path> m_imagePaths;
+            // cam path to cam
+            std::map<std::filesystem::path, gs::loader::CameraData> m_PathToCamData;
+
             int m_selectedImageIndex = -1;
             std::filesystem::path m_currentDatasetPath;
 
@@ -40,7 +47,7 @@ namespace gs {
             void setupEventHandlers();
             void handleSceneLoaded(const events::state::SceneLoaded& event);
             void handleSceneCleared();
-            void loadImageList(const std::filesystem::path& path);
+            void loadImageCams(const std::filesystem::path& path);
             void onImageSelected(const std::filesystem::path& imagePath);
             void onImageDoubleClicked(size_t imageIndex);
         };

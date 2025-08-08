@@ -195,8 +195,7 @@ namespace gs::loader {
         return 5; // Medium priority
     }
 
-    std::vector<std::filesystem::path> ColmapLoader::getImagesPaths(const std::filesystem::path& path) const
-    {
+    std::vector<CameraData> ColmapLoader::getImagesCams(const std::filesystem::path& path) const {
         if (!canLoad(path)) {
             return {};
         }
@@ -207,16 +206,16 @@ namespace gs::loader {
             return {};
         }
 
-        // Read COLMAP data
-        auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
-            path, "images");
+        try {
+            // Read COLMAP data
+            auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
+                path, "images");
+            return camera_infos;
+        } catch (std::runtime_error& e) {
 
-        std::vector<std::filesystem::path> camera_paths;
-        camera_paths.reserve(camera_infos.size());
-        for (const auto & cam_info:camera_infos) {
-            camera_paths.push_back(cam_info._image_path);
+            // something unxpected happen thow
+            std::println("getImagesCams unexpected error: {}", e.what());
         }
-
-        return camera_paths;
+        return {};
     }
 } // namespace gs::loader

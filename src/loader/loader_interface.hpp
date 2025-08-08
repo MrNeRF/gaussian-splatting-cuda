@@ -2,11 +2,11 @@
 
 #include "loader/loader.hpp"
 #include <expected>
-#include <filesystem>
 #include <string>
 #include <vector>
 
 namespace gs::loader {
+    struct CameraData; // forward declaration
 
     /**
      * @brief Base interface for data loaders
@@ -58,11 +58,12 @@ namespace gs::loader {
      *
      */
     class IImageDataLoader : public IDataLoader {
+    public:
         /**
-         * @brief gets a list of the data set images. if dataset no valid - return empty list
+         * @brief gets a list of the data set cameras if dataset no valid - return empty list
          * @return vector of paths
          */
-        virtual std::vector<std::filesystem::path> getImagesPaths(const std::filesystem::path& path) const = 0;
+        virtual std::vector<CameraData> getImagesCams(const std::filesystem::path& path) const = 0;
     };
 
 } // namespace gs::loader

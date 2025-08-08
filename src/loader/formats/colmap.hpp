@@ -22,8 +22,9 @@ namespace gs::loader {
     };
 
     struct CameraData {
+        typedef uint32_t CamID;
         // Static data loaded from COLMAP
-        uint32_t _camera_ID = 0;
+        CamID _camera_ID = 0;
         torch::Tensor _R = torch::eye(3, torch::kFloat32);
         torch::Tensor _T = torch::zeros({3}, torch::kFloat32);
         float _focal_x = 0.f;

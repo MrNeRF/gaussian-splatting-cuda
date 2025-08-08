@@ -45,6 +45,10 @@ namespace gs::visualizer {
 
         void setupInputHandlers();
         void handleFileDrop(const InputHandler::FileDropEvent& event);
+
+        // Event handlers
+        void setupEventHandlers();
+        void handleGoToCamView(const events::cmd::GoToCamView& event);
     };
 
 } // namespace gs::visualizer
