@@ -2,6 +2,7 @@
 #include "Ops.h"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/debug_utils.hpp"
 #include "core/strategy.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
 
@@ -28,55 +29,36 @@ void DefaultStrategy::pre_backward(gs::RenderOutput& render_output) {
 }
 
 void DefaultStrategy::update_state(gs::RenderOutput& render_output) {
-    torch::Tensor grads;
-    if (_key_for_gradient == "means2d") {
-        grads = _absgrad
-                    ? render_output.means2d.grad().abs().clone()
-                    : render_output.means2d.grad().clone();
+    // densification_info (means2d) is [2, N] where:
+    // - Row 0: gradient magnitudes for each Gaussian
+    // - Row 1: visibility flags (0.0 or 1.0) for each Gaussian
+    torch::Tensor densification_info = render_output.means2d;
 
-        if (!torch::isfinite(grads).all().item<bool>()) {
-            throw std::runtime_error("Gradient contains NaN or Inf values.");
-        }
-    } else {
-        throw std::runtime_error("Only means2d is supported for gradient updates in DefaultStrategy.");
-    }
-
-    const size_t num_cameras = render_output.image.dim() == 4 ? render_output.image.size(0) : 1;
-    const float scale_x = render_output.width / 2.0f * num_cameras;
-    const float scale_y = render_output.height / 2.0f * num_cameras;
-    grads.select(-1, 0).mul_(scale_x);
-    grads.select(-1, 1).mul_(scale_y);
+    torch::Tensor grad_magnitudes = densification_info[0];  // [N]
+    torch::Tensor visibility_flags = densification_info[1];  // [N]
 
     // Initialize state on the first run
     const size_t num_gaussians = _splat_data.size();
-    const c10::Device device = grads.device();
+    const c10::Device device = densification_info.device();
+
     if (!_grad2d.defined()) {
         _grad2d = torch::zeros(num_gaussians, torch::kFloat32).to(device);
     }
     if (!_count.defined()) {
         _count = torch::zeros(num_gaussians, torch::kFloat32).to(device);
     }
-    if (_params->stop_refine_scale2d > 0 && !_radii.defined()) {
-        _radii = torch::zeros(num_gaussians, torch::kFloat32).to(device);
-    }
 
-    // Update the running state
-    torch::Tensor gaussian_ids;
-    torch::Tensor radii;
+    // Find visible Gaussians where gradient magnitude > 0
+    const torch::Tensor valid_mask = grad_magnitudes > 0.0f;  // [N]
+    torch::Tensor gaussian_ids = valid_mask.nonzero().squeeze(-1);  // [nnz]
 
-    // grads is [C, N, 2]
-    // Currently, render_output.radii has a shape of [..., N], assuming C = 1
-    const torch::Tensor valid_mask = render_output.radii > 0;  // [N]
-    gaussian_ids = valid_mask.nonzero().squeeze(-1);           // [nnz]
-    grads = grads.squeeze(0).index_select(0, gaussian_ids);    // [nnz, 2]
-    radii = render_output.radii.index_select(0, gaussian_ids); // [nnz]
+    if (gaussian_ids.numel() > 0) {
+        // Get gradients for visible Gaussians
+        torch::Tensor visible_grads = grad_magnitudes.index_select(0, gaussian_ids);  // [nnz]
 
-    _grad2d.index_add_(0, gaussian_ids, grads.norm(2, -1));
-    _count.index_add_(0, gaussian_ids, torch::ones_like(gaussian_ids, torch::kFloat32));
-    if (_params->stop_refine_scale2d > 0) {
-        const double max_wh = static_cast<double>(std::max(render_output.width, render_output.height));
-        _radii.index_put_({gaussian_ids},
-                          torch::max(_radii.index_select(0, gaussian_ids), radii / max_wh));
+        // Update the running state
+        _grad2d.index_add_(0, gaussian_ids, visible_grads);
+        _count.index_add_(0, gaussian_ids, torch::ones_like(gaussian_ids, torch::kFloat32));
     }
 }
 
@@ -89,7 +71,6 @@ bool DefaultStrategy::is_refining(int iter) const {
 void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
     torch::NoGradGuard no_grad;
 
-    const c10::Device device = is_duplicated.device();
     const torch::Tensor sampled_idxs = is_duplicated.nonzero().squeeze(-1);
 
     const auto param_fn = [&sampled_idxs](const int i, const torch::Tensor param) {
@@ -125,12 +106,8 @@ void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
     strategy::update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data);
 
     // Update the extra running state
-    const int num_new_gaussians = sampled_idxs.size(0);
     if (_grad2d.defined()) {
         _grad2d = torch::cat({_grad2d, _grad2d.index_select(0, sampled_idxs)});
-    }
-    if (_radii.defined()) {
-        _radii = torch::cat({_radii, _radii.index_select(0, sampled_idxs)});
     }
     if (_count.defined()) {
         _count = torch::cat({_count, _count.index_select(0, sampled_idxs)});
@@ -219,17 +196,13 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
         _grad2d = torch::cat({_grad2d.index_select(0, rest_idxs),
                               _grad2d.index_select(0, sampled_idxs).repeat(make_repeats(_grad2d))});
     }
-    if (_radii.defined()) {
-        _radii = torch::cat({_radii.index_select(0, rest_idxs),
-                             _radii.index_select(0, sampled_idxs).repeat(make_repeats(_radii))});
-    }
     if (_count.defined()) {
         _count = torch::cat({_count.index_select(0, rest_idxs),
                              _count.index_select(0, sampled_idxs).repeat(make_repeats(_count))});
     }
 }
 
-std::tuple<int64_t, int64_t> DefaultStrategy::grow_gs(int iter) {
+    void DefaultStrategy::grow_gs(int iter) {
     torch::NoGradGuard no_grad;
 
     const torch::Tensor grads = _grad2d / _count.clamp_min(1);
@@ -243,9 +216,6 @@ std::tuple<int64_t, int64_t> DefaultStrategy::grow_gs(int iter) {
 
     const torch::Tensor is_large = ~is_small;
     torch::Tensor is_split = is_grad_high & is_large;
-    if (iter < _params->stop_refine_scale2d) {
-        is_split |= _radii > _params->grow_scale2d;
-    }
     const int64_t num_split = is_split.sum().item<int64_t>();
 
     // First duplicate
@@ -260,7 +230,6 @@ std::tuple<int64_t, int64_t> DefaultStrategy::grow_gs(int iter) {
         split(is_split);
     }
 
-    return {num_duplicates, num_split};
 }
 
 void DefaultStrategy::remove(const torch::Tensor is_prune) {
@@ -301,25 +270,18 @@ void DefaultStrategy::remove(const torch::Tensor is_prune) {
     if (_grad2d.defined()) {
         _grad2d = _grad2d.index_select(0, sampled_idxs);
     }
-    if (_radii.defined()) {
-        _radii = _radii.index_select(0, sampled_idxs);
-    }
     if (_count.defined()) {
         _count = _count.index_select(0, sampled_idxs);
     }
 }
 
-int64_t DefaultStrategy::prune_gs(int iter) {
+void DefaultStrategy::prune_gs(int iter) {
     torch::NoGradGuard no_grad;
 
     torch::Tensor is_prune = _splat_data.get_opacity() < _params->prune_opacity;
     if (iter > _params->reset_every) {
         const auto max_values = std::get<0>(torch::max(_splat_data.get_scaling(), -1));
         torch::Tensor is_too_big = max_values > _params->prune_scale3d * _splat_data.get_scene_scale();
-
-        if (iter < _params->stop_refine_scale2d) {
-            is_too_big |= _radii > _params->prune_scale2d;
-        }
 
         is_prune |= is_too_big;
     }
@@ -328,7 +290,6 @@ int64_t DefaultStrategy::prune_gs(int iter) {
     if (num_prunes > 0) {
         remove(is_prune);
     }
-    return num_prunes;
 }
 
 void DefaultStrategy::reset_opacity() {
@@ -387,14 +348,11 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
     update_state(render_output);
 
     if (is_refining(iter)) {
-        const auto [num_duplicates, num_splits] = grow_gs(iter);
-        const auto num_prunes = prune_gs(iter);
+        grow_gs(iter);
+        prune_gs(iter);
 
         _grad2d.zero_();
         _count.zero_();
-        if (_params->stop_refine_scale2d > 0) {
-            _radii.zero_();
-        }
 
         c10::cuda::CUDACachingAllocator::emptyCache();
     }

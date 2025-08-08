@@ -1,17 +1,15 @@
 #include "core/fast_rasterizer.hpp"
 #include "core/fast_rasterizer_autograd.hpp"
-#include <torch/torch.h>
 
 namespace gs {
 
     using torch::indexing::None;
     using torch::indexing::Slice;
 
-    // Main render function
     RenderOutput fast_rasterize(
-        Camera& viewpoint_camera,
-        const SplatData& gaussian_model,
-        torch::Tensor& bg_color) {
+     Camera& viewpoint_camera,
+     const SplatData& gaussian_model,
+     torch::Tensor& bg_color) {
 
         // Get camera parameters
         const int width = static_cast<int>(viewpoint_camera.image_width());
@@ -32,8 +30,6 @@ namespace gs {
         constexpr float near_plane = 0.01f;
         constexpr float far_plane = 10000.0f;
 
-        auto densification_info = torch::empty({0});
-
         fast_gs::rasterization::FastGSSettings settings;
         settings.w2c = viewpoint_camera.world_view_transform();
         settings.cam_position = viewpoint_camera.cam_position();
@@ -47,6 +43,10 @@ namespace gs {
         settings.near_plane = near_plane;
         settings.far_plane = far_plane;
 
+        RenderOutput output;
+        // Create densification_info buffer
+        output.means2d = torch::zeros({2, means.size(0)}, means.options());
+
         auto raster_outputs = FastGSRasterize::apply(
             means,
             raw_scales,
@@ -54,18 +54,12 @@ namespace gs {
             raw_opacities,
             sh0,
             shN,
-            densification_info,
+            output.means2d,
             settings);
 
-        RenderOutput output;
-
-        // TODO: background color is always black, let's save some time here
         output.image = raster_outputs[0];
         output.alpha = raster_outputs[1];
-        // output.image = image + (1.0f - alpha) * bg_color.unsqueeze(-1).unsqueeze(-1);
-
-        // TODO: if the background color is blended into the image, the resulting image has alpha=1 everywhere
-        // output.alpha = torch::ones_like(alpha);
+        output.means2d = raster_outputs[2];
 
         return output;
     }
