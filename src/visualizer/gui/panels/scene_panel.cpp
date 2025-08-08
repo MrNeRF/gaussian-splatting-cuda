@@ -9,296 +9,10 @@
 
 namespace gs::gui {
 
-    // TreeView Implementation
-    void TreeView::Render() {
-        if (!m_root)
-            return;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 16.0f);
-        RenderNode(*m_root);
-        ImGui::PopStyleVar();
-    }
-
-    void TreeView::RenderNode(SceneNode& node, int depth) {
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
-
-        if (node.children.empty() && node.childrenLoaded) {
-            flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-        }
-
-        if (m_selectedNode == &node) {
-            flags |= ImGuiTreeNodeFlags_Selected;
-        }
-
-        // Icon based on node type - using simple text instead of unicode
-        const char* icon = nullptr;
-        switch (node.type) {
-        case SceneNodeType::ColmapDataset: icon = "[D]"; break;
-        case SceneNodeType::Directory: icon = "[+]"; break;
-        case SceneNodeType::Images: icon = "[I]"; break;
-        case SceneNodeType::Cameras: icon = "[C]"; break;
-        case SceneNodeType::Points3D: icon = "[P]"; break;
-        case SceneNodeType::TrainedModel: icon = "[M]"; break;
-        case SceneNodeType::PointCloud: icon = "[PC]"; break;
-        case SceneNodeType::File: icon = "[-]"; break;
-        default: icon = "[?]";
-        }
-
-        std::string label = std::format("{} {}", icon, node.name);
-
-        bool isOpen = ImGui::TreeNodeEx(&node, flags, "%s", label.c_str());
-
-        // Handle selection
-        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-            m_selectedNode = &node;
-            if (m_onSelect) {
-                m_onSelect(node);
-            }
-        }
-
-        // Handle double-click - check for double-click on the current item
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-            if (m_onDoubleClick) {
-                m_onDoubleClick(node);
-            }
-        }
-
-        // Context menu
-        if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Copy Path")) {
-                ImGui::SetClipboardText(node.path.c_str());
-            }
-
-            // Only show "Load Dataset" option for dataset nodes that aren't the currently loaded dataset
-            if (node.type == SceneNodeType::ColmapDataset) {
-                // Check if this is already the loaded dataset by querying current state
-                bool is_loaded = false;
-
-                // Query current scene info
-                events::query::SceneInfo response;
-                events::query::SceneInfo::when([&response](const auto& r) {
-                    response = r;
-                });
-                events::query::GetSceneInfo{}.emit();
-
-                // Check if this path matches the currently loaded dataset
-                if (response.type == events::query::SceneInfo::Type::Dataset &&
-                    response.source_path.string() == node.path) {
-                    is_loaded = true;
-                }
-
-                if (!is_loaded && ImGui::MenuItem("Load Dataset")) {
-                    // Emit the load file event directly from here
-                    events::cmd::LoadFile{
-                        .path = std::filesystem::path(node.path),
-                        .is_dataset = true}
-                        .emit();
-                }
-            }
-
-            ImGui::EndPopup();
-        }
-
-        // Tooltip with metadata
-        if (ImGui::IsItemHovered() && !node.metadata.empty()) {
-            ImGui::BeginTooltip();
-            for (const auto& [key, value] : node.metadata) {
-                ImGui::Text("%s: %s", key.c_str(), value.c_str());
-            }
-            ImGui::EndTooltip();
-        }
-
-        if (isOpen && !(flags & ImGuiTreeNodeFlags_NoTreePushOnOpen)) {
-            if (!node.childrenLoaded && m_onExpand) {
-                m_onExpand(node);
-            }
-
-            for (auto& child : node.children) {
-                RenderNode(*child, depth + 1);
-            }
-
-            ImGui::TreePop();
-        }
-    }
-
-    // ColmapDatasetLoader Implementation
-    std::unique_ptr<SceneNode> ColmapDatasetLoader::LoadDataset(const std::filesystem::path& path) {
-        auto root = std::make_unique<SceneNode>();
-        root->name = path.filename().string();
-        root->path = path.string();
-        root->type = SceneNodeType::ColmapDataset;
-
-        root->metadata["dataset_type"] = "COLMAP";
-        root->metadata["path"] = path.string();
-
-        // Check if it's a valid COLMAP dataset
-        bool hasImages = std::filesystem::exists(path / "images") || std::filesystem::exists(path / "Images");
-        bool hasSparse = std::filesystem::exists(path / "sparse");
-
-        if (hasImages || hasSparse) {
-            root->metadata["valid"] = "true";
-        }
-
-        LoadDirectoryChildren(*root);
-
-        return root;
-    }
-
-    void ColmapDatasetLoader::LoadDirectoryChildren(SceneNode& node) {
-        if (node.childrenLoaded)
-            return;
-
-        std::filesystem::path dirPath(node.path);
-        if (!std::filesystem::exists(dirPath) || !std::filesystem::is_directory(dirPath)) {
-            node.childrenLoaded = true;
-            return;
-        }
-
-        try {
-            std::vector<std::filesystem::directory_entry> entries;
-
-            // Use recursive_directory_iterator for image folders to get all images
-            if (node.type == SceneNodeType::Images ||
-                (node.type == SceneNodeType::Directory && (node.name == "images" || node.name == "Images"))) {
-                // For image directories, get all image files recursively
-                for (const auto& entry : std::filesystem::recursive_directory_iterator(dirPath)) {
-                    if (entry.is_regular_file()) {
-                        std::string ext = entry.path().extension().string();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                        if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" ||
-                            ext == ".tiff" || ext == ".tif" || ext == ".webp") {
-                            entries.push_back(entry);
-                        }
-                    }
-                }
-            } else {
-                // For other directories, use regular iterator
-                for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
-                    entries.push_back(entry);
-                }
-            }
-
-            // Sort: directories first, then by name
-            std::ranges::sort(entries, [](const auto& a, const auto& b) {
-                if (a.is_directory() != b.is_directory()) {
-                    return a.is_directory();
-                }
-                return a.path().filename() < b.path().filename();
-            });
-
-            for (const auto& entry : entries) {
-                auto child = std::make_unique<SceneNode>();
-
-                // For nested files in image directories, show relative path
-                if (node.type == SceneNodeType::Images) {
-                    child->name = std::filesystem::relative(entry.path(), dirPath).string();
-                } else {
-                    child->name = entry.path().filename().string();
-                }
-
-                child->path = entry.path().string();
-                child->type = DetermineNodeType(entry.path());
-
-                // Override type for files in image directories
-                if (node.type == SceneNodeType::Images && entry.is_regular_file()) {
-                    child->type = SceneNodeType::Images;
-                }
-
-                if (entry.is_directory()) {
-                    child->childrenLoaded = false;
-                    // Special handling for known directories (case-insensitive)
-                    std::string lowername = child->name;
-                    std::transform(lowername.begin(), lowername.end(), lowername.begin(), ::tolower);
-                    if (lowername == "images") {
-                        child->type = SceneNodeType::Images;
-                    } else if (lowername == "sparse" || lowername == "dense") {
-                        child->type = SceneNodeType::Points3D;
-                    }
-                } else {
-                    child->childrenLoaded = true;
-                    if (entry.is_regular_file()) {
-                        auto size = entry.file_size();
-                        if (size < 1024) {
-                            child->metadata["size"] = std::format("{} B", size);
-                        } else if (size < 1024 * 1024) {
-                            child->metadata["size"] = std::format("{:.1f} KB", size / 1024.0);
-                        } else {
-                            child->metadata["size"] = std::format("{:.1f} MB", size / (1024.0 * 1024.0));
-                        }
-                        child->metadata["extension"] = entry.path().extension().string();
-                    }
-                }
-
-                node.children.push_back(std::move(child));
-            }
-        } catch (const std::filesystem::filesystem_error& e) {
-            // Handle permission errors, etc.
-            std::println("Error loading directory: {}", e.what());
-        }
-
-        node.childrenLoaded = true;
-    }
-
-    SceneNodeType ColmapDatasetLoader::DetermineNodeType(const std::filesystem::path& path) {
-        if (std::filesystem::is_directory(path)) {
-            std::string dirname = path.filename().string();
-            std::transform(dirname.begin(), dirname.end(), dirname.begin(), ::tolower);
-            if (dirname == "images") {
-                return SceneNodeType::Images;
-            } else if (dirname == "sparse" || dirname == "dense") {
-                return SceneNodeType::Points3D;
-            }
-            return SceneNodeType::Directory;
-        }
-
-        std::string ext = path.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        std::string filename = path.filename().string();
-        std::string filename_lower = filename;
-        std::transform(filename_lower.begin(), filename_lower.end(), filename_lower.begin(), ::tolower);
-
-        // Camera files
-        if ((ext == ".txt" || ext == ".bin") &&
-            (filename_lower.find("cameras") != std::string::npos ||
-             filename_lower.find("intrinsics") != std::string::npos)) {
-            return SceneNodeType::Cameras;
-        }
-        // Image files - comprehensive list
-        else if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" ||
-                 ext == ".bmp" || ext == ".tiff" || ext == ".tif" ||
-                 ext == ".webp" || ext == ".gif") {
-            return SceneNodeType::Images;
-        }
-        // Point cloud files
-        else if (ext == ".ply") {
-            return SceneNodeType::PointCloud;
-        }
-        // 3D points files
-        else if ((ext == ".bin" || ext == ".txt") &&
-                 filename_lower.find("points3d") != std::string::npos) {
-            return SceneNodeType::Points3D;
-        }
-
-        return SceneNodeType::File;
-    }
-
     // ScenePanel Implementation
-    ScenePanel::ScenePanel() {
-        m_treeView.SetOnSelect([this](const SceneNode& node) {
-            onNodeSelected(node);
-        });
-
-        m_treeView.SetOnExpand([this](SceneNode& node) {
-            onNodeExpanded(node);
-        });
-
-        m_treeView.SetOnDoubleClick([this](const SceneNode& node) {
-            onNodeDoubleClicked(node);
-        });
-
+    ScenePanel::ScenePanel(std::shared_ptr<const TrainerManager> trainer_manager) : m_trainer_manager(trainer_manager) {
         // Create image preview window
         m_imagePreview = std::make_unique<ImagePreview>();
-
         setupEventHandlers();
     }
 
@@ -318,15 +32,16 @@ namespace gs::gui {
     }
 
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
-        // Add the loaded scene to our tree
+        // Load the image list from the dataset
         if (!event.path.empty()) {
-            loadColmapDataset(event.path);
+            loadImageCams(event.path);
         }
     }
 
     void ScenePanel::handleSceneCleared() {
-        // Clear the tree
-        m_treeView.SetRootNode(nullptr);
+        // Clear the image list
+        m_imagePaths.clear();
+        m_selectedImageIndex = -1;
     }
 
     void ScenePanel::render(bool* p_open) {
@@ -356,18 +71,18 @@ namespace gs::gui {
         }
 
         if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
-            const auto* root = m_treeView.GetRoot();
-            if (root) {
-                auto path = root->path;
-                loadColmapDataset(path);
+            if (!m_currentDatasetPath.empty()) {
+                loadImageCams(m_currentDatasetPath);
             }
         }
 
         ImGui::SameLine();
 
         if (ImGui::Button("Clear", ImVec2(button_width * 0.48f, 0))) {
-            // Clear the tree view
-            m_treeView.SetRootNode(nullptr);
+            // Clear the image list
+            m_imagePaths.clear();
+            m_selectedImageIndex = -1;
+            m_currentDatasetPath.clear();
 
             // Also clear the actual scene data
             events::cmd::ClearScene{}.emit();
@@ -382,9 +97,77 @@ namespace gs::gui {
 
         ImGui::Separator();
 
-        // Tree view
-        ImGui::BeginChild("SceneTree", ImVec2(0, 0), true);
-        m_treeView.Render();
+        // Image list view
+        ImGui::BeginChild("ImageList", ImVec2(0, 0), true);
+
+        if (!m_imagePaths.empty()) {
+            ImGui::Text("Images (%zu):", m_imagePaths.size());
+            ImGui::Separator();
+
+            for (size_t i = 0; i < m_imagePaths.size(); ++i) {
+                const auto& imagePath = m_imagePaths[i];
+                std::string filename = imagePath.filename().string();
+
+                // Create unique ID for ImGui by combining filename with index
+                std::string unique_id = std::format("{}##{}", filename, i);
+
+                // Check if this item is selected
+                bool is_selected = (m_selectedImageIndex == static_cast<int>(i));
+
+                if (ImGui::Selectable(unique_id.c_str(), is_selected)) {
+                    m_selectedImageIndex = static_cast<int>(i);
+                    onImageSelected(imagePath);
+                }
+
+                // Handle double-click to open image preview
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    onImageDoubleClicked(i);
+                }
+
+                // Context menu for right-click - use unique ID
+                std::string context_menu_id = std::format("context_menu_{}", i);
+                if (ImGui::BeginPopupContextItem(context_menu_id.c_str())) {
+                    if (ImGui::MenuItem("Go to Cam View")) {
+                        // Get the camera data for this image
+                        auto cam_data_it = m_PathToCamId.find(imagePath);
+                        if (cam_data_it != m_PathToCamId.end()) {
+                            // Emit the new GoToCamView command event with camera data
+                            events::cmd::GoToCamView{
+                                .cam_id = cam_data_it->second}
+                                .emit();
+
+                            // Log the action
+                            events::notify::Log{
+                                .level = events::notify::Log::Level::Info,
+                                .message = std::format("Going to camera view for: {} (Camera ID: {})",
+                                                       imagePath.filename().string(),
+                                                       cam_data_it->second),
+                                .source = "ScenePanel"}
+                                .emit();
+                        } else {
+                            // Log warning if camera data not found
+                            events::notify::Log{
+                                .level = events::notify::Log::Level::Warning,
+                                .message = std::format("Camera data not found for: {}", imagePath.filename().string()),
+                                .source = "ScenePanel"}
+                                .emit();
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+
+                // Tooltip with full path
+                if (ImGui::IsItemHovered()) {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("Path: %s", imagePath.string().c_str());
+                    ImGui::EndTooltip();
+                }
+            }
+        } else {
+            ImGui::Text("No images loaded.");
+            ImGui::Text("Use 'Open File Browser' to load a dataset.");
+        }
+
         ImGui::EndChild();
 
         ImGui::End();
@@ -396,14 +179,34 @@ namespace gs::gui {
         }
     }
 
-    void ScenePanel::loadColmapDataset(const std::filesystem::path& path) {
-        auto dataset = m_datasetLoader.LoadDataset(path);
-        m_treeView.SetRootNode(std::move(dataset));
+    void ScenePanel::loadImageCams(const std::filesystem::path& path) {
+
+        m_currentDatasetPath = path;
+        m_imagePaths.clear();
+        m_PathToCamId.clear();
+        m_selectedImageIndex = -1;
+
+        if (!m_trainer_manager) {
+            std::cerr << "m_trainer_manager was not set" << std::endl;
+            return;
+        }
+
+        auto cams = m_trainer_manager->getCamList();
+
+        for (const auto& cam : cams) {
+            m_imagePaths.emplace_back(cam->image_path());
+            m_PathToCamId[cam->image_path()] = cam->uid();
+        }
+
+        // Sort paths for consistent ordering
+        std::ranges::sort(m_imagePaths, [](const auto& a, const auto& b) {
+            return a.filename() < b.filename();
+        });
 
         // Log the action
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
-            .message = std::format("Loaded dataset: {}", path.string()),
+            .message = std::format("Loaded {} images from dataset: {}", m_imagePaths.size(), path.string()),
             .source = "ScenePanel"}
             .emit();
     }
@@ -412,115 +215,41 @@ namespace gs::gui {
         m_onDatasetLoad = std::move(callback);
     }
 
-    void ScenePanel::onNodeSelected(const SceneNode& node) {
+    void ScenePanel::onImageSelected(const std::filesystem::path& imagePath) {
         // Log selection
         events::notify::Log{
             .level = events::notify::Log::Level::Debug,
-            .message = std::format("Selected: {} ({})", node.name, node.path),
+            .message = std::format("Selected image: {}", imagePath.filename().string()),
             .source = "ScenePanel"}
             .emit();
 
         // Publish NodeSelectedEvent for other components to react
         events::ui::NodeSelected{
-            .path = node.path,
-            .type = [&node]() -> std::string {
-                switch (node.type) {
-                case SceneNodeType::ColmapDataset: return "ColmapDataset";
-                case SceneNodeType::Directory: return "Directory";
-                case SceneNodeType::Images: return "Images";
-                case SceneNodeType::Cameras: return "Cameras";
-                case SceneNodeType::Points3D: return "Points3D";
-                case SceneNodeType::TrainedModel: return "TrainedModel";
-                case SceneNodeType::PointCloud: return "PointCloud";
-                case SceneNodeType::File: return "File";
-                default: return "Unknown";
-                }
-            }(),
-            .metadata = node.metadata}
+            .path = imagePath.string(),
+            .type = "Images",
+            .metadata = {{"filename", imagePath.filename().string()}, {"path", imagePath.string()}}}
             .emit();
     }
 
-    void ScenePanel::onNodeExpanded(SceneNode& node) {
-        if (node.type == SceneNodeType::Directory ||
-            node.type == SceneNodeType::ColmapDataset ||
-            node.type == SceneNodeType::Images ||
-            node.type == SceneNodeType::Points3D) {
-            m_datasetLoader.LoadDirectoryChildren(node);
-        }
-    }
-
-    void ScenePanel::onNodeDoubleClicked(const SceneNode& node) {
-        // Check if this is an image file
-        if (node.type == SceneNodeType::Images && node.childrenLoaded) {
-
-            // First, collect all image paths from the parent directory
-            m_currentImagePaths.clear();
-
-            // Find the parent node (should be the Images directory)
-            const SceneNode* parent = nullptr;
-            std::function<const SceneNode*(const SceneNode*, const SceneNode*)> findParent =
-                [&findParent](const SceneNode* root, const SceneNode* target) -> const SceneNode* {
-                for (const auto& child : root->children) {
-                    if (child.get() == target) {
-                        return root;
-                    }
-                    if (auto found = findParent(child.get(), target)) {
-                        return found;
-                    }
-                }
-                return nullptr;
-            };
-
-            if (m_treeView.GetRoot()) {
-                parent = findParent(m_treeView.GetRoot(), &node);
-            }
-
-            // Collect all image paths from the parent
-            if (parent) {
-                collectImagePaths(*parent, m_currentImagePaths);
-            } else {
-                // Fallback: just use this single image
-                m_currentImagePaths.push_back(node.path);
-            }
-
-            // Sort paths for consistent ordering
-            std::ranges::sort(m_currentImagePaths);
-
-            // Find the index of the current image
-            std::filesystem::path node_path(node.path);
-            auto it = std::ranges::find(m_currentImagePaths, node_path);
-            size_t index = 0;
-            if (it != m_currentImagePaths.end()) {
-                index = std::distance(m_currentImagePaths.begin(), it);
-            }
-
-            // Open the image preview
-            if (m_imagePreview) {
-                m_imagePreview->open(m_currentImagePaths, index);
-                m_showImagePreview = true;
-            }
-
-            // Log the action
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = std::format("Opening image preview: {}", node.name),
-                .source = "ScenePanel"}
-                .emit();
-        } else {
-            std::println("[ScenePanel] Node is not an image file or is a directory");
-        }
-    }
-
-    void ScenePanel::collectImagePaths(const SceneNode& node, std::vector<std::filesystem::path>& paths) const {
-        // Check if this node is an image file
-        if (node.type == SceneNodeType::Images && node.childrenLoaded) {
-            paths.push_back(node.path);
+    void ScenePanel::onImageDoubleClicked(size_t imageIndex) {
+        if (imageIndex >= m_imagePaths.size()) {
+            return;
         }
 
-        // Recursively collect from children
-        for (const auto& child : node.children) {
-            collectImagePaths(*child, paths);
+        const auto& imagePath = m_imagePaths[imageIndex];
+
+        // Open the image preview with all images and current index
+        if (m_imagePreview) {
+            m_imagePreview->open(m_imagePaths, imageIndex);
+            m_showImagePreview = true;
         }
+
+        // Log the action
+        events::notify::Log{
+            .level = events::notify::Log::Level::Info,
+            .message = std::format("Opening image preview: {}", imagePath.filename().string()),
+            .source = "ScenePanel"}
+            .emit();
     }
 
 } // namespace gs::gui
