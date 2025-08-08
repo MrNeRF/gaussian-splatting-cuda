@@ -359,8 +359,6 @@ void MCMC::inject_noise() {
         current_lr);
 }
 
-void MCMC::pre_backward(gs::RenderOutput& render_output) {}
-
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     // Increment SH degree every 1000 iterations
     torch::NoGradGuard no_grad;

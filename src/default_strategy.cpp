@@ -22,12 +22,6 @@ void DefaultStrategy::initialize(const gs::param::OptimizationParameters& optimP
     _scheduler = strategy::create_scheduler(*_params, _optimizer.get(), 0);
 }
 
-void DefaultStrategy::pre_backward(gs::RenderOutput& render_output) {
-    if (_key_for_gradient == "means2d") {
-        render_output.means2d.retain_grad();
-    }
-}
-
 bool DefaultStrategy::is_refining(int iter) const {
     return (iter > _params->start_refine &&
             iter % _params->refine_every == 0 &&
@@ -143,13 +137,6 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
     };
 
     strategy::update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data);
-
-    // Update the extra running state
-    const auto make_repeats = [&split_size](const at::Tensor& t) {
-        std::vector<int64_t> v(t.dim(), 1);
-        v[0] = split_size;
-        return v;
-    };
 }
 
 void DefaultStrategy::grow_gs(int iter) {
@@ -169,16 +156,16 @@ void DefaultStrategy::grow_gs(int iter) {
     const int64_t num_split = is_split.sum().item<int64_t>();
 
     // First duplicate
-    if (num_duplicates > 0) {
-        duplicate(is_duplicated);
-    }
+    //if (num_duplicates > 0) {
+    //    duplicate(is_duplicated);
+    //}
 
     // New Gaussians added by duplication will not be split
     is_split = torch::cat({is_split,
                            torch::zeros(num_duplicates, c10::TensorOptions().dtype(torch::kBool).device(device))});
-    if (num_split > 0) {
-        split(is_split);
-    }
+    //if (num_split > 0) {
+    //    split(is_split);
+    //}
 }
 
 void DefaultStrategy::remove(const torch::Tensor is_prune) {
@@ -287,8 +274,8 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
     }
 
     if (is_refining(iter)) {
-        grow_gs(iter);
-        prune_gs(iter);
+        //grow_gs(iter);
+        //prune_gs(iter);
 
         c10::cuda::CUDACachingAllocator::emptyCache();
     }

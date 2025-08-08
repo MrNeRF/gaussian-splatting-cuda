@@ -58,7 +58,8 @@ namespace gs {
         ctx->mark_non_differentiable({per_primitive_buffers,
                                       per_tile_buffers,
                                       per_instance_buffers,
-                                      per_bucket_buffers});
+                                      per_bucket_buffers,
+            densification_info});
         ctx->save_for_backward({image,
                                 alpha,
                                 means,
@@ -87,7 +88,7 @@ namespace gs {
         ctx->saved_data["primitive_primitive_indices_selector"] = primitive_primitive_indices_selector;
         ctx->saved_data["instance_primitive_indices_selector"] = instance_primitive_indices_selector;
 
-        return {image, alpha, densification_info};
+        return {image, alpha};
     }
 
     torch::autograd::tensor_list FastGSRasterize::backward(
@@ -123,7 +124,7 @@ namespace gs {
             torch::TensorOptions().dtype(dtype).device(c10::Device(device_type, device_index)));
 
         auto outputs = fast_gs::rasterization::backward_wrapper(
-            densification_info, // This will modify the ORIGINAL tensor data
+            densification_info,
             grad_image,
             grad_alpha,
             image,
