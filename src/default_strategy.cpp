@@ -156,16 +156,16 @@ void DefaultStrategy::grow_gs(int iter) {
     const int64_t num_split = is_split.sum().item<int64_t>();
 
     // First duplicate
-    //if (num_duplicates > 0) {
-    //    duplicate(is_duplicated);
-    //}
+    if (num_duplicates > 0) {
+        duplicate(is_duplicated);
+    }
 
     // New Gaussians added by duplication will not be split
     is_split = torch::cat({is_split,
                            torch::zeros(num_duplicates, c10::TensorOptions().dtype(torch::kBool).device(device))});
-    //if (num_split > 0) {
-    //    split(is_split);
-    //}
+    if (num_split > -1) {
+        split(is_split);
+    }
 }
 
 void DefaultStrategy::remove(const torch::Tensor is_prune) {
@@ -274,8 +274,8 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
     }
 
     if (is_refining(iter)) {
-        //grow_gs(iter);
-        //prune_gs(iter);
+        grow_gs(iter);
+        prune_gs(iter);
 
         c10::cuda::CUDACachingAllocator::emptyCache();
     }
