@@ -199,5 +199,4 @@ namespace gs::loader {
     int BlenderLoader::priority() const {
         return 5; // Medium priority
     }
-
 } // namespace gs::loader

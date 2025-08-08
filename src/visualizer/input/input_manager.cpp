@@ -7,6 +7,94 @@ namespace gs::visualizer {
     InputManager::InputManager(GLFWwindow* window, Viewport& viewport)
         : window_(window),
           viewport_(viewport) {
+
+        setupEventHandlers();
+    }
+
+    void InputManager::setupEventHandlers() {
+        // Subscribe to GoToCamView events
+        events::cmd::GoToCamView::when([this](const auto& event) {
+            handleGoToCamView(event);
+        });
+    }
+
+    void InputManager::handleGoToCamView(const events::cmd::GoToCamView& event) {
+
+        if (!trainer_manager_) {
+            std::cerr << "handleGoToCamView: trainer_manager_ was not initialized" << std::endl;
+            return;
+        }
+        const auto cam_data = trainer_manager_->getCamById(event.cam_id);
+
+        if (!cam_data) {
+            std::cerr << "cam id " << event.cam_id << " was not found" << std::endl;
+            return;
+        }
+        // Convert torch tensors to glm matrices/vectors
+        // cam_data contains WorldToCam transform, but viewport uses CamToWorld
+        glm::mat3 world_to_cam_R;
+        glm::vec3 world_to_cam_T;
+
+        // Extract rotation matrix from torch tensor (WorldToCam)
+        auto R_accessor = cam_data->R().accessor<float, 2>();
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                world_to_cam_R[j][i] = R_accessor[i][j]; // Note: glm is column-major
+            }
+        }
+
+        // Extract translation vector from torch tensor (WorldToCam)
+        auto T_accessor = cam_data->T().accessor<float, 1>();
+        world_to_cam_T = glm::vec3(T_accessor[0], T_accessor[1], T_accessor[2]);
+
+        // Convert from WorldToCam to CamToWorld convention
+        // If [R|T] is WorldToCam, then CamToWorld is [R^T | -R^T * T]
+        glm::mat3 cam_to_world_R = glm::transpose(world_to_cam_R);   // R^T
+        glm::vec3 cam_to_world_T = -cam_to_world_R * world_to_cam_T; // -R^T * T
+
+        // Set the camera transform (CamToWorld)
+        viewport_.camera.R = cam_to_world_R;
+        viewport_.camera.t = cam_to_world_T;
+
+        float focal_x = cam_data->focal_x();
+        float width = cam_data->image_width();
+
+        // Calculate and set FOV based on focal length and image dimensions
+        if (focal_x > 0.0f && width > 0) {
+            // Calculate horizontal FOV from focal length
+            float fov_horizontal_rad = 2.0f * std::atan(width / (2.0f * focal_x));
+            float fov_horizontal_deg = glm::degrees(fov_horizontal_rad);
+
+            // Emit render settings change event with new FOV
+            events::ui::RenderSettingsChanged{
+                .fov = fov_horizontal_deg,
+                .scaling_modifier = std::nullopt,
+                .antialiasing = std::nullopt}
+                .emit();
+
+            // Log FOV change
+            events::notify::Log{
+                .level = events::notify::Log::Level::Debug,
+                .message = std::format("FOV set to {:.2f} degrees (focal_x: {:.2f}, width: {})",
+                                       fov_horizontal_deg, focal_x, width),
+                .source = "CameraController"}
+                .emit();
+        }
+
+        // Force publish the camera change immediately
+        events::ui::CameraMove{
+            .rotation = viewport_.getRotationMatrix(),
+            .translation = viewport_.getTranslation()}
+            .emit();
+
+        // Log the action
+        events::notify::Log{
+            .level = events::notify::Log::Level::Info,
+            .message = std::format("Camera moved to view of image: {} (Camera ID: {})",
+                                   cam_data->image_name(),
+                                   cam_data->uid()),
+            .source = "CameraController"}
+            .emit();
     }
 
     InputManager::~InputManager() {
