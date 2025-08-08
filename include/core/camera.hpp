@@ -87,7 +87,7 @@ namespace gs {
         float _center_x = 0.f;
         float _center_y = 0.f;
 		
-		// redundacy with _world_view_transform, but save calculation and passing from GPU 2 CPU
+		// redundancy with _world_view_transform, but save calculation and passing from GPU 2 CPU
         torch::Tensor _R;
         torch::Tensor _T;
 
