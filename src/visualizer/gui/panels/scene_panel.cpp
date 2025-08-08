@@ -202,7 +202,7 @@ namespace gs::gui {
 
 
         gs::loader::BlenderLoader blender_loader = gs::loader::BlenderLoader();
-        std::vector<gs::loader::CameraData> blender_cams = colmap_loader.getImagesCams(path);
+        std::vector<gs::loader::CameraData> blender_cams = blender_loader.getImagesCams(path);
         for (const auto& cam_info : blender_cams) {
             images_path_names.push_back(cam_info._image_path);
             m_PathToCamData[cam_info._image_path] = cam_info;
