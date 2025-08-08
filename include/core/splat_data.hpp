@@ -65,7 +65,6 @@ namespace gs {
         inline const torch::Tensor& sh0() const { return _sh0; }
         inline torch::Tensor& shN() { return _shN; }
         inline const torch::Tensor& shN() const { return _shN; }
-        inline torch::Tensor& max_radii2D() { return _max_radii2D; }
 
         // Utility methods
         void increment_sh_degree();
@@ -91,7 +90,6 @@ namespace gs {
         torch::Tensor _scaling;
         torch::Tensor _rotation;
         torch::Tensor _opacity;
-        torch::Tensor _max_radii2D;
 
         // Thread management for async saves
         mutable std::vector<std::thread> _save_threads;

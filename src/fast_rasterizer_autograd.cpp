@@ -48,6 +48,7 @@ namespace gs {
 
         // Store pointer to the original densification_info tensor
         // This allows us to modify it directly in backward pass
+        // FIXME: Does anybody know how to avoid this?
         ctx->saved_data["densification_info_ptr"] = reinterpret_cast<int64_t>(densification_info.data_ptr());
         ctx->saved_data["densification_info_numel"] = densification_info.numel();
         ctx->saved_data["densification_info_dtype"] = static_cast<int>(densification_info.scalar_type());
@@ -59,7 +60,7 @@ namespace gs {
                                       per_tile_buffers,
                                       per_instance_buffers,
                                       per_bucket_buffers,
-            densification_info});
+                                      densification_info});
         ctx->save_for_backward({image,
                                 alpha,
                                 means,
@@ -168,7 +169,7 @@ namespace gs {
             grad_opacities_raw,
             grad_sh_coefficients_0,
             grad_sh_coefficients_rest,
-            torch::Tensor(), // densification_info gradient
+            torch::Tensor(), // densification_info
             torch::Tensor(), // settings
         };
     }

@@ -36,7 +36,4 @@ private:
     std::unique_ptr<ExponentialLR> _scheduler;
     gs::SplatData _splat_data;
     std::unique_ptr<const gs::param::OptimizationParameters> _params;
-
-    // Default strategy specific parameters
-    const std::string _key_for_gradient = "means2d";
 };
