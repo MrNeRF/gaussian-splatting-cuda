@@ -40,14 +40,18 @@ namespace gs {
         glGenTextures(1, &texture_id_);
         glBindTexture(GL_TEXTURE_2D, texture_id_);
 
-        // Allocate texture storage (RGBA for better alignment)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
+        // Set texture parameters BEFORE allocating storage
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        // Allocate texture storage (RGBA for better alignment)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+        // CRITICAL: Unbind texture before registering with CUDA
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         // Check OpenGL errors
         GLenum gl_err = glGetError();
@@ -56,6 +60,9 @@ namespace gs {
             throw std::runtime_error("OpenGL error during texture creation: " +
                                      std::to_string(gl_err));
         }
+
+        // Clear any previous CUDA errors
+        cudaGetLastError();
 
         // Register texture with CUDA
         cudaError_t err = cudaGraphicsGLRegisterImage(
