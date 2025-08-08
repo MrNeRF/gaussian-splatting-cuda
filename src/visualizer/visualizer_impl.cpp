@@ -183,7 +183,7 @@ namespace gs::visualizer {
         // Create input manager
         input_manager_ = std::make_unique<InputManager>(window_manager_->getWindow(), viewport_);
         input_manager_->initialize();
-        input_manager_->setTrainingManger(trainer_manager_);
+        input_manager_->setTrainingManager(trainer_manager_);
 
         // Set viewport focus check
         input_manager_->setViewportFocusCheck([this]() {
