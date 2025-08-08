@@ -8,7 +8,7 @@
 #include <functional>
 #include <tuple>
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, int, int, int, int, int>
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, int, int, int, int, int>
 fast_gs::rasterization::forward_wrapper(
     const torch::Tensor& means,
     const torch::Tensor& scales_raw,
@@ -42,6 +42,7 @@ fast_gs::rasterization::forward_wrapper(
     const torch::TensorOptions byte_options = torch::TensorOptions().dtype(torch::kByte).device(torch::kCUDA);
     torch::Tensor image = torch::empty({3, height, width}, float_options);
     torch::Tensor alpha = torch::empty({1, height, width}, float_options);
+    torch::Tensor depth = torch::empty({1, height, width}, float_options);
     torch::Tensor per_primitive_buffers = torch::empty({0}, byte_options);
     torch::Tensor per_tile_buffers = torch::empty({0}, byte_options);
     torch::Tensor per_instance_buffers = torch::empty({0}, byte_options);
@@ -66,6 +67,7 @@ fast_gs::rasterization::forward_wrapper(
         reinterpret_cast<float3*>(cam_position.contiguous().data_ptr<float>()),
         image.data_ptr<float>(),
         alpha.data_ptr<float>(),
+        depth.data_ptr<float>(),
         n_primitives,
         active_sh_bases,
         total_bases_sh_rest,
@@ -80,7 +82,7 @@ fast_gs::rasterization::forward_wrapper(
     );
     
     return {
-        image, alpha,
+        image, alpha, depth,
         per_primitive_buffers, per_tile_buffers, per_instance_buffers, per_bucket_buffers,
         n_visible_primitives, n_instances, n_buckets,
         primitive_primitive_indices_selector, instance_primitive_indices_selector
@@ -92,8 +94,10 @@ fast_gs::rasterization::backward_wrapper(
     torch::Tensor& densification_info,
     const torch::Tensor& grad_image,
     const torch::Tensor& grad_alpha,
+    const torch::Tensor& grad_depth,
     const torch::Tensor& image,
     const torch::Tensor& alpha,
+    const torch::Tensor& depth,
     const torch::Tensor& means,
     const torch::Tensor& scales_raw,
     const torch::Tensor& rotations_raw,
@@ -136,8 +140,10 @@ fast_gs::rasterization::backward_wrapper(
     backward(
         grad_image.data_ptr<float>(),
         grad_alpha.data_ptr<float>(),
+        grad_depth.data_ptr<float>(),
         image.data_ptr<float>(),
         alpha.data_ptr<float>(),
+        depth.data_ptr<float>(),
         reinterpret_cast<float3*>(means.data_ptr<float>()),
         reinterpret_cast<float3*>(scales_raw.data_ptr<float>()),
         reinterpret_cast<float4*>(rotations_raw.data_ptr<float>()),

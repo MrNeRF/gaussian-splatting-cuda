@@ -19,7 +19,7 @@ namespace fast_gs::rasterization {
         float far_plane;
     };
 
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, int, int, int, int, int>
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, int, int, int, int, int>
     forward_wrapper(
         const torch::Tensor& means,
         const torch::Tensor& scales_raw,
@@ -44,8 +44,10 @@ namespace fast_gs::rasterization {
         torch::Tensor& densification_info,
         const torch::Tensor& grad_image,
         const torch::Tensor& grad_alpha,
+        const torch::Tensor& grad_depth,
         const torch::Tensor& image,
         const torch::Tensor& alpha,
+        const torch::Tensor& depth,
         const torch::Tensor& means,
         const torch::Tensor& scales_raw,
         const torch::Tensor& rotations_raw,

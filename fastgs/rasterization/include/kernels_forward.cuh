@@ -27,6 +27,7 @@ namespace fast_gs::rasterization::kernels::forward {
         float2* primitive_mean2d,
         float4* primitive_conic_opacity,
         float3* primitive_color,
+        float* primitive_depth,
         uint* n_visible_primitives,
         uint* n_instances,
         const uint n_primitives,
@@ -194,6 +195,7 @@ namespace fast_gs::rasterization::kernels::forward {
             sh_coefficients_0, sh_coefficients_rest,
             mean3d, cam_position[0],
             primitive_idx, active_sh_bases, total_bases_sh_rest);
+        primitive_depth[primitive_idx] = depth;
 
         const uint offset = atomicAdd(n_visible_primitives, 1);
         const uint depth_key = __float_as_uint(depth);
@@ -355,12 +357,15 @@ namespace fast_gs::rasterization::kernels::forward {
         const float2* primitive_mean2d,
         const float4* primitive_conic_opacity,
         const float3* primitive_color,
+        const float* primitive_depth,
         float* image,
         float* alpha_map,
+        float* depth_map,
         uint* tile_max_n_contributions,
         uint* tile_n_contributions,
         uint* bucket_tile_index,
         float4* bucket_color_transmittance,
+        float* bucket_depth,
         const uint width,
         const uint height,
         const uint grid_width)
@@ -387,8 +392,10 @@ namespace fast_gs::rasterization::kernels::forward {
         __shared__ float2 collected_mean2d[config::block_size_blend];
         __shared__ float4 collected_conic_opacity[config::block_size_blend];
         __shared__ float3 collected_color[config::block_size_blend];
+        __shared__ float collected_depth[config::block_size_blend];
         // initialize local storage
         float3 color_pixel = make_float3(0.0f);
+        float depth_pixel = 0.0f;
         float transmittance = 1.0f;
         uint n_possible_contributions = 0;
         uint n_contributions = 0;
@@ -402,6 +409,7 @@ namespace fast_gs::rasterization::kernels::forward {
                 collected_conic_opacity[thread_rank] = primitive_conic_opacity[primitive_idx];
                 const float3 color = fmaxf(primitive_color[primitive_idx], 0.0f);
                 collected_color[thread_rank] = color;
+                collected_depth[thread_rank] = primitive_depth[primitive_idx];
             }
             block.sync();
             const int current_batch_size = min(config::block_size_blend, n_points_remaining);
@@ -409,6 +417,7 @@ namespace fast_gs::rasterization::kernels::forward {
                 if (j % 32 == 0) {
                     const float4 current_color_transmittance = make_float4(color_pixel, transmittance);
                     bucket_color_transmittance[bucket_offset * config::block_size_blend + thread_rank] = current_color_transmittance;
+                    bucket_depth[bucket_offset * config::block_size_blend + thread_rank] = depth_pixel;
                     bucket_offset++;
                 }
                 n_possible_contributions++;
@@ -426,7 +435,9 @@ namespace fast_gs::rasterization::kernels::forward {
                     done = true;
                     continue;
                 }
-                color_pixel += transmittance * alpha * collected_color[j];
+                const float blending_weight = transmittance * alpha;
+                color_pixel += blending_weight * collected_color[j];
+                depth_pixel += blending_weight * collected_depth[j];
                 transmittance = next_transmittance;
                 n_contributions = n_possible_contributions;
             }
@@ -439,6 +450,7 @@ namespace fast_gs::rasterization::kernels::forward {
             image[pixel_idx + n_pixels] = color_pixel.y;
             image[pixel_idx + n_pixels * 2] = color_pixel.z;
             alpha_map[pixel_idx] = 1.0f - transmittance;
+            depth_map[pixel_idx] = depth_pixel;
             tile_n_contributions[pixel_idx] = n_contributions;
         }
 
