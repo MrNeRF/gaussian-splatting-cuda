@@ -30,7 +30,7 @@ namespace gs {
         const int active_sh_bases = (sh_degree + 1) * (sh_degree + 1);
 
         constexpr float near_plane = 0.01f;
-        constexpr float far_plane = 10000.0f;
+        constexpr float far_plane = 1e10f;
 
         auto densification_info = torch::empty({0});
 
