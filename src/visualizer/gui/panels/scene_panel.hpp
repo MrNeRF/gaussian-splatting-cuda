@@ -14,13 +14,12 @@ namespace gs {
         // Scene panel that integrates with existing GUI
         class ScenePanel {
         public:
-            ScenePanel();
+            ScenePanel(std::shared_ptr<const TrainerManager> trainer_manager);
             ~ScenePanel();
 
             void render(bool* p_open);
             void setOnDatasetLoad(std::function<void(const std::filesystem::path&)> callback);
 
-            void setTrainingManager( std::shared_ptr<const TrainerManager> trainer_manager) {m_trainer_manager=trainer_manager;}
         private:
             // Panel state
             float m_panelWidth = 300.0f;

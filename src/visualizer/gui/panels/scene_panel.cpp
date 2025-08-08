@@ -10,7 +10,7 @@
 namespace gs::gui {
 
     // ScenePanel Implementation
-    ScenePanel::ScenePanel() {
+    ScenePanel::ScenePanel(std::shared_ptr<const TrainerManager> trainer_manager) : m_trainer_manager(trainer_manager) {
         // Create image preview window
         m_imagePreview = std::make_unique<ImagePreview>();
         setupEventHandlers();

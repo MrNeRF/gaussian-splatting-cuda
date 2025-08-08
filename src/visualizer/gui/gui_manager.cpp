@@ -27,8 +27,7 @@ namespace gs::gui {
         console_ = std::make_unique<ScriptingConsole>();
         file_browser_ = std::make_unique<FileBrowser>();
 
-        scene_panel_ = std::make_unique<ScenePanel>();
-        scene_panel_->setTrainingManager(viewer->trainer_manager_);
+        scene_panel_ = std::make_unique<ScenePanel>(viewer->trainer_manager_);
 
         // Initialize window states
         window_states_["console"] = false;
