@@ -21,7 +21,7 @@ namespace gs::visualizer {
     void InputManager::handleGoToCamView(const events::cmd::GoToCamView& event) {
 
         if (!trainer_manager_) {
-            std::cerr << "handleGoToCamView: trainer_manager_ was not initilized" << std::endl;
+            std::cerr << "handleGoToCamView: trainer_manager_ was not initialized" << std::endl;
             return;
         }
         const auto cam_data = trainer_manager_->getCamById(event.cam_id);
