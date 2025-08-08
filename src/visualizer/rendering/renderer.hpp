@@ -4,6 +4,7 @@
 #include "internal/viewport.hpp"
 #include "rendering/framebuffer.hpp"
 #include "rendering/shader.hpp"
+#include <memory>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "rendering/cuda_gl_interop.hpp" // Add path and extension
