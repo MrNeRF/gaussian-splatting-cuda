@@ -273,6 +273,10 @@ namespace gs {
     }
 
     std::vector<std::shared_ptr<const Camera>> TrainerManager::getCamList() const {
-        return trainer_->getCamList();
+        if (trainer_) {
+            return trainer_->getCamList();
+        }
+        std::cerr << " getCamList trainer is not initialized " << std::endl;
+        return {};
     }
 } // namespace gs
