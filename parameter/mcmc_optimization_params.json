@@ -42,5 +42,5 @@
   "revised_opacity": false,
   "steps_scaler": 0,
   "antialiasing": false,
-  "use_attention_mask": false
+  "attention_masks": false
 }

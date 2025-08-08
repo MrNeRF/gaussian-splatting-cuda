@@ -737,17 +737,17 @@ namespace gs {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                strategy_->get_model().save_ply(final_path, iter - 1, /*join=*/true);
+                strategy_->get_model().save_ply(final_path, iter, /*join=*/true);
 
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
-                    .iteration = iter - 1,
+                    .iteration = iter,
                     .path = final_path}
                     .emit();
 
                 events::notify::Log{
                     .level = events::notify::Log::Level::Info,
-                    .message = std::format("Training completed. Final model saved at iteration {}", iter - 1),
+                    .message = std::format("Training completed. Final model saved at iteration {}", iter),
                     .source = "Trainer"}
                     .emit();
             }
