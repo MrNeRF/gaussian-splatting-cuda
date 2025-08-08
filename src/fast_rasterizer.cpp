@@ -46,12 +46,6 @@ namespace gs {
         settings.near_plane = near_plane;
         settings.far_plane = far_plane;
 
-        RenderOutput output;
-        // Create densification_info buffer
-        output.means2d = torch::zeros({2, means.size(0)}, means.options());
-
-        const bool use_densifcation_info = params.optimization.strategy == "default" && params.optimization.stop_refine < iter;
-
         auto raster_outputs = FastGSRasterize::apply(
             means,
             raw_scales,
@@ -62,9 +56,9 @@ namespace gs {
             gaussian_model._densification_info,
             settings);
 
+        RenderOutput output;
         output.image = raster_outputs[0];
         output.alpha = raster_outputs[1];
-        output.means2d = raster_outputs[2];
 
         return output;
     }
