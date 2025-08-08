@@ -19,15 +19,24 @@ namespace gs::visualizer {
     }
 
     void InputManager::handleGoToCamView(const events::cmd::GoToCamView& event) {
-        const auto& cam_data = event.cam_data;
 
+        if (!trainer_manager_) {
+            std::cerr << "handleGoToCamView: trainer_manager_ was not initilized" << std::endl;
+            return;
+        }
+        const auto cam_data = trainer_manager_->getCamById(event.cam_id);
+
+        if (!cam_data) {
+            std::cerr << "cam id " << event.cam_id << " was not found" << std::endl;
+            return;
+        }
         // Convert torch tensors to glm matrices/vectors
         // cam_data contains WorldToCam transform, but viewport uses CamToWorld
         glm::mat3 world_to_cam_R;
         glm::vec3 world_to_cam_T;
 
         // Extract rotation matrix from torch tensor (WorldToCam)
-        auto R_accessor = cam_data._R.accessor<float, 2>();
+        auto R_accessor = cam_data->R().accessor<float, 2>();
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
                 world_to_cam_R[j][i] = R_accessor[i][j]; // Note: glm is column-major
@@ -35,7 +44,7 @@ namespace gs::visualizer {
         }
 
         // Extract translation vector from torch tensor (WorldToCam)
-        auto T_accessor = cam_data._T.accessor<float, 1>();
+        auto T_accessor = cam_data->T().accessor<float, 1>();
         world_to_cam_T = glm::vec3(T_accessor[0], T_accessor[1], T_accessor[2]);
 
         // Convert from WorldToCam to CamToWorld convention
@@ -47,10 +56,13 @@ namespace gs::visualizer {
         viewport_.camera.R = cam_to_world_R;
         viewport_.camera.t = cam_to_world_T;
 
+        float focal_x = cam_data->focal_x();
+        float width = cam_data->image_width();
+
         // Calculate and set FOV based on focal length and image dimensions
-        if (cam_data._focal_x > 0.0f && cam_data._width > 0) {
+        if (focal_x > 0.0f && width > 0) {
             // Calculate horizontal FOV from focal length
-            float fov_horizontal_rad = 2.0f * std::atan(cam_data._width / (2.0f * cam_data._focal_x));
+            float fov_horizontal_rad = 2.0f * std::atan(width / (2.0f * focal_x));
             float fov_horizontal_deg = glm::degrees(fov_horizontal_rad);
 
             // Emit render settings change event with new FOV
@@ -64,7 +76,7 @@ namespace gs::visualizer {
             events::notify::Log{
                 .level = events::notify::Log::Level::Debug,
                 .message = std::format("FOV set to {:.2f} degrees (focal_x: {:.2f}, width: {})",
-                                       fov_horizontal_deg, cam_data._focal_x, cam_data._width),
+                                       fov_horizontal_deg, focal_x, width),
                 .source = "CameraController"}
                 .emit();
         }
@@ -79,8 +91,8 @@ namespace gs::visualizer {
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
             .message = std::format("Camera moved to view of image: {} (Camera ID: {})",
-                                   cam_data._image_path.filename().string(),
-                                   cam_data._camera_ID),
+                                   cam_data->image_name(),
+                                   cam_data->uid()),
             .source = "CameraController"}
             .emit();
     }

@@ -132,19 +132,19 @@ namespace gs::gui {
                 if (ImGui::BeginPopupContextItem(context_menu_id.c_str())) {
                     if (ImGui::MenuItem("Go to Cam View")) {
                         // Get the camera data for this image
-                        auto cam_data_it = m_PathToCamData.find(imagePath);
-                        if (cam_data_it != m_PathToCamData.end()) {
+                        auto cam_data_it = m_PathToCamId.find(imagePath);
+                        if (cam_data_it != m_PathToCamId.end()) {
                             // Emit the new GoToCamView command event with camera data
                             events::cmd::GoToCamView{
-                                .cam_data = cam_data_it->second
-                            }.emit();
+                                .cam_id = cam_data_it->second}
+                                .emit();
 
                             // Log the action
                             events::notify::Log{
                                 .level = events::notify::Log::Level::Info,
                                 .message = std::format("Going to camera view for: {} (Camera ID: {})",
-                                                     imagePath.filename().string(),
-                                                     cam_data_it->second._camera_ID),
+                                                       imagePath.filename().string(),
+                                                       cam_data_it->second),
                                 .source = "ScenePanel"}
                                 .emit();
                         } else {
@@ -186,30 +186,20 @@ namespace gs::gui {
 
         m_currentDatasetPath = path;
         m_imagePaths.clear();
-        m_PathToCamData.clear();
+        m_PathToCamId.clear();
         m_selectedImageIndex = -1;
 
-        // Use the ColmapLoader to get image paths
-        gs::loader::ColmapLoader colmap_loader = gs::loader::ColmapLoader();
-
-        std::vector<gs::loader::CameraData> colmap_cams = colmap_loader.getImagesCams(path);
-
-        std::vector<std::filesystem::path> images_path_names;
-        for (const auto& cam_info : colmap_cams) {
-            images_path_names.push_back(cam_info._image_path);
-            m_PathToCamData[cam_info._image_path] = cam_info;
+        if (!m_trainer_manager) {
+            std::cerr << "m_trainer_manager was not set" << std::endl;
+            return;
         }
 
+        auto cams = m_trainer_manager->getCamList();
 
-        gs::loader::BlenderLoader blender_loader = gs::loader::BlenderLoader();
-        std::vector<gs::loader::CameraData> blender_cams = blender_loader.getImagesCams(path);
-        for (const auto& cam_info : blender_cams) {
-            images_path_names.push_back(cam_info._image_path);
-            m_PathToCamData[cam_info._image_path] = cam_info;
+        for (const auto& cam : cams) {
+            m_imagePaths.emplace_back(cam->image_path());
+            m_PathToCamId[cam->image_path()] = cam->uid();
         }
-
-        // Store the image paths
-        m_imagePaths = std::move(images_path_names);
 
         // Sort paths for consistent ordering
         std::ranges::sort(m_imagePaths, [](const auto& a, const auto& b) {

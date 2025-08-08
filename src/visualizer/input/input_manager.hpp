@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/events.hpp"
+#include "training/training_manager.hpp"
 #include "input/camera_controller.hpp"
 #include "input/input_handler.hpp"
 #include "internal/viewport.hpp"
@@ -31,12 +32,16 @@ namespace gs::visualizer {
         InputHandler* getInputHandler() { return input_handler_.get(); }
         CameraController* getCameraController() { return camera_controller_.get(); }
 
+        void setTrainingManger(std::shared_ptr<const TrainerManager> training_manger){ trainer_manager_ = training_manger;};
+
     private:
         GLFWwindow* window_;
         Viewport& viewport_;
 
         std::unique_ptr<InputHandler> input_handler_;
         std::unique_ptr<CameraController> camera_controller_;
+
+        std::shared_ptr<const TrainerManager> trainer_manager_;
 
         GuiActiveCheck gui_active_check_;
         FileDropCallback file_drop_callback_;

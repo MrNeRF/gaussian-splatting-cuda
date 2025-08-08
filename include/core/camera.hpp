@@ -48,6 +48,9 @@ namespace gs {
             return _cam_position;
         }
 
+        const torch::Tensor& R() const { return _R; }
+        const torch::Tensor& T() const { return _T; }
+
         torch::Tensor K() const;
 
         std::tuple<float, float, float, float> get_intrinsics() const {
@@ -68,6 +71,7 @@ namespace gs {
         torch::Tensor tangential_distortion() const noexcept { return _tangential_distortion; }
         gsplat::CameraModelType camera_model_type() const noexcept { return _camera_model_type; }
         const std::string& image_name() const noexcept { return _image_name; }
+        const std::filesystem::path& image_path() const noexcept { return _image_path; }
         int uid() const noexcept { return _uid; }
 
         float FoVx() const noexcept { return _FoVx; }
@@ -82,6 +86,10 @@ namespace gs {
         float _focal_y = 0.f;
         float _center_x = 0.f;
         float _center_y = 0.f;
+		
+		// redundacy with _world_view_transform, but save calculation and passing from GPU 2 CPU
+        torch::Tensor _R;
+        torch::Tensor _T;
 
         torch::Tensor _radial_distortion = torch::empty({0}, torch::kFloat32);
         torch::Tensor _tangential_distortion = torch::empty({0}, torch::kFloat32);

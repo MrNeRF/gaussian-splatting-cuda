@@ -8,7 +8,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include "loader/formats/colmap.hpp"
 
 namespace gs {
 
@@ -47,7 +46,7 @@ namespace gs {
             EVENT(ResetCamera, );
             EVENT(ShowWindow, std::string window_name; bool show;);
             EVENT(ExecuteConsole, std::string command;);
-            EVENT(GoToCamView, gs::loader::CameraData cam_data;);
+            EVENT(GoToCamView, int cam_id;);
         } // namespace cmd
 
         // ============================================================================
