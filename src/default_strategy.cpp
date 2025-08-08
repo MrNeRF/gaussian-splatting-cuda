@@ -1,8 +1,8 @@
 #include "core/default_strategy.hpp"
 #include "Ops.h"
+#include "core/debug_utils.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
-#include "core/debug_utils.hpp"
 #include "core/strategy.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
 
@@ -35,7 +35,7 @@ void DefaultStrategy::update_state(gs::RenderOutput& render_output) {
     torch::Tensor densification_info = render_output.means2d;
 
     torch::Tensor grad_magnitudes = densification_info[0];  // [N]
-    torch::Tensor visibility_flags = densification_info[1];  // [N]
+    torch::Tensor visibility_flags = densification_info[1]; // [N]
 
     // Initialize state on the first run
     const size_t num_gaussians = _splat_data.size();
@@ -49,12 +49,12 @@ void DefaultStrategy::update_state(gs::RenderOutput& render_output) {
     }
 
     // Find visible Gaussians where gradient magnitude > 0
-    const torch::Tensor valid_mask = grad_magnitudes > 0.0f;  // [N]
-    torch::Tensor gaussian_ids = valid_mask.nonzero().squeeze(-1);  // [nnz]
+    const torch::Tensor valid_mask = grad_magnitudes > 0.0f;       // [N]
+    torch::Tensor gaussian_ids = valid_mask.nonzero().squeeze(-1); // [nnz]
 
     if (gaussian_ids.numel() > 0) {
         // Get gradients for visible Gaussians
-        torch::Tensor visible_grads = grad_magnitudes.index_select(0, gaussian_ids);  // [nnz]
+        torch::Tensor visible_grads = grad_magnitudes.index_select(0, gaussian_ids); // [nnz]
 
         // Update the running state
         _grad2d.index_add_(0, gaussian_ids, visible_grads);
@@ -202,7 +202,7 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
     }
 }
 
-    void DefaultStrategy::grow_gs(int iter) {
+void DefaultStrategy::grow_gs(int iter) {
     torch::NoGradGuard no_grad;
 
     const torch::Tensor grads = _grad2d / _count.clamp_min(1);
@@ -229,7 +229,6 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
     if (num_split > 0) {
         split(is_split);
     }
-
 }
 
 void DefaultStrategy::remove(const torch::Tensor is_prune) {

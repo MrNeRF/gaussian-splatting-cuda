@@ -7,9 +7,9 @@ namespace gs {
     using torch::indexing::Slice;
 
     RenderOutput fast_rasterize(
-     Camera& viewpoint_camera,
-     const SplatData& gaussian_model,
-     torch::Tensor& bg_color) {
+        Camera& viewpoint_camera,
+        const SplatData& gaussian_model,
+        torch::Tensor& bg_color) {
 
         // Get camera parameters
         const int width = static_cast<int>(viewpoint_camera.image_width());

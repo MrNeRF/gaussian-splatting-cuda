@@ -119,12 +119,11 @@ namespace gs {
         // Create tensor view from the original data pointer
         torch::Tensor densification_info = torch::from_blob(
             data_ptr,
-            {2, numel / 2},  // Assuming shape is [2, N]
-            torch::TensorOptions().dtype(dtype).device(c10::Device(device_type, device_index))
-        );
+            {2, numel / 2}, // Assuming shape is [2, N]
+            torch::TensorOptions().dtype(dtype).device(c10::Device(device_type, device_index)));
 
         auto outputs = fast_gs::rasterization::backward_wrapper(
-            densification_info,  // This will modify the ORIGINAL tensor data
+            densification_info, // This will modify the ORIGINAL tensor data
             grad_image,
             grad_alpha,
             image,
