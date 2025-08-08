@@ -6,7 +6,6 @@
 #include <vector>
 
 namespace gs::loader {
-    struct CameraData; // forward declaration
 
     /**
      * @brief Base interface for data loaders
@@ -52,18 +51,4 @@ namespace gs::loader {
          */
         virtual int priority() const { return 0; }
     };
-
-    /**
-     * @brief Base interface for Image data loaders
-     *
-     */
-    class IImageDataLoader : public IDataLoader {
-    public:
-        /**
-         * @brief gets a list of the data set cameras if dataset no valid - return empty list
-         * @return vector of paths
-         */
-        virtual std::vector<CameraData> getImagesCams(const std::filesystem::path& path) const = 0;
-    };
-
 } // namespace gs::loader

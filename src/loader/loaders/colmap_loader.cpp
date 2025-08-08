@@ -194,28 +194,4 @@ namespace gs::loader {
     int ColmapLoader::priority() const {
         return 5; // Medium priority
     }
-
-    std::vector<CameraData> ColmapLoader::getImagesCams(const std::filesystem::path& path) const {
-        if (!canLoad(path)) {
-            return {};
-        }
-        // Check for image directory
-        std::filesystem::path image_dir = path / "images";
-        if (!std::filesystem::exists(image_dir)) {
-            std::println("images directory not found");
-            return {};
-        }
-
-        try {
-            // Read COLMAP data
-            auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
-                path, "images");
-            return camera_infos;
-        } catch (std::runtime_error& e) {
-
-            // something unxpected happen thow
-            std::println("getImagesCams unexpected error: {}", e.what());
-        }
-        return {};
-    }
 } // namespace gs::loader

@@ -1,8 +1,5 @@
 #include "gui/panels/scene_panel.hpp"
 #include "gui/windows/image_preview.hpp"
-#include "loader/loader.hpp"
-#include "loader/loaders/blender_loader.hpp"
-#include "loader/loaders/colmap_loader.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <format>

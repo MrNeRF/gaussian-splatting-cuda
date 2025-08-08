@@ -199,21 +199,4 @@ namespace gs::loader {
     int BlenderLoader::priority() const {
         return 5; // Medium priority
     }
-
-    std::vector<CameraData> BlenderLoader::getImagesCams(const std::filesystem::path& path) const {
-        if (!canLoad(path)) {
-            return {};
-        }
-
-        try {
-            auto [camera_infos, scene_center] = read_transforms_cameras_and_images(path);
-
-            return camera_infos;
-        } catch (std::runtime_error& e) {
-            // something unxpected happen thow
-            std::println("getImagesCams unexpected error: {}", e.what());
-        }
-        return {};
-    }
-
 } // namespace gs::loader

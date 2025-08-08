@@ -1,16 +1,11 @@
 #pragma once
 
 #include "core/events.hpp"
-
 #include <filesystem>
 #include <functional>
 #include <memory>
-#include <string>
-#include <unordered_map>
 #include <vector>
 
-#include <loader/loader.hpp>
-#include "loader/formats/colmap.hpp"
 #include "training/training_manager.hpp"
 
 namespace gs {
