@@ -29,8 +29,8 @@ namespace gs {
         const int sh_degree = gaussian_model.get_active_sh_degree();
         const int active_sh_bases = (sh_degree + 1) * (sh_degree + 1);
 
-        constexpr float near_plane = 0.2f;
-        constexpr float far_plane = 1000.0f;
+        constexpr float near_plane = 0.01f;
+        constexpr float far_plane = 1e10f;
 
         auto densification_info = torch::empty({0});
 
