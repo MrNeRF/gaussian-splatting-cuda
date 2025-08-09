@@ -195,5 +195,4 @@ namespace gs::loader {
     int ColmapLoader::priority() const {
         return 5; // Medium priority
     }
-
 } // namespace gs::loader

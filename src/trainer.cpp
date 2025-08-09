@@ -355,6 +355,11 @@ namespace gs {
         // Initialize the evaluator - it handles all metrics internally
         evaluator_ = std::make_unique<metrics::MetricsEvaluator>(params);
 
+        // setup camera cache
+        for (const auto& cam : dataset->get_cameras()) {
+            m_cam_id_to_cam[cam->uid()] = cam;
+        }
+
         // Print render mode configuration
         std::println("Render mode: {}", params.optimization.render_mode);
         std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
@@ -771,6 +776,26 @@ namespace gs {
         }
     }
 
+    std::shared_ptr<const Camera> Trainer::getCamById(int camId) const {
+        const auto it = m_cam_id_to_cam.find(camId);
+        if (it == m_cam_id_to_cam.end()) {
+            std::cerr << "error: getCamById - could not find cam with cam id " << camId << std::endl;
+            return nullptr;
+        }
+        return it->second;
+    }
+
+    std::vector<std::shared_ptr<const Camera>> Trainer::getCamList() const {
+
+        std::vector<std::shared_ptr<const Camera>> cams;
+        cams.reserve(m_cam_id_to_cam.size());
+        for (auto& [key, value] : m_cam_id_to_cam) {
+            cams.push_back(value);
+        }
+
+        return cams;
+    }
+    
     void Trainer::prune_after_training(float threshold) {
         torch::NoGradGuard no_grad;
         auto& model = strategy_->get_model();

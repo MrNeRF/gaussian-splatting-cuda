@@ -264,5 +264,19 @@ namespace gs {
         }
         completion_cv_.notify_all();
     }
+    std::shared_ptr<const Camera> TrainerManager::getCamById(int camId) const {
+        if (trainer_) {
+            return trainer_->getCamById(camId);
+        }
+        std::cerr << " getCamById trainer is not initialized " << std::endl;
+        return nullptr;
+    }
 
+    std::vector<std::shared_ptr<const Camera>> TrainerManager::getCamList() const {
+        if (trainer_) {
+            return trainer_->getCamList();
+        }
+        std::cerr << " getCamList trainer is not initialized " << std::endl;
+        return {};
+    }
 } // namespace gs

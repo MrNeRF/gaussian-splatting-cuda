@@ -63,6 +63,10 @@ namespace gs {
 
         const param::TrainingParameters& getParams() const { return params_; }
 
+        std::shared_ptr <const Camera> getCamById(int camId) const;
+
+        std::vector<std::shared_ptr <const Camera>> getCamList() const;
+
     private:
         // Training step result
         enum class StepResult {
@@ -154,6 +158,8 @@ namespace gs {
         std::atomic<bool> callback_busy_{false};
         at::cuda::CUDAStream callback_stream_ = at::cuda::getStreamFromPool(false);
         at::cuda::CUDAEvent callback_launch_event_;
+        // camera id to cam
+        std::map<int, std::shared_ptr<const Camera>> m_cam_id_to_cam;
     };
 
 } // namespace gs

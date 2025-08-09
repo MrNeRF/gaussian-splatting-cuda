@@ -19,20 +19,6 @@ namespace gs {
     void SceneManager::setupEventHandlers() {
         using namespace events;
 
-        // Command handlers
-        cmd::LoadFile::when([this](const auto& cmd) {
-            if (cmd.is_dataset && cached_params_) {
-                loadDataset(cmd.path, *cached_params_);
-            } else if (!cmd.is_dataset) {
-                loadPLY(cmd.path);
-            } else {
-                notify::Error{
-                    .message = "Cannot load dataset without parameters",
-                    .details = "No cached parameters available"}
-                    .emit();
-            }
-        });
-
         cmd::ClearScene::when([this](const auto&) {
             clearScene();
         });
