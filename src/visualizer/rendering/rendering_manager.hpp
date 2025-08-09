@@ -64,7 +64,7 @@ namespace gs::visualizer {
 
     private:
         void initializeShaders();
-        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager);
+        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render);
         void drawFocusIndicator(const RenderContext& context);
         void drawCropBox(const RenderContext& context);
         void drawCoordAxes(const RenderContext& context);
@@ -79,6 +79,7 @@ namespace gs::visualizer {
         FramerateController framerate_controller_;
         mutable bool last_viewport_changed_ = true;
         mutable Viewport last_viewport_state_;
+        RenderingPipeline::RenderResult last_result_;
     };
 
 } // namespace gs::visualizer

@@ -69,16 +69,11 @@ namespace gs::visualizer {
         }
 
         // Render scene only if not skipping
-        if (!skip_scene_render) {
-            drawSceneFrame(context, scene_manager);
+        drawSceneFrame(context, scene_manager, skip_scene_render);
 
-            // Update last viewport state
-            last_viewport_state_ = context.viewport;
-            last_viewport_changed_ = viewport_changed;
-        } else {
-            // If skipping, we might want to show last frame or a static indicator
-            // For now, just render the overlays on the cleared background
-        }
+        // Update last viewport state
+        last_viewport_state_ = context.viewport;
+        last_viewport_changed_ = viewport_changed;
 
         // Always render UI overlays (these are typically fast)
         if (settings_.show_crop_box && context.crop_box) {
@@ -187,7 +182,7 @@ namespace gs::visualizer {
             glDisable(GL_BLEND);
     }
 
-    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager) {
+    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render) {
         if (!scene_manager->hasScene()) {
             return;
         }
@@ -215,6 +210,12 @@ namespace gs::visualizer {
             render_size = glm::ivec2(
                 static_cast<int>(context.viewport_region->width),
                 static_cast<int>(context.viewport_region->height));
+        }
+
+        if (last_result_.valid && skip_render) {
+            RenderingPipeline::uploadToScreen(last_result_, *screen_renderer_, render_size);
+            screen_renderer_->render(quad_shader_);
+            return;
         }
 
         RenderingPipeline::RenderRequest request{
@@ -246,6 +247,7 @@ namespace gs::visualizer {
         if (result.valid) {
             RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_size);
             screen_renderer_->render(quad_shader_);
+            last_result_ = result;
         }
     }
 

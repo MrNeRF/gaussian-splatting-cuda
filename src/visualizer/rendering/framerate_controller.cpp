@@ -33,10 +33,6 @@ namespace gs::visualizer {
     }
 
     bool FramerateController::shouldSkipSceneRender(bool is_training, bool viewport_changed) const {
-        // Never skip if we're training - we want to see training progress
-        if (is_training) {
-            return false;
-        }
 
         // Don't skip if viewport changed - user interaction requires immediate response
         if (viewport_changed) {
