@@ -157,11 +157,11 @@ namespace gs::gui {
                 }
 
                 // Tooltip with full path
-                if (ImGui::IsItemHovered()) {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("Path: %s", imagePath.string().c_str());
-                    ImGui::EndTooltip();
-                }
+                // if (ImGui::IsItemHovered()) {
+                //     ImGui::BeginTooltip();
+                //     ImGui::Text("Path: %s", imagePath.string().c_str());
+                //     ImGui::EndTooltip();
+                // }
             }
         } else {
             ImGui::Text("No images loaded.");
