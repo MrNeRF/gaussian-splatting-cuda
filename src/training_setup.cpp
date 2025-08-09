@@ -75,8 +75,7 @@ namespace gs {
                 if (params.optimization.strategy == "mcmc") {
                     strategy = std::make_unique<MCMC>(std::move(*splat_result));
                 } else {
-                    throw std::runtime_error("ADC (default strategy) is currently disabled until the new rasterizer is integrated. Please use MCMC strategy instead.");
-                    // strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
+                    strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
                 }
 
                 // Create trainer

@@ -16,7 +16,6 @@ public:
 
     // IStrategy interface implementation
     void initialize(const gs::param::OptimizationParameters& optimParams) override;
-    void pre_backward(gs::RenderOutput& render_output) override;
     void post_backward(int iter, gs::RenderOutput& render_output) override;
     bool is_refining(int iter) const override;
     void step(int iter) override;

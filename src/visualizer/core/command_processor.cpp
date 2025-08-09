@@ -1,5 +1,6 @@
 #include "core/command_processor.hpp"
 #include "core/splat_data.hpp"
+#include "scene/scene_manager.hpp"
 #include <cuda_runtime.h>
 #include <iomanip>
 #include <sstream>

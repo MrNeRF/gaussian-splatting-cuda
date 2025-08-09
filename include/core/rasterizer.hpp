@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Ops.h"
 #include "core/camera.hpp"
 #include "core/splat_data.hpp"
 #include "geometry/bounding_box.hpp"

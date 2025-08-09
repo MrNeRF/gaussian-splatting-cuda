@@ -100,8 +100,6 @@ TEST_F(MCMCTest, FullPipelineIntegrationTest) {
     EXPECT_EQ(render_output.image.sizes(), torch::IntArrayRef({3, 256, 256}));
     EXPECT_FALSE(render_output.image.isnan().any().item<bool>());
 
-    mcmc->pre_backward(render_output);
-
     // Compute loss and backward
     auto loss = render_output.image.mean();
     loss.backward();
@@ -163,7 +161,6 @@ TEST_F(MCMCTest, SHDegreeIncrementWithRenderingTest) {
 
     // Render again and call post_backward at iteration 1000
     render_output = performRendering(*mcmc);
-    mcmc->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -220,7 +217,6 @@ TEST_F(MCMCTest, NoiseInjectionWithRenderingTest) {
 
     // Render again
     render_output = performRendering(*mcmc);
-    mcmc->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -254,7 +250,6 @@ TEST_F(MCMCTest, RefinementWithActualRenderingTest) {
 
     // Run refinement step
     render_output = performRendering(*mcmc);
-    mcmc->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -294,7 +289,6 @@ TEST_F(MCMCTest, RelocationMechanicsTest) {
 
     // Trigger relocation through rendering
     render_output = performRendering(*mcmc);
-    mcmc->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -327,7 +321,6 @@ TEST_F(MCMCTest, ConsistentRenderingAfterOperationsTest) {
     // Run through several iterations
     for (int iter = 1; iter <= 5; ++iter) {
         auto render_output = performRendering(*mcmc);
-        mcmc->pre_backward(render_output);
         auto loss = render_output.image.mean();
         loss.backward();
 
@@ -368,7 +361,6 @@ TEST_F(MCMCTest, MultipleRefinementCyclesTest) {
     // Run multiple refinement cycles
     for (int iter = 100; iter <= 500; iter += 100) {
         auto render_output = performRendering(*mcmc);
-        mcmc->pre_backward(render_output);
         auto loss = render_output.image.mean();
         loss.backward();
 
