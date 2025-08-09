@@ -2,7 +2,6 @@
 
 #include "loader/loader.hpp"
 #include <expected>
-#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -52,5 +51,4 @@ namespace gs::loader {
          */
         virtual int priority() const { return 0; }
     };
-
 } // namespace gs::loader

@@ -91,6 +91,11 @@ namespace gs {
         // Get last error message
         const std::string& getLastError() const { return last_error_; }
 
+        // call the trainer getCamById
+        std::shared_ptr<const Camera> getCamById(int camId) const;
+
+        std::vector<std::shared_ptr<const Camera>> getCamList() const;
+
     private:
         // Training thread function
         void trainingThreadFunc(std::stop_token stop_token);

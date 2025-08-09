@@ -46,6 +46,7 @@ namespace gs {
             EVENT(ResetCamera, );
             EVENT(ShowWindow, std::string window_name; bool show;);
             EVENT(ExecuteConsole, std::string command;);
+            EVENT(GoToCamView, int cam_id;);
         } // namespace cmd
 
         // ============================================================================

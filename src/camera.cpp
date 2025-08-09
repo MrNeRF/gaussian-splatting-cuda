@@ -32,6 +32,8 @@ namespace gs {
           _focal_y(focal_y),
           _center_x(center_x),
           _center_y(center_y),
+          _R(R),
+          _T(T),
           _radial_distortion(radial_distortion),
           _tangential_distortion(tangential_distortion),
           _camera_model_type(camera_model_type),
