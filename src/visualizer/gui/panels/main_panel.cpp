@@ -77,7 +77,7 @@ namespace gs::gui::panels {
                 .fov = std::nullopt,
                 .scaling_modifier = config->scaling_modifier,
                 .antialiasing = std::nullopt}
-                .emit();
+            .emit();
         }
 
         if (widgets::SliderWithReset("FoV", &config->fov, 45.0f, 120.0f, 75.0f)) {
@@ -85,7 +85,13 @@ namespace gs::gui::panels {
                 .fov = config->fov,
                 .scaling_modifier = std::nullopt,
                 .antialiasing = std::nullopt}
-                .emit();
+            .emit();
+        }
+
+        // Display current FPS (read-only)
+        float average_fps = ctx.viewer->getAverageFPS();
+        if (average_fps > 0.0f) {
+            ImGui::Text("FPS: %.1f", average_fps);
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED

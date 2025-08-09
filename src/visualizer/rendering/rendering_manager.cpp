@@ -39,16 +39,27 @@ namespace gs::visualizer {
     }
 
     void RenderingManager::renderFrame(const RenderContext& context, SceneManager* scene_manager) {
+        // Begin framerate tracking
+        framerate_controller_.beginFrame();
+
         if (!initialized_) {
             initialize();
         }
 
-        // Clear the entire window first
+        // Check if viewport has changed since last frame
+        bool viewport_changed = hasViewportChanged(context.viewport);
+
+        // Check if we should skip scene rendering
+        auto state = scene_manager->getCurrentState();
+        bool skip_scene_render = framerate_controller_.shouldSkipSceneRender(
+            state.is_training, viewport_changed);
+
+        // Always clear and setup viewport (this is fast)
         glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Now render to the viewport region
+        // Set viewport region
         if (context.viewport_region) {
             glViewport(
                 static_cast<GLint>(context.viewport_region->x),
@@ -57,8 +68,19 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
-        drawSceneFrame(context, scene_manager);
+        // Render scene only if not skipping
+        if (!skip_scene_render) {
+            drawSceneFrame(context, scene_manager);
 
+            // Update last viewport state
+            last_viewport_state_ = context.viewport;
+            last_viewport_changed_ = viewport_changed;
+        } else {
+            // If skipping, we might want to show last frame or a static indicator
+            // For now, just render the overlays on the cleared background
+        }
+
+        // Always render UI overlays (these are typically fast)
         if (settings_.show_crop_box && context.crop_box) {
             drawCropBox(context);
         }
@@ -70,6 +92,9 @@ namespace gs::visualizer {
         if (context.has_focus && context.viewport_region) {
             drawFocusIndicator(context);
         }
+
+        // End framerate tracking
+        framerate_controller_.endFrame();
     }
 
     // case world to user is defined - we shift view matrix and crop box
@@ -287,6 +312,39 @@ namespace gs::visualizer {
 
             coord_axes->render(view, projection);
         }
+    }
+
+    bool RenderingManager::hasViewportChanged(const Viewport& current_viewport) const {
+        // Compare current viewport with last known state
+        const float epsilon = 1e-6f;
+
+        // Check if this is the first frame
+        if (last_viewport_changed_) {
+            return true;
+        }
+
+        // Compare viewport parameters that affect rendering
+        if (glm::length(current_viewport.getTranslation() - last_viewport_state_.getTranslation()) > epsilon) {
+            return true;
+        }
+
+        auto current_rot = current_viewport.getRotationMatrix();
+        auto last_rot = last_viewport_state_.getRotationMatrix();
+
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                if (std::abs(current_rot[i][j] - last_rot[i][j]) > epsilon) {
+                    return true;
+                }
+            }
+        }
+
+        // Check window size changes
+        if (current_viewport.windowSize != last_viewport_state_.windowSize) {
+            return true;
+        }
+
+        return false;
     }
 
 } // namespace gs::visualizer
