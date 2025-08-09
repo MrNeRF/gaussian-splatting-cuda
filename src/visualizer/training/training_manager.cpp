@@ -83,8 +83,6 @@ namespace gs {
             waitForCompletion();
         }
 
-        // Clear the trainer
-        trainer_.reset();
         last_error_.clear();
         setState(State::Idle);
     }
