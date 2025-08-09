@@ -130,6 +130,7 @@ namespace gs {
     void SceneManager::loadDataset(const std::filesystem::path& path,
                                    const param::TrainingParameters& params) {
         try {
+            trainer_manager_->clearTrainer(); // mainly to stop training thread
             cached_params_ = params; // Cache for potential reloads
             loadDatasetInternal(path, params);
         } catch (const std::exception& e) {
