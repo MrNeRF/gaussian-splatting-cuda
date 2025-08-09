@@ -72,6 +72,10 @@ namespace gs {
         }
     }
 
+    bool TrainerManager::hasTrainer() const {
+        return trainer_ != nullptr;
+    }
+
     void TrainerManager::clearTrainer() {
         // Stop any ongoing training
         if (isTrainingActive()) {
@@ -80,7 +84,6 @@ namespace gs {
         }
 
         // Clear the trainer
-        trainer_.reset();
         last_error_.clear();
         setState(State::Idle);
     }

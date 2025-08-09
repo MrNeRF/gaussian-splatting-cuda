@@ -141,6 +141,9 @@ namespace gs {
     }
 
     void SceneManager::clearScene() {
+        // because if we are training while clearing scene - everything crashes...
+        events::cmd::StopTraining{}.emit();
+
         std::lock_guard<std::mutex> lock(state_mutex_);
 
         // Clear trainer if we're in dataset mode

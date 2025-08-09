@@ -18,13 +18,13 @@
 #endif
 
 namespace gs::event {
+    using HandlerId = size_t;
 
     // Event concept
     template <typename T>
     concept Event = requires {
         typename T::event_id;
-    }
-    &&std::is_aggregate_v<T>;
+    } && std::is_aggregate_v<T>;
 
     class Bus {
         template <typename T>
@@ -38,13 +38,10 @@ namespace gs::event {
 
         template <Event E>
         struct Channel : BaseChannel {
-            std::vector<Handler<E>> handlers;
+            std::vector<std::pair<HandlerId, Handler<E>>> handlers;
             mutable std::mutex mutex;
 
-            std::string_view type_name() const override {
-                return typeid(E).name();
-            }
-
+            std::string_view type_name() const override { return typeid(E).name(); }
             size_t handler_count() const override {
                 std::lock_guard lock(mutex);
                 return handlers.size();
@@ -52,8 +49,6 @@ namespace gs::event {
         };
 
     public:
-        using HandlerId = size_t;
-
         // Debug settings
         struct DebugConfig {
             bool enabled = false;
@@ -74,11 +69,14 @@ namespace gs::event {
             if (auto it = channels_.find(typeid(E)); it != channels_.end()) {
                 auto& channel = static_cast<Channel<E>&>(*it->second);
 
-                // Copy handlers to avoid lock during dispatch
+                // Copy only the handlers, not the IDs
                 std::vector<Handler<E>> handlers_copy;
                 {
                     std::lock_guard lock(channel.mutex);
-                    handlers_copy = channel.handlers;
+                    handlers_copy.reserve(channel.handlers.size());
+                    for (auto& [id, handler] : channel.handlers) {
+                        handlers_copy.push_back(handler);
+                    }
                 }
 
                 if (debug_.enabled && debug_.log_unhandled && handlers_copy.empty()) {
@@ -104,12 +102,11 @@ namespace gs::event {
             std::lock_guard lock(channel.mutex);
 
             HandlerId id = next_id_++;
-            channel.handlers.push_back(std::move(handler));
+            channel.handlers.emplace_back(id, std::move(handler));
 
             if (debug_.enabled && debug_.log_subscribe) {
                 log_subscribe_event<E>(id, loc);
             }
-
             return id;
         }
 
@@ -122,7 +119,7 @@ namespace gs::event {
                 auto before = channel.handlers.size();
                 channel.handlers.erase(
                     std::remove_if(channel.handlers.begin(), channel.handlers.end(),
-                                   [id](const auto&) { return false; }), // TODO: Track IDs properly
+                                   [id](const auto& pair) { return pair.first == id; }),
                     channel.handlers.end());
 
                 if (debug_.enabled && before != channel.handlers.size()) {
