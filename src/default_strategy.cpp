@@ -1,6 +1,7 @@
 #include "core/default_strategy.hpp"
 #include "Ops.h"
 #include "core/debug_utils.hpp"
+#include "core/fused_adam.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
 #include "core/strategy.hpp"
@@ -43,20 +44,20 @@ void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
         -> std::unique_ptr<torch::optim::OptimizerParamState> {
         auto new_shape = full_param.sizes().vec();
         new_shape[0] = sampled_idxs.size(0);
-        if (auto* adam_state = dynamic_cast<torch::optim::AdamParamState*>(&state)) {
-            // Standard Adam state
-            auto zeros_to_add = torch::zeros(new_shape, adam_state->exp_avg().options());
-            auto new_exp_avg = torch::cat({adam_state->exp_avg(), zeros_to_add}, 0);
-            auto new_exp_avg_sq = torch::cat({adam_state->exp_avg_sq(), zeros_to_add}, 0);
+        if (auto* fused_adam_state = dynamic_cast<gs::FusedAdam::AdamParamState*>(&state)) {
+            // FusedAdam state
+            auto zeros_to_add = torch::zeros(new_shape, fused_adam_state->exp_avg.options());
+            auto new_exp_avg = torch::cat({fused_adam_state->exp_avg, zeros_to_add}, 0);
+            auto new_exp_avg_sq = torch::cat({fused_adam_state->exp_avg_sq, zeros_to_add}, 0);
 
             // Create new state
-            auto new_state = std::make_unique<torch::optim::AdamParamState>();
-            new_state->step(adam_state->step());
-            new_state->exp_avg(new_exp_avg);
-            new_state->exp_avg_sq(new_exp_avg_sq);
-            if (adam_state->max_exp_avg_sq().defined()) {
-                auto new_max_exp_avg_sq = torch::cat({adam_state->max_exp_avg_sq(), zeros_to_add}, 0);
-                new_state->max_exp_avg_sq(new_max_exp_avg_sq);
+            auto new_state = std::make_unique<gs::FusedAdam::AdamParamState>();
+            new_state->step_count = fused_adam_state->step_count;
+            new_state->exp_avg = new_exp_avg;
+            new_state->exp_avg_sq = new_exp_avg_sq;
+            if (fused_adam_state->max_exp_avg_sq.defined()) {
+                auto new_max_exp_avg_sq = torch::cat({fused_adam_state->max_exp_avg_sq, zeros_to_add}, 0);
+                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
             }
             return new_state;
         }
@@ -112,24 +113,24 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
         -> std::unique_ptr<torch::optim::OptimizerParamState> {
         auto zero_shape = full_param.sizes().vec();
         zero_shape[0] = sampled_idxs.size(0) * split_size;
-        if (auto* adam_state = dynamic_cast<torch::optim::AdamParamState*>(&state)) {
-            // Standard Adam state
-            auto rest_exp_avg = adam_state->exp_avg().index_select(0, rest_idxs);
-            auto rest_exp_avg_sq = adam_state->exp_avg_sq().index_select(0, rest_idxs);
+        if (auto* fused_adam_state = dynamic_cast<gs::FusedAdam::AdamParamState*>(&state)) {
+            // FusedAdam state
+            auto rest_exp_avg = fused_adam_state->exp_avg.index_select(0, rest_idxs);
+            auto rest_exp_avg_sq = fused_adam_state->exp_avg_sq.index_select(0, rest_idxs);
 
-            auto zeros_to_add = torch::zeros(zero_shape, adam_state->exp_avg().options());
+            auto zeros_to_add = torch::zeros(zero_shape, fused_adam_state->exp_avg.options());
             auto new_exp_avg = torch::cat({rest_exp_avg, zeros_to_add}, 0);
             auto new_exp_avg_sq = torch::cat({rest_exp_avg_sq, zeros_to_add}, 0);
 
             // Create new state
-            auto new_state = std::make_unique<torch::optim::AdamParamState>();
-            new_state->step(adam_state->step());
-            new_state->exp_avg(new_exp_avg);
-            new_state->exp_avg_sq(new_exp_avg_sq);
-            if (adam_state->max_exp_avg_sq().defined()) {
-                auto rest_max_exp_avg_sq = adam_state->max_exp_avg_sq().index_select(0, rest_idxs);
+            auto new_state = std::make_unique<gs::FusedAdam::AdamParamState>();
+            new_state->step_count = fused_adam_state->step_count;
+            new_state->exp_avg = new_exp_avg;
+            new_state->exp_avg_sq = new_exp_avg_sq;
+            if (fused_adam_state->max_exp_avg_sq.defined()) {
+                auto rest_max_exp_avg_sq = fused_adam_state->max_exp_avg_sq.index_select(0, rest_idxs);
                 auto new_max_exp_avg_sq = torch::cat({rest_max_exp_avg_sq, zeros_to_add}, 0);
-                new_state->max_exp_avg_sq(new_max_exp_avg_sq);
+                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
             }
             return new_state;
         }
@@ -181,19 +182,19 @@ void DefaultStrategy::remove(const torch::Tensor is_prune) {
                                   torch::optim::OptimizerParamState& state,
                                   const torch::Tensor new_param)
         -> std::unique_ptr<torch::optim::OptimizerParamState> {
-        if (auto* adam_state = dynamic_cast<torch::optim::AdamParamState*>(&state)) {
-            // Standard Adam state
-            auto new_exp_avg = adam_state->exp_avg().index_select(0, sampled_idxs);
-            auto new_exp_avg_sq = adam_state->exp_avg_sq().index_select(0, sampled_idxs);
+        if (auto* fused_adam_state = dynamic_cast<gs::FusedAdam::AdamParamState*>(&state)) {
+            // FusedAdam state
+            auto new_exp_avg = fused_adam_state->exp_avg.index_select(0, sampled_idxs);
+            auto new_exp_avg_sq = fused_adam_state->exp_avg_sq.index_select(0, sampled_idxs);
 
             // Create new state
-            auto new_state = std::make_unique<torch::optim::AdamParamState>();
-            new_state->step(adam_state->step());
-            new_state->exp_avg(new_exp_avg);
-            new_state->exp_avg_sq(new_exp_avg_sq);
-            if (adam_state->max_exp_avg_sq().defined()) {
-                auto new_max_exp_avg_sq = adam_state->max_exp_avg_sq().index_select(0, sampled_idxs);
-                new_state->max_exp_avg_sq(new_max_exp_avg_sq);
+            auto new_state = std::make_unique<gs::FusedAdam::AdamParamState>();
+            new_state->step_count = fused_adam_state->step_count;
+            new_state->exp_avg = new_exp_avg;
+            new_state->exp_avg_sq = new_exp_avg_sq;
+            if (fused_adam_state->max_exp_avg_sq.defined()) {
+                auto new_max_exp_avg_sq = fused_adam_state->max_exp_avg_sq.index_select(0, sampled_idxs);
+                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
             }
             return new_state;
         }
@@ -239,19 +240,19 @@ void DefaultStrategy::reset_opacity() {
     const auto optimizer_fn = [](torch::optim::OptimizerParamState& state,
                                  const torch::Tensor new_param)
         -> std::unique_ptr<torch::optim::OptimizerParamState> {
-        if (auto* adam_state = dynamic_cast<torch::optim::AdamParamState*>(&state)) {
-            // Standard Adam state
-            auto new_exp_avg = torch::zeros_like(adam_state->exp_avg());
-            auto new_exp_avg_sq = torch::zeros_like(adam_state->exp_avg_sq());
+        if (auto* fused_adam_state = dynamic_cast<gs::FusedAdam::AdamParamState*>(&state)) {
+            // FusedAdam state
+            auto new_exp_avg = torch::zeros_like(fused_adam_state->exp_avg);
+            auto new_exp_avg_sq = torch::zeros_like(fused_adam_state->exp_avg_sq);
 
             // Create new state
-            auto new_state = std::make_unique<torch::optim::AdamParamState>();
-            new_state->step(adam_state->step());
-            new_state->exp_avg(new_exp_avg);
-            new_state->exp_avg_sq(new_exp_avg_sq);
-            if (adam_state->max_exp_avg_sq().defined()) {
-                auto new_max_exp_avg_sq = torch::zeros_like(adam_state->max_exp_avg_sq());
-                new_state->max_exp_avg_sq(new_max_exp_avg_sq);
+            auto new_state = std::make_unique<gs::FusedAdam::AdamParamState>();
+            new_state->step_count = fused_adam_state->step_count;
+            new_state->exp_avg = new_exp_avg;
+            new_state->exp_avg_sq = new_exp_avg_sq;
+            if (fused_adam_state->max_exp_avg_sq.defined()) {
+                auto new_max_exp_avg_sq = torch::zeros_like(fused_adam_state->max_exp_avg_sq);
+                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
             }
             return new_state;
         }
@@ -288,8 +289,9 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
 
 void DefaultStrategy::step(int iter) {
     if (iter < _params->iterations) {
-        _optimizer->step();
-        _optimizer->zero_grad(true);
+        auto* fused_adam = dynamic_cast<gs::FusedAdam*>(_optimizer.get());
+        fused_adam->step(iter);
+        fused_adam->zero_grad(true, iter);
         _scheduler->step();
     }
 }
