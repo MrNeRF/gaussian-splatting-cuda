@@ -21,6 +21,7 @@ namespace fast_gs::rasterization {
         const float3* cam_position,
         float* image,
         float* alpha,
+        float* depth,
         const int n_primitives,
         const int active_sh_bases,
         const int total_bases_sh_rest,

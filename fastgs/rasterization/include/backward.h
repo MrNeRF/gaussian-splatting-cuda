@@ -8,8 +8,10 @@ namespace fast_gs::rasterization {
     void backward(
         const float* grad_image,
         const float* grad_alpha,
+        const float* grad_depth,
         const float* image,
         const float* alpha,
+        const float* depth,
         const float3* means,
         const float3* scales_raw,
         const float4* rotations_raw,

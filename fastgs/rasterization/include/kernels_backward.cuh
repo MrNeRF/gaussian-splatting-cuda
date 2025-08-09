@@ -245,14 +245,18 @@ namespace fast_gs::rasterization::kernels::backward {
         const float2* primitive_mean2d,
         const float4* primitive_conic_opacity,
         const float3* primitive_color,
+        const float* primitive_depth,
         const float* grad_image,
         const float* grad_alpha_map,
+        const float* grad_depth_map,
         const float* image,
         const float* alpha_map,
+        const float* depth_map,
         const uint* tile_max_n_contributions,
         const uint* tile_n_contributions,
         const uint* bucket_tile_index,
         const float4* bucket_color_transmittance,
+        const float* bucket_depth,
         float2* grad_mean2d,
         float* grad_conic,
         float* grad_raw_opacity,
@@ -287,6 +291,7 @@ namespace fast_gs::rasterization::kernels::backward {
         float opacity = 0.0f;
         float3 color = {0.0f, 0.0f, 0.0f};
         float3 color_grad_factor = {0.0f, 0.0f, 0.0f};
+        float depth = 0.0f;
         if (valid_primitive) {
             primitive_idx = instance_primitive_indices[instance_idx];
             mean2d = primitive_mean2d[primitive_idx];
@@ -298,6 +303,7 @@ namespace fast_gs::rasterization::kernels::backward {
             if (color_unclamped.x >= 0.0f) color_grad_factor.x = 1.0f;
             if (color_unclamped.y >= 0.0f) color_grad_factor.y = 1.0f;
             if (color_unclamped.z >= 0.0f) color_grad_factor.z = 1.0f;
+            depth = primitive_depth[primitive_idx];
         }
         
         // helpers
@@ -318,11 +324,15 @@ namespace fast_gs::rasterization::kernels::backward {
         float transmittance;
         float3 grad_color_pixel;
         float grad_alpha_common;
+        float depth_pixel_after;
+        float grad_depth_pixel;
 
         bucket_color_transmittance += bucket_idx * config::block_size_blend;
         __shared__ uint collected_last_contributor[32];
         __shared__ float4 collected_color_pixel_after_transmittance[32];
         __shared__ float4 collected_grad_info_pixel[32];
+        __shared__ float collected_depth_pixel_after[32];
+        __shared__ float collected_grad_depth_pixel[32];
 
         // iterate over all pixels in the tile
         #pragma unroll
@@ -330,11 +340,12 @@ namespace fast_gs::rasterization::kernels::backward {
             if (i % 32 == 0) {
                 const uint local_idx = i + lane_idx;
                 const float4 color_transmittance = bucket_color_transmittance[local_idx];
+                const float start_depth = bucket_depth[local_idx];
                 const uint2 pixel_coords = {start_pixel_coords.x + local_idx % config::tile_width, start_pixel_coords.y + local_idx / config::tile_width};
                 const uint pixel_idx = width * pixel_coords.y + pixel_coords.x;
                 // final values from forward pass before background blend and the respective gradients
                 float3 color_pixel, grad_color_pixel;
-                float alpha_pixel, grad_alpha_pixel;
+                float alpha_pixel, grad_alpha_pixel, depth_pixel, grad_depth_pixel_tmp;
                 if (pixel_coords.x < width && pixel_coords.y < height) {
                     color_pixel = make_float3(
                         image[pixel_idx],
@@ -348,6 +359,8 @@ namespace fast_gs::rasterization::kernels::backward {
                     );
                     alpha_pixel = alpha_map[pixel_idx];
                     grad_alpha_pixel = grad_alpha_map[pixel_idx];
+                    depth_pixel = depth_map[pixel_idx];
+                    grad_depth_pixel_tmp = grad_depth_map[pixel_idx];
                 }
                 collected_color_pixel_after_transmittance[lane_idx] = make_float4(
                     color_pixel - make_float3(color_transmittance),
@@ -358,6 +371,8 @@ namespace fast_gs::rasterization::kernels::backward {
                     grad_alpha_pixel * (1.0f - alpha_pixel)
                 );
                 collected_last_contributor[lane_idx] = tile_n_contributions[pixel_idx];
+                collected_depth_pixel_after[lane_idx] = depth_pixel - start_depth;
+                collected_grad_depth_pixel[lane_idx] = grad_depth_pixel_tmp;
                 __syncwarp();
             }
 
@@ -371,6 +386,8 @@ namespace fast_gs::rasterization::kernels::backward {
                 grad_color_pixel.y = warp.shfl_up(grad_color_pixel.y, 1);
                 grad_color_pixel.z = warp.shfl_up(grad_color_pixel.z, 1);
                 grad_alpha_common = warp.shfl_up(grad_alpha_common, 1);
+                depth_pixel_after = warp.shfl_up(depth_pixel_after, 1);
+                grad_depth_pixel = warp.shfl_up(grad_depth_pixel, 1);
             }
 
             // which pixel index should this thread deal with?
@@ -388,6 +405,8 @@ namespace fast_gs::rasterization::kernels::backward {
                 const float4 grad_info_pixel = collected_grad_info_pixel[current_shmem_index];
                 grad_color_pixel = make_float3(grad_info_pixel);
                 grad_alpha_common = grad_info_pixel.w;
+                depth_pixel_after = collected_depth_pixel_after[current_shmem_index];
+                grad_depth_pixel = collected_grad_depth_pixel[current_shmem_index];
             }
 
             const bool skip = !valid_primitive || !valid_pixel || idx < 0 || idx >= config::block_size_blend || tile_primitive_idx >= last_contributor;
@@ -408,13 +427,19 @@ namespace fast_gs::rasterization::kernels::backward {
             const float3 dL_dcolor = blending_weight * grad_color_pixel * color_grad_factor;
             dL_dcolor_accum += dL_dcolor;
 
+            // TODO: depth gradient
+            // const float dL_ddepth = blending_weight * grad_depth_pixel;
+            // dL_ddepth_accum += dL_ddepth;
+
             color_pixel_after -= blending_weight * color;
+            depth_pixel_after -= blending_weight * depth;
 
             // alpha gradient
             const float one_minus_alpha_rcp = 1.0f / one_minus_alpha;
             const float dL_dalpha_from_color = dot(transmittance * color - color_pixel_after * one_minus_alpha_rcp, grad_color_pixel);
             const float dL_dalpha_from_alpha = grad_alpha_common * one_minus_alpha_rcp;
-            const float dL_dalpha = dL_dalpha_from_color + dL_dalpha_from_alpha;
+            const float dL_dalpha_from_depth = (transmittance * depth - depth_pixel_after * one_minus_alpha_rcp) * grad_depth_pixel;
+            const float dL_dalpha = dL_dalpha_from_color + dL_dalpha_from_alpha + dL_dalpha_from_depth;
             // unactivated opacity gradient
             const float dL_draw_opacity_partial = alpha * dL_dalpha;
             dL_draw_opacity_partial_accum += dL_draw_opacity_partial;
