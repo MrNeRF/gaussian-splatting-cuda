@@ -130,6 +130,7 @@ namespace gs {
     void SceneManager::loadDataset(const std::filesystem::path& path,
                                    const param::TrainingParameters& params) {
         try {
+            trainer_manager_->clearTrainer(); // mainly to stop training thread
             cached_params_ = params; // Cache for potential reloads
             loadDatasetInternal(path, params);
         } catch (const std::exception& e) {
@@ -141,6 +142,9 @@ namespace gs {
     }
 
     void SceneManager::clearScene() {
+        // because if we are training while clearing scene - everything crashes...
+        events::cmd::StopTraining{}.emit();
+
         std::lock_guard<std::mutex> lock(state_mutex_);
 
         // Clear trainer if we're in dataset mode

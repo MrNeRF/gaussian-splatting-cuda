@@ -72,14 +72,42 @@ namespace gs {
         }
     }
 
+    bool TrainerManager::hasTrainer() const {
+        return trainer_ != nullptr;
+    }
+
     void TrainerManager::clearTrainer() {
-        // Stop any ongoing training
+        events::cmd::StopTraining{}.emit();
+        // Stop any ongoing training first
         if (isTrainingActive()) {
+            std::println("TrainerManager: Stopping training before clearing trainer...");
             stopTraining();
             waitForCompletion();
         }
 
-        // Clear the trainer
+        // Additional safety: ensure thread is properly stopped even if not "active"
+        if (training_thread_ && training_thread_->joinable()) {
+            std::println("TrainerManager: Force stopping training thread...");
+            training_thread_->request_stop();
+
+            // Try to wait for completion with a short timeout
+            auto timeout = std::chrono::milliseconds(500);
+            {
+                std::unique_lock<std::mutex> lock(completion_mutex_);
+                if (completion_cv_.wait_for(lock, timeout, [this] { return training_complete_; })) {
+                    lock.unlock();
+                    std::println("TrainerManager: Thread completed gracefully, joining...");
+                    training_thread_->join();
+                } else {
+                    lock.unlock();
+                    std::println("TrainerManager: Thread didn't respond to stop request, detaching...");
+                    training_thread_->detach();
+                }
+            }
+            training_thread_.reset();
+        }
+
+        // Now safe to clear the trainer
         trainer_.reset();
         last_error_.clear();
         setState(State::Idle);

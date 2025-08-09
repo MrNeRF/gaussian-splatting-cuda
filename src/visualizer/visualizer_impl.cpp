@@ -168,8 +168,6 @@ namespace gs::visualizer {
                 }
             }
         });
-
-        // Trainer ready
         internal::TrainerReady::when([this](const auto&) {
             internal::TrainingReadyToStart{}.emit();
         });
