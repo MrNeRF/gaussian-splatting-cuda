@@ -67,6 +67,7 @@ namespace {
             // Optional flag arguments
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
+            ::args::Flag disable_densification(parser, "disable-densification", "Disable densification during training", {"disable-densification"});
             ::args::Flag headless(parser, "headless", "Disable visualization during training", {"headless"});
             ::args::Flag antialiasing(parser, "antialiasing", "Enable antialiasing", {'a', "antialiasing"});
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
@@ -192,6 +193,7 @@ namespace {
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
+                                        disable_densification_flag = bool(disable_densification),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
@@ -224,6 +226,7 @@ namespace {
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
+                setFlag(disable_densification_flag, opt.disable_densifcation);
                 setFlag(headless_flag, opt.headless);
                 setFlag(antialiasing_flag, opt.antialiasing);
                 setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
