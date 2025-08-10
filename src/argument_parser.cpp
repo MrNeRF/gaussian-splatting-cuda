@@ -212,7 +212,7 @@ namespace {
 
                 // Apply all overrides
                 setVal(iterations_val, opt.iterations);
-                setVal(resize_factor_val, ds.resolution);
+                setVal(resize_factor_val, ds.resize_factor);
                 setVal(max_cap_val, opt.max_cap);
                 setVal(images_folder_val, ds.images);
                 setVal(test_every_val, ds.test_every);
