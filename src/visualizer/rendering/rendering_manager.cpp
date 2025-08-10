@@ -47,7 +47,7 @@ namespace gs::visualizer {
         }
 
         // Check if viewport has changed since last frame
-        bool viewport_changed = hasViewportChanged(context.viewport);
+        bool viewport_changed = hasCamChanged(context.viewport);
 
         // Check if we should skip scene rendering
         auto state = scene_manager->getCurrentState();
@@ -72,8 +72,8 @@ namespace gs::visualizer {
         drawSceneFrame(context, scene_manager, skip_scene_render);
 
         // Update last viewport state
-        last_viewport_state_ = context.viewport;
-        last_viewport_changed_ = viewport_changed;
+        prev_viewport_state_ = context.viewport;
+        cam_changed_ = viewport_changed;
 
         // Always render UI overlays (these are typically fast)
         if (settings_.show_crop_box && context.crop_box) {
@@ -212,8 +212,8 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
-        if (last_result_.valid && skip_render) {
-            RenderingPipeline::uploadToScreen(last_result_, *screen_renderer_, render_size);
+        if (prev_result_.valid && skip_render) {
+            RenderingPipeline::uploadToScreen(prev_result_, *screen_renderer_, render_size);
             screen_renderer_->render(quad_shader_);
             return;
         }
@@ -247,7 +247,7 @@ namespace gs::visualizer {
         if (result.valid) {
             RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_size);
             screen_renderer_->render(quad_shader_);
-            last_result_ = result;
+            prev_result_ = result;
         }
     }
 
@@ -316,37 +316,39 @@ namespace gs::visualizer {
         }
     }
 
-    bool RenderingManager::hasViewportChanged(const Viewport& current_viewport) const {
+    bool RenderingManager::hasCamChanged(const Viewport& current_viewport) const {
         // Compare current viewport with last known state
         const float epsilon = 1e-6f;
 
-        // Check if this is the first frame
-        if (last_viewport_changed_) {
-            return true;
-        }
-
+        bool has_changed = false;
         // Compare viewport parameters that affect rendering
-        if (glm::length(current_viewport.getTranslation() - last_viewport_state_.getTranslation()) > epsilon) {
-            return true;
+        if (glm::length(current_viewport.getTranslation() - prev_viewport_state_.getTranslation()) > epsilon) {
+            has_changed = true;
         }
 
-        auto current_rot = current_viewport.getRotationMatrix();
-        auto last_rot = last_viewport_state_.getRotationMatrix();
+        if (!has_changed) {
+            auto current_rot = current_viewport.getRotationMatrix();
+            auto last_rot = prev_viewport_state_.getRotationMatrix();
+            auto diff = last_rot - current_rot;
 
-        for (int i = 0; i < 3; ++i) {
-            for (int j = 0; j < 3; ++j) {
-                if (std::abs(current_rot[i][j] - last_rot[i][j]) > epsilon) {
-                    return true;
-                }
+            if (glm::length(diff[0]) + glm::length(diff[1]) + glm::length(diff[2])) {
+                has_changed = true;
             }
         }
 
-        // Check window size changes
-        if (current_viewport.windowSize != last_viewport_state_.windowSize) {
-            return true;
+        if (!has_changed) {
+            // Check window size changes
+            if (current_viewport.windowSize != prev_viewport_state_.windowSize) {
+                has_changed = true;
+            }
+            if (std::abs(prev_fov_ - settings_.fov) > epsilon) {
+                has_changed = true;
+            }
         }
 
-        return false;
-    }
+        prev_viewport_state_ = current_viewport;
+        prev_fov_ = settings_.fov;
 
+        return has_changed;
+    }
 } // namespace gs::visualizer

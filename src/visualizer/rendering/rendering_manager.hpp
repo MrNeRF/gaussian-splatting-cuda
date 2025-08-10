@@ -68,7 +68,7 @@ namespace gs::visualizer {
         void drawFocusIndicator(const RenderContext& context);
         void drawCropBox(const RenderContext& context);
         void drawCoordAxes(const RenderContext& context);
-        bool hasViewportChanged(const Viewport& current_viewport) const;
+        bool hasCamChanged(const Viewport& current_viewport) const;
 
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
@@ -77,9 +77,10 @@ namespace gs::visualizer {
 
         // Framerate control
         FramerateController framerate_controller_;
-        mutable bool last_viewport_changed_ = true;
-        mutable Viewport last_viewport_state_;
-        RenderingPipeline::RenderResult last_result_;
+        mutable bool cam_changed_ = true;
+        mutable Viewport prev_viewport_state_;
+        mutable float prev_fov_ = 0;
+        RenderingPipeline::RenderResult prev_result_;
     };
 
 } // namespace gs::visualizer

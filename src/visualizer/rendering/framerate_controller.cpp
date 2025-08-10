@@ -129,5 +129,4 @@ namespace gs::visualizer {
         frame_start_time_ = now;
         last_frame_time_ = now;
     }
-
 } // namespace gs::visualizer
