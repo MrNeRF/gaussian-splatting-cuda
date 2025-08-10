@@ -10,6 +10,7 @@
 #include <memory>
 #include <numeric>
 #include <print>
+#include "core/rasterizer_autograd.hpp"
 
 namespace gs {
 
@@ -796,79 +797,150 @@ namespace gs {
 
         return cams;
     }
-    
+
     void Trainer::prune_after_training(float threshold) {
         torch::NoGradGuard no_grad;
-        auto& model = strategy_->get_model();
 
+        // 0) Access current Gaussian model
+        SplatData& model = strategy_->get_model();
         const int64_t N = model.get_means().size(0);
         if (N == 0)
             return;
 
-        torch::Tensor pos = torch::zeros({N}, torch::kInt32).cuda();
-        torch::Tensor tot = torch::zeros({N}, torch::kInt32).cuda();
-        torch::Tensor bg;
+        // 1) Allocate vote buffers on GPU
+        torch::Tensor pos = torch::zeros({N}, torch::kInt32).cuda(); // positive votes
+        torch::Tensor tot = torch::zeros({N}, torch::kInt32).cuda(); // total votes
 
-        std::cout << "Optimized pruning: Using DataLoader to pre-fetch masks..." << std::endl;
+        // 2) Build the same DataLoader you already use (mask comes from batch.data.attentionMask)
+        std::cout << "Optimized pruning (projection-only): Using DataLoader..." << std::endl;
         auto pruning_dataloader = torch::data::make_data_loader(
             *train_dataset_,
             torch::data::samplers::SequentialSampler(train_dataset_->size().value()),
-            torch::data::DataLoaderOptions().batch_size(1).workers(4));
+            torch::data::DataLoaderOptions().batch_size(1).workers(4) // keep your current setting
+        );
 
-        std::cout << std::endl;
-        int index = 0;
+        // 3) Prepare model tensors once (CUDA)
+        auto means3D = model.get_means();      // [N,3], CUDA
+        auto scales = model.get_scaling();     // [N,3], CUDA
+        auto rotations = model.get_rotation(); // [N,4] or [N,3x3], CUDA
+        auto opacities = model.get_opacity();  // [N] or [N,1], CUDA / may be undefined but Tensor
+
+        if (opacities.defined() && opacities.dim() == 2 && opacities.size(-1) == 1) {
+            opacities = opacities.squeeze(-1);
+        }
+
+        // Projection numeric constants (keep in sync with rasterizer)
+        const float eps2d = 0.3f;
+        const float near_plane = 0.01f;
+        const float far_plane = 10000.0f;
+        const float radius_clip = 0.0f;
+        const float scaling_mod = 1.0f;
+
+        std::cout << "Optimized pruning: Fetched..." << std::endl;
+        int index = 1;
+
         for (auto& batch : *pruning_dataloader) {
+            // Progress heartbeat
             printf("\rPrunning image %i", index++);
+            fflush(stdout);
+
+            // 3.a) Unpack camera and attention mask from your batch
             auto camera_with_data = batch[0].data;
             Camera* cam = camera_with_data.camera;
             torch::Tensor float_weight_map = camera_with_data.attentionMask;
-
-            if (!float_weight_map.defined()) {
+            if (!cam || !float_weight_map.defined()) {
                 continue;
             }
 
-            auto bool_mask_3d = (float_weight_map > 0.5f);
+            // Make a [H,W] boolean mask on CPU
+            auto bool_mask_3d = (float_weight_map > 0.5f); // [1,H,W] or [H,W]
+            auto bool_mask = (bool_mask_3d.dim() == 3 && bool_mask_3d.size(0) == 1)
+                                 ? bool_mask_3d.squeeze(0)
+                                 : bool_mask_3d;
+            TORCH_CHECK(bool_mask.dim() == 2, "Attention mask must be [H,W] or [1,H,W]");
+            bool_mask = bool_mask.contiguous(); // CPU bool [H,W]
 
-            // Squeeze the tensor to remove the first dimension
-            // This converts the tensor from shape [1, H, W] to [H, W].
-            auto bool_mask = bool_mask_3d.squeeze(0);
+            const int H = static_cast<int>(bool_mask.size(0));
+            const int W = static_cast<int>(bool_mask.size(1));
 
-            RenderOutput out = gs::rasterize(*cam, model, bg, 1.f, false, false, RenderMode::RGB);
+            // 3.b) Camera tensors (CUDA)
+            auto viewmat = cam->world_view_transform().to(torch::kCUDA); // [1,4,4]
+            auto K = cam->K().to(torch::kCUDA);                          // [1,3,3] or [3,3]
 
-            auto visible = out.radii.squeeze(-1) > 0.0f;
-            if (!visible.any().item<bool>()) {
+            // Prefer camera's declared image size for projection
+            const int image_width = static_cast<int>(cam->image_width());
+            const int image_height = static_cast<int>(cam->image_height());
+
+            // 3.c) Projection-only (no rendering)
+            auto proj_settings = torch::tensor(
+                {static_cast<float>(image_width),
+                 static_cast<float>(image_height),
+                 eps2d, near_plane, far_plane, radius_clip, scaling_mod},
+                torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+
+            // NOTE: This lives in the same namespace (gs) – call without "gs::" prefix,
+            // exactly like in rasterizer.cpp.
+            auto proj_out = ProjectionFunction::apply(
+                means3D, rotations, scales, opacities, viewmat, K, proj_settings);
+
+            torch::Tensor radii2 = proj_out[0];  // [1,N,2] or [N,2]
+            torch::Tensor means2d = proj_out[1]; // [1,N,2] or [N,2]
+
+            if (!radii2.defined() || !means2d.defined()) {
+                printf("radii2 or means2d failed\n");
+                continue; // Projection failed, skip gracefully
+            }
+            if (radii2.dim() == 3 && radii2.size(0) == 1)
+                radii2 = radii2.squeeze(0);
+            if (means2d.dim() == 3 && means2d.size(0) == 1)
+                means2d = means2d.squeeze(0);
+
+            // 3.d) Visibility: positive projected radius
+            torch::Tensor visible;
+            if (radii2.dim() == 2 && radii2.size(1) >= 1) {
+                visible = (radii2 > 0.0f).all(-1); // [N]
+            } else if (radii2.dim() == 1) {
+                visible = (radii2 > 0.0f);
+            } else {
                 continue;
             }
+            if (!visible.any().item<bool>())
+                continue;
 
-            auto idx = visible.nonzero().squeeze();
-            auto means2d_squeezed = out.means2d.squeeze(0);
+            auto idx = visible.nonzero().squeeze(); // [M], CUDA
 
-            // Ahora la indexación es coherente
-            auto xy = means2d_squeezed.index({idx});
+            // 3.e) Gather 2D positions (CPU) and vote on the CPU mask
+            auto xy_cuda = means2d.index({idx}); // [M,2], CUDA
+            auto xy = xy_cuda.detach().to(torch::kCPU);
 
-            // Now these calculations will be correct because bool_mask is 2D.
-            const int W = bool_mask.size(1);
-            const int H = bool_mask.size(0);
+            // Round and clamp to mask bounds
             auto x = torch::round(xy.select(1, 0)).to(torch::kLong).clamp(0, W - 1);
             auto y = torch::round(xy.select(1, 1)).to(torch::kLong).clamp(0, H - 1);
-            auto lin = y * W + x;
+            auto lin = y * W + x; // [M], CPU long
 
-            // The rest of the logic works as intended now.
-            auto white = bool_mask.flatten().index({lin});
-            pos.index_add_(0, idx, white.to(torch::kInt32));
-            tot.index_add_(0, idx, torch::ones_like(white, torch::kInt32));
+            // Sample mask and accumulate votes
+            auto white_cpu = bool_mask.flatten().index({lin});                  // CPU bool
+            auto white_i32_cuda = white_cpu.to(torch::kInt32).to(torch::kCUDA); // CUDA int32
+
+            pos.index_add_(0, idx, white_i32_cuda);
+            tot.index_add_(0, idx, torch::ones_like(white_i32_cuda, torch::kInt32));
         }
 
+        // Newline after progress
+        printf("\n");
+
+        // 4) Final pruning by vote ratio
         const int min_visibility_count = 3;
-        auto ratio = pos.to(torch::kFloat32) / tot.to(torch::kFloat32).clamp_min(1.0f);
+        auto tot_safe = tot.to(torch::kFloat32).clamp_min(1.0f);
+        auto ratio = pos.to(torch::kFloat32) / tot_safe;
+
         auto keep_mask = (tot >= min_visibility_count) & (ratio >= threshold);
 
         const int removed = (keep_mask == 0).sum().item<int>();
         model.filterByMask(keep_mask);
 
-        std::cout << std::endl;
-        std::cout << "[Trainer] prune_after_training: removed "
-                  << removed << " / " << N << " splats (thr = "
-                  << threshold << ", min_vis = " << min_visibility_count << ")\n";
+        std::cout << "[Trainer] prune_after_training (projection-only): removed "
+                  << removed << " / " << N << " splats (thr=" << threshold
+                  << ", min_vis=" << min_visibility_count << ")\n";
     }
 } // namespace gs
