@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/events.hpp"
 #include "rendering/framerate_controller.hpp"
 #include "rendering/renderer.hpp"
 #include "rendering/rendering_pipeline.hpp"
@@ -69,6 +70,7 @@ namespace gs::visualizer {
         void drawCropBox(const RenderContext& context);
         void drawCoordAxes(const RenderContext& context);
         bool hasCamChanged(const Viewport& current_viewport) const;
+        void setupEventHandlers();
 
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
@@ -81,6 +83,10 @@ namespace gs::visualizer {
         mutable Viewport prev_viewport_state_;
         mutable float prev_fov_ = 0;
         RenderingPipeline::RenderResult prev_result_;
+
+        // Scene loading tracking - for frame control
+        bool scene_just_loaded_ = false;
+        event::HandlerId scene_loaded_handler_id_;
     };
 
 } // namespace gs::visualizer

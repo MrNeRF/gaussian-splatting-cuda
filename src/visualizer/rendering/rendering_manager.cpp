@@ -10,8 +10,14 @@
 
 namespace gs::visualizer {
 
-    RenderingManager::RenderingManager() = default;
-    RenderingManager::~RenderingManager() = default;
+    RenderingManager::RenderingManager() {
+        setupEventHandlers();
+    }
+
+    RenderingManager::~RenderingManager() {
+        // Unsubscribe from events
+        event::bus().remove<events::state::SceneLoaded>(scene_loaded_handler_id_);
+    }
 
     void RenderingManager::initialize() {
         if (initialized_)
@@ -38,6 +44,13 @@ namespace gs::visualizer {
             true);
     }
 
+    void RenderingManager::setupEventHandlers() {
+        // Subscribe to SceneLoaded events
+        scene_loaded_handler_id_ = events::state::SceneLoaded::when([this](const auto& event) {
+            scene_just_loaded_ = true;
+        });
+    }
+
     void RenderingManager::renderFrame(const RenderContext& context, SceneManager* scene_manager) {
         // Begin framerate tracking
         framerate_controller_.beginFrame();
@@ -53,6 +66,12 @@ namespace gs::visualizer {
         auto state = scene_manager->getCurrentState();
         bool skip_scene_render = framerate_controller_.shouldSkipSceneRender(
             state.is_training, viewport_changed);
+
+        // Don't skip rendering if scene was just loaded
+        if (scene_just_loaded_) {
+            skip_scene_render = false;
+            scene_just_loaded_ = false; // Reset the flag after using it
+        }
 
         // Always clear and setup viewport (this is fast)
         glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
