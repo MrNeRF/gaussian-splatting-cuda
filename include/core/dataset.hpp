@@ -93,7 +93,7 @@ namespace gs {
 
     private:
         std::vector<std::shared_ptr<Camera>> _cameras;
-        const gs::param::DatasetConfig& _datasetConfig;
+        const gs::param::DatasetConfig _datasetConfig;
         Split _split;
         std::vector<size_t> _indices;
     };
