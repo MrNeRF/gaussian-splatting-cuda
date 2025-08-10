@@ -24,7 +24,7 @@ namespace gs::loader {
 
     // Public types that clients need
     struct LoadOptions {
-        int resolution = -1;
+        int resize_factor = -1;
         std::string images_folder = "images";
         bool validate_only = false;
         ProgressCallback progress = nullptr;

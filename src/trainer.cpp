@@ -180,6 +180,8 @@ namespace gs {
         if (callback_busy_.load()) {
             callback_stream_.synchronize();
         }
+        // unsubscribe - because when the event emits while class destroyed we get crash
+        gs::event::bus().remove<gs::events::internal::TrainingReadyToStart>(train_started_handle_);
     }
 
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
@@ -414,7 +416,7 @@ namespace gs {
             std::atomic<bool> ready{false};
 
             // Subscribe temporarily to start signal
-            events::internal::TrainingReadyToStart::when([&ready](const auto&) {
+            train_started_handle_ = events::internal::TrainingReadyToStart::when([&ready](const auto&) {
                 ready = true;
             });
 

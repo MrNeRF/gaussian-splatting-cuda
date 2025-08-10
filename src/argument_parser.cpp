@@ -54,7 +54,6 @@ namespace {
 
             // Optional value arguments
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
-            ::args::ValueFlag<int> resolution(parser, "resolution", "Set resolution", {'r', "resolution"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
@@ -73,6 +72,17 @@ namespace {
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
             ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
+
+            ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
+                                                            "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
+                                                            {'r', "resize_factor"},
+                                                            // load_image only supports those resizes
+                                                            std::unordered_map<std::string, int>{
+                                                                {"auto", 1},
+                                                                {"1", 1},
+                                                                {"2", 2},
+                                                                {"4", 4},
+                                                                {"8", 8}});
 
             // Parse arguments
             try {
@@ -170,7 +180,7 @@ namespace {
             auto apply_cmd_overrides = [&params,
                                         // Capture values, not references
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
-                                        resolution_val = resolution ? std::optional<int>(::args::get(resolution)) : std::optional<int>(),
+                                        resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
                                         images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
                                         test_every_val = test_every ? std::optional<int>(::args::get(test_every)) : std::optional<int>(),
@@ -202,7 +212,7 @@ namespace {
 
                 // Apply all overrides
                 setVal(iterations_val, opt.iterations);
-                setVal(resolution_val, ds.resolution);
+                setVal(resize_factor_val, ds.resize_factor);
                 setVal(max_cap_val, opt.max_cap);
                 setVal(images_folder_val, ds.images);
                 setVal(test_every_val, ds.test_every);
