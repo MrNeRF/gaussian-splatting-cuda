@@ -62,7 +62,7 @@ namespace gs {
             size_t camera_idx = _indices[index];
             auto& cam = _cameras[camera_idx];
 
-            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
+            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resize_factor);
             return {{cam.get(), std::move(image)}, torch::empty({})};
         }
 
@@ -85,15 +85,15 @@ namespace gs {
                 total_bytes += cam->get_num_bytes_from_file();
             }
             // Adjust for resolution factor if specified
-            if (_datasetConfig.resolution > 0) {
-                total_bytes /= _datasetConfig.resolution * _datasetConfig.resolution;
+            if (_datasetConfig.resize_factor > 0) {
+                total_bytes /= _datasetConfig.resize_factor * _datasetConfig.resize_factor;
             }
             return total_bytes;
         }
 
     private:
         std::vector<std::shared_ptr<Camera>> _cameras;
-        const gs::param::DatasetConfig& _datasetConfig;
+        const gs::param::DatasetConfig _datasetConfig;
         Split _split;
         std::vector<size_t> _indices;
     };
@@ -133,7 +133,7 @@ namespace gs {
 
             // Set up load options
             gs::loader::LoadOptions options{
-                .resolution = datasetConfig.resolution,
+                .resize_factor = datasetConfig.resize_factor,
                 .images_folder = datasetConfig.images,
                 .validate_only = false};
 
@@ -180,7 +180,7 @@ namespace gs {
 
             // Set up load options
             gs::loader::LoadOptions options{
-                .resolution = datasetConfig.resolution,
+                .resize_factor = datasetConfig.resize_factor,
                 .images_folder = datasetConfig.images,
                 .validate_only = false};
 

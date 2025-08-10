@@ -325,9 +325,9 @@ flowchart LR
   - Paper suggests 30k, but 6k-7k often yields good preliminary results
   - Outputs are saved every 7k iterations and at completion
 
-- **`-r, --resolution [NUM]`**  
-  Set the resolution for training images
-  - -1: Use original resolution (default)
+- **`-r, --resize_factor [NUM]`**  
+  resize the resolution for training images
+  - 1: Use original resolution (default)
   - Positive values: Target resolution for image loading
 
 - **`--steps-scaler [NUM]`**  

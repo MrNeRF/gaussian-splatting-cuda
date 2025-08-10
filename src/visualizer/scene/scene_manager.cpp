@@ -131,7 +131,7 @@ namespace gs {
                                    const param::TrainingParameters& params) {
         try {
             trainer_manager_->clearTrainer(); // mainly to stop training thread
-            cached_params_ = params; // Cache for potential reloads
+            cached_params_ = params;          // Cache for potential reloads
             loadDatasetInternal(path, params);
         } catch (const std::exception& e) {
             events::notify::Error{
@@ -204,7 +204,7 @@ namespace gs {
 
         // Set up load options
         gs::loader::LoadOptions options{
-            .resolution = -1,
+            .resize_factor = -1,
             .images_folder = "images",
             .validate_only = false,
             .progress = [this](float percent, const std::string& msg) {
