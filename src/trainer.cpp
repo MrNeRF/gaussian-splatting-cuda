@@ -737,7 +737,8 @@ namespace gs {
             }
 
             training_complete:
-                prune_after_training(0.8);
+                if (params_.optimization.use_attention_mask)
+                    prune_after_training(0.8);
             
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
@@ -814,7 +815,10 @@ namespace gs {
             torch::data::samplers::SequentialSampler(train_dataset_->size().value()),
             torch::data::DataLoaderOptions().batch_size(1).workers(4));
 
+        std::cout << std::endl;
+        int index = 0;
         for (auto& batch : *pruning_dataloader) {
+            printf("\rPrunning image %i", index++);
             auto camera_with_data = batch[0].data;
             Camera* cam = camera_with_data.camera;
             torch::Tensor float_weight_map = camera_with_data.attentionMask;
@@ -829,7 +833,7 @@ namespace gs {
             // This converts the tensor from shape [1, H, W] to [H, W].
             auto bool_mask = bool_mask_3d.squeeze(0);
 
-            RenderOutput out = gs::rasterize(*cam, model, bg, 1.f, false, false, RenderMode::D);
+            RenderOutput out = gs::rasterize(*cam, model, bg, 1.f, false, false, RenderMode::RGB);
 
             auto visible = out.radii.squeeze(-1) > 0.0f;
             if (!visible.any().item<bool>()) {
@@ -862,9 +866,9 @@ namespace gs {
         const int removed = (keep_mask == 0).sum().item<int>();
         model.filterByMask(keep_mask);
 
+        std::cout << std::endl;
         std::cout << "[Trainer] prune_after_training: removed "
                   << removed << " / " << N << " splats (thr = "
                   << threshold << ", min_vis = " << min_visibility_count << ")\n";
     }
-
 } // namespace gs
