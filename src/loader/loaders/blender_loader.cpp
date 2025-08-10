@@ -126,7 +126,7 @@ namespace gs::loader {
             gs::param::DatasetConfig dataset_config;
             dataset_config.data_path = path;
             dataset_config.images = options.images_folder;
-            dataset_config.resolution = options.resolution;
+            dataset_config.resize_factor = options.resize_factor;
 
             // Create dataset with ALL images
             auto dataset = std::make_shared<gs::CameraDataset>(
