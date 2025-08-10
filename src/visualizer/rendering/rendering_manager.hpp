@@ -21,6 +21,7 @@ namespace gs::visualizer {
         bool show_crop_box = false;
         bool use_crop_box = false;
         bool show_coord_axes = false;
+        bool adaptive_frame_rate = true;
     };
 
     struct ViewportRegion {

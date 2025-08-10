@@ -64,8 +64,11 @@ namespace gs::visualizer {
 
         // Check if we should skip scene rendering
         auto state = scene_manager->getCurrentState();
-        bool skip_scene_render = framerate_controller_.shouldSkipSceneRender(
-            state.is_training, viewport_changed);
+        bool skip_scene_render = false;
+        if (settings_.adaptive_frame_rate) {
+            skip_scene_render = framerate_controller_.shouldSkipSceneRender(
+                state.is_training, viewport_changed);
+        }
 
         // Don't skip rendering if scene was just loaded
         if (scene_just_loaded_) {
