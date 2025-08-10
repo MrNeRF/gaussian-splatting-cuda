@@ -65,7 +65,7 @@ namespace gs {
             std::filesystem::path data_path = "";
             std::filesystem::path output_path = "output";
             std::string images = "images";
-            int resolution = -1;
+            int resize_factor = -1;
             int test_every = 8;
         };
 
