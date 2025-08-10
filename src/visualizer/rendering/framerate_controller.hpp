@@ -58,13 +58,14 @@ namespace gs::visualizer {
         std::deque<FrameData> frame_times_; // Store recent frame data with timestamps
 
         // FPS tracking
-        float current_fps_ = 0.0f;
-        float average_fps_ = 0.0f;
+        float current_fps_ = 0.0f; // very noisy right now
+        float average_fps_ = 0.0f; // average is over time_window_seconds
         bool is_performance_critical_ = false;
 
         // Skip logic state
         bool was_skipping_frames_ = false;
         int consecutive_skips_ = 0;
+        // in the worst case - we drop max_consecutive_skips_ of of max_consecutive_skips_+1 frames
         static constexpr int max_consecutive_skips_ = 10;
     };
 
