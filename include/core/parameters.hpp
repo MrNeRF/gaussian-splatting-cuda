@@ -29,10 +29,11 @@ namespace gs {
             float init_opacity = 0.5f;
             float init_scaling = 0.1f;
             int max_cap = 1000000;
-            std::vector<size_t> eval_steps = {7'000, 30'000}; // Steps to evaluate the model
-            std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
+            std::vector<size_t> eval_steps = {10'000, 30'000}; // Steps to evaluate the model
+            std::vector<size_t> save_steps = {10'000, 30'000}; // Steps to save the model
             bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
+            bool disable_densifcation = false;                // Disable densification during training
             bool enable_save_eval_images = true;              // Save during evaluation images
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
