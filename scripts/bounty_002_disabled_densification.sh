@@ -41,7 +41,7 @@ do
         --headless \
         --save-eval-images \
         --strategy mcmc \
-        --iter 10000 \
+        --iter 30000 \
         --disable-densification
 
     echo "Completed $SCENE"
