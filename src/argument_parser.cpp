@@ -76,7 +76,7 @@ namespace {
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
                                                             "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
                                                             {'r', "resize_factor"},
-                                                            // load_image only support those resizes
+                                                            // load_image only supports those resizes
                                                             std::unordered_map<std::string, int>{
                                                                 {"auto", -1},
                                                                 {"-1", -1},
