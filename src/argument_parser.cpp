@@ -78,8 +78,8 @@ namespace {
                                                             {'r', "resize_factor"},
                                                             // load_image only supports those resizes
                                                             std::unordered_map<std::string, int>{
-                                                                {"auto", -1},
-                                                                {"-1", -1},
+                                                                {"auto", 1},
+                                                                {"1", 1},
                                                                 {"2", 2},
                                                                 {"4", 4},
                                                                 {"8", 8}});
