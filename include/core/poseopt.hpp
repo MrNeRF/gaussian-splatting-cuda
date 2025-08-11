@@ -5,7 +5,7 @@
 namespace gs {
     struct PoseOptimizationModule : torch::nn::Module {
         PoseOptimizationModule() {}
-        virtual torch::Tensor forward(torch::Tensor camera_transforms, torch::Tensor embedding_ids) {
+        virtual torch::Tensor forward(torch::Tensor camera_transforms, [[maybe_unused]] torch::Tensor embedding_ids) {
             // No operation, just return the input transforms
             return camera_transforms;
         }

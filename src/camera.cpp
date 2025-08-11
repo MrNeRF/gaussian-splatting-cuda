@@ -56,6 +56,8 @@ namespace gs {
           _focal_y(other._focal_y),
           _center_x(other._center_x),
           _center_y(other._center_y),
+          _R(other._R),
+          _T(other._T),
           _radial_distortion(other._radial_distortion),
           _tangential_distortion(other._tangential_distortion),
           _camera_model_type(other._camera_model_type),
@@ -64,7 +66,10 @@ namespace gs {
           _camera_width(other._camera_width),
           _camera_height(other._camera_height),
           _image_width(other._image_width),
-          _image_height(other._image_height) {
+          _image_height(other._image_height),
+          _cam_position(other._cam_position),
+          _FoVx(other._FoVx),
+          _FoVy(other._FoVy) {
         _world_view_transform = transform;
     }
     torch::Tensor Camera::K() const {
