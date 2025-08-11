@@ -63,9 +63,9 @@ namespace gs {
 
         const param::TrainingParameters& getParams() const { return params_; }
 
-        std::shared_ptr <const Camera> getCamById(int camId) const;
+        std::shared_ptr<const Camera> getCamById(int camId) const;
 
-        std::vector<std::shared_ptr <const Camera>> getCamList() const;
+        std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
     private:
         // this is for unsubscribing in the DTOR
