@@ -12,6 +12,9 @@ namespace gs {
 
 namespace gs::visualizer {
 
+    // Forward declaration
+    class BackgroundTool;
+
     struct RenderSettings {
         float fov = 60.0f;
         float scaling_modifier = 1.0f;
@@ -34,7 +37,8 @@ namespace gs::visualizer {
             const RenderCoordinateAxes* coord_axes;
             const geometry::EuclideanTransform* world_to_user;
             const ViewportRegion* viewport_region = nullptr;
-            bool has_focus = false; // Indicates if the viewport has focus for input handling
+            bool has_focus = false;                          // Indicates if the viewport has focus for input handling
+            const BackgroundTool* background_tool = nullptr; // NEW
         };
 
         RenderingManager();

@@ -2,6 +2,7 @@
 #include "rendering/render_coordinate_axes.hpp"
 
 #include "internal/resource_paths.hpp"
+#include "tools/background_tool.hpp"
 #include "training/training_manager.hpp"
 
 #ifdef CUDA_GL_INTEROP_ENABLED
@@ -192,6 +193,12 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
+        // Get background color
+        glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
+        if (context.background_tool) {
+            background_color = context.background_tool->getBackgroundColor();
+        }
+
         RenderingPipeline::RenderRequest request{
             .view_rotation = rot,
             .view_translation = trans,
@@ -200,7 +207,8 @@ namespace gs::visualizer {
             .scaling_modifier = settings_.scaling_modifier,
             .antialiasing = settings_.antialiasing,
             .render_mode = RenderMode::RGB,
-            .crop_box = render_crop_box};
+            .crop_box = render_crop_box,
+            .background_color = background_color};
 
         // Get trainer for potential mutex locking
         auto state = scene_manager->getCurrentState();
