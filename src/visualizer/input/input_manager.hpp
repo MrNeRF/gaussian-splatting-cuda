@@ -1,10 +1,10 @@
 #pragma once
 
 #include "core/events.hpp"
-#include "training/training_manager.hpp"
 #include "input/camera_controller.hpp"
 #include "input/input_handler.hpp"
 #include "internal/viewport.hpp"
+#include "training/training_manager.hpp"
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -32,7 +32,7 @@ namespace gs::visualizer {
         InputHandler* getInputHandler() { return input_handler_.get(); }
         CameraController* getCameraController() { return camera_controller_.get(); }
 
-        void setTrainingManager(std::shared_ptr<const TrainerManager> training_manager){ trainer_manager_ = training_manager;};
+        void setTrainingManager(std::shared_ptr<const TrainerManager> training_manager) { trainer_manager_ = training_manager; };
 
     private:
         GLFWwindow* window_;
