@@ -9,7 +9,7 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting.
 <img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="80%"/>
 
 ## 🏆 Second Bounty (Started on 10 of August 2025)
-Better 3DGS Initialization and Training without Densification: $1600 + $500 (Bonus Challenge)
+Better 3DGS Initialization and Training without Densification: $2600 + $500 (Bonus Challenge)
 
 Details here [Issue #284](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/284)
 
