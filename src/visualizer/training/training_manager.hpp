@@ -51,7 +51,7 @@ namespace gs {
         // Setup and teardown
         void setTrainer(std::unique_ptr<Trainer> trainer);
         void clearTrainer();
-        bool hasTrainer() const { return trainer_ != nullptr; }
+        bool hasTrainer() const;
 
         // Link to viewer for notifications
         void setViewer(visualizer::VisualizerImpl* viewer) { viewer_ = viewer; }
@@ -90,6 +90,11 @@ namespace gs {
 
         // Get last error message
         const std::string& getLastError() const { return last_error_; }
+
+        // call the trainer getCamById
+        std::shared_ptr<const Camera> getCamById(int camId) const;
+
+        std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
     private:
         // Training thread function

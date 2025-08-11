@@ -55,7 +55,6 @@ namespace {
 
             // Optional value arguments
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
-            ::args::ValueFlag<int> resolution(parser, "resolution", "Set resolution", {'r', "resolution"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
@@ -66,17 +65,29 @@ namespace {
             ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
             ::args::ValueFlag<std::string> pose_opt(parser, "pose_opt", "Enable pose optimization type: none, direct, mlp", {"pose-opt"});
             ::args::ValueFlag<std::string> strategy(parser, "strategy", "Optimization strategy: mcmc, default", {"strategy"});
+            ::args::ValueFlag<int> init_num_pts(parser, "init_num_pts", "Number of random initialization points", {"init-num-pts"});
+            ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
 
             // Optional flag arguments
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
             ::args::Flag headless(parser, "headless", "Disable visualization during training", {"headless"});
             ::args::Flag antialiasing(parser, "antialiasing", "Enable antialiasing", {'a', "antialiasing"});
-            ::args::Flag selective_adam(parser, "selective_adam", "Enable selective adam", {"selective-adam"});
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
             ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
-            ::args::Flag preload_to_ram(parser, "preload_to_ram", "Load the entire dataset into RAM at startup for maximum performance (uses more RAM)", {"preload-to-ram"});
+            ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
+
+            ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
+                                                            "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
+                                                            {'r', "resize_factor"},
+                                                            // load_image only supports those resizes
+                                                            std::unordered_map<std::string, int>{
+                                                                {"auto", 1},
+                                                                {"1", 1},
+                                                                {"2", 2},
+                                                                {"4", 4},
+                                                                {"8", 8}});
 
             // Parse arguments
             try {
@@ -163,6 +174,11 @@ namespace {
                         "ERROR: Invalid optimization strategy '{}'. Valid strategies are: mcmc, default",
                         strat));
                 }
+
+                // Unlike other parameters that will be set later as overrides,
+                // strategy must be set immediately to ensure correct JSON loading
+                // in `read_optim_params_from_json()`
+                params.optimization.strategy = strat;
             }
 
             if (pose_opt) {
@@ -178,7 +194,7 @@ namespace {
             auto apply_cmd_overrides = [&params,
                                         // Capture values, not references
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
-                                        resolution_val = resolution ? std::optional<int>(::args::get(resolution)) : std::optional<int>(),
+                                        resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
                                         images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
                                         test_every_val = test_every ? std::optional<int>(::args::get(test_every)) : std::optional<int>(),
@@ -187,17 +203,18 @@ namespace {
                                         sh_degree_val = sh_degree ? std::optional<int>(::args::get(sh_degree)) : std::optional<int>(),
                                         min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
+                                        init_num_pts_val = init_num_pts ? std::optional<int>(::args::get(init_num_pts)) : std::optional<int>(),
+                                        init_extent_val = init_extent ? std::optional<float>(::args::get(init_extent)) : std::optional<float>(),
                                         pose_opt_val = pose_opt ? std::optional<std::string>(::args::get(pose_opt)) : std::optional<std::string>(),
                                         strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
                                         // Capture flag states
-                                        preload_to_ram_flag = bool(preload_to_ram),
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
-                                        selective_adam_flag = bool(selective_adam),
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
-                                        skip_intermediate_saving_flag = bool(skip_intermediate_saving)]() {
+                                        skip_intermediate_saving_flag = bool(skip_intermediate_saving),
+                                        random_flag = bool(random)]() {
                 auto& opt = params.optimization;
                 auto& ds = params.dataset;
 
@@ -214,7 +231,7 @@ namespace {
 
                 // Apply all overrides
                 setVal(iterations_val, opt.iterations);
-                setVal(resolution_val, ds.resolution);
+                setVal(resize_factor_val, ds.resize_factor);
                 setVal(max_cap_val, opt.max_cap);
                 setVal(images_folder_val, ds.images);
                 setVal(test_every_val, ds.test_every);
@@ -223,17 +240,18 @@ namespace {
                 setVal(sh_degree_val, opt.sh_degree);
                 setVal(min_opacity_val, opt.min_opacity);
                 setVal(render_mode_val, opt.render_mode);
+                setVal(init_num_pts_val, opt.init_num_pts);
+                setVal(init_extent_val, opt.init_extent);
                 setVal(pose_opt_val, opt.pose_optimization);
                 setVal(strategy_val, opt.strategy);
 
-                setFlag(preload_to_ram_flag, opt.preload_to_ram);
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
                 setFlag(headless_flag, opt.headless);
                 setFlag(antialiasing_flag, opt.antialiasing);
-                setFlag(selective_adam_flag, opt.selective_adam);
                 setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
                 setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
+                setFlag(random_flag, opt.random);
             };
 
             return std::make_tuple(ParseResult::Success, apply_cmd_overrides);
@@ -288,7 +306,7 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
     // Training mode - load JSON first
     if (!params->dataset.data_path.empty()) {
-        auto opt_params_result = gs::param::read_optim_params_from_json();
+        auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
         if (!opt_params_result) {
             return std::unexpected(std::format("Failed to load optimization parameters: {}",
                                                opt_params_result.error()));

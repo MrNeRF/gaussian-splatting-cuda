@@ -21,7 +21,6 @@ endif()
 # All gsplat sources together
 set(GSPLAT_SOURCES
         # C++ files
-        Adam.cpp
         Intersect.cpp
         Null.cpp
         Projection.cpp
@@ -32,7 +31,6 @@ set(GSPLAT_SOURCES
         SphericalHarmonics.cpp
 
         # CUDA files
-        AdamCUDA.cu
         IntersectTile.cu
         NullCUDA.cu
         ProjectionEWA3DGSFused.cu

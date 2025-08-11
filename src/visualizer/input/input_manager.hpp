@@ -4,10 +4,10 @@
 #include "input/camera_controller.hpp"
 #include "input/input_handler.hpp"
 #include "internal/viewport.hpp"
+#include "training/training_manager.hpp"
 #include <filesystem>
 #include <functional>
 #include <memory>
-#include <vector>
 
 namespace gs::visualizer {
 
@@ -22,10 +22,17 @@ namespace gs::visualizer {
         // Setup
         void initialize();
         void setupCallbacks(GuiActiveCheck gui_check, FileDropCallback file_drop);
+        void setViewportFocusCheck(std::function<bool()> focus_check);
+        void setPositionCheck(std::function<bool(double, double)> check);
+
+        // Update input routing based on focus
+        void updateInputRouting();
 
         // Getters
         InputHandler* getInputHandler() { return input_handler_.get(); }
         CameraController* getCameraController() { return camera_controller_.get(); }
+
+        void setTrainingManager(std::shared_ptr<const TrainerManager> training_manager) { trainer_manager_ = training_manager; };
 
     private:
         GLFWwindow* window_;
@@ -34,14 +41,19 @@ namespace gs::visualizer {
         std::unique_ptr<InputHandler> input_handler_;
         std::unique_ptr<CameraController> camera_controller_;
 
+        std::shared_ptr<const TrainerManager> trainer_manager_;
+
         GuiActiveCheck gui_active_check_;
         FileDropCallback file_drop_callback_;
-
-        // Handler IDs for cleanup
-        std::vector<InputHandler::HandlerId> gui_handler_ids_;
+        std::function<bool()> viewport_focus_check_;
+        std::function<bool(double, double)> position_check_;
 
         void setupInputHandlers();
-        bool handleFileDrop(const InputHandler::FileDropEvent& event);
+        void handleFileDrop(const InputHandler::FileDropEvent& event);
+
+        // Event handlers
+        void setupEventHandlers();
+        void handleGoToCamView(const events::cmd::GoToCamView& event);
     };
 
 } // namespace gs::visualizer

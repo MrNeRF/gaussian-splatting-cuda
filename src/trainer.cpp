@@ -1,10 +1,14 @@
 #include "core/trainer.hpp"
-
 #include "core/poseopt.hpp"
+#include "core/fast_rasterizer.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
+#include <ATen/cuda/CUDAEvent.h>
+#include <atomic>
 #include <chrono>
+#include <cuda_runtime.h>
 #include <expected>
+#include <memory>
 #include <numeric>
 #include <print>
 
@@ -137,18 +141,6 @@ namespace gs {
                          train_dataset_->size().value());
         }
 
-        if (params_.optimization.preload_to_ram) {
-            std::cout << "Preload to RAM enabled. Caching datasets..." << std::endl;
-            if (train_dataset_) {
-                train_dataset_->preload_data();
-            }
-            if (val_dataset_) {
-                val_dataset_->preload_data();
-            }
-        } else {
-            std::cout << "Loading dataset from disk on-the-fly." << std::endl;
-        }
-
         train_dataset_size_ = train_dataset_->size().value();
 
         strategy_->initialize(params.optimization);
@@ -158,6 +150,7 @@ namespace gs {
             throw std::runtime_error(result.error());
         }
 
+        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
         if (params.optimization.pose_optimization != "none") {
             if (params.optimization.enable_eval) {
                 throw std::runtime_error("Evaluating with pose optimization is not supported yet. "
@@ -191,6 +184,11 @@ namespace gs {
         // Initialize the evaluator - it handles all metrics internally
         evaluator_ = std::make_unique<metrics::MetricsEvaluator>(params);
 
+        // setup camera cache
+        for (const auto& cam : dataset->get_cameras()) {
+            m_cam_id_to_cam[cam->uid()] = cam;
+        }
+
         // Print render mode configuration
         std::println("Render mode: {}", params.optimization.render_mode);
         std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
@@ -200,6 +198,13 @@ namespace gs {
     Trainer::~Trainer() {
         // Ensure training is stopped
         stop_requested_ = true;
+
+        // Wait for callback to finish if busy
+        if (callback_busy_.load()) {
+            callback_stream_.synchronize();
+        }
+        // unsubscribe - because when the event emits while class destroyed we get crash
+        gs::event::bus().remove<gs::events::internal::TrainingReadyToStart>(train_started_handle_);
     }
 
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
@@ -290,14 +295,10 @@ namespace gs {
 
             // Use the render mode from parameters
             auto render_fn = [this, &adjusted_cam, render_mode]() {
-                return gs::rasterize(
+                return fast_rasterize(
                     adjusted_cam,
                     strategy_->get_model(),
-                    background_,
-                    1.0f,
-                    false,
-                    params_.optimization.antialiasing,
-                    render_mode);
+                    background_);
             };
 
             RenderOutput r_output = render_fn();
@@ -349,7 +350,15 @@ namespace gs {
             loss.backward();
             loss_value += loss.item<float>();
 
+            // Store the loss value immediately
             current_loss_ = loss_value;
+
+            // Update progress synchronously if needed
+            if (progress_) {
+                progress_->update(iter, loss_value,
+                                  static_cast<int>(strategy_->get_model().size()),
+                                  strategy_->is_refining(iter));
+            }
 
             // Emit training progress event (throttled to reduce GUI updates)
             if (iter % 10 == 0 || iter == 1) { // Only update every 10 iterations
@@ -416,12 +425,6 @@ namespace gs {
                 }
             }
 
-            if (progress_) {
-                progress_->update(iter, current_loss_.load(),
-                                  static_cast<int>(strategy_->get_model().size()),
-                                  strategy_->is_refining(iter));
-            }
-
             // Return Continue if we should continue training
             if (iter < params_.optimization.iterations && !stop_requested_.load() && !stop_token.stop_requested()) {
                 return StepResult::Continue;
@@ -443,7 +446,7 @@ namespace gs {
             std::atomic<bool> ready{false};
 
             // Subscribe temporarily to start signal
-            events::internal::TrainingReadyToStart::when([&ready](const auto&) {
+            train_started_handle_ = events::internal::TrainingReadyToStart::when([&ready](const auto&) {
                 ready = true;
             });
 
@@ -460,8 +463,7 @@ namespace gs {
 
         try {
             int iter = 1;
-            const int epochs_needed = (params_.optimization.iterations + train_dataset_size_ - 1) / train_dataset_size_;
-            const int num_workers = 4;
+            const int num_workers = 16;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
             if (progress_) {
@@ -470,50 +472,77 @@ namespace gs {
                                   strategy_->is_refining(iter));
             }
 
-            for (int epoch = 0; epoch < epochs_needed; ++epoch) {
+            // Use infinite dataloader to avoid epoch restarts
+            auto train_dataloader = create_infinite_dataloader_from_dataset(train_dataset_, num_workers);
+            auto loader = train_dataloader->begin();
+
+            // Single loop without epochs
+            while (iter <= params_.optimization.iterations) {
                 if (stop_token.stop_requested() || stop_requested_.load()) {
                     break;
                 }
 
-                auto train_dataloader = create_dataloader_from_dataset(train_dataset_, num_workers);
-
-                for (auto& batch : *train_dataloader) {
-                    if (stop_token.stop_requested() || stop_requested_.load()) {
-                        break;
-                    }
-
-                    auto camera_with_image = batch[0].data;
-                    Camera* cam = camera_with_image.camera;
-                    torch::Tensor gt_image = std::move(camera_with_image.image);
-
-                    auto step_result = train_step(iter, cam, gt_image, render_mode, stop_token);
-                    if (!step_result) {
-                        return std::unexpected(step_result.error());
-                    }
-
-                    if (*step_result == StepResult::Stop) {
-                        goto training_complete; // Break out of nested loops
-                    }
-
-                    ++iter;
+                // Wait for previous callback if still running
+                if (callback_busy_.load()) {
+                    callback_stream_.synchronize();
                 }
+
+                auto& batch = *loader;
+                auto camera_with_image = batch[0].data;
+                Camera* cam = camera_with_image.camera;
+                torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA, /*non_blocking=*/true);
+
+                auto step_result = train_step(iter, cam, gt_image, render_mode, stop_token);
+                if (!step_result) {
+                    return std::unexpected(step_result.error());
+                }
+
+                if (*step_result == StepResult::Stop) {
+                    break;
+                }
+
+                // Launch callback for async progress update (except first iteration)
+                if (iter > 1 && callback_) {
+                    callback_busy_ = true;
+                    auto err = cudaLaunchHostFunc(
+                        callback_stream_.stream(),
+                        [](void* self) {
+                            auto* trainer = static_cast<Trainer*>(self);
+                            if (trainer->callback_) {
+                                trainer->callback_();
+                            }
+                            trainer->callback_busy_ = false;
+                        },
+                        this);
+                    if (err != cudaSuccess) {
+                        std::cerr << "Warning: Failed to launch callback: " << cudaGetErrorString(err) << std::endl;
+                        callback_busy_ = false;
+                    }
+                }
+
+                ++iter;
+                ++loader;
             }
 
-training_complete:
+            // Ensure callback is finished before final save
+            if (callback_busy_.load()) {
+                callback_stream_.synchronize();
+            }
+
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                strategy_->get_model().save_ply(final_path, iter, /*join=*/true);
+                strategy_->get_model().save_ply(final_path, iter - 1, /*join=*/true);
 
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
-                    .iteration = iter,
+                    .iteration = iter - 1,
                     .path = final_path}
                     .emit();
 
                 events::notify::Log{
                     .level = events::notify::Log::Level::Info,
-                    .message = std::format("Training completed. Final model saved at iteration {}", iter),
+                    .message = std::format("Training completed. Final model saved at iteration {}", iter - 1),
                     .source = "Trainer"}
                     .emit();
             }
@@ -535,6 +564,26 @@ training_complete:
             is_running_ = false;
             return std::unexpected(std::format("Training failed: {}", e.what()));
         }
+    }
+
+    std::shared_ptr<const Camera> Trainer::getCamById(int camId) const {
+        const auto it = m_cam_id_to_cam.find(camId);
+        if (it == m_cam_id_to_cam.end()) {
+            std::cerr << "error: getCamById - could not find cam with cam id " << camId << std::endl;
+            return nullptr;
+        }
+        return it->second;
+    }
+
+    std::vector<std::shared_ptr<const Camera>> Trainer::getCamList() const {
+
+        std::vector<std::shared_ptr<const Camera>> cams;
+        cams.reserve(m_cam_id_to_cam.size());
+        for (auto& [key, value] : m_cam_id_to_cam) {
+            cams.push_back(value);
+        }
+
+        return cams;
     }
 
 } // namespace gs

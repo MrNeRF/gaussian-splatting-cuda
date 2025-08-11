@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.h"
+#include <c10/cuda/CUDAStream.h>
 #include <filesystem>
 #include <future>
 #include <string>
@@ -37,12 +38,31 @@ namespace gs {
         // Load image from disk and return it
         torch::Tensor load_and_get_image(int resolution = -1);
 
+        // Get number of bytes in the image file
+        size_t get_num_bytes_from_file() const;
+
         // Accessors - now return const references to avoid copies
         const torch::Tensor& world_view_transform() const {
             return _world_view_transform;
         }
+        const torch::Tensor& cam_position() const {
+            return _cam_position;
+        }
+
+        const torch::Tensor& R() const { return _R; }
+        const torch::Tensor& T() const { return _T; }
 
         torch::Tensor K() const;
+
+        std::tuple<float, float, float, float> get_intrinsics() const {
+            const float tanfovx = std::tan(_FoVx * 0.5f);
+            const float tanfovy = std::tan(_FoVy * 0.5f);
+            const float fx = _image_width / (2.f * tanfovx);
+            const float fy = _image_height / (2.f * tanfovy);
+            const float cx = _image_width / 2.0f;
+            const float cy = _image_height / 2.0f;
+            return std::make_tuple(fx, fy, cx, cy);
+        }
 
         int image_height() const noexcept { return _image_height; }
         int image_width() const noexcept { return _image_width; }
@@ -52,15 +72,25 @@ namespace gs {
         torch::Tensor tangential_distortion() const noexcept { return _tangential_distortion; }
         gsplat::CameraModelType camera_model_type() const noexcept { return _camera_model_type; }
         const std::string& image_name() const noexcept { return _image_name; }
+        const std::filesystem::path& image_path() const noexcept { return _image_path; }
         int uid() const noexcept { return _uid; }
+
+        float FoVx() const noexcept { return _FoVx; }
+        float FoVy() const noexcept { return _FoVy; }
 
     private:
         // IDs
+        float _FoVx = 0.f;
+        float _FoVy = 0.f;
         int _uid = -1;
         float _focal_x = 0.f;
         float _focal_y = 0.f;
         float _center_x = 0.f;
         float _center_y = 0.f;
+
+        // redundancy with _world_view_transform, but save calculation and passing from GPU 2 CPU
+        torch::Tensor _R;
+        torch::Tensor _T;
 
         torch::Tensor _radial_distortion = torch::empty({0}, torch::kFloat32);
         torch::Tensor _tangential_distortion = torch::empty({0}, torch::kFloat32);
@@ -76,8 +106,11 @@ namespace gs {
 
         // GPU tensors (computed on demand)
         torch::Tensor _world_view_transform;
-    };
+        torch::Tensor _cam_position;
 
+        // CUDA stream for async operations
+        at::cuda::CUDAStream _stream = at::cuda::getStreamFromPool(false);
+    };
     inline float focal2fov(float focal, int pixels) {
         return 2.0f * std::atan(pixels / (2.0f * focal));
     }

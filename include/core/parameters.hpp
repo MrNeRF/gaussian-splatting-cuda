@@ -36,7 +36,7 @@ namespace gs {
             bool enable_save_eval_images = true;              // Save during evaluation images
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
-            std::string strategy = "default";                 // Optimization strategy: mcmc, default.
+            std::string strategy = "mcmc";                 // Optimization strategy: mcmc, default.
             bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
             std::string pose_optimization = "none";           // Pose optimization type: none, direct, mlp
 
@@ -59,16 +59,20 @@ namespace gs {
             size_t pause_refine_after_reset = 0;
             bool revised_opacity = false;
 
-            float steps_scaler = 0.f;    // If < 0, step size scaling is disabled
-            bool selective_adam = false; // Use Selective Adam optimizer
-            bool antialiasing = false;   // Enable antialiasing in rendering
+            float steps_scaler = 0.f;  // If < 0, step size scaling is disabled
+            bool antialiasing = false; // Enable antialiasing in rendering
+
+            // Random initialization parameters
+            bool random = false;        // Use random initialization instead of SfM
+            int init_num_pts = 100'000; // Number of random points to initialize
+            float init_extent = 3.0f;   // Extent of random point cloud
         };
 
         struct DatasetConfig {
             std::filesystem::path data_path = "";
             std::filesystem::path output_path = "output";
             std::string images = "images";
-            int resolution = -1;
+            int resize_factor = -1;
             int test_every = 8;
         };
 
@@ -81,7 +85,7 @@ namespace gs {
         };
 
         // Modern C++23 functions returning expected values
-        std::expected<OptimizationParameters, std::string> read_optim_params_from_json();
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_json(const std::string strategy);
 
         // Save training parameters to JSON
         std::expected<void, std::string> save_training_parameters_to_json(

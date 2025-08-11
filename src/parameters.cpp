@@ -33,19 +33,19 @@ namespace gs {
                 char executablePathWindows[MAX_PATH];
                 GetModuleFileNameA(nullptr, executablePathWindows, MAX_PATH);
                 std::filesystem::path executablePath = std::filesystem::path(executablePathWindows);
-                std::filesystem::path parentDir = executablePath;
-                do {
-                    parentDir = parentDir.parent_path();
-                } while (!parentDir.empty() && !std::filesystem::exists(parentDir / "parameter" / filename));
+                std::filesystem::path searchDir = executablePath.parent_path();
+                while (!searchDir.empty() && !std::filesystem::exists(searchDir / "parameter" / filename)) {
+                    searchDir = searchDir.parent_path();
+                }
 
-                if (parentDir.empty()) {
+                if (searchDir.empty()) {
                     throw std::runtime_error("could not find " + (std::filesystem::path("parameter") / filename).string());
                 }
 #else
                 std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
-                std::filesystem::path parentDir = executablePath.parent_path().parent_path();
+                std::filesystem::path searchDir = executablePath.parent_path().parent_path();
 #endif
-                return parentDir / "parameter" / filename;
+                return searchDir / "parameter" / filename;
             }
 
             /**
@@ -126,7 +126,6 @@ namespace gs {
                     {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
                     {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
                     {"skip_intermediate", defaults.skip_intermediate_saving, "Skip saving intermediate results and only save final output"},
-                    {"preload_to_ram", defaults.preload_to_ram, "Load the entire dataset into RAM at startup for maximum performance (uses more RAM)"},
                     {"use_bilateral_grid", defaults.use_bilateral_grid, "Enable bilateral grid for appearance modeling"},
                     {"bilateral_grid_X", defaults.bilateral_grid_X, "Bilateral grid X dimension"},
                     {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
@@ -145,7 +144,9 @@ namespace gs {
                     {"steps_scaler", defaults.steps_scaler, "Scales the training steps and values"},
                     {"antialiasing", defaults.antialiasing, "Enables antialiasing"},
                     {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
-                    {"selective_adam", defaults.selective_adam, "Selective Adam optimizer flag"}};
+                    {"random", defaults.random, "Use random initialization instead of SfM"},
+                    {"init_num_pts", defaults.init_num_pts, "Number of random initialization points"},
+                    {"init_extent", defaults.init_extent, "Extent of random initialization"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -247,10 +248,11 @@ namespace gs {
 
         /**
          * @brief Read optimization parameters from JSON file
+         * @param[in] strategy Optimization strategy to load parameters for
          * @return Expected OptimizationParameters or error message
          */
-        std::expected<OptimizationParameters, std::string> read_optim_params_from_json() {
-            auto json_result = read_json_file(get_config_path("optimization_params.json"));
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_json(const std::string strategy) {
+            auto json_result = read_json_file(get_config_path(strategy + "_optimization_params.json"));
             if (!json_result) {
                 return std::unexpected(json_result.error());
             }
@@ -347,9 +349,6 @@ namespace gs {
                 if (json.contains("skip_intermediate")) {
                     params.skip_intermediate_saving = json["skip_intermediate"];
                 }
-                if (json.contains("preload_to_ram")) {
-                    params.preload_to_ram = json["preload_to_ram"];
-                }
                 if (json.contains("use_bilateral_grid")) {
                     params.use_bilateral_grid = json["use_bilateral_grid"];
                 }
@@ -407,8 +406,14 @@ namespace gs {
                 if (json.contains("sh_degree_interval")) {
                     params.sh_degree_interval = json["sh_degree_interval"];
                 }
-                if (json.contains("selective_adam")) {
-                    params.selective_adam = json["selective_adam"];
+                if (json.contains("random")) {
+                    params.random = json["random"];
+                }
+                if (json.contains("init_num_pts")) {
+                    params.init_num_pts = json["init_num_pts"];
+                }
+                if (json.contains("init_extent")) {
+                    params.init_extent = json["init_extent"];
                 }
 
                 return params;
@@ -435,7 +440,7 @@ namespace gs {
                 json["dataset"]["data_path"] = params.dataset.data_path.string();
                 json["dataset"]["output_path"] = params.dataset.output_path.string();
                 json["dataset"]["images"] = params.dataset.images;
-                json["dataset"]["resolution"] = params.dataset.resolution;
+                json["dataset"]["resize_factor"] = params.dataset.resize_factor;
                 json["dataset"]["test_every"] = params.dataset.test_every;
 
                 // Optimization configuration
@@ -466,7 +471,6 @@ namespace gs {
                 opt_json["enable_save_eval_images"] = params.optimization.enable_save_eval_images;
                 opt_json["strategy"] = params.optimization.strategy;
                 opt_json["skip_intermediate"] = params.optimization.skip_intermediate_saving;
-                opt_json["preload_to_ram"] = params.optimization.preload_to_ram;
                 opt_json["use_bilateral_grid"] = params.optimization.use_bilateral_grid;
                 opt_json["bilateral_grid_X"] = params.optimization.bilateral_grid_X;
                 opt_json["bilateral_grid_Y"] = params.optimization.bilateral_grid_Y;
@@ -485,7 +489,9 @@ namespace gs {
                 opt_json["steps_scaler"] = params.optimization.steps_scaler;
                 opt_json["antialiasing"] = params.optimization.antialiasing;
                 opt_json["sh_degree_interval"] = params.optimization.sh_degree_interval;
-                opt_json["selective_adam"] = params.optimization.selective_adam;
+                opt_json["random"] = params.optimization.random;
+                opt_json["init_num_pts"] = params.optimization.init_num_pts;
+                opt_json["init_extent"] = params.optimization.init_extent;
 
                 json["optimization"] = opt_json;
 

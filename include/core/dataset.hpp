@@ -54,24 +54,6 @@ namespace gs {
         CameraDataset& operator=(CameraDataset&&) noexcept = default;
         CameraDataset& operator=(const CameraDataset&) = default;
 
-        void preload_data() {
-            if (!_image_cache.empty()) {
-                std::cout << "Dataset already preloaded." << std::endl;
-                return;
-            }
-
-            std::cout << "Preloading dataset into RAM... This may take a moment." << std::endl;
-            _image_cache.reserve(_indices.size());
-
-            for (size_t i = 0; i < _indices.size(); ++i) {
-                size_t camera_idx = _indices[i];
-                auto& cam = _cameras[camera_idx];
-                torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
-                _image_cache.push_back(image.clone());
-            }
-            std::cout << "Dataset preloading complete." << std::endl;
-        }
-
         CameraExample get(size_t index) override {
             if (index >= _indices.size()) {
                 throw std::out_of_range("Dataset index out of range");
@@ -80,14 +62,8 @@ namespace gs {
             size_t camera_idx = _indices[index];
             auto& cam = _cameras[camera_idx];
 
-            if (!_image_cache.empty() && _image_cache.size() > index) {
-                // Get tensors directly from RAM cache
-                return {{cam.get(), _image_cache[index]}, torch::empty({})};
-            } else {
-                // Fallback to loading from disk if not preloaded
-                torch::Tensor image = cam->load_and_get_image(_datasetConfig.resolution);
-                return {{cam.get(), std::move(image)}, torch::empty({})};
-            }
+            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resize_factor);
+            return {{cam.get(), std::move(image)}, torch::empty({})};
         }
 
         torch::optional<size_t> size() const override {
@@ -100,12 +76,47 @@ namespace gs {
 
         Split get_split() const { return _split; }
 
+        size_t get_num_bytes() const {
+            if (_cameras.empty()) {
+                return 0;
+            }
+            size_t total_bytes = 0;
+            for (const auto& cam : _cameras) {
+                total_bytes += cam->get_num_bytes_from_file();
+            }
+            // Adjust for resolution factor if specified
+            if (_datasetConfig.resize_factor > 0) {
+                total_bytes /= _datasetConfig.resize_factor * _datasetConfig.resize_factor;
+            }
+            return total_bytes;
+        }
+
     private:
         std::vector<std::shared_ptr<Camera>> _cameras;
-        const gs::param::DatasetConfig& _datasetConfig;
+        const gs::param::DatasetConfig _datasetConfig;
         Split _split;
         std::vector<size_t> _indices;
-        std::vector<torch::Tensor> _image_cache;
+    };
+
+    // Infinite random sampler for continuous data flow
+    class InfiniteRandomSampler : public torch::data::samplers::RandomSampler {
+    public:
+        using super = torch::data::samplers::RandomSampler;
+
+        explicit InfiniteRandomSampler(size_t dataset_size)
+            : super(dataset_size) {}
+
+        std::optional<std::vector<size_t>> next(size_t batch_size) override {
+            auto indices = super::next(batch_size);
+            if (!indices) {
+                super::reset();
+                indices = super::next(batch_size);
+            }
+            return indices;
+        }
+
+    private:
+        size_t dataset_size_;
     };
 
     inline std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
@@ -122,7 +133,7 @@ namespace gs {
 
             // Set up load options
             gs::loader::LoadOptions options{
-                .resolution = datasetConfig.resolution,
+                .resize_factor = datasetConfig.resize_factor,
                 .images_folder = datasetConfig.images,
                 .validate_only = false};
 
@@ -169,7 +180,7 @@ namespace gs {
 
             // Set up load options
             gs::loader::LoadOptions options{
-                .resolution = datasetConfig.resolution,
+                .resize_factor = datasetConfig.resize_factor,
                 .images_folder = datasetConfig.images,
                 .validate_only = false};
 
@@ -211,6 +222,21 @@ namespace gs {
         return torch::data::make_data_loader(
             *dataset,
             torch::data::samplers::RandomSampler(dataset_size),
+            torch::data::DataLoaderOptions()
+                .batch_size(1)
+                .workers(num_workers)
+                .enforce_ordering(false));
+    }
+
+    inline auto create_infinite_dataloader_from_dataset(
+        std::shared_ptr<CameraDataset> dataset,
+        int num_workers = 4) {
+
+        const size_t dataset_size = dataset->size().value();
+
+        return torch::data::make_data_loader(
+            *dataset,
+            InfiniteRandomSampler(dataset_size),
             torch::data::DataLoaderOptions()
                 .batch_size(1)
                 .workers(num_workers)

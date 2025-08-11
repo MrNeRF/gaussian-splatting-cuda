@@ -54,6 +54,8 @@ namespace gs::visualizer {
 
         // Compatibility method for crop box
         std::shared_ptr<RenderBoundingBox> getCropBox() const;
+        std::shared_ptr<const RenderCoordinateAxes> getAxes() const;
+        std::shared_ptr<const geometry::EuclideanTransform> getWorldToUser() const;
 
         // GUI needs these for compatibility
         std::shared_ptr<TrainingInfo> info_;
@@ -62,7 +64,7 @@ namespace gs::visualizer {
 
         // Scene management (temporarily public for compatibility)
         std::unique_ptr<Scene> scene_;
-        std::unique_ptr<TrainerManager> trainer_manager_;
+        std::shared_ptr<TrainerManager> trainer_manager_;
 
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
@@ -98,7 +100,6 @@ namespace gs::visualizer {
         // Support components
         std::unique_ptr<ErrorHandler> error_handler_;
         std::unique_ptr<MemoryMonitor> memory_monitor_;
-
         // State
         bool gui_initialized_ = false;
     };

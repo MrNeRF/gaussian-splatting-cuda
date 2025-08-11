@@ -14,7 +14,7 @@ namespace gs {
 
         // 2. Set up load options
         loader::LoadOptions load_options{
-            .resolution = params.dataset.resolution,
+            .resize_factor = params.dataset.resize_factor,
             .images_folder = params.dataset.images,
             .validate_only = false,
             .progress = [](float percentage, const std::string& message) {
@@ -75,7 +75,8 @@ namespace gs {
                 if (params.optimization.strategy == "mcmc") {
                     strategy = std::make_unique<MCMC>(std::move(*splat_result));
                 } else {
-                    strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
+                    throw std::runtime_error("ADC (default strategy) is currently disabled until the new rasterizer is integrated. Please use MCMC strategy instead.");
+                    // strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
                 }
 
                 // Create trainer

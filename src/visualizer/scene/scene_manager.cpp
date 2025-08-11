@@ -19,20 +19,6 @@ namespace gs {
     void SceneManager::setupEventHandlers() {
         using namespace events;
 
-        // Command handlers
-        cmd::LoadFile::when([this](const auto& cmd) {
-            if (cmd.is_dataset && cached_params_) {
-                loadDataset(cmd.path, *cached_params_);
-            } else if (!cmd.is_dataset) {
-                loadPLY(cmd.path);
-            } else {
-                notify::Error{
-                    .message = "Cannot load dataset without parameters",
-                    .details = "No cached parameters available"}
-                    .emit();
-            }
-        });
-
         cmd::ClearScene::when([this](const auto&) {
             clearScene();
         });
@@ -144,7 +130,8 @@ namespace gs {
     void SceneManager::loadDataset(const std::filesystem::path& path,
                                    const param::TrainingParameters& params) {
         try {
-            cached_params_ = params; // Cache for potential reloads
+            trainer_manager_->clearTrainer(); // mainly to stop training thread
+            cached_params_ = params;          // Cache for potential reloads
             loadDatasetInternal(path, params);
         } catch (const std::exception& e) {
             events::notify::Error{
@@ -155,6 +142,9 @@ namespace gs {
     }
 
     void SceneManager::clearScene() {
+        // because if we are training while clearing scene - everything crashes...
+        events::cmd::StopTraining{}.emit();
+
         std::lock_guard<std::mutex> lock(state_mutex_);
 
         // Clear trainer if we're in dataset mode
@@ -183,7 +173,7 @@ namespace gs {
         const RenderingPipeline::RenderRequest& request) {
 
         if (!scene_) {
-            return RenderingPipeline::RenderResult{.valid = false};
+            return RenderingPipeline::RenderResult(false);
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -214,7 +204,7 @@ namespace gs {
 
         // Set up load options
         gs::loader::LoadOptions options{
-            .resolution = -1,
+            .resize_factor = -1,
             .images_folder = "images",
             .validate_only = false,
             .progress = [this](float percent, const std::string& msg) {

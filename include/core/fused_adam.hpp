@@ -7,15 +7,11 @@
 namespace gs {
 
     /**
-     * @brief SelectiveAdam optimizer with visibility mask support
-     *
-     * This optimizer extends the standard Adam optimizer by incorporating selective updates
-     * based on visibility masks. It's particularly useful for 3D Gaussian Splatting where
-     * only visible Gaussians need to be updated.
+     * @brief FusedAdam optimizer
      *
      * The implementation uses fused CUDA kernels for better performance.
      */
-    class SelectiveAdam : public torch::optim::Optimizer {
+    class FusedAdam : public torch::optim::Optimizer {
     public:
         struct Options : public torch::optim::OptimizerCloneableOptions<Options> {
             Options(double lr = 1e-3) : lr_(lr) {}
@@ -68,24 +64,22 @@ namespace gs {
             }
         };
 
-        explicit SelectiveAdam(std::vector<torch::optim::OptimizerParamGroup> param_groups,
-                               std::unique_ptr<Options> options)
+        explicit FusedAdam(std::vector<torch::optim::OptimizerParamGroup> param_groups, std::unique_ptr<Options> options)
             : Optimizer(std::move(param_groups),
                         std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
 
-        explicit SelectiveAdam(std::vector<torch::Tensor> params,
-                               std::unique_ptr<Options> options)
-            : Optimizer({torch::optim::OptimizerParamGroup(std::move(params))},
-                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
+        explicit FusedAdam(std::vector<torch::Tensor> params, std::unique_ptr<Options> options)
+            : Optimizer({torch::optim::OptimizerParamGroup(std::move(params))}, std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
 
         // Override the base class step() with proper signature
-        torch::Tensor step(LossClosure closure = nullptr) override;
+        torch::Tensor step(LossClosure closure) override;
 
         /**
-         * @brief Perform optimization step with visibility mask
-         * @param visibility_mask Boolean tensor indicating which elements to update
+         * @brief Perform optimization step
          */
-        void step(const torch::Tensor& visibility_mask);
+        void step(int iteration);
+
+        void zero_grad(bool set_to_none, int iteration);
 
     private:
         const Options& options() const {

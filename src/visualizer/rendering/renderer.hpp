@@ -4,6 +4,7 @@
 #include "internal/viewport.hpp"
 #include "rendering/framebuffer.hpp"
 #include "rendering/shader.hpp"
+#include <memory>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "rendering/cuda_gl_interop.hpp" // Add path and extension
@@ -50,7 +51,7 @@ public:
 
     virtual ~ScreenQuadRenderer() = default;
 
-    virtual void render(std::shared_ptr<Shader> shader, const Viewport& viewport) const {
+    virtual void render(std::shared_ptr<Shader> shader) const {
 
         shader->bind();
 
@@ -129,7 +130,7 @@ public:
 
     bool isInteropEnabled() const { return interop_enabled_; }
 
-    void render(std::shared_ptr<Shader> shader, const Viewport& viewport) const override {
+    void render(std::shared_ptr<Shader> shader) const override {
         shader->bind();
 
         glBindVertexArray(quadVAO);

@@ -1,7 +1,5 @@
 #include "tools/crop_box_tool.hpp"
 #include "core/events.hpp"
-#include "gui/ui_context.hpp"
-#include "gui/ui_widgets.hpp"
 
 // clang-format off
 #include <glad/glad.h>
@@ -20,7 +18,7 @@ namespace gs::visualizer {
 
     CropBoxTool::~CropBoxTool() = default;
 
-    bool CropBoxTool::initialize(const ToolContext& ctx) {
+    bool CropBoxTool::initialize([[maybe_unused]] const ToolContext& ctx) {
         // Bounding box OpenGL resources are initialized lazily on first render
         return true;
     }
@@ -29,82 +27,21 @@ namespace gs::visualizer {
         // Cleanup handled by destructors
     }
 
-    void CropBoxTool::update(const ToolContext& ctx) {
+    void CropBoxTool::update([[maybe_unused]] const ToolContext& ctx) {
         // Nothing to update per frame for crop box
     }
 
-    void CropBoxTool::render(const ToolContext& ctx) {
+    void CropBoxTool::render([[maybe_unused]] const ToolContext& ctx) {
         // Rendering is handled by the rendering manager based on our state
         // This method could be used for tool-specific overlays if needed
     }
 
-    void CropBoxTool::renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) {
+    void CropBoxTool::renderUI([[maybe_unused]] const gs::gui::UIContext& ui_ctx, [[maybe_unused]] bool* p_open) {
         if (!isEnabled()) {
             return;
         }
 
         drawControls(ui_ctx);
-    }
-
-    void CropBoxTool::registerInputHandlers(InputHandler& handler) {
-        // Clear any existing handlers
-        unregisterInputHandlers(handler);
-
-        // Register mouse button handler for clicking on crop box handles
-        handler_ids_.push_back(
-            handler.addMouseButtonHandler(
-                [this](const InputHandler::MouseButtonEvent& event) {
-                    if (!isEnabled() || !shouldShowBox())
-                        return false;
-
-                    if (event.action == GLFW_PRESS && event.button == GLFW_MOUSE_BUTTON_LEFT) {
-                        // Check if clicking on any handle
-                        if (isMouseOverHandle(event.position)) {
-                            startDragging(event.position);
-                            return true; // Consume event
-                        }
-                    } else if (event.action == GLFW_RELEASE && event.button == GLFW_MOUSE_BUTTON_LEFT) {
-                        if (is_dragging_) {
-                            stopDragging();
-                            return true; // Consume event
-                        }
-                    }
-                    return false;
-                },
-                InputPriority::Tools));
-
-        // Register mouse move handler for dragging
-        handler_ids_.push_back(
-            handler.addMouseMoveHandler(
-                [this](const InputHandler::MouseMoveEvent& event) {
-                    if (!isEnabled() || !is_dragging_)
-                        return false;
-
-                    updateDragging(event.position);
-                    return true; // Consume event while dragging
-                },
-                InputPriority::Tools));
-
-        // Register key handler for quick toggles
-        handler_ids_.push_back(
-            handler.addKeyHandler(
-                [this](const InputHandler::KeyEvent& event) {
-                    if (!isEnabled() || event.action != GLFW_PRESS)
-                        return false;
-
-                    // Ctrl+B to toggle crop box visibility
-                    if (event.key == GLFW_KEY_B && (event.mods & GLFW_MOD_CONTROL)) {
-                        show_crop_box_ = !show_crop_box_;
-                        events::tools::CropBoxSettingsChanged{
-                            .show_box = show_crop_box_,
-                            .use_box = use_crop_box_}
-                            .emit();
-                        return true;
-                    }
-
-                    return false;
-                },
-                InputPriority::Tools));
     }
 
     void CropBoxTool::onEnabledChanged(bool enabled) {
@@ -131,7 +68,7 @@ namespace gs::visualizer {
         });
     }
 
-    bool CropBoxTool::isMouseOverHandle(const glm::dvec2& mouse_pos) const {
+    bool CropBoxTool::isMouseOverHandle([[maybe_unused]] const glm::dvec2& mouse_pos) const {
         // For now, just return false
         return false;
     }
@@ -182,7 +119,7 @@ namespace gs::visualizer {
         current_handle_ = DragHandle::None;
     }
 
-    void CropBoxTool::drawControls(const gs::gui::UIContext& ui_ctx) {
+    void CropBoxTool::drawControls([[maybe_unused]] const gs::gui::UIContext& ui_ctx) {
         if (!ImGui::CollapsingHeader("Crop Box")) {
             return;
         }

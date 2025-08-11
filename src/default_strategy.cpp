@@ -2,6 +2,7 @@
 #include "Ops.h"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include "core/strategy.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
 
 DefaultStrategy::DefaultStrategy(gs::SplatData&& splat_data)
@@ -26,7 +27,7 @@ void DefaultStrategy::pre_backward(gs::RenderOutput& render_output) {
     }
 }
 
-void DefaultStrategy::update_state(gs::RenderOutput& render_output, bool packed) {
+void DefaultStrategy::update_state(gs::RenderOutput& render_output) {
     torch::Tensor grads;
     if (_key_for_gradient == "means2d") {
         grads = _absgrad
@@ -62,19 +63,13 @@ void DefaultStrategy::update_state(gs::RenderOutput& render_output, bool packed)
     // Update the running state
     torch::Tensor gaussian_ids;
     torch::Tensor radii;
-    if (packed) {
-        throw std::runtime_error("Packed mode is not supported in this implementation");
-        // TODO: Implement packed mode
-        // gs_ids = info["gaussian_ids"]  # [nnz]
-        // radii = info["radii"].max(dim=-1).values  # [nnz]
-    } else {
-        // grads is [C, N, 2]
-        // Currently, render_output.radii has a shape of [..., N], assuming C = 1
-        const torch::Tensor valid_mask = render_output.radii > 0;  // [N]
-        gaussian_ids = valid_mask.nonzero().squeeze(-1);           // [nnz]
-        grads = grads.squeeze(0).index_select(0, gaussian_ids);    // [nnz, 2]
-        radii = render_output.radii.index_select(0, gaussian_ids); // [nnz]
-    }
+
+    // grads is [C, N, 2]
+    // Currently, render_output.radii has a shape of [..., N], assuming C = 1
+    const torch::Tensor valid_mask = render_output.radii > 0;  // [N]
+    gaussian_ids = valid_mask.nonzero().squeeze(-1);           // [nnz]
+    grads = grads.squeeze(0).index_select(0, gaussian_ids);    // [nnz, 2]
+    radii = render_output.radii.index_select(0, gaussian_ids); // [nnz]
 
     _grad2d.index_add_(0, gaussian_ids, grads.norm(2, -1));
     _count.index_add_(0, gaussian_ids, torch::ones_like(gaussian_ids, torch::kFloat32));
@@ -121,22 +116,6 @@ void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
             if (adam_state->max_exp_avg_sq().defined()) {
                 auto new_max_exp_avg_sq = torch::cat({adam_state->max_exp_avg_sq(), zeros_to_add}, 0);
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
-            }
-            return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto zeros_to_add = torch::zeros(new_shape, selective_adam_state->exp_avg.options());
-            auto new_exp_avg = torch::cat({selective_adam_state->exp_avg, zeros_to_add}, 0);
-            auto new_exp_avg_sq = torch::cat({selective_adam_state->exp_avg_sq, zeros_to_add}, 0);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto new_max_exp_avg_sq = torch::cat({selective_adam_state->max_exp_avg_sq, zeros_to_add}, 0);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
             }
             return new_state;
         }
@@ -222,26 +201,6 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
                 auto rest_max_exp_avg_sq = adam_state->max_exp_avg_sq().index_select(0, rest_idxs);
                 auto new_max_exp_avg_sq = torch::cat({rest_max_exp_avg_sq, zeros_to_add}, 0);
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
-            }
-            return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto rest_exp_avg = selective_adam_state->exp_avg.index_select(0, rest_idxs);
-            auto rest_exp_avg_sq = selective_adam_state->exp_avg_sq.index_select(0, rest_idxs);
-
-            auto zeros_to_add = torch::zeros(zero_shape, selective_adam_state->exp_avg.options());
-            auto new_exp_avg = torch::cat({rest_exp_avg, zeros_to_add}, 0);
-            auto new_exp_avg_sq = torch::cat({rest_exp_avg_sq, zeros_to_add}, 0);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto rest_max_exp_avg_sq = selective_adam_state->max_exp_avg_sq.index_select(0, rest_idxs);
-                auto new_max_exp_avg_sq = torch::cat({rest_max_exp_avg_sq, zeros_to_add}, 0);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
             }
             return new_state;
         }
@@ -332,21 +291,6 @@ void DefaultStrategy::remove(const torch::Tensor is_prune) {
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
             }
             return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto new_exp_avg = selective_adam_state->exp_avg.index_select(0, sampled_idxs);
-            auto new_exp_avg_sq = selective_adam_state->exp_avg_sq.index_select(0, sampled_idxs);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto new_max_exp_avg_sq = selective_adam_state->max_exp_avg_sq.index_select(0, sampled_idxs);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
-            }
-            return new_state;
         }
         return nullptr;
     };
@@ -421,21 +365,6 @@ void DefaultStrategy::reset_opacity() {
                 new_state->max_exp_avg_sq(new_max_exp_avg_sq);
             }
             return new_state;
-        } else if (auto* selective_adam_state = dynamic_cast<gs::SelectiveAdam::AdamParamState*>(&state)) {
-            // SelectiveAdam state
-            auto new_exp_avg = torch::zeros_like(selective_adam_state->exp_avg);
-            auto new_exp_avg_sq = torch::zeros_like(selective_adam_state->exp_avg_sq);
-
-            // Create new state
-            auto new_state = std::make_unique<gs::SelectiveAdam::AdamParamState>();
-            new_state->step_count = selective_adam_state->step_count;
-            new_state->exp_avg = new_exp_avg;
-            new_state->exp_avg_sq = new_exp_avg_sq;
-            if (selective_adam_state->max_exp_avg_sq.defined()) {
-                auto new_max_exp_avg_sq = torch::zeros_like(selective_adam_state->max_exp_avg_sq);
-                new_state->max_exp_avg_sq = new_max_exp_avg_sq;
-            }
-            return new_state;
         }
 
         return nullptr;
@@ -444,12 +373,7 @@ void DefaultStrategy::reset_opacity() {
     strategy::update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data, {5});
 }
 
-void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output, bool packed) {
-    // Store visibility mask for selective adam
-    if (_params->selective_adam) {
-        _last_visibility_mask = render_output.visibility;
-    }
-
+void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
     // Increment SH degree every 1000 iterations
     torch::NoGradGuard no_grad;
     if (iter % _params->sh_degree_interval == 0) {
@@ -460,7 +384,7 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output, b
         return;
     }
 
-    update_state(render_output, packed);
+    update_state(render_output);
 
     if (is_refining(iter)) {
         const auto [num_duplicates, num_splits] = grow_gs(iter);
@@ -482,16 +406,7 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output, b
 
 void DefaultStrategy::step(int iter) {
     if (iter < _params->iterations) {
-        if (_params->selective_adam && _last_visibility_mask.defined()) {
-            auto* selective_adam = dynamic_cast<gs::SelectiveAdam*>(_optimizer.get());
-            if (selective_adam) {
-                selective_adam->step(_last_visibility_mask);
-            } else {
-                _optimizer->step();
-            }
-        } else {
-            _optimizer->step();
-        }
+        _optimizer->step();
         _optimizer->zero_grad(true);
         _scheduler->step();
     }

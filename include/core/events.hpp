@@ -46,6 +46,7 @@ namespace gs {
             EVENT(ResetCamera, );
             EVENT(ShowWindow, std::string window_name; bool show;);
             EVENT(ExecuteConsole, std::string command;);
+            EVENT(GoToCamView, int cam_id;);
         } // namespace cmd
 
         // ============================================================================
@@ -58,6 +59,8 @@ namespace gs {
             EVENT(CropBoxSettingsChanged,
                   bool show_box;
                   bool use_box;);
+            EVENT(AxesSettingsChanged,
+                  bool show_axes;);
         } // namespace tools
         // ============================================================================
         // State - Notifications about what has happened
@@ -139,6 +142,7 @@ namespace gs {
         namespace ui {
             EVENT(WindowResized, int width; int height;);
             EVENT(CameraMove, glm::mat3 rotation; glm::vec3 translation;);
+            EVENT(SpeedChanged, float current_speed; float max_speed;);
             EVENT(RenderSettingsChanged,
                   std::optional<float> fov;
                   std::optional<float> scaling_modifier;
@@ -230,7 +234,7 @@ namespace gs {
     public:
         Response send(const Request& req, std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
             // Subscribe to response
-            auto handler = Response::when([this](const Response& r) {
+            [[maybe_unused]] auto handler = Response::when([this](const Response& r) {
                 std::lock_guard lock(mutex_);
                 response_ = r;
                 cv_.notify_one();

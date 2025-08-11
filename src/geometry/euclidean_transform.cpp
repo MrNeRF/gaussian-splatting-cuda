@@ -100,5 +100,11 @@ namespace gs {
             result[3] = matrix[3];
             return result;
         }
+
+        glm::mat3 EuclideanTransform::getRotationMat() const {
+            // Convert quaternion to 3x3 rotation matrix
+            return glm::mat3_cast(m_rotation);
+        }
+
     } // namespace geometry
 } // namespace gs

@@ -1,8 +1,6 @@
 #pragma once
 
 #include "core/istrategy.hpp"
-#include "core/selective_adam.hpp"
-#include "core/strategy.hpp"
 #include <memory>
 #include <torch/torch.h>
 
@@ -19,7 +17,7 @@ public:
     // IStrategy interface implementation
     void initialize(const gs::param::OptimizationParameters& optimParams) override;
     void pre_backward(gs::RenderOutput& render_output) override;
-    void post_backward(int iter, gs::RenderOutput& render_output, bool packed = false) override;
+    void post_backward(int iter, gs::RenderOutput& render_output) override;
     void step(int iter) override;
     bool is_refining(int iter) const override;
     gs::SplatData& get_model() override { return _splat_data; }
@@ -27,7 +25,7 @@ public:
 
 private:
     // Helper functions
-    void update_state(gs::RenderOutput& render_output, bool packed);
+    void update_state(gs::RenderOutput& render_output);
     void duplicate(const torch::Tensor is_duplicated);
     void split(const torch::Tensor is_split);
     std::tuple<int64_t, int64_t> grow_gs(int iter);
