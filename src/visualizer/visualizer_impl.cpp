@@ -289,9 +289,7 @@ namespace gs::visualizer {
 
         const BackgroundTool* background_tool = nullptr;
         if (auto* bg_tool = dynamic_cast<BackgroundTool*>(tool_manager_->getTool("Background"))) {
-            if (bg_tool->isEnabled()) {
-                background_tool = bg_tool;
-            }
+            background_tool = bg_tool;
         }
 
         // Render

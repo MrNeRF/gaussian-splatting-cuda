@@ -38,9 +38,26 @@ namespace gs::visualizer {
             return;
         }
 
-        if (ImGui::ColorEdit3("Background Color", color_array_)) {
-            background_color_ = getColorArrayAsVec3();
+        bool color_changed = false;
 
+        // Color picker without label
+        if (ImGui::ColorEdit3("##BackgroundColor", color_array_)) {
+            background_color_ = getColorArrayAsVec3();
+            color_changed = true;
+        }
+
+        // Reset button
+        ImGui::SameLine();
+        if (ImGui::Button("Reset")) {
+            // Reset to black
+            background_color_ = glm::vec3(0.0f, 0.0f, 0.0f);
+            color_array_[0] = 0.0f;
+            color_array_[1] = 0.0f;
+            color_array_[2] = 0.0f;
+            color_changed = true;
+        }
+
+        if (color_changed) {
             // Emit event to update rendering
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
@@ -52,15 +69,9 @@ namespace gs::visualizer {
     }
 
     void BackgroundTool::onEnabledChanged(bool enabled) {
-        if (enabled) {
-            // Emit current color when enabled
-            events::ui::RenderSettingsChanged{
-                .fov = std::nullopt,
-                .scaling_modifier = std::nullopt,
-                .antialiasing = std::nullopt,
-                .background_color = background_color_}
-                .emit();
-        }
+        // Don't do anything when enabling/disabling
+        // The color should persist regardless of tool state
+        (void)enabled;
     }
 
     glm::vec3 BackgroundTool::getColorArrayAsVec3() const {
