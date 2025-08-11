@@ -24,10 +24,10 @@ namespace gs {
             return result;
         }
 
-        // Update background color from request
-        background_ = torch::tensor({request.background_color.r, request.background_color.g, request.background_color.b},
-                                    torch::kFloat32)
-                          .to(torch::kCUDA);
+        // Update background tensor in-place to avoid allocation
+        background_[0] = request.background_color.r;
+        background_[1] = request.background_color.g;
+        background_[2] = request.background_color.b;
 
         // Create camera for this frame
         Camera cam = createCamera(request);

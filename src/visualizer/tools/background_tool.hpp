@@ -30,6 +30,9 @@ namespace gs::visualizer {
     private:
         glm::vec3 background_color_;
         float color_array_[3];
+
+        // Helper to convert color_array_ to vec3
+        glm::vec3 getColorArrayAsVec3() const;
     };
 
 } // namespace gs::visualizer

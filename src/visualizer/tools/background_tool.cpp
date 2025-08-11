@@ -6,9 +6,9 @@ namespace gs::visualizer {
 
     BackgroundTool::BackgroundTool()
         : background_color_(0.0f, 0.0f, 0.0f) {
-        color_array_[0] = 0.0f;
-        color_array_[1] = 0.0f;
-        color_array_[2] = 0.0f;
+        color_array_[0] = background_color_.r;
+        color_array_[1] = background_color_.g;
+        color_array_[2] = background_color_.b;
     }
 
     BackgroundTool::~BackgroundTool() = default;
@@ -39,7 +39,7 @@ namespace gs::visualizer {
         }
 
         if (ImGui::ColorEdit3("Background Color", color_array_)) {
-            background_color_ = glm::vec3(color_array_[0], color_array_[1], color_array_[2]);
+            background_color_ = getColorArrayAsVec3();
 
             // Emit event to update rendering
             events::ui::RenderSettingsChanged{
@@ -61,6 +61,10 @@ namespace gs::visualizer {
                 .background_color = background_color_}
                 .emit();
         }
+    }
+
+    glm::vec3 BackgroundTool::getColorArrayAsVec3() const {
+        return glm::vec3(color_array_[0], color_array_[1], color_array_[2]);
     }
 
 } // namespace gs::visualizer
