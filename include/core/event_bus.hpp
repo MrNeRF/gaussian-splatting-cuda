@@ -25,7 +25,7 @@ namespace gs::event {
     concept Event = requires {
         typename T::event_id;
     }
-    && std::is_aggregate_v<T>;
+    &&std::is_aggregate_v<T>;
 
     class Bus {
         template <typename T>
