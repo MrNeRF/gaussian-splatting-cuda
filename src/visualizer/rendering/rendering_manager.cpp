@@ -60,14 +60,24 @@ namespace gs::visualizer {
         }
 
         // Check if viewport has changed since last frame
-        bool viewport_changed = hasCamChanged(context.viewport);
+        bool scene_changed = hasCamChanged(context.viewport);
+
+        if (!scene_changed and context.world_to_user) {
+            const auto& w2u = *context.world_to_user;
+            if (!(w2u * prev_world_to_usr_inv_).isIdentity()) {
+                scene_changed = true;
+                prev_world_to_usr_inv_ = (*context.world_to_user).inv();
+            }
+        }
 
         // Check if we should skip scene rendering
         auto state = scene_manager->getCurrentState();
         bool skip_scene_render = false;
-        if (settings_.adaptive_frame_rate) {
+        if (settings_.adaptive_frame_rate || settings_.use_crop_box) {
+            // at the moment - I dont want to track the cropbox too - so if
+            // it is enabled - render every frame
             skip_scene_render = framerate_controller_.shouldSkipSceneRender(
-                state.is_training, viewport_changed);
+                state.is_training, scene_changed);
         }
 
         // Don't skip rendering if scene was just loaded
@@ -95,7 +105,6 @@ namespace gs::visualizer {
 
         // Update last viewport state
         prev_viewport_state_ = context.viewport;
-        cam_changed_ = viewport_changed;
 
         // Always render UI overlays (these are typically fast)
         if (settings_.show_crop_box && context.crop_box) {

@@ -80,9 +80,9 @@ namespace gs::visualizer {
 
         // Framerate control
         FramerateController framerate_controller_;
-        mutable bool cam_changed_ = true;
         mutable Viewport prev_viewport_state_;
         mutable float prev_fov_ = 0;
+        mutable geometry::EuclideanTransform prev_world_to_usr_inv_;
         RenderingPipeline::RenderResult prev_result_;
 
         // Scene loading tracking - for frame control

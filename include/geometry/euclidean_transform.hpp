@@ -41,6 +41,9 @@ namespace gs {
             // Inverse transformation
             EuclideanTransform inv() const;
 
+            // Check if transform is identity within epsilon tolerance
+            bool isIdentity(float eps = 1e-6f) const;
+
             // Getters
             const glm::quat& getRotation() const { return m_rotation; }
             const glm::vec3& getTranslation() const { return m_translation; }
@@ -48,6 +51,7 @@ namespace gs {
             // Setters
             void setRotation(const glm::quat& rot) { m_rotation = rot; }
             void setTranslation(const glm::vec3& trans) { m_translation = trans; }
+
             // Get Euler angles (in radians) in ZYX order
             glm::vec3 getEulerAngles() const { return glm::eulerAngles(m_rotation); }
 
