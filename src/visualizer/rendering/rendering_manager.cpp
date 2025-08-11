@@ -46,7 +46,7 @@ namespace gs::visualizer {
 
     void RenderingManager::setupEventHandlers() {
         // Subscribe to SceneLoaded events
-        scene_loaded_handler_id_ = events::state::SceneLoaded::when([this](const auto& event) {
+        scene_loaded_handler_id_ = events::state::SceneLoaded::when([this](const auto& /* event (bypass unused warning) */) {
             scene_just_loaded_ = true;
         });
     }

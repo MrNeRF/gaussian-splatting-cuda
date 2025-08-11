@@ -87,7 +87,7 @@ namespace gs::visualizer {
 
         // Scene loading tracking - for frame control
         bool scene_just_loaded_ = false;
-        event::HandlerId scene_loaded_handler_id_;
+        event::HandlerId scene_loaded_handler_id_ = 0;
     };
 
 } // namespace gs::visualizer
