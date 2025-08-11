@@ -21,6 +21,7 @@ namespace gs {
             bool antialiasing = false;
             RenderMode render_mode = RenderMode::RGB;
             const geometry::BoundingBox* crop_box = nullptr; // crop box
+            glm::vec3 background_color = glm::vec3(0.0f, 0.0f, 0.0f);
         };
 
         struct RenderResult {

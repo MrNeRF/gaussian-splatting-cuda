@@ -24,6 +24,11 @@ namespace gs {
             return result;
         }
 
+        // Update background color from request
+        background_ = torch::tensor({request.background_color.r, request.background_color.g, request.background_color.b},
+                                    torch::kFloat32)
+                          .to(torch::kCUDA);
+
         // Create camera for this frame
         Camera cam = createCamera(request);
 

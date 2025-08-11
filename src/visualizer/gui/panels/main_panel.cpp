@@ -76,7 +76,8 @@ namespace gs::gui::panels {
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
                 .scaling_modifier = config->scaling_modifier,
-                .antialiasing = std::nullopt}
+                .antialiasing = std::nullopt,
+                .background_color = std::nullopt}
                 .emit();
         }
 
@@ -84,7 +85,8 @@ namespace gs::gui::panels {
             events::ui::RenderSettingsChanged{
                 .fov = config->fov,
                 .scaling_modifier = std::nullopt,
-                .antialiasing = std::nullopt}
+                .antialiasing = std::nullopt,
+                .background_color = std::nullopt}
                 .emit();
         }
 
