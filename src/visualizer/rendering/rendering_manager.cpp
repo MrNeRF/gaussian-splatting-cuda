@@ -396,7 +396,7 @@ namespace gs::visualizer {
         // check is user increased window size
         if (!scene_changed && context.viewport_region) {
             glm::ivec2 render_size = context.viewport.windowSize;
-            render_size = glm::ivec2(
+            glm::ivec2 render_size(
                 static_cast<int>(context.viewport_region->width),
                 static_cast<int>(context.viewport_region->height));
             if (render_size != prev_render_size_) {
