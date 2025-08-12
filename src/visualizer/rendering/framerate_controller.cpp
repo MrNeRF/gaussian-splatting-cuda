@@ -1,6 +1,4 @@
 #include "framerate_controller.hpp"
-#include <algorithm>
-#include <numeric>
 
 namespace gs::visualizer {
 
@@ -8,6 +6,7 @@ namespace gs::visualizer {
         auto now = std::chrono::high_resolution_clock::now();
         frame_start_time_ = now;
         last_frame_time_ = now;
+        last_non_dropped_training_frame_time_ = now;
     }
 
     void FramerateController::beginFrame() {
@@ -32,15 +31,15 @@ namespace gs::visualizer {
         // This can be used for additional timing if needed in the future
     }
 
-    bool FramerateController::shouldSkipSceneRender(bool is_training, bool viewport_changed) const {
+    bool FramerateController::shouldSkipSceneRender(bool is_training, bool scene_changed) {
 
-        // Don't skip if viewport changed - user interaction requires immediate response
-        if (viewport_changed) {
+        // Don't skip if scene changed - user interaction requires immediate response
+        if (scene_changed) {
             return false;
         }
 
-        // Skip if we're in static mode and viewport hasn't changed
-        if (settings_.skip_when_static && !viewport_changed && !is_training) {
+        // when not training - skip if we're in static mode and scene hasn't changed
+        if (settings_.skip_when_static && !is_training) {
             return true;
         }
 
@@ -48,6 +47,18 @@ namespace gs::visualizer {
         if (settings_.adaptive_quality && is_performance_critical_ &&
             consecutive_skips_ < max_consecutive_skips_) {
             return true;
+        }
+        // if training - refersh rate should corresponds to training_frame_refresh_time_sec_
+        if (is_training) {
+            using seconds_f = std::chrono::duration<float>;
+
+            auto now = std::chrono::high_resolution_clock::now();
+            float time_diff_sec = seconds_f(now - last_non_dropped_training_frame_time_).count();
+            if (time_diff_sec < training_frame_refresh_time_sec_) {
+                return true;
+            }
+            last_non_dropped_training_frame_time_ = now;
+            return false;
         }
 
         return false;

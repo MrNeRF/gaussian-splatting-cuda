@@ -29,7 +29,7 @@ namespace gs::visualizer {
         void endFrame();
 
         // Check if we should skip rendering the scene this frame
-        bool shouldSkipSceneRender(bool is_training, bool viewport_changed) const;
+        bool shouldSkipSceneRender(bool is_training, bool scene_changed);
 
         // Get current FPS statistics
         float getCurrentFPS() const { return current_fps_; }
@@ -67,6 +67,9 @@ namespace gs::visualizer {
         int consecutive_skips_ = 0;
         // in the worst case - we drop max_consecutive_skips_ of of max_consecutive_skips_+1 frames
         static constexpr int max_consecutive_skips_ = 10;
+        //
+        float training_frame_refresh_time_sec_ = 1;
+        std::chrono::high_resolution_clock::time_point last_non_dropped_training_frame_time_;
     };
 
 } // namespace gs::visualizer
