@@ -76,16 +76,18 @@ namespace gs::gui::panels {
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
                 .scaling_modifier = config->scaling_modifier,
-                .antialiasing = std::nullopt}
-            .emit();
+                .antialiasing = std::nullopt,
+                .background_color = std::nullopt}
+                .emit();
         }
 
         if (widgets::SliderWithReset("FoV", &config->fov, 45.0f, 120.0f, 75.0f)) {
             events::ui::RenderSettingsChanged{
                 .fov = config->fov,
                 .scaling_modifier = std::nullopt,
-                .antialiasing = std::nullopt}
-            .emit();
+                .antialiasing = std::nullopt,
+                .background_color = std::nullopt}
+                .emit();
         }
 
         // Display current FPS (read-only)
