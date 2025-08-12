@@ -106,11 +106,6 @@ namespace gs::gui::panels {
             if (ImGui::Checkbox("VSync", &vsync_enabled)) {
                 // Set VSync through the viewer's public interface
                 ctx.viewer->setVSync(vsync_enabled);
-
-                // should we create this event ?
-                // events::ui::VSyncChanged{
-                //     .enabled = vsync_enabled
-                // }.emit();
             }
 
             // Add tooltip
