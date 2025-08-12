@@ -69,8 +69,6 @@ namespace gs::visualizer {
         }
 
         [[nodiscard]] bool getVSyncEnabled() const {
-            // You'll need to implement getVSyncEnabled() in WindowManager
-            // or track the state in RenderingConfig
             return window_manager_ ? window_manager_->getVSync() : true;
         }
 
