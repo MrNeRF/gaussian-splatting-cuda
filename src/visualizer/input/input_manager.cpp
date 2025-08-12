@@ -69,7 +69,8 @@ namespace gs::visualizer {
             events::ui::RenderSettingsChanged{
                 .fov = fov_horizontal_deg,
                 .scaling_modifier = std::nullopt,
-                .antialiasing = std::nullopt}
+                .antialiasing = std::nullopt,
+                .background_color = std::nullopt}
                 .emit();
 
             // Log FOV change

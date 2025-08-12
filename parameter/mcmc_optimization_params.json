@@ -41,5 +41,8 @@
   "pause_refine_after_reset": 0,
   "revised_opacity": false,
   "steps_scaler": 0,
-  "antialiasing": false
+  "antialiasing": false,
+  "random": false,
+  "init_num_pts": 100000,
+  "init_extent": 3.0
 }

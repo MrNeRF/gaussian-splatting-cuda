@@ -146,7 +146,8 @@ namespace gs {
             EVENT(RenderSettingsChanged,
                   std::optional<float> fov;
                   std::optional<float> scaling_modifier;
-                  std::optional<bool> antialiasing;);
+                  std::optional<bool> antialiasing;
+                  std::optional<glm::vec3> background_color;);
             EVENT(RenderModeChanged, std::string old_mode; std::string new_mode;);
             EVENT(NodeSelected,
                   std::string path;

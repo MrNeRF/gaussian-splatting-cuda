@@ -11,6 +11,7 @@ add_library(gs_visualizer OBJECT
         tools/crop_box_tool.cpp
         tools/tool_manager.cpp
         tools/world_transform_tool.cpp
+        tools/background_tool.cpp
 
         # Window management
         window/window_manager.cpp
