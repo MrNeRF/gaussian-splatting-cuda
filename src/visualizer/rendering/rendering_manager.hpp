@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/events.hpp"
+#include "rendering/framerate_controller.hpp"
 #include "rendering/renderer.hpp"
 #include "rendering/rendering_pipeline.hpp"
 #include "rendering/shader.hpp"
@@ -22,6 +24,7 @@ namespace gs::visualizer {
         bool show_crop_box = false;
         bool use_crop_box = false;
         bool show_coord_axes = false;
+        bool adaptive_frame_rate = true;
     };
 
     struct ViewportRegion {
@@ -54,20 +57,42 @@ namespace gs::visualizer {
         void updateSettings(const RenderSettings& settings) { settings_ = settings; }
         const RenderSettings& getSettings() const { return settings_; }
 
+        // Framerate control
+        void updateFramerateSettings(const FramerateSettings& settings) { framerate_controller_.updateSettings(settings); }
+        const FramerateSettings& getFramerateSettings() const { return framerate_controller_.getSettings(); }
+        float getCurrentFPS() const { return framerate_controller_.getCurrentFPS(); }
+        float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
+        bool isPerformanceCritical() const { return framerate_controller_.isPerformanceCritical(); }
+        void resetFramerateController() { framerate_controller_.reset(); }
+
         // Get shader for external use (crop box rendering)
         std::shared_ptr<Shader> getQuadShader() const { return quad_shader_; }
 
     private:
         void initializeShaders();
-        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager);
+        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render);
         void drawFocusIndicator(const RenderContext& context);
         void drawCropBox(const RenderContext& context);
         void drawCoordAxes(const RenderContext& context);
-
+        bool hasCamChanged(const Viewport& current_viewport);
+        bool hasSceneChanged(const RenderContext& context);
+        void setupEventHandlers();
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
         std::shared_ptr<Shader> quad_shader_;
         bool initialized_ = false;
+
+        // Framerate control
+        FramerateController framerate_controller_;
+        Viewport prev_viewport_state_;
+        float prev_fov_ = 0;
+        geometry::EuclideanTransform prev_world_to_usr_inv_;
+        glm::vec3 prev_background_color_;
+        RenderingPipeline::RenderResult prev_result_;
+
+        // Scene loading tracking - for frame control
+        bool scene_just_loaded_ = false;
+        event::HandlerId scene_loaded_handler_id_ = 0;
     };
 
 } // namespace gs::visualizer
