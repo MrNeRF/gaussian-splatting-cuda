@@ -140,11 +140,12 @@ namespace gs::gui::panels {
             if (tool_name == "Crop Box") {
                 return "[□]"; // Box icon
             } else if (tool_name == "World Transform") {
-                return ""; // Box icon
-            } else {
-                std::println(stderr, "Warning: tool_name '{}' has no icon", tool_name);
+                return "[⊕]"; // Transform icon
+            } else if (tool_name == "Background") {
+                return "[◐]"; // Background/color icon
             }
 
+            // No warning needed - just return default icon
             return "[?]"; // Default icon
         }
 
