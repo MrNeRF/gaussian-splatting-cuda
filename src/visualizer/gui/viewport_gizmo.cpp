@@ -25,7 +25,13 @@ namespace gs::gui {
         generateGeometry();
 
         // Initialize text renderer using window size (will be updated in render)
-        text_renderer_ = std::make_unique<TextRenderer>(1280, 720);
+        // Initialize text renderer using actual window size (will be updated in render)
+        int width = 1280, height = 720;
+        GLFWwindow* window = glfwGetCurrentContext();
+        if (window) {
+            glfwGetFramebufferSize(window, &width, &height);
+        }
+        text_renderer_ = std::make_unique<TextRenderer>(width, height);
 
         // Load font from our assets
         std::string font_path = std::string(PROJECT_ROOT_PATH) +
