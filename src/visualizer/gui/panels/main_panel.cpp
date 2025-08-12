@@ -72,6 +72,46 @@ namespace gs::gui::panels {
         ImGui::Text("Rendering Settings");
         ImGui::Separator();
 
+        // Get current render settings
+        auto render_manager = ctx.viewer->getRenderingManager();
+        if (!render_manager)
+            return;
+
+        auto settings = render_manager->getSettings();
+        bool settings_changed = false;
+
+        // Point Cloud Mode checkbox
+        if (ImGui::Checkbox("Point Cloud Mode", &settings.point_cloud_mode)) {
+            settings_changed = true;
+            // Emit point cloud mode changed event
+            events::ui::PointCloudModeChanged{
+                .enabled = settings.point_cloud_mode,
+                .voxel_size = settings.voxel_size}
+                .emit();
+        }
+
+        // Show voxel size slider only when in point cloud mode
+        if (settings.point_cloud_mode) {
+            if (widgets::SliderWithReset("Voxel Size", &settings.voxel_size, 0.001f, 0.1f, 0.01f)) {
+                settings_changed = true;
+                // Emit point cloud mode changed event with new voxel size
+                events::ui::PointCloudModeChanged{
+                    .enabled = settings.point_cloud_mode,
+                    .voxel_size = settings.voxel_size}
+                    .emit();
+            }
+        }
+
+        // Apply settings changes if any
+        if (settings_changed) {
+            render_manager->updateSettings(settings);
+
+            // Emit generic scene changed event
+            events::state::SceneChanged{}.emit();
+        }
+
+        ImGui::Separator();
+
         if (widgets::SliderWithReset("Scale", &config->scaling_modifier, 0.01f, 3.0f, 1.0f)) {
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
