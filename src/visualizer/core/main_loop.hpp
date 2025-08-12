@@ -23,25 +23,15 @@ namespace gs::visualizer {
         void setShutdownCallback(ShutdownCallback cb) { shutdown_callback_ = cb; }
         void setShouldCloseCallback(ShouldCloseCallback cb) { should_close_callback_ = cb; }
 
-        // Frame rate control
-        void setTargetFPS(int fps);
-        int getTargetFPS() const { return target_fps_; }
-
         // Main run loop
         void run();
 
     private:
-        void controlFrameRate();
-
         InitCallback init_callback_;
         UpdateCallback update_callback_;
         RenderCallback render_callback_;
         ShutdownCallback shutdown_callback_;
         ShouldCloseCallback should_close_callback_;
-
-        int target_fps_ = 30;
-        int frame_time_ms_;
-        std::chrono::time_point<std::chrono::high_resolution_clock> last_frame_time_;
     };
 
 } // namespace gs::visualizer

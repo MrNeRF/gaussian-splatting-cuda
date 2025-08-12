@@ -52,6 +52,15 @@ namespace gs::visualizer {
         ::GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
         ToolManager* getToolManager() { return tool_manager_.get(); }
 
+        // Add FPS monitoring methods
+        [[nodiscard]] float getCurrentFPS() const {
+            return rendering_manager_ ? rendering_manager_->getCurrentFPS() : 0.0f;
+        }
+
+        [[nodiscard]] float getAverageFPS() const {
+            return rendering_manager_ ? rendering_manager_->getAverageFPS() : 0.0f;
+        }
+
         // Compatibility method for crop box
         std::shared_ptr<RenderBoundingBox> getCropBox() const;
         std::shared_ptr<const RenderCoordinateAxes> getAxes() const;
