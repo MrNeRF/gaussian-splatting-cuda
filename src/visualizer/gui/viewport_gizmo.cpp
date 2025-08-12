@@ -88,6 +88,14 @@ namespace gs::gui {
 
         // Generate cylinder (for axes)
         constexpr int segments = 16;
+        constexpr size_t kVertexBufferReserve = segments * 6; // Number of vertices for cylinder
+        vertices.reserve(kVertexBufferReserve);
+
+        auto addVertex = [&](float x, float y, float z, float nx, float ny, float nz) {
+            vertices.insert(vertices.end(), {x, y, z, nx, ny, nz});
+        };
+
+        // Generate cylinder (for axes)
         constexpr float two_pi = 2 * std::numbers::pi_v<float>;
 
         for (const auto i : std::views::iota(0, segments)) {
