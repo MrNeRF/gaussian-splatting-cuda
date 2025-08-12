@@ -15,6 +15,7 @@
     },
     "nlohmann-json",
     "spdlog",
-    "tbb"
+    "tbb",
+    "freetype"
   ]
 }
