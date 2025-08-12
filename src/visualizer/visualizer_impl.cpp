@@ -55,7 +55,6 @@ namespace gs::visualizer {
 
         // Create main loop
         main_loop_ = std::make_unique<MainLoop>();
-        main_loop_->setTargetFPS(options.target_fps);
 
         // Setup connections
         setupEventHandlers();
