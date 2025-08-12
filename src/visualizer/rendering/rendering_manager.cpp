@@ -393,7 +393,7 @@ namespace gs::visualizer {
                 prev_world_to_usr_inv_ = (*context.world_to_user).inv();
             }
         }
-        if (!scene_changed and context.background_tool) {
+        if (!scene_changed && context.background_tool) {
             glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
             if (context.background_tool) {
                 background_color = context.background_tool->getBackgroundColor();
