@@ -90,6 +90,12 @@ namespace gs::gui::panels {
                 .emit();
         }
 
+        // Display current FPS (read-only)
+        float average_fps = ctx.viewer->getAverageFPS();
+        if (average_fps > 0.0f) {
+            ImGui::Text("FPS: %.1f", average_fps);
+        }
+
 #ifdef CUDA_GL_INTEROP_ENABLED
         ImGui::Text("Render Mode: GPU Direct (Interop)");
 #else

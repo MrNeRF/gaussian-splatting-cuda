@@ -18,7 +18,6 @@ namespace gs::visualizer {
         int width = 1280;
         int height = 720;
         bool antialiasing = false;
-        int target_fps = 30;
         bool enable_cuda_interop = true;
     };
 

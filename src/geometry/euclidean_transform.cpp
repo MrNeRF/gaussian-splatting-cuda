@@ -106,5 +106,30 @@ namespace gs {
             return glm::mat3_cast(m_rotation);
         }
 
+        bool EuclideanTransform::isIdentity(float eps) const {
+            // Check if translation is near zero
+            if (glm::length(m_translation) > eps) {
+                return false;
+            }
+
+            // Check if rotation is near identity quaternion
+            // Identity quaternion is (1, 0, 0, 0) or (-1, 0, 0, 0) due to double cover
+            // We can check the angle of rotation: if small, it's near identity
+
+            // Method 1: Check quaternion components directly
+            // For identity: w = ±1, x = y = z = 0
+            float w_abs = glm::abs(m_rotation.w);
+            if (glm::abs(w_abs - 1.0f) > eps) {
+                return false;
+            }
+
+            glm::vec3 xyz = glm::vec3(m_rotation.x, m_rotation.y, m_rotation.z);
+            if (glm::length(xyz) > eps) {
+                return false;
+            }
+
+            return true;
+        }
+
     } // namespace geometry
 } // namespace gs
