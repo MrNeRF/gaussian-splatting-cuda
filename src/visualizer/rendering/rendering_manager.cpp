@@ -235,7 +235,8 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
-        if (prev_result_.valid && skip_render) {
+        // Don't skip render if we're in point cloud mode or if settings changed
+        if (prev_result_.valid && skip_render && !settings_.point_cloud_mode) {
             RenderingPipeline::uploadToScreen(prev_result_, *screen_renderer_, render_size);
             screen_renderer_->render(quad_shader_);
             return;
@@ -256,7 +257,9 @@ namespace gs::visualizer {
             .antialiasing = settings_.antialiasing,
             .render_mode = RenderMode::RGB,
             .crop_box = render_crop_box,
-            .background_color = background_color};
+            .background_color = background_color,
+            .point_cloud_mode = settings_.point_cloud_mode,  // Pass point cloud settings
+            .voxel_size = settings_.voxel_size};
 
         // Get trainer for potential mutex locking
         auto state = scene_manager->getCurrentState();
@@ -402,6 +405,17 @@ namespace gs::visualizer {
                     prev_background_color_ = background_color;
                 }
             }
+        }
+
+        // Check if point cloud mode or voxel size changed
+        static bool prev_point_cloud_mode = false;
+        static float prev_voxel_size = 0.01f;
+
+        if (settings_.point_cloud_mode != prev_point_cloud_mode ||
+            std::abs(settings_.voxel_size - prev_voxel_size) > 1e-6f) {
+            scene_changed = true;
+            prev_point_cloud_mode = settings_.point_cloud_mode;
+            prev_voxel_size = settings_.voxel_size;
         }
 
         return scene_changed;

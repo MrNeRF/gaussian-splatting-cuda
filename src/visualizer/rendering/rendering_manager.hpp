@@ -25,6 +25,8 @@ namespace gs::visualizer {
         bool use_crop_box = false;
         bool show_coord_axes = false;
         bool adaptive_frame_rate = true;
+        bool point_cloud_mode = false;
+        float voxel_size = 0.01f;
     };
 
     struct ViewportRegion {

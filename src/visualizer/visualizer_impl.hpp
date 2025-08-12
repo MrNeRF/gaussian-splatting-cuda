@@ -51,6 +51,8 @@ namespace gs::visualizer {
         SceneManager* getSceneManager() { return scene_manager_.get(); }
         ::GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
         ToolManager* getToolManager() { return tool_manager_.get(); }
+        RenderingManager* getRenderingManager() { return rendering_manager_.get(); }
+        const Viewport& getViewport() const { return viewport_; }  // Add viewport getter
 
         // Add FPS monitoring methods
         [[nodiscard]] float getCurrentFPS() const {
