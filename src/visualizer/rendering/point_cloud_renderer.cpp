@@ -1,6 +1,5 @@
 #include "rendering/point_cloud_renderer.hpp"
 #include "internal/resource_paths.hpp"
-#include <iostream>
 
 namespace gs {
 
@@ -10,17 +9,25 @@ namespace gs {
     PointCloudRenderer::PointCloudRenderer() = default;
 
     PointCloudRenderer::~PointCloudRenderer() {
-        if (cube_vao_) glDeleteVertexArrays(1, &cube_vao_);
-        if (cube_vbo_) glDeleteBuffers(1, &cube_vbo_);
-        if (cube_ebo_) glDeleteBuffers(1, &cube_ebo_);
-        if (instance_vbo_) glDeleteBuffers(1, &instance_vbo_);
-        if (fbo_) glDeleteFramebuffers(1, &fbo_);
-        if (color_texture_) glDeleteTextures(1, &color_texture_);
-        if (depth_texture_) glDeleteTextures(1, &depth_texture_);
+        if (cube_vao_)
+            glDeleteVertexArrays(1, &cube_vao_);
+        if (cube_vbo_)
+            glDeleteBuffers(1, &cube_vbo_);
+        if (cube_ebo_)
+            glDeleteBuffers(1, &cube_ebo_);
+        if (instance_vbo_)
+            glDeleteBuffers(1, &instance_vbo_);
+        if (fbo_)
+            glDeleteFramebuffers(1, &fbo_);
+        if (color_texture_)
+            glDeleteTextures(1, &color_texture_);
+        if (depth_texture_)
+            glDeleteTextures(1, &depth_texture_);
     }
 
     void PointCloudRenderer::initialize() {
-        if (initialized_) return;
+        if (initialized_)
+            return;
 
         // Create shader
         shader_ = std::make_unique<Shader>(
@@ -58,34 +65,21 @@ namespace gs {
         // Instance position attribute
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(1);
-        glVertexAttribDivisor(1, 1);  // One per instance
+        glVertexAttribDivisor(1, 1); // One per instance
 
         // Instance color attribute
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
         glEnableVertexAttribArray(2);
-        glVertexAttribDivisor(2, 1);  // One per instance
+        glVertexAttribDivisor(2, 1); // One per instance
 
         glBindVertexArray(0);
     }
 
     torch::Tensor PointCloudRenderer::extractRGBFromSH(const torch::Tensor& shs) {
-        // The SH coefficients are stored in a special format in gaussian splatting
-        // shs shape: [N, K, 3] where K is number of SH coefficients
-        
-        // Get the DC component (first SH coefficient)
+        const float SH_C0 = 0.28209479177387814f;
         torch::Tensor features_dc = shs.index({torch::indexing::Slice(), 0, torch::indexing::Slice()});
-        
-        // The SH coefficient for degree 0 (DC term) needs to be converted to color
-        // Using the same formula as in the gaussian splatting renderer
-        const float C0 = 0.28209479177387814f; // 1 / (2 * sqrt(pi))
-        
-        // Convert SH to RGB: color = sigmoid((features_dc * C0 + 0.5))
-        torch::Tensor rgb = features_dc * C0 + 0.5f;
-        
-        // Apply sigmoid activation
-        rgb = torch::sigmoid(rgb);
-        
-        return rgb;
+        torch::Tensor colors = features_dc * SH_C0 + 0.5f;
+        return colors.clamp(0.0f, 1.0f);
     }
 
     void PointCloudRenderer::uploadPointData(const torch::Tensor& positions, const torch::Tensor& colors) {
@@ -105,32 +99,33 @@ namespace gs {
             instance_data[i * 6 + 0] = pos_accessor[i][0];
             instance_data[i * 6 + 1] = pos_accessor[i][1];
             instance_data[i * 6 + 2] = pos_accessor[i][2];
-            // Color
-            instance_data[i * 6 + 3] = col_accessor[i][0];
-            instance_data[i * 6 + 4] = col_accessor[i][1];
-            instance_data[i * 6 + 5] = col_accessor[i][2];
+            // Color - ensure values are in [0, 1] range
+            instance_data[i * 6 + 3] = std::max(0.0f, std::min(1.0f, col_accessor[i][0]));
+            instance_data[i * 6 + 4] = std::max(0.0f, std::min(1.0f, col_accessor[i][1]));
+            instance_data[i * 6 + 5] = std::max(0.0f, std::min(1.0f, col_accessor[i][2]));
         }
 
         // Upload to GPU
         glBindBuffer(GL_ARRAY_BUFFER, instance_vbo_);
-        glBufferData(GL_ARRAY_BUFFER, instance_data.size() * sizeof(float), 
+        glBufferData(GL_ARRAY_BUFFER, instance_data.size() * sizeof(float),
                      instance_data.data(), GL_DYNAMIC_DRAW);
 
         current_point_count_ = num_points;
     }
 
     void PointCloudRenderer::render(const SplatData& splat_data,
-                                   const glm::mat4& view,
-                                   const glm::mat4& projection,
-                                   float voxel_size,
-                                   const glm::vec3& background_color) {
-        if (!initialized_ || splat_data.size() == 0) return;
+                                    const glm::mat4& view,
+                                    const glm::mat4& projection,
+                                    float voxel_size,
+                                    const glm::vec3& background_color) {
+        if (!initialized_ || splat_data.size() == 0)
+            return;
 
         // Get positions and SH coefficients
         torch::Tensor positions = splat_data.get_means();
         torch::Tensor shs = splat_data.get_shs();
 
-        // Extract RGB from SH coefficients
+        // Extract RGB colors from SH coefficients
         torch::Tensor colors = extractRGBFromSH(shs);
 
         // Upload data to GPU
@@ -150,8 +145,8 @@ namespace gs {
 
         // Render instanced cubes
         glBindVertexArray(cube_vao_);
-        glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0, 
-                               static_cast<GLsizei>(current_point_count_));
+        glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0,
+                                static_cast<GLsizei>(current_point_count_));
         glBindVertexArray(0);
 
         shader_->unbind();

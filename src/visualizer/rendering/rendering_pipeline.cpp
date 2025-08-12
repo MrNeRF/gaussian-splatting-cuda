@@ -78,8 +78,7 @@ namespace gs {
         glm::mat3 flip_yz = glm::mat3(
             1, 0, 0,
             0, -1, 0,
-            0, 0, -1
-        );
+            0, 0, -1);
 
         // Convert from camera space (what we get in request) to view space
         glm::mat3 R_inv = glm::transpose(request.view_rotation); // Inverse of rotation matrix
@@ -152,7 +151,8 @@ namespace gs {
         auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
         torch::Tensor image_cpu = torch::from_blob(pixels.data(),
                                                    {request.viewport_size.y, request.viewport_size.x, 3},
-                                                   options).clone();
+                                                   options)
+                                      .clone();
 
         // Flip vertically (OpenGL has origin at bottom-left)
         image_cpu = torch::flip(image_cpu, {0});

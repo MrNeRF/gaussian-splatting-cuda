@@ -258,7 +258,7 @@ namespace gs::visualizer {
             .render_mode = RenderMode::RGB,
             .crop_box = render_crop_box,
             .background_color = background_color,
-            .point_cloud_mode = settings_.point_cloud_mode,  // Pass point cloud settings
+            .point_cloud_mode = settings_.point_cloud_mode, // Pass point cloud settings
             .voxel_size = settings_.voxel_size};
 
         // Get trainer for potential mutex locking

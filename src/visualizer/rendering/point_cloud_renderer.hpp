@@ -29,13 +29,13 @@ namespace gs {
     private:
         void createCubeGeometry();
         void uploadPointData(const torch::Tensor& positions, const torch::Tensor& colors);
-        torch::Tensor extractRGBFromSH(const torch::Tensor& shs);
+        static torch::Tensor extractRGBFromSH(const torch::Tensor& shs);
 
         // OpenGL resources
         GLuint cube_vao_ = 0;
         GLuint cube_vbo_ = 0;
         GLuint cube_ebo_ = 0;
-        GLuint instance_vbo_ = 0;  // For positions and colors
+        GLuint instance_vbo_ = 0; // For positions and colors
 
         // Framebuffer resources
         GLuint fbo_ = 0;
@@ -54,16 +54,15 @@ namespace gs {
         // Cube vertices and indices
         static constexpr float cube_vertices_[] = {
             // Front face
-            -0.5f, -0.5f,  0.5f,
-             0.5f, -0.5f,  0.5f,
-             0.5f,  0.5f,  0.5f,
-            -0.5f,  0.5f,  0.5f,
+            -0.5f, -0.5f, 0.5f,
+            0.5f, -0.5f, 0.5f,
+            0.5f, 0.5f, 0.5f,
+            -0.5f, 0.5f, 0.5f,
             // Back face
             -0.5f, -0.5f, -0.5f,
-             0.5f, -0.5f, -0.5f,
-             0.5f,  0.5f, -0.5f,
-            -0.5f,  0.5f, -0.5f
-        };
+            0.5f, -0.5f, -0.5f,
+            0.5f, 0.5f, -0.5f,
+            -0.5f, 0.5f, -0.5f};
 
         static constexpr unsigned int cube_indices_[] = {
             // Front face
@@ -77,8 +76,7 @@ namespace gs {
             // Top face
             3, 2, 6, 6, 7, 3,
             // Bottom face
-            0, 4, 5, 5, 1, 0
-        };
+            0, 4, 5, 5, 1, 0};
     };
 
 } // namespace gs

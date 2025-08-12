@@ -74,7 +74,8 @@ namespace gs::gui::panels {
 
         // Get current render settings
         auto render_manager = ctx.viewer->getRenderingManager();
-        if (!render_manager) return;
+        if (!render_manager)
+            return;
 
         auto settings = render_manager->getSettings();
         bool settings_changed = false;
