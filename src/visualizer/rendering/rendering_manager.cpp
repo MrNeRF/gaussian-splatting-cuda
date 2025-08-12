@@ -60,16 +60,7 @@ namespace gs::visualizer {
             initialize();
         }
 
-        // Check if viewport has changed since last frame
-        bool scene_changed = hasCamChanged(context.viewport);
-
-        if (!scene_changed and context.world_to_user) {
-            const auto& w2u = *context.world_to_user;
-            if (!(w2u * prev_world_to_usr_inv_).isIdentity()) {
-                scene_changed = true;
-                prev_world_to_usr_inv_ = (*context.world_to_user).inv();
-            }
-        }
+        bool scene_changed = hasSceneChaged(context);
 
         // Check if we should skip scene rendering
         auto state = scene_manager->getCurrentState();
@@ -355,7 +346,7 @@ namespace gs::visualizer {
         }
     }
 
-    bool RenderingManager::hasCamChanged(const Viewport& current_viewport) const {
+    bool RenderingManager::hasCamChanged(const Viewport& current_viewport) {
         // Compare current viewport with last known state
         const float epsilon = 1e-6f;
 
@@ -390,4 +381,30 @@ namespace gs::visualizer {
 
         return has_changed;
     }
+
+    bool RenderingManager::hasSceneChaged(const RenderContext& context) {
+        // Check if viewport has changed since last frame
+        bool scene_changed = hasCamChanged(context.viewport);
+
+        if (!scene_changed and context.world_to_user) {
+            const auto& w2u = *context.world_to_user;
+            if (!(w2u * prev_world_to_usr_inv_).isIdentity()) {
+                scene_changed = true;
+                prev_world_to_usr_inv_ = (*context.world_to_user).inv();
+            }
+        }
+        if (!scene_changed and context.background_tool) {
+            glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
+            if (context.background_tool) {
+                background_color = context.background_tool->getBackgroundColor();
+                if (glm::length(background_color - prev_background_color_) > 0) {
+                    scene_changed = true;
+                    prev_background_color_ = background_color;
+                }
+            }
+        }
+
+        return scene_changed;
+    }
+
 } // namespace gs::visualizer
