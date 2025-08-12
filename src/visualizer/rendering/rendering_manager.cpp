@@ -361,7 +361,7 @@ namespace gs::visualizer {
             auto last_rot = prev_viewport_state_.getRotationMatrix();
             auto diff = last_rot - current_rot;
 
-            if (glm::length(diff[0]) + glm::length(diff[1]) + glm::length(diff[2])) {
+            if (glm::length(diff[0]) + glm::length(diff[1]) + glm::length(diff[2]) > epsilon) {
                 has_changed = true;
             }
         }
