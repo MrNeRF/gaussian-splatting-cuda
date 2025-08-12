@@ -74,7 +74,7 @@ void main()
         // Load only needed characters
         for (unsigned char c : {'X', 'Y', 'Z'}) {
             if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
-                std::cerr << "ERROR::FREETYTPE: Failed to load Glyph for character: " << c << std::endl;
+                std::cerr << "ERROR::FREETYPE: Failed to load Glyph for character: " << c << std::endl;
                 continue;
             }
 

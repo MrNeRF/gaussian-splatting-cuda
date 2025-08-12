@@ -1,5 +1,4 @@
-#ifndef GS_TEXT_RENDERER_H
-#define GS_TEXT_RENDERER_H
+#pragma once
 
 #include <ft2build.h>
 #include <glad/glad.h>
@@ -46,5 +45,3 @@ namespace gs::gui {
     };
 
 } // namespace gs::gui
-
-#endif // GS_TEXT_RENDERER_H
