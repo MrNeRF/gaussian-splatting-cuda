@@ -75,7 +75,7 @@ namespace gs::visualizer {
         void drawCropBox(const RenderContext& context);
         void drawCoordAxes(const RenderContext& context);
         bool hasCamChanged(const Viewport& current_viewport);
-        bool hasSceneChaged(const RenderContext& context);
+        bool hasSceneChanged(const RenderContext& context);
         void setupEventHandlers();
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
