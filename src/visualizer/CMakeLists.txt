@@ -26,7 +26,8 @@ add_library(gs_visualizer OBJECT
         gui/gui_manager.cpp
         gui/ui_widgets.cpp
 	    gui/viewport_gizmo.cpp
-	    gui/text_renderer.cpp
+        gui/viewport_gizmo.cpp
+        gui/text_renderer.cpp
         gui/panels/main_panel.cpp
         gui/panels/training_panel.cpp
         gui/panels/crop_box_panel.cpp
