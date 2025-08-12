@@ -54,7 +54,7 @@ namespace gs::visualizer {
 
             auto now = std::chrono::high_resolution_clock::now();
             float time_diff_sec = seconds_f(now - last_non_dropped_training_frame_time_).count();
-            if (time_diff_sec < training_frame_refresh_time_sec_) {
+            if (time_diff_sec < settings_.training_frame_refresh_time_sec) {
                 return true;
             }
             last_non_dropped_training_frame_time_ = now;

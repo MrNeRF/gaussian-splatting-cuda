@@ -12,6 +12,7 @@ namespace gs::visualizer {
         bool skip_when_static = true;
         float time_window_seconds = 10.0f; // Time window to keep frame samples (seconds)
         size_t max_frame_samples = 1000;   // Maximum number of frame samples to keep
+        float training_frame_refresh_time_sec = 1;
     };
 
     class FramerateController {
@@ -67,8 +68,7 @@ namespace gs::visualizer {
         int consecutive_skips_ = 0;
         // in the worst case - we drop max_consecutive_skips_ of of max_consecutive_skips_+1 frames
         static constexpr int max_consecutive_skips_ = 10;
-        //
-        float training_frame_refresh_time_sec_ = 1;
+
         std::chrono::high_resolution_clock::time_point last_non_dropped_training_frame_time_;
     };
 
