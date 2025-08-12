@@ -382,7 +382,7 @@ namespace gs::visualizer {
         return has_changed;
     }
 
-    bool RenderingManager::hasSceneChaged(const RenderContext& context) {
+    bool RenderingManager::hasSceneChanged(const RenderContext& context) {
         // Check if viewport has changed since last frame
         bool scene_changed = hasCamChanged(context.viewport);
 
