@@ -25,6 +25,9 @@ add_library(gs_visualizer OBJECT
         # GUI system
         gui/gui_manager.cpp
         gui/ui_widgets.cpp
+	    gui/viewport_gizmo.cpp
+        gui/viewport_gizmo.cpp
+        gui/text_renderer.cpp
         gui/panels/main_panel.cpp
         gui/panels/training_panel.cpp
         gui/panels/crop_box_panel.cpp
@@ -88,6 +91,7 @@ target_link_libraries(gs_visualizer
         nlohmann_json::nlohmann_json
         Python3::Python
         CUDA::cudart
+        Freetype::Freetype
         ${OPENGL_LIBRARIES}
         gs_loader           # Use the loader module
         gaussian_host       # For access to core functionality
