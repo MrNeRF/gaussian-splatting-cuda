@@ -54,11 +54,17 @@ namespace gs::gui {
 
     void ViewportGizmo::createShaders() {
         // Use the shader system to create shaders
-        shader_ = std::make_unique<Shader>(
-            (gs::visualizer::getShaderPath("viewport_gizmo.vert")).string().c_str(),
-            (gs::visualizer::getShaderPath("viewport_gizmo.frag")).string().c_str(),
-            false // Don't create buffer
-        );
+        try {
+            shader_ = std::make_unique<Shader>(
+                (gs::visualizer::getShaderPath("viewport_gizmo.vert")).string().c_str(),
+                (gs::visualizer::getShaderPath("viewport_gizmo.frag")).string().c_str(),
+                false // Don't create buffer
+            );
+            std::cout << "[ViewportGizmo] Shaders created successfully" << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "[ViewportGizmo] ERROR creating shaders: " << e.what() << std::endl;
+            throw;
+        }
     }
 
     void ViewportGizmo::generateGeometry() {
@@ -280,6 +286,12 @@ namespace gs::gui {
         std::sort(sphereInfo, sphereInfo + 3, [](const SphereInfo& a, const SphereInfo& b) {
             return a.depth > b.depth;
         });
+
+        // Make screen positions relative to the current viewport origin
+        for (int i = 0; i < 3; ++i) {
+            sphereInfo[i].screenPos.x -= vp[0];
+            sphereInfo[i].screenPos.y -= vp[1];
+        }
 
         // Draw text labels with occlusion
         if (text_renderer_) {
