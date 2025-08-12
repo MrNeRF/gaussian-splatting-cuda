@@ -63,6 +63,17 @@ namespace gs::visualizer {
             return rendering_manager_ ? rendering_manager_->getAverageFPS() : 0.0f;
         }
 
+        // Add VSync control methods
+        void setVSync(bool enabled) {
+            if (window_manager_) {
+                window_manager_->setVSync(enabled);
+            }
+        }
+
+        [[nodiscard]] bool getVSyncEnabled() const {
+            return window_manager_ ? window_manager_->getVSync() : true;
+        }
+
         // Compatibility method for crop box
         std::shared_ptr<RenderBoundingBox> getCropBox() const;
         std::shared_ptr<const RenderCoordinateAxes> getAxes() const;

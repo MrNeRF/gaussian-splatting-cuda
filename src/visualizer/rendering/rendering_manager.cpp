@@ -396,6 +396,18 @@ namespace gs::visualizer {
                 prev_world_to_usr_inv_ = (*context.world_to_user).inv();
             }
         }
+        // check is user increased window size
+        if (!scene_changed && context.viewport_region) {
+            glm::ivec2 render_size = context.viewport.windowSize;
+            glm::ivec2 render_size(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+            if (render_size != prev_render_size_) {
+                scene_changed = true;
+                prev_render_size_ = render_size;
+            }
+        }
+
         if (!scene_changed && context.background_tool) {
             glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
             if (context.background_tool) {
