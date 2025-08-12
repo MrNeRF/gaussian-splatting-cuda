@@ -396,26 +396,29 @@ namespace gs::visualizer {
                 prev_world_to_usr_inv_ = (*context.world_to_user).inv();
             }
         }
+        // check is user increased window size
+        if (!scene_changed && context.viewport_region) {
+            glm::ivec2 render_size = context.viewport.windowSize;
+            if (render_size != prev_render_size_) {
+                scene_changed = true;
+                prev_render_size_ = render_size;
+            }
+        }
+
         if (!scene_changed && context.background_tool) {
-            glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
-            if (context.background_tool) {
-                background_color = context.background_tool->getBackgroundColor();
-                if (glm::length(background_color - prev_background_color_) > 0) {
-                    scene_changed = true;
-                    prev_background_color_ = background_color;
-                }
+            auto background_color = context.background_tool->getBackgroundColor();
+            if (glm::length(background_color - prev_background_color_) > 0) {
+                scene_changed = true;
+                prev_background_color_ = background_color;
             }
         }
 
         // Check if point cloud mode or voxel size changed
-        static bool prev_point_cloud_mode = false;
-        static float prev_voxel_size = 0.01f;
-
-        if (settings_.point_cloud_mode != prev_point_cloud_mode ||
-            std::abs(settings_.voxel_size - prev_voxel_size) > 1e-6f) {
+        if (settings_.point_cloud_mode != prev_point_cloud_mode_ ||
+            std::abs(settings_.voxel_size - prev_voxel_size_) > 1e-6f) {
             scene_changed = true;
-            prev_point_cloud_mode = settings_.point_cloud_mode;
-            prev_voxel_size = settings_.voxel_size;
+            prev_point_cloud_mode_ = settings_.point_cloud_mode;
+            prev_voxel_size_ = settings_.voxel_size;
         }
 
         return scene_changed;

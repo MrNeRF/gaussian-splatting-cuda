@@ -79,6 +79,7 @@ namespace gs::visualizer {
         bool hasCamChanged(const Viewport& current_viewport);
         bool hasSceneChanged(const RenderContext& context);
         void setupEventHandlers();
+
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
         std::shared_ptr<Shader> quad_shader_;
@@ -90,7 +91,11 @@ namespace gs::visualizer {
         float prev_fov_ = 0;
         geometry::EuclideanTransform prev_world_to_usr_inv_;
         glm::vec3 prev_background_color_;
+        glm::ivec2 prev_render_size_;
         RenderingPipeline::RenderResult prev_result_;
+
+        bool prev_point_cloud_mode_ = false;
+        float prev_voxel_size_ = 0.01f;
 
         // Scene loading tracking - for frame control
         bool scene_just_loaded_ = false;
