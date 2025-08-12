@@ -130,10 +130,30 @@ namespace gs::gui::panels {
                 .emit();
         }
 
-        // Display current FPS (read-only)
+        // Display current FPS and VSync control on the same line
         float average_fps = ctx.viewer->getAverageFPS();
         if (average_fps > 0.0f) {
-            ImGui::Text("FPS: %.1f", average_fps);
+            ImGui::Text("FPS: %6.1f", average_fps); // 6 characters total, 1 decimal place
+
+            // Add VSync checkbox on the same line
+            ImGui::SameLine();
+            ImGui::Spacing();
+            ImGui::SameLine();
+
+            // Get current VSync state from viewer
+            bool vsync_enabled = ctx.viewer->getVSyncEnabled();
+
+            if (ImGui::Checkbox("VSync", &vsync_enabled)) {
+                // Set VSync through the viewer's public interface
+                ctx.viewer->setVSync(vsync_enabled);
+            }
+
+            // Add tooltip
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Toggle Vertical Synchronization\n%s",
+                                  vsync_enabled ? "FPS capped to monitor refresh rate"
+                                                : "Uncapped FPS");
+            }
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED
