@@ -386,7 +386,7 @@ namespace gs::visualizer {
         // Check if viewport has changed since last frame
         bool scene_changed = hasCamChanged(context.viewport);
 
-        if (!scene_changed and context.world_to_user) {
+        if (!scene_changed && context.world_to_user) {
             const auto& w2u = *context.world_to_user;
             if (!(w2u * prev_world_to_usr_inv_).isIdentity()) {
                 scene_changed = true;
