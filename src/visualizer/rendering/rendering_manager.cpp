@@ -399,9 +399,6 @@ namespace gs::visualizer {
         // check is user increased window size
         if (!scene_changed && context.viewport_region) {
             glm::ivec2 render_size = context.viewport.windowSize;
-            glm::ivec2 render_size(
-                static_cast<int>(context.viewport_region->width),
-                static_cast<int>(context.viewport_region->height));
             if (render_size != prev_render_size_) {
                 scene_changed = true;
                 prev_render_size_ = render_size;
@@ -409,13 +406,10 @@ namespace gs::visualizer {
         }
 
         if (!scene_changed && context.background_tool) {
-            glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
-            if (context.background_tool) {
-                background_color = context.background_tool->getBackgroundColor();
-                if (glm::length(background_color - prev_background_color_) > 0) {
-                    scene_changed = true;
-                    prev_background_color_ = background_color;
-                }
+            auto background_color = context.background_tool->getBackgroundColor();
+            if (glm::length(background_color - prev_background_color_) > 0) {
+                scene_changed = true;
+                prev_background_color_ = background_color;
             }
         }
 
