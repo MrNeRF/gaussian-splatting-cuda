@@ -100,9 +100,9 @@ namespace gs {
             instance_data[i * 6 + 1] = pos_accessor[i][1];
             instance_data[i * 6 + 2] = pos_accessor[i][2];
             // Color - ensure values are in [0, 1] range
-            instance_data[i * 6 + 3] = std::max(0.0f, std::min(1.0f, col_accessor[i][0]));
-            instance_data[i * 6 + 4] = std::max(0.0f, std::min(1.0f, col_accessor[i][1]));
-            instance_data[i * 6 + 5] = std::max(0.0f, std::min(1.0f, col_accessor[i][2]));
+            instance_data[i * 6 + 3] = std::clamp(col_accessor[i][0], 0.0f, 1.0f);
+            instance_data[i * 6 + 4] = std::clamp(col_accessor[i][1], 0.0f, 1.0f);
+            instance_data[i * 6 + 5] = std::clamp(col_accessor[i][2], 0.0f, 1.0f);
         }
 
         // Upload to GPU

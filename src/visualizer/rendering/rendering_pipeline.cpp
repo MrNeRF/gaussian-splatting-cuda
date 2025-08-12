@@ -128,8 +128,10 @@ namespace gs {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
 
-        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            std::cerr << "Framebuffer not complete!" << std::endl;
+        GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
+            std::cerr << "Framebuffer not complete! Status code: 0x"
+                      << std::hex << fb_status << std::dec << std::endl;
             glDeleteFramebuffers(1, &fbo);
             glDeleteTextures(1, &color_texture);
             glDeleteTextures(1, &depth_texture);

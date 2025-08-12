@@ -52,6 +52,22 @@ namespace gs {
         size_t current_point_count_ = 0;
 
         // Cube vertices and indices
+        /*
+         * Cube vertex positions.
+         * Coordinate system: Right-handed, +X is right, +Y is up, +Z is forward (out of
+         * the screen).
+         * Vertices are ordered as follows:
+         *   0: (-0.5, -0.5,  0.5) // Front-bottom-left
+         *   1: ( 0.5, -0.5,  0.5) // Front-bottom-right
+         *   2: ( 0.5,  0.5,  0.5) // Front-top-right
+         *   3: (-0.5,  0.5,  0.5) // Front-top-left
+         *   4: (-0.5, -0.5, -0.5) // Back-bottom-left
+         *   5: ( 0.5, -0.5, -0.5) // Back-bottom-right
+         *   6: ( 0.5,  0.5, -0.5) // Back-top-right
+         *   7: (-0.5,  0.5, -0.5) // Back-top-left
+         * Winding order for faces: Counter-clockwise when looking at the face from
+         * outside the cube.
+         */
         static constexpr float cube_vertices_[] = {
             // Front face
             -0.5f, -0.5f, 0.5f,

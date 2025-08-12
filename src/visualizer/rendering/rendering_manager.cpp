@@ -408,14 +408,11 @@ namespace gs::visualizer {
         }
 
         // Check if point cloud mode or voxel size changed
-        static bool prev_point_cloud_mode = false;
-        static float prev_voxel_size = 0.01f;
-
-        if (settings_.point_cloud_mode != prev_point_cloud_mode ||
-            std::abs(settings_.voxel_size - prev_voxel_size) > 1e-6f) {
+        if (settings_.point_cloud_mode != prev_point_cloud_mode_ ||
+            std::abs(settings_.voxel_size - prev_voxel_size_) > 1e-6f) {
             scene_changed = true;
-            prev_point_cloud_mode = settings_.point_cloud_mode;
-            prev_voxel_size = settings_.voxel_size;
+            prev_point_cloud_mode_ = settings_.point_cloud_mode;
+            prev_voxel_size_ = settings_.voxel_size;
         }
 
         return scene_changed;

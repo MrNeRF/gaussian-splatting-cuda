@@ -83,12 +83,22 @@ namespace gs::gui::panels {
         // Point Cloud Mode checkbox
         if (ImGui::Checkbox("Point Cloud Mode", &settings.point_cloud_mode)) {
             settings_changed = true;
+            // Emit point cloud mode changed event
+            events::ui::PointCloudModeChanged{
+                .enabled = settings.point_cloud_mode,
+                .voxel_size = settings.voxel_size}
+                .emit();
         }
 
         // Show voxel size slider only when in point cloud mode
         if (settings.point_cloud_mode) {
             if (widgets::SliderWithReset("Voxel Size", &settings.voxel_size, 0.001f, 0.1f, 0.01f)) {
                 settings_changed = true;
+                // Emit point cloud mode changed event with new voxel size
+                events::ui::PointCloudModeChanged{
+                    .enabled = settings.point_cloud_mode,
+                    .voxel_size = settings.voxel_size}
+                    .emit();
             }
         }
 
@@ -96,12 +106,8 @@ namespace gs::gui::panels {
         if (settings_changed) {
             render_manager->updateSettings(settings);
 
-            // Force a camera update to trigger re-render
-            const auto& viewport = ctx.viewer->getViewport();
-            events::ui::CameraMove{
-                .rotation = viewport.getRotationMatrix(),
-                .translation = viewport.getTranslation()}
-                .emit();
+            // Emit generic scene changed event
+            events::state::SceneChanged{}.emit();
         }
 
         ImGui::Separator();
