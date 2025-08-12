@@ -60,7 +60,7 @@ namespace gs::visualizer {
             initialize();
         }
 
-        bool scene_changed = hasSceneChaged(context);
+        bool scene_changed = hasSceneChanged(context);
 
         // Check if we should skip scene rendering
         auto state = scene_manager->getCurrentState();
