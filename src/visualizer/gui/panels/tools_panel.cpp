@@ -137,9 +137,11 @@ namespace gs::gui::panels {
             // Using simple text icons for now, but could use FontAwesome or similar
             if (tool_name == "Crop Box") {
                 return "[□]"; // Box icon
-            } else if (tool_name == "World Transform") {
+            }
+            if (tool_name == "World Transform") {
                 return "[⊕]"; // Transform icon
-            } else if (tool_name == "Background") {
+            }
+            if (tool_name == "Background") {
                 return "[●]"; // Background/color icon
             }
 
