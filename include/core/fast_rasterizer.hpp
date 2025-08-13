@@ -12,8 +12,6 @@ namespace gs {
     RenderOutput fast_rasterize(
         Camera& viewpoint_camera,
         SplatData& gaussian_model,
-        const param::TrainingParameters& params,
-        int iter,
         torch::Tensor& bg_color);
 
 } // namespace gs

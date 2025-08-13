@@ -270,6 +270,11 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
         _splat_data.increment_sh_degree();
     }
 
+    if (iter == _params->stop_refine) {
+        // Reset densification info at the end of refinement.Saves memory and processing time.
+        _splat_data._densification_info = torch::empty({0});
+    }
+
     if (iter >= _params->stop_refine) {
         return;
     }

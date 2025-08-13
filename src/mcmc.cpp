@@ -403,6 +403,7 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _splat_data.opacity_raw() = _splat_data.opacity_raw().to(dev).set_requires_grad(true);
     _splat_data.sh0() = _splat_data.sh0().to(dev).set_requires_grad(true);
     _splat_data.shN() = _splat_data.shN().to(dev).set_requires_grad(true);
+    _splat_data._densification_info = torch::empty({0});
 
     // Initialize binomial coefficients
     const int n_max = 51;

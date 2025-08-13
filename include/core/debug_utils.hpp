@@ -148,26 +148,26 @@ inline void PrintTorchMat(const torch::Tensor& mat) {
     }
 }
 
-// template <typename MatType>
-// inline void PrintGLMMat(const MatType& mat) {
-//     static_assert(std::is_same<MatType, glm::mat2>::value ||
-//                       std::is_same<MatType, glm::mat3>::value ||
-//                       std::is_same<MatType, glm::mat4>::value,
-//                   "PrintGLMMat: Only glm::mat2, mat3, and mat4 are supported.");
-//
-//     constexpr int cols = MatType::col_type::length();
-//     constexpr int rows = MatType::length();
-//
-//     std::cout << "GLM Matrix (" << rows << "x" << cols << "):" << std::endl;
-//
-//     for (int i = 0; i < rows; ++i) {
-//         std::cout << "[ ";
-//         for (int j = 0; j < cols; ++j) {
-//             std::cout << std::fixed << std::setprecision(6) << std::setw(10)
-//                       << mat[j][i]; // GLM stores matrices in column-major order
-//             if (j < cols - 1)
-//                 std::cout << ", ";
-//         }
-//         std::cout << " ]" << std::endl;
-//     }
-// }
+template <typename MatType>
+void PrintGLMMat(const MatType& mat) {
+    static_assert(std::is_same<MatType, glm::mat2>::value ||
+                      std::is_same<MatType, glm::mat3>::value ||
+                      std::is_same<MatType, glm::mat4>::value,
+                  "PrintGLMMat: Only glm::mat2, mat3, and mat4 are supported.");
+
+    constexpr int cols = MatType::col_type::length();
+    constexpr int rows = MatType::length();
+
+    std::cout << "GLM Matrix (" << rows << "x" << cols << "):" << std::endl;
+
+    for (int i = 0; i < rows; ++i) {
+        std::cout << "[ ";
+        for (int j = 0; j < cols; ++j) {
+            std::cout << std::fixed << std::setprecision(6) << std::setw(10)
+                      << mat[j][i]; // GLM stores matrices in column-major order
+            if (j < cols - 1)
+                std::cout << ", ";
+        }
+        std::cout << " ]" << std::endl;
+    }
+}

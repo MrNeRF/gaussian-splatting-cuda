@@ -14,8 +14,8 @@ namespace strategy {
     }
 
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(
-    gs::SplatData& splat_data,
-    const gs::param::OptimizationParameters& params) {
+        gs::SplatData& splat_data,
+        const gs::param::OptimizationParameters& params) {
         using Options = gs::FusedAdam::Options;
         std::vector<torch::optim::OptimizerParamGroup> groups;
 

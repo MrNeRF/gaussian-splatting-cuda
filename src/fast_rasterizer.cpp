@@ -10,8 +10,6 @@ namespace gs {
     RenderOutput fast_rasterize(
         Camera& viewpoint_camera,
         SplatData& gaussian_model,
-        const param::TrainingParameters& params,
-        int iter,
         torch::Tensor& bg_color) {
 
         // Get camera parameters
@@ -60,6 +58,10 @@ namespace gs {
         output.image = raster_outputs[0];
         output.alpha = raster_outputs[1];
 
+        // output.image = image + (1.0f - alpha) * bg_color.unsqueeze(-1).unsqueeze(-1);
+
+        // TODO: if the background color is blended into the image, the resulting image has alpha=1 everywhere
+        // output.alpha = torch::ones_like(alpha);
         return output;
     }
 
