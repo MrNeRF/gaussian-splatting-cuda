@@ -48,9 +48,9 @@ namespace gs {
         // Store pointer to the original densification_info tensor
         // This allows us to modify it directly in backward pass
         // FIXME: Does anybody know how to avoid this?
-        ctx->saved_data["densification_info_ptr"] = densification_info.data_ptr();
+        ctx->saved_data["densification_info_ptr"] = reinterpret_cast<int64_t>(densification_info.data_ptr());
         ctx->saved_data["densification_info_numel"] = densification_info.numel();
-        ctx->saved_data["densification_info_dtype"] = densification_info.scalar_type();
+        ctx->saved_data["densification_info_dtype"] = static_cast<int>(densification_info.scalar_type());
         ctx->saved_data["densification_info_device_type"] = static_cast<int>(densification_info.device().type());
         ctx->saved_data["densification_info_device_index"] = densification_info.device().index();
 
@@ -118,8 +118,9 @@ namespace gs {
             auto dtype = static_cast<c10::ScalarType>(ctx->saved_data["densification_info_dtype"].toInt());
             auto device_type = static_cast<c10::DeviceType>(ctx->saved_data["densification_info_device_type"].toInt());
             int device_index = ctx->saved_data["densification_info_device_index"].toInt();
+
             // Create tensor view from the original data pointer
-            torch::Tensor densification_info = torch::from_blob(
+            densification_info = torch::from_blob(
                 data_ptr,
                 {2, numel / 2}, // Assuming shape is [2, N]
                 torch::TensorOptions().dtype(dtype).device(c10::Device(device_type, device_index)));
