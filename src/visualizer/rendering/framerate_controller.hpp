@@ -10,8 +10,8 @@ namespace gs::visualizer {
         float min_fps_threshold = 10.0f;
         bool adaptive_quality = true;
         bool skip_when_static = true;
-        float time_window_seconds = 10.0f; // Time window to keep frame samples (seconds)
-        size_t max_frame_samples = 1000;   // Maximum number of frame samples to keep
+        float time_window_seconds = 5.0f; // Time window to keep frame samples (seconds)
+        size_t max_frame_samples = 1000;  // Maximum number of frame samples to keep
         float training_frame_refresh_time_sec = 1;
     };
 

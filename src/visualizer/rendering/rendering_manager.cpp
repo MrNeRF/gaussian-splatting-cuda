@@ -235,7 +235,8 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
-        if (prev_result_.valid && skip_render) {
+        // Don't skip render if we're in point cloud mode or if settings changed
+        if (prev_result_.valid && skip_render && !settings_.point_cloud_mode) {
             RenderingPipeline::uploadToScreen(prev_result_, *screen_renderer_, render_size);
             screen_renderer_->render(quad_shader_);
             return;
@@ -256,7 +257,9 @@ namespace gs::visualizer {
             .antialiasing = settings_.antialiasing,
             .render_mode = RenderMode::RGB,
             .crop_box = render_crop_box,
-            .background_color = background_color};
+            .background_color = background_color,
+            .point_cloud_mode = settings_.point_cloud_mode, // Pass point cloud settings
+            .voxel_size = settings_.voxel_size};
 
         // Get trainer for potential mutex locking
         auto state = scene_manager->getCurrentState();
@@ -393,15 +396,29 @@ namespace gs::visualizer {
                 prev_world_to_usr_inv_ = (*context.world_to_user).inv();
             }
         }
-        if (!scene_changed && context.background_tool) {
-            glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
-            if (context.background_tool) {
-                background_color = context.background_tool->getBackgroundColor();
-                if (glm::length(background_color - prev_background_color_) > 0) {
-                    scene_changed = true;
-                    prev_background_color_ = background_color;
-                }
+        // check is user increased window size
+        if (!scene_changed && context.viewport_region) {
+            glm::ivec2 render_size = context.viewport.windowSize;
+            if (render_size != prev_render_size_) {
+                scene_changed = true;
+                prev_render_size_ = render_size;
             }
+        }
+
+        if (!scene_changed && context.background_tool) {
+            auto background_color = context.background_tool->getBackgroundColor();
+            if (glm::length(background_color - prev_background_color_) > 0) {
+                scene_changed = true;
+                prev_background_color_ = background_color;
+            }
+        }
+
+        // Check if point cloud mode or voxel size changed
+        if (settings_.point_cloud_mode != prev_point_cloud_mode_ ||
+            std::abs(settings_.voxel_size - prev_voxel_size_) > 1e-6f) {
+            scene_changed = true;
+            prev_point_cloud_mode_ = settings_.point_cloud_mode;
+            prev_voxel_size_ = settings_.voxel_size;
         }
 
         return scene_changed;

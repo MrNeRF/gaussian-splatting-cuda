@@ -13,6 +13,8 @@ namespace gs {
         : title_(title),
           window_size_(width, height),
           framebuffer_size_(width, height) {
+
+        setVSync(true);
     }
 
     WindowManager::~WindowManager() {
@@ -93,6 +95,7 @@ namespace gs {
 
     void WindowManager::setVSync(bool enabled) {
         glfwSwapInterval(enabled ? 1 : 0);
+        vsync_enabled_ = enabled;
     }
 
 } // namespace gs
