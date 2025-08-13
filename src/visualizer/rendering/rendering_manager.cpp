@@ -65,7 +65,7 @@ namespace gs::visualizer {
         // Check if we should skip scene rendering
         auto state = scene_manager->getCurrentState();
         bool skip_scene_render = false;
-        if (settings_.adaptive_frame_rate and not settings_.use_crop_box) {
+        if (settings_.adaptive_frame_rate && not settings_.use_crop_box) {
             // at the moment - I dont want to track the crop box too - so if
             // it is enabled - render every frame
             skip_scene_render = framerate_controller_.shouldSkipSceneRender(
