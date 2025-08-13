@@ -2,6 +2,7 @@
 
 #include "core/events.hpp"
 #include "gui/ui_context.hpp"
+#include "gui/viewport_gizmo.hpp"
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
@@ -66,10 +67,12 @@ namespace gs {
             std::unique_ptr<ScriptingConsole> console_;
             std::unique_ptr<FileBrowser> file_browser_;
             std::unique_ptr<ScenePanel> scene_panel_;
+            std::unique_ptr<ViewportGizmo> viewport_gizmo_;
 
             // UI state only
             std::unordered_map<std::string, bool> window_states_;
             bool show_main_panel_ = true;
+            bool show_viewport_gizmo_ = true;
 
             // Speed overlay state
             bool speed_overlay_visible_ = false;

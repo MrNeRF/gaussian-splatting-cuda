@@ -51,7 +51,7 @@ namespace gs {
         // Setup and teardown
         void setTrainer(std::unique_ptr<Trainer> trainer);
         void clearTrainer();
-        bool hasTrainer() const { return trainer_ != nullptr; }
+        bool hasTrainer() const;
 
         // Link to viewer for notifications
         void setViewer(visualizer::VisualizerImpl* viewer) { viewer_ = viewer; }

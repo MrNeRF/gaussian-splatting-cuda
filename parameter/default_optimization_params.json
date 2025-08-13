@@ -42,5 +42,8 @@
   "revised_opacity": false,
   "steps_scaler": 0,
   "antialiasing": false,
+  "random": false,
+  "init_num_pts": 100000,
+  "init_extent": 3.0,
   "attention_masks": false
 }
