@@ -78,7 +78,7 @@ namespace gs {
         const int size = 32;
         std::vector<float> noise_data(size * size);
 
-        // Generate blue noise pattern (simplified version)
+        // Generate white noise pattern using uniform random distribution
         std::mt19937 rng(42); // Fixed seed for consistency
         std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
@@ -149,8 +149,8 @@ namespace gs {
         GLboolean depth_mask;
         glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
         GLint blend_src, blend_dst;
-        glGetIntegerv(GL_BLEND_SRC_ALPHA, &blend_src);
-        glGetIntegerv(GL_BLEND_DST_ALPHA, &blend_dst);
+        glGetIntegerv(GL_BLEND_SRC_RGB, &blend_src);
+        glGetIntegerv(GL_BLEND_DST_RGB, &blend_dst);
         GLboolean blend_enabled = glIsEnabled(GL_BLEND);
 
         // Set rendering state
