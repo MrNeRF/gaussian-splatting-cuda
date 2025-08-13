@@ -2,6 +2,7 @@
 
 #include "core/events.hpp"
 #include "rendering/framerate_controller.hpp"
+#include "rendering/render_infinite_grid.hpp"
 #include "rendering/renderer.hpp"
 #include "rendering/rendering_pipeline.hpp"
 #include "rendering/shader.hpp"
@@ -24,6 +25,9 @@ namespace gs::visualizer {
         bool show_crop_box = false;
         bool use_crop_box = false;
         bool show_coord_axes = false;
+        bool show_grid = true;
+        int grid_plane = 1; // Default to XZ plane
+        float grid_opacity = 0.5f;
         bool adaptive_frame_rate = true;
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
@@ -76,6 +80,7 @@ namespace gs::visualizer {
         void drawFocusIndicator(const RenderContext& context);
         void drawCropBox(const RenderContext& context);
         void drawCoordAxes(const RenderContext& context);
+        void drawGrid(const RenderContext& context);
         bool hasCamChanged(const Viewport& current_viewport);
         bool hasSceneChanged(const RenderContext& context);
         void setupEventHandlers();
@@ -83,6 +88,7 @@ namespace gs::visualizer {
         RenderSettings settings_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
         std::shared_ptr<Shader> quad_shader_;
+        std::unique_ptr<RenderInfiniteGrid> infinite_grid_;
         bool initialized_ = false;
 
         // Framerate control
@@ -100,6 +106,7 @@ namespace gs::visualizer {
         // Scene loading tracking - for frame control
         bool scene_just_loaded_ = false;
         event::HandlerId scene_loaded_handler_id_ = 0;
+        event::HandlerId grid_settings_handler_id_ = 0;
     };
 
 } // namespace gs::visualizer

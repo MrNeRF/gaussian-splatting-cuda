@@ -20,6 +20,7 @@ add_library(gs_visualizer OBJECT
         rendering/rendering_manager.cpp
         rendering/rendering_pipeline.cpp
         rendering/render_bounding_box.cpp
+        rendering/render_infinite_grid.cpp
         rendering/point_cloud_renderer.cpp
 
         # GUI system
