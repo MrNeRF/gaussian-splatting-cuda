@@ -56,8 +56,7 @@ namespace gs::gui {
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
         io.ConfigWindowsMoveFromTitleBarOnly = true;
 
         // Platform/Renderer initialization
@@ -107,16 +106,20 @@ namespace gs::gui {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
 
-        // Check if mouse is in viewport before ImGui processes the frame
+        // CRITICAL: Check mouse state BEFORE ImGui::NewFrame()
+        // This is important because ImGui updates WantCaptureMouse during NewFrame()
         ImVec2 mouse_pos = ImGui::GetMousePos();
         bool mouse_in_viewport = isPositionInViewport(mouse_pos.x, mouse_pos.y);
 
         ImGui::NewFrame();
 
-        // Prevent ImGui from capturing right/middle mouse buttons when in viewport
-        if (mouse_in_viewport && (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
-                                  ImGui::IsMouseDown(ImGuiMouseButton_Middle))) {
-            ImGui::GetIO().WantCaptureMouse = false;
+        // Override ImGui's mouse capture for right/middle buttons when in viewport
+        // This ensures that camera controls work properly
+        if (mouse_in_viewport && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+                ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+                ImGui::GetIO().WantCaptureMouse = false;
+            }
         }
 
         // Create main dockspace
