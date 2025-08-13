@@ -136,7 +136,6 @@ namespace gs {
                     {"grow_scale2d", defaults.grow_scale2d, "2D scale threshold for splitting"},
                     {"prune_scale3d", defaults.prune_scale3d, "3D scale threshold for pruning"},
                     {"prune_scale2d", defaults.prune_scale2d, "2D scale threshold for pruning"},
-                    {"stop_refine_scale2d", defaults.stop_refine_scale2d, "Stop refining Gaussians based on 2D scale at this iteration"},
                     {"reset_every", defaults.reset_every, "Reset opacity every this many iterations"},
                     {"pause_refine_after_reset", defaults.pause_refine_after_reset, "Pause refinement after reset for N iterations"},
                     {"revised_opacity", defaults.revised_opacity, "Use revised opacity heuristic"},
@@ -373,9 +372,6 @@ namespace gs {
                 if (json.contains("prune_scale2d")) {
                     params.prune_scale2d = json["prune_scale2d"];
                 }
-                if (json.contains("stop_refine_scale2d")) {
-                    params.stop_refine_scale2d = json["stop_refine_scale2d"];
-                }
                 if (json.contains("reset_every")) {
                     params.reset_every = json["reset_every"];
                 }
@@ -472,7 +468,6 @@ namespace gs {
                 opt_json["grow_scale2d"] = params.optimization.grow_scale2d;
                 opt_json["prune_scale3d"] = params.optimization.prune_scale3d;
                 opt_json["prune_scale2d"] = params.optimization.prune_scale2d;
-                opt_json["stop_refine_scale2d"] = params.optimization.stop_refine_scale2d;
                 opt_json["reset_every"] = params.optimization.reset_every;
                 opt_json["pause_refine_after_reset"] = params.optimization.pause_refine_after_reset;
                 opt_json["revised_opacity"] = params.optimization.revised_opacity;

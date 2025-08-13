@@ -102,6 +102,47 @@ namespace gs::gui::panels {
             }
         }
 
+        // Grid checkbox and settings
+        if (ImGui::Checkbox("Show Grid", &settings.show_grid)) {
+            settings_changed = true;
+            // Emit grid settings changed event
+            events::ui::GridSettingsChanged{
+                .enabled = settings.show_grid,
+                .plane = static_cast<int>(settings.grid_plane),
+                .opacity = settings.grid_opacity}
+                .emit();
+        }
+
+        // Show grid settings only when grid is enabled
+        if (settings.show_grid) {
+            ImGui::Indent();
+
+            // Grid plane selection
+            const char* planes[] = {"YZ (X-plane)", "XZ (Y-plane)", "XY (Z-plane)"};
+            int current_plane = static_cast<int>(settings.grid_plane);
+            if (ImGui::Combo("Plane", &current_plane, planes, IM_ARRAYSIZE(planes))) {
+                settings.grid_plane = current_plane;
+                settings_changed = true;
+                events::ui::GridSettingsChanged{
+                    .enabled = settings.show_grid,
+                    .plane = current_plane,
+                    .opacity = settings.grid_opacity}
+                    .emit();
+            }
+
+            // Grid opacity
+            if (ImGui::SliderFloat("Grid Opacity", &settings.grid_opacity, 0.0f, 1.0f)) {
+                settings_changed = true;
+                events::ui::GridSettingsChanged{
+                    .enabled = settings.show_grid,
+                    .plane = static_cast<int>(settings.grid_plane),
+                    .opacity = settings.grid_opacity}
+                    .emit();
+            }
+
+            ImGui::Unindent();
+        }
+
         // Apply settings changes if any
         if (settings_changed) {
             render_manager->updateSettings(settings);

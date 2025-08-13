@@ -359,8 +359,6 @@ void MCMC::inject_noise() {
         current_lr);
 }
 
-void MCMC::pre_backward(gs::RenderOutput& render_output) {}
-
 void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     // Increment SH degree every 1000 iterations
     torch::NoGradGuard no_grad;
@@ -406,6 +404,7 @@ void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
     _splat_data.opacity_raw() = _splat_data.opacity_raw().to(dev).set_requires_grad(true);
     _splat_data.sh0() = _splat_data.sh0().to(dev).set_requires_grad(true);
     _splat_data.shN() = _splat_data.shN().to(dev).set_requires_grad(true);
+    _splat_data._densification_info = torch::empty({0});
 
     // Initialize binomial coefficients
     const int n_max = 51;

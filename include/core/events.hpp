@@ -151,6 +151,10 @@ namespace gs {
                   std::optional<glm::vec3> background_color;);
             EVENT(RenderModeChanged, std::string old_mode; std::string new_mode;);
             EVENT(PointCloudModeChanged, bool enabled; float voxel_size;);
+            EVENT(GridSettingsChanged,
+                  bool enabled;
+                  int plane;
+                  float opacity;);
             EVENT(NodeSelected,
                   std::string path;
                   std::string type;
@@ -210,6 +214,7 @@ namespace gs {
         namespace internal {
             EVENT(TrainerReady, );
             EVENT(TrainingReadyToStart, );
+            EVENT(WindowFocusLost, );
             EVENT(RenderRequest,
                   glm::mat3 view_rotation;
                   glm::vec3 view_translation;
