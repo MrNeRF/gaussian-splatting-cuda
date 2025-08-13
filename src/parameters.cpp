@@ -141,7 +141,10 @@ namespace gs {
                     {"revised_opacity", defaults.revised_opacity, "Use revised opacity heuristic"},
                     {"steps_scaler", defaults.steps_scaler, "Scales the training steps and values"},
                     {"antialiasing", defaults.antialiasing, "Enables antialiasing"},
-                    {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"}};
+                    {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
+                    {"random", defaults.random, "Use random initialization instead of SfM"},
+                    {"init_num_pts", defaults.init_num_pts, "Number of random initialization points"},
+                    {"init_extent", defaults.init_extent, "Extent of random initialization"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -390,6 +393,15 @@ namespace gs {
                 if (json.contains("sh_degree_interval")) {
                     params.sh_degree_interval = json["sh_degree_interval"];
                 }
+                if (json.contains("random")) {
+                    params.random = json["random"];
+                }
+                if (json.contains("init_num_pts")) {
+                    params.init_num_pts = json["init_num_pts"];
+                }
+                if (json.contains("init_extent")) {
+                    params.init_extent = json["init_extent"];
+                }
 
                 return params;
 
@@ -415,7 +427,7 @@ namespace gs {
                 json["dataset"]["data_path"] = params.dataset.data_path.string();
                 json["dataset"]["output_path"] = params.dataset.output_path.string();
                 json["dataset"]["images"] = params.dataset.images;
-                json["dataset"]["resolution"] = params.dataset.resolution;
+                json["dataset"]["resize_factor"] = params.dataset.resize_factor;
                 json["dataset"]["test_every"] = params.dataset.test_every;
 
                 // Optimization configuration
@@ -462,6 +474,9 @@ namespace gs {
                 opt_json["steps_scaler"] = params.optimization.steps_scaler;
                 opt_json["antialiasing"] = params.optimization.antialiasing;
                 opt_json["sh_degree_interval"] = params.optimization.sh_degree_interval;
+                opt_json["random"] = params.optimization.random;
+                opt_json["init_num_pts"] = params.optimization.init_num_pts;
+                opt_json["init_extent"] = params.optimization.init_extent;
 
                 json["optimization"] = opt_json;
 

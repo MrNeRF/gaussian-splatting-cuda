@@ -14,11 +14,10 @@ namespace gs {
 namespace gs::visualizer {
 
     struct ViewerOptions {
-        std::string title = "3DGS Viewer";
+        std::string title = "LichtFeld Studio";
         int width = 1280;
         int height = 720;
         bool antialiasing = false;
-        int target_fps = 30;
         bool enable_cuda_interop = true;
     };
 

@@ -8,13 +8,12 @@ A high-performance C++ and CUDA implementation of 3D Gaussian Splatting.
 
 <img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="80%"/>
 
-## 🏆 Competition (done)
-Reduce training time by half and win **the $1500 prize**!  
-Details here: [Issue #135](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/135)
+## 🏆 Second Bounty (Started on 10 of August 2025)
+Better 3DGS Initialization and Training without Densification: $2600 + $500 (Bonus Challenge)
 
-This competition is sponsored by [@vincentwoo](https://github.com/vincentwoo), [@mazy1998](https://github.com/mazy1998), and myself – each contributing **$300**. [@toshas](https://github.com/toshas) and [@ChrisAtKIRI](https://x.com/ChrisAtKIRI) are each contributing **$200**. Finally, [@JulienBlanchon](https://x.com/JulienBlanchon) and [Drew Moffitt](https://www.linkedin.com/in/drew-moffitt-gisp-0a4522157?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app) are each contributing **$100**.
+Details here [Issue #284](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/284)
 
-Winning [pr](https://github.com/MrNeRF/gaussian-splatting-cuda/pull/245).
+Winner of the first bounty (rasterizer speedup by 2.4x) [Florian Hahlbohm](https://github.com/MrNeRF/gaussian-splatting-cuda/pull/245).
 
 ## Agenda (this summer)
 1. Improve the viewer, i.e., better camera controls, more interactive features.
@@ -325,9 +324,9 @@ flowchart LR
   - Paper suggests 30k, but 6k-7k often yields good preliminary results
   - Outputs are saved every 7k iterations and at completion
 
-- **`-r, --resolution [NUM]`**  
-  Set the resolution for training images
-  - -1: Use original resolution (default)
+- **`-r, --resize_factor [NUM]`**  
+  resize the resolution for training images
+  - 1: Use original resolution (default)
   - Positive values: Target resolution for image loading
 
 - **`--steps-scaler [NUM]`**  

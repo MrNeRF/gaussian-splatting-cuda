@@ -4,6 +4,7 @@
 #include "input/camera_controller.hpp"
 #include "input/input_handler.hpp"
 #include "internal/viewport.hpp"
+#include "training/training_manager.hpp"
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -31,12 +32,16 @@ namespace gs::visualizer {
         InputHandler* getInputHandler() { return input_handler_.get(); }
         CameraController* getCameraController() { return camera_controller_.get(); }
 
+        void setTrainingManager(std::shared_ptr<const TrainerManager> training_manager) { trainer_manager_ = training_manager; };
+
     private:
         GLFWwindow* window_;
         Viewport& viewport_;
 
         std::unique_ptr<InputHandler> input_handler_;
         std::unique_ptr<CameraController> camera_controller_;
+
+        std::shared_ptr<const TrainerManager> trainer_manager_;
 
         GuiActiveCheck gui_active_check_;
         FileDropCallback file_drop_callback_;
@@ -45,6 +50,10 @@ namespace gs::visualizer {
 
         void setupInputHandlers();
         void handleFileDrop(const InputHandler::FileDropEvent& event);
+
+        // Event handlers
+        void setupEventHandlers();
+        void handleGoToCamView(const events::cmd::GoToCamView& event);
     };
 
 } // namespace gs::visualizer

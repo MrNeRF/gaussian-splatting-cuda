@@ -54,7 +54,6 @@ namespace {
 
             // Optional value arguments
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
-            ::args::ValueFlag<int> resolution(parser, "resolution", "Set resolution", {'r', "resolution"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
@@ -64,6 +63,8 @@ namespace {
             ::args::ValueFlag<float> min_opacity(parser, "min_opacity", "Minimum opacity threshold", {"min-opacity"});
             ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
             ::args::ValueFlag<std::string> strategy(parser, "strategy", "Optimization strategy: mcmc, default", {"strategy"});
+            ::args::ValueFlag<int> init_num_pts(parser, "init_num_pts", "Number of random initialization points", {"init-num-pts"});
+            ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
 
             // Optional flag arguments
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
@@ -73,6 +74,18 @@ namespace {
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
             ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
+            ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
+
+            ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
+                                                            "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
+                                                            {'r', "resize_factor"},
+                                                            // load_image only supports those resizes
+                                                            std::unordered_map<std::string, int>{
+                                                                {"auto", 1},
+                                                                {"1", 1},
+                                                                {"2", 2},
+                                                                {"4", 4},
+                                                                {"8", 8}});
 
             // Parse arguments
             try {
@@ -170,7 +183,7 @@ namespace {
             auto apply_cmd_overrides = [&params,
                                         // Capture values, not references
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
-                                        resolution_val = resolution ? std::optional<int>(::args::get(resolution)) : std::optional<int>(),
+                                        resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
                                         images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
                                         test_every_val = test_every ? std::optional<int>(::args::get(test_every)) : std::optional<int>(),
@@ -179,13 +192,16 @@ namespace {
                                         sh_degree_val = sh_degree ? std::optional<int>(::args::get(sh_degree)) : std::optional<int>(),
                                         min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
+                                        init_num_pts_val = init_num_pts ? std::optional<int>(::args::get(init_num_pts)) : std::optional<int>(),
+                                        init_extent_val = init_extent ? std::optional<float>(::args::get(init_extent)) : std::optional<float>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
-                                        skip_intermediate_saving_flag = bool(skip_intermediate_saving)]() {
+                                        skip_intermediate_saving_flag = bool(skip_intermediate_saving),
+                                        random_flag = bool(random)]() {
                 auto& opt = params.optimization;
                 auto& ds = params.dataset;
 
@@ -202,7 +218,7 @@ namespace {
 
                 // Apply all overrides
                 setVal(iterations_val, opt.iterations);
-                setVal(resolution_val, ds.resolution);
+                setVal(resize_factor_val, ds.resize_factor);
                 setVal(max_cap_val, opt.max_cap);
                 setVal(images_folder_val, ds.images);
                 setVal(test_every_val, ds.test_every);
@@ -211,6 +227,8 @@ namespace {
                 setVal(sh_degree_val, opt.sh_degree);
                 setVal(min_opacity_val, opt.min_opacity);
                 setVal(render_mode_val, opt.render_mode);
+                setVal(init_num_pts_val, opt.init_num_pts);
+                setVal(init_extent_val, opt.init_extent);
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
@@ -218,6 +236,7 @@ namespace {
                 setFlag(antialiasing_flag, opt.antialiasing);
                 setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
                 setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
+                setFlag(random_flag, opt.random);
             };
 
             return std::make_tuple(ParseResult::Success, apply_cmd_overrides);

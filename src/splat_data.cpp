@@ -343,30 +343,47 @@ namespace gs {
     }
 
     std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
-        const gs::param::TrainingParameters& params,
+        const param::TrainingParameters& params,
         torch::Tensor scene_center,
         const PointCloud& pcd) {
 
         try {
-            const torch::Tensor dists = torch::norm(pcd.means - scene_center, 2, 1); // [N_points]
+            // Generate positions and colors based on init type
+            torch::Tensor positions, colors;
+            if (params.optimization.random) {
+                const int num_points = params.optimization.init_num_pts;
+                const float extent = params.optimization.init_extent;
+                const auto f32_cuda = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+
+                positions = (torch::rand({num_points, 3}, f32_cuda) * 2.0f - 1.0f) * extent;
+                colors = torch::rand({num_points, 3}, f32_cuda);
+            } else {
+                positions = pcd.means;
+                colors = pcd.colors / 255.0f; // Normalize directly
+            }
+
+            scene_center = scene_center.to(positions.device());
+            const torch::Tensor dists = torch::norm(positions - scene_center, 2, 1);
             const auto scene_scale = dists.median().item<float>();
 
             auto rgb_to_sh = [](const torch::Tensor& rgb) {
-                constexpr float kInvSH = 0.28209479177387814f; // 1 / √(4π)
+                constexpr float kInvSH = 0.28209479177387814f;
                 return (rgb - 0.5f) / kInvSH;
             };
 
             const auto f32 = torch::TensorOptions().dtype(torch::kFloat32);
             const auto f32_cuda = f32.device(torch::kCUDA);
 
-            // Create a mutable copy for normalization
-            PointCloud pcd_copy = pcd;
-            pcd_copy.normalize_colors();
+            // 1. means
+            torch::Tensor means;
+            if (params.optimization.random) {
+                // Scale positions before setting requires_grad
+                means = (positions * scene_scale).to(torch::kCUDA).set_requires_grad(true);
+            } else {
+                means = positions.to(torch::kCUDA).set_requires_grad(true);
+            }
 
-            // 1. means - already a tensor, just move to CUDA and set requires_grad
-            auto means = pcd_copy.means.to(torch::kCUDA).set_requires_grad(true);
-
-            // 2. scaling (log(σ)) - compute nearest neighbor distances
+            // 2. scaling (log(σ))
             auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
             auto scaling = torch::log(torch::sqrt(nn_dist) * params.optimization.init_scaling)
                                .unsqueeze(-1)
@@ -384,8 +401,7 @@ namespace gs {
                                .set_requires_grad(true);
 
             // 5. shs (SH coefficients)
-            // Colors are already normalized to float by pcd.normalize_colors()
-            auto colors_float = pcd_copy.colors.to(torch::kCUDA);
+            auto colors_float = colors.to(torch::kCUDA);
             auto fused_color = rgb_to_sh(colors_float);
 
             const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));

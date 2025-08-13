@@ -20,11 +20,12 @@ namespace gs {
     };
 
     enum class RenderMode {
-        RGB,   // Color only
-        D,     // Accumulated depth only
-        ED,    // Expected depth only
-        RGB_D, // Color + accumulated depth
-        RGB_ED // Color + expected depth
+        RGB,            // Color only
+        D,              // Accumulated depth only
+        ED,             // Expected depth only
+        RGB_D,          // Color + accumulated depth
+        RGB_ED,         // Color + expected depth
+        POINT_CLOUD = 5 // Point cloud rendering mode
     };
 
     // Helper function to check if render mode includes depth

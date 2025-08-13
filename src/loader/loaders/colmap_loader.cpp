@@ -3,6 +3,8 @@
 #include "core/dataset.hpp"
 #include "core/point_cloud.hpp"
 #include "formats/colmap.hpp"
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <format>
@@ -120,7 +122,7 @@ namespace gs::loader {
             gs::param::DatasetConfig dataset_config;
             dataset_config.data_path = path;
             dataset_config.images = options.images_folder;
-            dataset_config.resolution = options.resolution;
+            dataset_config.resize_factor = options.resize_factor;
 
             // Create dataset with ALL images
             auto dataset = std::make_shared<gs::CameraDataset>(
@@ -178,9 +180,59 @@ namespace gs::loader {
             return false;
         }
 
-        // Check for COLMAP structure
-        return std::filesystem::exists(path / "sparse" / "0" / "cameras.bin") ||
-               std::filesystem::exists(path / "sparse" / "cameras.bin");
+        // Helper function to check for case-insensitive file existence
+        auto caseInsensitiveExists = [](const std::filesystem::path& dir, const std::string& filename) -> bool {
+            if (!std::filesystem::exists(dir)) {
+                return false;
+            }
+
+            // Convert target filename to lowercase for comparison
+            std::string targetLower = filename;
+            std::transform(targetLower.begin(), targetLower.end(), targetLower.begin(), ::tolower);
+
+            // Check all entries in the directory
+            for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+                std::string entryName = entry.path().filename().string();
+                std::transform(entryName.begin(), entryName.end(), entryName.begin(), ::tolower);
+
+                if (entryName == targetLower) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Helper to find sparse directory (case-insensitive)
+        auto findSparseDir = [&](const std::filesystem::path& parentDir) -> std::filesystem::path {
+            for (const auto& entry : std::filesystem::directory_iterator(parentDir)) {
+                if (entry.is_directory()) {
+                    std::string dirName = entry.path().filename().string();
+                    std::transform(dirName.begin(), dirName.end(), dirName.begin(), ::tolower);
+                    if (dirName == "sparse") {
+                        return entry.path();
+                    }
+                }
+            }
+            return {};
+        };
+
+        // First, try to find the sparse directory
+        std::filesystem::path sparseDir = findSparseDir(path);
+
+        if (!sparseDir.empty()) {
+            // Check in sparse/0/ first
+            std::filesystem::path sparse0 = sparseDir / "0";
+            if (std::filesystem::exists(sparse0) && caseInsensitiveExists(sparse0, "cameras.bin")) {
+                return true;
+            }
+
+            // Check directly in sparse/
+            if (caseInsensitiveExists(sparseDir, "cameras.bin")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     std::string ColmapLoader::name() const {
@@ -194,5 +246,4 @@ namespace gs::loader {
     int ColmapLoader::priority() const {
         return 5; // Medium priority
     }
-
 } // namespace gs::loader
