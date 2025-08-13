@@ -64,7 +64,6 @@ namespace gs::visualizer {
         bool is_performance_critical_ = false;
 
         // Skip logic state
-        bool was_skipping_frames_ = false;
         int consecutive_skips_ = 0;
         // in the worst case - we drop max_consecutive_skips_ of of max_consecutive_skips_+1 frames
         static constexpr int max_consecutive_skips_ = 10;

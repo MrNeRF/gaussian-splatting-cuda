@@ -46,9 +46,14 @@ namespace gs::visualizer {
         // Skip if performance is critical and we haven't been skipping too many frames
         if (settings_.adaptive_quality && is_performance_critical_ &&
             consecutive_skips_ < max_consecutive_skips_) {
+            consecutive_skips_++;
+            // reset consecutive_skips_ counter
+            if (consecutive_skips_ > max_consecutive_skips_) {
+                consecutive_skips_ = 0;
+            }
             return true;
         }
-        // if training - refersh rate should corresponds to training_frame_refresh_time_sec_
+        // if training - refresh rate should correspond to training_frame_refresh_time_sec_
         if (is_training) {
             using seconds_f = std::chrono::duration<float>;
 
@@ -115,13 +120,6 @@ namespace gs::visualizer {
         bool was_critical = is_performance_critical_;
         is_performance_critical_ = (average_fps_ < settings_.min_fps_threshold && average_fps_ > 0.0f);
 
-        // Update skip counter
-        if (was_skipping_frames_) {
-            consecutive_skips_++;
-        } else {
-            consecutive_skips_ = 0;
-        }
-
         // Reset skip counter if performance improved
         if (was_critical && !is_performance_critical_) {
             consecutive_skips_ = 0;
@@ -133,7 +131,6 @@ namespace gs::visualizer {
         current_fps_ = 0.0f;
         average_fps_ = 0.0f;
         is_performance_critical_ = false;
-        was_skipping_frames_ = false;
         consecutive_skips_ = 0;
 
         auto now = std::chrono::high_resolution_clock::now();
