@@ -36,10 +36,10 @@ namespace gs {
         void initialize_cuda_tensors();
 
         // Load image from disk and return it
-        torch::Tensor load_and_get_image(int resolution = -1);
+        torch::Tensor load_and_get_image(int resize_factor = -1);
         
         // Load mask from disk and return it
-        torch::Tensor load_and_get_attention_weights(int resolution = -1);
+        torch::Tensor load_and_get_attention_weights(int resize_factor = -1);
 
         // Get number of bytes in the image file
         size_t get_num_bytes_from_file() const;

@@ -65,7 +65,7 @@ namespace gs {
         return K;
     }
 
-    torch::Tensor Camera::load_and_get_image(int resolution) {
+    torch::Tensor Camera::load_and_get_image(int resize_factor) {
         // Use pinned memory for faster GPU transfer
         auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
 
@@ -73,7 +73,7 @@ namespace gs {
         int w, h, c;
 
         // Load image synchronously
-        auto result = load_image(_image_path, resolution);
+        auto result = load_image(_image_path, resize_factor);
         data = std::get<0>(result);
         w = std::get<1>(result);
         h = std::get<2>(result);
@@ -109,7 +109,7 @@ namespace gs {
         return image;
     }
     
-    torch::Tensor Camera::load_and_get_attention_weights(int resolution) {
+    torch::Tensor Camera::load_and_get_attention_weights(int resize_factor) {
 
         if (_mask_path.empty())
             return torch::Tensor();
@@ -117,7 +117,7 @@ namespace gs {
         unsigned char* data;
         int w, h, c;
 
-        auto result = load_image(_mask_path, resolution);
+        auto result = load_image(_mask_path, resize_factor);
         
         data = std::get<0>(result);
         w = std::get<1>(result);
