@@ -6,10 +6,13 @@
 #include <iostream>
 #include <random>
 
+<<<<<<< HEAD
 #ifdef _WIN32
 #include <c10/cuda/CUDACachingAllocator.h> //required for emptyCache
 #endif
 
+=======
+>>>>>>> parent of ea456f4 (Fix mcmc memory usage in windows (#274))
 void MCMC::ExponentialLR::step() {
     if (param_group_index_ >= 0) {
         auto& group = optimizer_.param_groups()[param_group_index_];
@@ -375,11 +378,14 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
 
         // Add new Gaussians
         add_new_gs();
+<<<<<<< HEAD
 
 #ifdef _WIN32
         // Windows doesn't support CUDACachingAllocator expandable_segments
         c10::cuda::CUDACachingAllocator::emptyCache();
 #endif
+=======
+>>>>>>> parent of ea456f4 (Fix mcmc memory usage in windows (#274))
     }
 
     // Inject noise to positions
