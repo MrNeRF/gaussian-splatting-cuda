@@ -50,8 +50,9 @@ namespace gs::visualizer {
             // reset consecutive_skips_ counter
             if (consecutive_skips_ > max_consecutive_skips_) {
                 consecutive_skips_ = 0;
+            } else {
+                return true;
             }
-            return true;
         }
         // if training - refresh rate should correspond to training_frame_refresh_time_sec_
         if (is_training) {
