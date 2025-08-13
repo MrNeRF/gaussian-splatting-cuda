@@ -16,6 +16,13 @@ namespace gs::visualizer {
         events::cmd::GoToCamView::when([this](const auto& event) {
             handleGoToCamView(event);
         });
+
+        // Subscribe to WindowFocusLost to reset camera states
+        events::internal::WindowFocusLost::when([this](const auto&) {
+            if (camera_controller_) {
+                camera_controller_->resetStates();
+            }
+        });
     }
 
     void InputManager::handleGoToCamView(const events::cmd::GoToCamView& event) {
