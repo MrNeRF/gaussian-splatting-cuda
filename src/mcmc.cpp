@@ -375,15 +375,16 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
 
         // Add new Gaussians
         add_new_gs();
-
-#ifdef _WIN32
-        // Windows doesn't support CUDACachingAllocator expandable_segments
-        c10::cuda::CUDACachingAllocator::emptyCache();
-#endif
     }
 
     // Inject noise to positions
     inject_noise();
+
+#ifdef _WIN32
+    // Windows doesn't support CUDACachingAllocator expandable_segments
+    if (iter % 10 == 0 || iter == _params->stop_refine || iter == _params->iterations)
+        c10::cuda::CUDACachingAllocator::emptyCache();
+#endif
 }
 
 void MCMC::step(int iter) {

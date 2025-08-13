@@ -395,13 +395,17 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
         if (_params->stop_refine_scale2d > 0) {
             _radii.zero_();
         }
-
-        c10::cuda::CUDACachingAllocator::emptyCache();
     }
 
     if (iter % _params->reset_every == 0 && iter > 0) {
         reset_opacity();
     }
+
+#ifdef _WIN32
+    // Windows doesn't support CUDACachingAllocator expandable_segments
+    if (iter % 10 == 0 || iter == _params->stop_refine || iter == _params->iterations)
+        c10::cuda::CUDACachingAllocator::emptyCache();
+#endif
 }
 
 void DefaultStrategy::step(int iter) {
