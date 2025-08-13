@@ -7,6 +7,7 @@
 // clang-format on
 
 #include <algorithm>
+#include <imgui.h> // Add ImGui for checking its state
 #include <print>
 
 namespace gs {
@@ -94,11 +95,32 @@ namespace gs {
             instance_->mouse_button_states_[button] = (action == GLFW_PRESS);
         }
 
-        // Send to both consumers - let them decide what to handle
-        if (instance_->viewport_callbacks_.mouse_button) {
+        bool imgui_wants_mouse = ImGui::GetIO().WantCaptureMouse;
+        bool in_viewport = instance_->viewport_check_callback_ ? instance_->viewport_check_callback_(x, y) : false;
+
+        // For mouse button events, we need to check if ImGui wants the mouse BEFORE we process
+        // But we also need to handle releases for buttons we're tracking
+        bool send_to_viewport = false;
+        bool send_to_gui = false;
+
+        if (action == GLFW_PRESS) {
+            // On press, check where the mouse is and if ImGui wants it
+            if (!imgui_wants_mouse && in_viewport) {
+                send_to_viewport = true;
+            } else {
+                send_to_gui = true;
+            }
+        } else if (action == GLFW_RELEASE) {
+            // On release, send to both - let them handle their own state
+            send_to_viewport = true;
+            send_to_gui = true;
+        }
+
+        // Send events based on decision
+        if (send_to_viewport && instance_->viewport_callbacks_.mouse_button) {
             instance_->viewport_callbacks_.mouse_button(event);
         }
-        if (instance_->gui_callbacks_.mouse_button) {
+        if (send_to_gui && instance_->gui_callbacks_.mouse_button) {
             instance_->gui_callbacks_.mouse_button(event);
         }
     }
