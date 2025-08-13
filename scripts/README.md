@@ -28,3 +28,7 @@ The following commands should be run from the root directory of this project.
     ./scripts/benchmark_mipnerf360.sh
     ./scripts/timing_mipnerf360.sh
     ```
+
+    ```ps
+    powershell.exe -executionpolicy bypass ./scripts/benchmark_mipnerf360.sh
+    powershell.exe -executionpolicy bypass ./scripts/timing_mipnerf360.sh
