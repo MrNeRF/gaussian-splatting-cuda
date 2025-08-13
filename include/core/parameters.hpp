@@ -60,6 +60,11 @@ namespace gs {
 
             float steps_scaler = 0.f;  // If < 0, step size scaling is disabled
             bool antialiasing = false; // Enable antialiasing in rendering
+
+            // Random initialization parameters
+            bool random = false;        // Use random initialization instead of SfM
+            int init_num_pts = 100'000; // Number of random points to initialize
+            float init_extent = 3.0f;   // Extent of random point cloud
         };
 
         struct DatasetConfig {

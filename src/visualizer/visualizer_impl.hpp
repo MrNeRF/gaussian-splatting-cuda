@@ -51,6 +51,28 @@ namespace gs::visualizer {
         SceneManager* getSceneManager() { return scene_manager_.get(); }
         ::GLFWwindow* getWindow() const { return window_manager_->getWindow(); }
         ToolManager* getToolManager() { return tool_manager_.get(); }
+        RenderingManager* getRenderingManager() { return rendering_manager_.get(); }
+        const Viewport& getViewport() const { return viewport_; } // Add viewport getter
+
+        // Add FPS monitoring methods
+        [[nodiscard]] float getCurrentFPS() const {
+            return rendering_manager_ ? rendering_manager_->getCurrentFPS() : 0.0f;
+        }
+
+        [[nodiscard]] float getAverageFPS() const {
+            return rendering_manager_ ? rendering_manager_->getAverageFPS() : 0.0f;
+        }
+
+        // Add VSync control methods
+        void setVSync(bool enabled) {
+            if (window_manager_) {
+                window_manager_->setVSync(enabled);
+            }
+        }
+
+        [[nodiscard]] bool getVSyncEnabled() const {
+            return window_manager_ ? window_manager_->getVSync() : true;
+        }
 
         // Compatibility method for crop box
         std::shared_ptr<RenderBoundingBox> getCropBox() const;

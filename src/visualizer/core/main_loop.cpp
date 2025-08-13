@@ -5,28 +5,7 @@
 
 namespace gs::visualizer {
 
-    MainLoop::MainLoop() {
-        setTargetFPS(30);
-    }
-
-    void MainLoop::setTargetFPS(int fps) {
-        target_fps_ = fps;
-        frame_time_ms_ = 1000 / target_fps_;
-    }
-
-    void MainLoop::controlFrameRate() {
-        auto now = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            now - last_frame_time_)
-                            .count();
-
-        if (duration < frame_time_ms_) {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(frame_time_ms_ - duration));
-        }
-
-        last_frame_time_ = std::chrono::high_resolution_clock::now();
-    }
+    MainLoop::MainLoop() = default;
 
     void MainLoop::run() {
         // Initialize
@@ -35,17 +14,11 @@ namespace gs::visualizer {
             return;
         }
 
-        // Initialize frame time
-        last_frame_time_ = std::chrono::high_resolution_clock::now();
-
         // Main loop
         while (should_close_callback_ ? !should_close_callback_() : true) {
             // Clear
             glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-            // Frame rate control
-            controlFrameRate();
 
             // Update
             if (update_callback_) {

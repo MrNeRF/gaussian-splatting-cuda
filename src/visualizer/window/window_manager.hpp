@@ -27,6 +27,7 @@ namespace gs {
         void pollEvents();
         bool shouldClose() const;
         void setVSync(bool enabled);
+        [[nodiscard]] bool getVSync() const { return vsync_enabled_; }
 
         // Getters
         GLFWwindow* getWindow() const { return window_; }
@@ -44,6 +45,7 @@ namespace gs {
 
         // Static callback handler pointer
         static void* callback_handler_;
+        bool vsync_enabled_ = true; // Track VSync state
 
         // Static GLFW callbacks
         static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
