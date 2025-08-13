@@ -24,10 +24,10 @@ public:
 
 private:
     // Helper functions
-    void duplicate(const torch::Tensor is_duplicated);
-    void split(const torch::Tensor is_split);
+    void duplicate(const torch::Tensor& is_duplicated);
+    void split(const torch::Tensor& is_split);
     void grow_gs(int iter);
-    void remove(const torch::Tensor is_prune);
+    void remove(const torch::Tensor& is_prune);
     void prune_gs(int iter);
     void reset_opacity();
 

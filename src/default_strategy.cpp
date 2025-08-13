@@ -28,18 +28,18 @@ bool DefaultStrategy::is_refining(int iter) const {
             iter % _params->reset_every >= _params->pause_refine_after_reset);
 }
 
-void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
+void DefaultStrategy::duplicate(const torch::Tensor& is_duplicated) {
     torch::NoGradGuard no_grad;
 
     const torch::Tensor sampled_idxs = is_duplicated.nonzero().squeeze(-1);
 
-    const auto param_fn = [&sampled_idxs](const int i, const torch::Tensor param) {
+    const auto param_fn = [&sampled_idxs](const int i, const torch::Tensor& param) {
         const torch::Tensor new_param = param.index_select(0, sampled_idxs);
         return torch::cat({param, new_param}).set_requires_grad(param.requires_grad());
     };
 
     const auto optimizer_fn = [&sampled_idxs](torch::optim::OptimizerParamState& state,
-                                              const torch::Tensor full_param)
+                                              const torch::Tensor& full_param)
         -> std::unique_ptr<torch::optim::OptimizerParamState> {
         auto new_shape = full_param.sizes().vec();
         new_shape[0] = sampled_idxs.size(0);
@@ -66,7 +66,7 @@ void DefaultStrategy::duplicate(const torch::Tensor is_duplicated) {
     strategy::update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data);
 }
 
-void DefaultStrategy::split(const torch::Tensor is_split) {
+void DefaultStrategy::split(const torch::Tensor& is_split) {
     torch::NoGradGuard no_grad;
 
     const c10::Device device = is_split.device();
@@ -78,14 +78,14 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
     const torch::Tensor rotmats = gsplat::quats_to_rotmats(sampled_quats); // [N, 3, 3]
 
     const auto num_split_gaussians = sampled_idxs.size(0);
-    const auto split_size = 2;
+    constexpr auto split_size = 2;
     const torch::Tensor samples = torch::einsum( // [split_size, N, 3]
         "nij,nj,bnj->bni",
         {rotmats,
          sampled_scales,
          torch::randn({split_size, num_split_gaussians, 3}, sampled_quats.options().device(device))});
 
-    const auto param_fn = [this, &sampled_idxs, &rest_idxs, &samples, &split_size, &sampled_scales](const int i, const torch::Tensor param) {
+    const auto param_fn = [this, &sampled_idxs, &rest_idxs, &samples, &sampled_scales](const int i, const torch::Tensor& param) {
         std::vector<int64_t> repeats(param.dim(), 1);
         repeats[0] = split_size;
 
@@ -106,9 +106,9 @@ void DefaultStrategy::split(const torch::Tensor is_split) {
         return torch::cat({rest_param, split_param}, 0).set_requires_grad(param.requires_grad());
     };
 
-    const auto optimizer_fn = [&sampled_idxs, &rest_idxs, &split_size](
+    const auto optimizer_fn = [&sampled_idxs, &rest_idxs](
                                   torch::optim::OptimizerParamState& state,
-                                  const torch::Tensor full_param)
+                                  const torch::Tensor& full_param)
         -> std::unique_ptr<torch::optim::OptimizerParamState> {
         auto zero_shape = full_param.sizes().vec();
         zero_shape[0] = sampled_idxs.size(0) * split_size;
@@ -149,11 +149,11 @@ void DefaultStrategy::grow_gs(int iter) {
     const auto max_values = std::get<0>(torch::max(_splat_data.get_scaling(), -1));
     const torch::Tensor is_small = max_values <= _params->grow_scale3d * _splat_data.get_scene_scale();
     const torch::Tensor is_duplicated = is_grad_high & is_small;
-    const int64_t num_duplicates = is_duplicated.sum().item<int64_t>();
+    const auto num_duplicates = is_duplicated.sum().item<int64_t>();
 
     const torch::Tensor is_large = ~is_small;
     torch::Tensor is_split = is_grad_high & is_large;
-    const int64_t num_split = is_split.sum().item<int64_t>();
+    const auto num_split = is_split.sum().item<int64_t>();
 
     // First duplicate
     if (num_duplicates > 0) {
@@ -168,18 +168,18 @@ void DefaultStrategy::grow_gs(int iter) {
     }
 }
 
-void DefaultStrategy::remove(const torch::Tensor is_prune) {
+void DefaultStrategy::remove(const torch::Tensor& is_prune) {
     torch::NoGradGuard no_grad;
 
     const torch::Tensor sampled_idxs = is_prune.logical_not().nonzero().squeeze(-1);
 
-    const auto param_fn = [&sampled_idxs](const int i, const torch::Tensor param) {
+    const auto param_fn = [&sampled_idxs](const int i, const torch::Tensor& param) {
         return param.index_select(0, sampled_idxs).set_requires_grad(param.requires_grad());
     };
 
     const auto optimizer_fn = [&sampled_idxs](
                                   torch::optim::OptimizerParamState& state,
-                                  const torch::Tensor new_param)
+                                  const torch::Tensor& new_param)
         -> std::unique_ptr<torch::optim::OptimizerParamState> {
         if (auto* fused_adam_state = dynamic_cast<gs::FusedAdam::AdamParamState*>(&state)) {
             // FusedAdam state
@@ -206,15 +206,20 @@ void DefaultStrategy::remove(const torch::Tensor is_prune) {
 void DefaultStrategy::prune_gs(int iter) {
     torch::NoGradGuard no_grad;
 
+    // Check for low opacity
     torch::Tensor is_prune = _splat_data.get_opacity() < _params->prune_opacity;
+
+    auto rotation_raw = _splat_data.rotation_raw();
+    is_prune |= (rotation_raw * rotation_raw).sum(-1) < 1e-8f;
+
+    // Check for too large Gaussians
     if (iter > _params->reset_every) {
         const auto max_values = std::get<0>(torch::max(_splat_data.get_scaling(), -1));
         torch::Tensor is_too_big = max_values > _params->prune_scale3d * _splat_data.get_scene_scale();
-
         is_prune |= is_too_big;
     }
 
-    const int64_t num_prunes = is_prune.sum().item<int64_t>();
+    const auto num_prunes = is_prune.sum().item<int64_t>();
     if (num_prunes > 0) {
         remove(is_prune);
     }
@@ -225,19 +230,18 @@ void DefaultStrategy::reset_opacity() {
 
     const auto threshold = 2.0f * _params->prune_opacity;
 
-    const auto param_fn = [&threshold](const int i, const torch::Tensor param) {
+    const auto param_fn = [&threshold](const int i, const torch::Tensor& param) {
         if (i == 5) {
             const torch::Tensor new_opacities = torch::clamp_max(
                 param,
                 torch::logit(torch::tensor(threshold)).item());
             return new_opacities.set_requires_grad(param.requires_grad());
-        } else {
-            throw std::runtime_error("Invalid parameter index for reset_opacity: " + std::to_string(i));
         }
+        throw std::runtime_error("Invalid parameter index for reset_opacity: " + std::to_string(i));
     };
 
     const auto optimizer_fn = [](torch::optim::OptimizerParamState& state,
-                                 const torch::Tensor new_param)
+                                 const torch::Tensor& new_param)
         -> std::unique_ptr<torch::optim::OptimizerParamState> {
         if (auto* fused_adam_state = dynamic_cast<gs::FusedAdam::AdamParamState*>(&state)) {
             // FusedAdam state
