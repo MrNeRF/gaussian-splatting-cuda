@@ -6,7 +6,7 @@
 namespace gs {
     int Application::run(std::unique_ptr<param::TrainingParameters> params) {
         // Create visualizer with options
-        auto viewer = visualizer::Visualizer::create({.title = "3DGS Viewer",
+        auto viewer = visualizer::Visualizer::create({.title = "LichtFeld Studio",
                                                       .width = 1280,
                                                       .height = 720,
                                                       .antialiasing = params->optimization.antialiasing,
