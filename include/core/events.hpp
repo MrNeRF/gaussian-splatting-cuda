@@ -214,6 +214,7 @@ namespace gs {
         namespace internal {
             EVENT(TrainerReady, );
             EVENT(TrainingReadyToStart, );
+            EVENT(WindowFocusLost, );
             EVENT(RenderRequest,
                   glm::mat3 view_rotation;
                   glm::vec3 view_translation;
