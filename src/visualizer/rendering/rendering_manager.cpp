@@ -100,7 +100,7 @@ namespace gs::visualizer {
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Set viewport region
+        // Set viewport region for all subsequent rendering
         if (context.viewport_region) {
             glViewport(
                 static_cast<GLint>(context.viewport_region->x),
@@ -109,13 +109,15 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
-        // Render grid first (before scene) if enabled
+        // Render scene first (if we have one)
+        if (scene_manager->hasScene()) {
+            drawSceneFrame(context, scene_manager, skip_scene_render);
+        }
+
+        // Render grid on top of scene (with proper blending)
         if (settings_.show_grid && infinite_grid_) {
             drawGrid(context);
         }
-
-        // Render scene only if not skipping
-        drawSceneFrame(context, scene_manager, skip_scene_render);
 
         // Update last viewport state
         prev_viewport_state_ = context.viewport;
@@ -231,6 +233,7 @@ namespace gs::visualizer {
         if (!scene_manager->hasScene()) {
             return;
         }
+
         const Viewport& render_viewport = context.viewport;
         const geometry::BoundingBox* render_crop_box = nullptr;
         if (settings_.use_crop_box && context.crop_box) {
@@ -280,7 +283,7 @@ namespace gs::visualizer {
             .render_mode = RenderMode::RGB,
             .crop_box = render_crop_box,
             .background_color = background_color,
-            .point_cloud_mode = settings_.point_cloud_mode, // Pass point cloud settings
+            .point_cloud_mode = settings_.point_cloud_mode,
             .voxel_size = settings_.voxel_size};
 
         // Get trainer for potential mutex locking
@@ -347,20 +350,44 @@ namespace gs::visualizer {
         }
 
         if (render_size.x <= 0 || render_size.y <= 0) {
+            std::cout << "ERROR: Invalid render size!" << std::endl;
             return;
         }
 
-        if (infinite_grid_ && infinite_grid_->isInitialized()) {
-            auto fov_rad = glm::radians(settings_.fov);
-            auto projection = glm::perspective(
-                static_cast<float>(fov_rad),
-                static_cast<float>(render_size.x) / render_size.y,
-                0.1f,
-                1000.0f);
-
-            glm::mat4 view = context.viewport.getViewMatrix();
-            infinite_grid_->render(view, projection);
+        if (!infinite_grid_) {
+            std::cout << "ERROR: Grid object is null in drawGrid!" << std::endl;
+            return;
         }
+
+        if (!infinite_grid_->isInitialized()) {
+            std::cout << "ERROR: Grid not initialized!" << std::endl;
+            return;
+        }
+
+        // Save OpenGL state
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
+
+        // Enable blending for grid
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        auto fov_rad = glm::radians(settings_.fov);
+        auto projection = glm::perspective(
+            static_cast<float>(fov_rad),
+            static_cast<float>(render_size.x) / render_size.y,
+            0.1f,
+            1000.0f);
+
+        glm::mat4 view = context.viewport.getViewMatrix();
+
+        infinite_grid_->render(view, projection);
+
+        // Restore state
+        if (!blend_enabled)
+            glDisable(GL_BLEND);
+        if (depth_test_enabled)
+            glEnable(GL_DEPTH_TEST);
     }
 
     void RenderingManager::drawCoordAxes(const RenderContext& context) {
