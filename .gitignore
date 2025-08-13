@@ -5,6 +5,8 @@ cmake-build-release/
 external/libtorch/
 external/glad/
 external/imgui/
+external/debug/
+external/release/
 output*
 results
 .idea

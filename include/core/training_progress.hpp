@@ -24,9 +24,17 @@ public:
         // Configure the progress bar after creation using constructor syntax
         progress_bar_->set_option(indicators::option::BarWidth(40));
         progress_bar_->set_option(indicators::option::Start("["));
+        
+        // Use ASCII characters on Windows, Unicode on other platforms
+#ifdef _WIN32
+        progress_bar_->set_option(indicators::option::Fill("="));
+        progress_bar_->set_option(indicators::option::Lead(">"));
+        progress_bar_->set_option(indicators::option::Remainder(" "));
+#else
         progress_bar_->set_option(indicators::option::Fill("█"));
         progress_bar_->set_option(indicators::option::Lead("▌"));
         progress_bar_->set_option(indicators::option::Remainder("░"));
+#endif
         progress_bar_->set_option(indicators::option::End("]"));
         progress_bar_->set_option(indicators::option::PrefixText("Training "));
         progress_bar_->set_option(indicators::option::PostfixText("Initializing..."));
@@ -95,12 +103,20 @@ public:
         int iterations_used = (actual_iterations > 0) ? actual_iterations : total_iterations_;
 
         std::cout << std::endl
+#ifdef _WIN32
+                  << "* Training completed in "
+#else
                   << "✓ Training completed in "
+#endif
                   << std::fixed << std::setprecision(3) << elapsed << "s"
                   << " (avg " << std::fixed << std::setprecision(1)
                   << iterations_used / elapsed << " iter/s)"
                   << std::endl
+#ifdef _WIN32
+                  << "* Final splats: " << final_splats
+#else
                   << "✓ Final splats: " << final_splats
+#endif
                   << std::endl;
     }
 
