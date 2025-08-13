@@ -20,7 +20,7 @@ namespace gs::visualizer {
         // Subscribe to WindowFocusLost to reset camera states
         events::internal::WindowFocusLost::when([this](const auto&) {
             if (camera_controller_) {
-                camera_controller_->resetStates(); // New method: is_panning_ = is_rotating_ = is_orbiting_ = false;
+                camera_controller_->resetStates();
             }
         });
     }

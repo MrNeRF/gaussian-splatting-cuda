@@ -7,7 +7,7 @@
 // clang-format on
 
 #include <algorithm>
-#include <imgui.h> // Add ImGui for checking its state
+#include <imgui.h>
 #include <print>
 
 namespace gs {
