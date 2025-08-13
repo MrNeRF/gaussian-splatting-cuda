@@ -64,6 +64,8 @@ namespace gs {
         output.alpha = raster_outputs[1];
         // output.image = image + (1.0f - alpha) * bg_color.unsqueeze(-1).unsqueeze(-1);
 
+        output.depth = raster_outputs[2] / output.alpha.clamp_min(1e-6f);
+
         // TODO: if the background color is blended into the image, the resulting image has alpha=1 everywhere
         // output.alpha = torch::ones_like(alpha);
 
