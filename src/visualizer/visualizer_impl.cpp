@@ -2,6 +2,7 @@
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
 #include "core/model_providers.hpp"
+#include "tools/background_tool.hpp"
 #include "tools/crop_box_tool.hpp"
 
 #include <tools/world_transform_tool.hpp>
@@ -37,6 +38,7 @@ namespace gs::visualizer {
         tool_manager_->registerBuiltinTools();
         tool_manager_->addTool("Crop Box"); // Add crop box by default
         tool_manager_->addTool("World Transform");
+        tool_manager_->addTool("Background");
 
         // Create support components
         gui_manager_ = std::make_unique<gui::GuiManager>(this);
@@ -55,7 +57,6 @@ namespace gs::visualizer {
 
         // Create main loop
         main_loop_ = std::make_unique<MainLoop>();
-        main_loop_->setTargetFPS(options.target_fps);
 
         // Setup connections
         setupEventHandlers();
@@ -285,6 +286,11 @@ namespace gs::visualizer {
             world_to_user = coord_axes.get();
         }
 
+        const BackgroundTool* background_tool = nullptr;
+        if (auto* bg_tool = dynamic_cast<BackgroundTool*>(tool_manager_->getTool("Background"))) {
+            background_tool = bg_tool;
+        }
+
         // Render
         RenderingManager::RenderContext context{
             .viewport = viewport_,
@@ -293,7 +299,8 @@ namespace gs::visualizer {
             .coord_axes = coord_axes_ptr,
             .world_to_user = world_to_user,
             .viewport_region = has_viewport_region ? &viewport_region : nullptr,
-            .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
+            .has_focus = gui_manager_ && gui_manager_->isViewportFocused(),
+            .background_tool = background_tool};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 

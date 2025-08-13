@@ -63,6 +63,8 @@ namespace {
             ::args::ValueFlag<float> min_opacity(parser, "min_opacity", "Minimum opacity threshold", {"min-opacity"});
             ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
             ::args::ValueFlag<std::string> strategy(parser, "strategy", "Optimization strategy: mcmc, default", {"strategy"});
+            ::args::ValueFlag<int> init_num_pts(parser, "init_num_pts", "Number of random initialization points", {"init-num-pts"});
+            ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
 
             // Optional flag arguments
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
@@ -73,6 +75,7 @@ namespace {
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
             ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
+            ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
 
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
                                                             "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
@@ -190,6 +193,8 @@ namespace {
                                         sh_degree_val = sh_degree ? std::optional<int>(::args::get(sh_degree)) : std::optional<int>(),
                                         min_opacity_val = min_opacity ? std::optional<float>(::args::get(min_opacity)) : std::optional<float>(),
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
+                                        init_num_pts_val = init_num_pts ? std::optional<int>(::args::get(init_num_pts)) : std::optional<int>(),
+                                        init_extent_val = init_extent ? std::optional<float>(::args::get(init_extent)) : std::optional<float>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
@@ -197,7 +202,8 @@ namespace {
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
-                                        skip_intermediate_saving_flag = bool(skip_intermediate_saving)]() {
+                                        skip_intermediate_saving_flag = bool(skip_intermediate_saving),
+                                        random_flag = bool(random)]() {
                 auto& opt = params.optimization;
                 auto& ds = params.dataset;
 
@@ -223,6 +229,8 @@ namespace {
                 setVal(sh_degree_val, opt.sh_degree);
                 setVal(min_opacity_val, opt.min_opacity);
                 setVal(render_mode_val, opt.render_mode);
+                setVal(init_num_pts_val, opt.init_num_pts);
+                setVal(init_extent_val, opt.init_extent);
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
@@ -231,6 +239,7 @@ namespace {
                 setFlag(antialiasing_flag, opt.antialiasing);
                 setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
                 setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
+                setFlag(random_flag, opt.random);
             };
 
             return std::make_tuple(ParseResult::Success, apply_cmd_overrides);
