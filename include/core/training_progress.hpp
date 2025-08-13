@@ -24,7 +24,7 @@ public:
         // Configure the progress bar after creation using constructor syntax
         progress_bar_->set_option(indicators::option::BarWidth(40));
         progress_bar_->set_option(indicators::option::Start("["));
-        
+
         // Use ASCII characters on Windows, Unicode on other platforms
 #ifdef _WIN32
         progress_bar_->set_option(indicators::option::Fill("="));

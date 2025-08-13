@@ -18,6 +18,7 @@ namespace gs::visualizer {
     RenderingManager::~RenderingManager() {
         // Unsubscribe from events
         event::bus().remove<events::state::SceneLoaded>(scene_loaded_handler_id_);
+        event::bus().remove<events::ui::GridSettingsChanged>(grid_settings_handler_id_);
     }
 
     void RenderingManager::initialize() {
@@ -35,6 +36,10 @@ namespace gs::visualizer {
         std::cout << "Using CPU copy for rendering (interop not available)" << std::endl;
 #endif
 
+        // Initialize infinite grid
+        infinite_grid_ = std::make_unique<RenderInfiniteGrid>();
+        infinite_grid_->init();
+
         initialized_ = true;
     }
 
@@ -49,6 +54,18 @@ namespace gs::visualizer {
         // Subscribe to SceneLoaded events
         scene_loaded_handler_id_ = events::state::SceneLoaded::when([this]([[maybe_unused]] const auto& event) {
             scene_just_loaded_ = true;
+        });
+
+        // Subscribe to GridSettingsChanged events
+        grid_settings_handler_id_ = events::ui::GridSettingsChanged::when([this](const auto& event) {
+            settings_.show_grid = event.enabled;
+            settings_.grid_plane = event.plane;
+            settings_.grid_opacity = event.opacity;
+
+            if (infinite_grid_) {
+                infinite_grid_->setPlane(static_cast<RenderInfiniteGrid::GridPlane>(event.plane));
+                infinite_grid_->setOpacity(event.opacity);
+            }
         });
     }
 
@@ -90,6 +107,11 @@ namespace gs::visualizer {
                 static_cast<GLint>(context.viewport_region->y),
                 static_cast<GLsizei>(context.viewport_region->width),
                 static_cast<GLsizei>(context.viewport_region->height));
+        }
+
+        // Render grid first (before scene) if enabled
+        if (settings_.show_grid && infinite_grid_) {
+            drawGrid(context);
         }
 
         // Render scene only if not skipping
@@ -313,6 +335,31 @@ namespace gs::visualizer {
 
             glm::mat4 view = context.viewport.getViewMatrix();
             crop_box->render(view, projection);
+        }
+    }
+
+    void RenderingManager::drawGrid(const RenderContext& context) {
+        glm::ivec2 render_size = context.viewport.windowSize;
+        if (context.viewport_region) {
+            render_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+        }
+
+        if (render_size.x <= 0 || render_size.y <= 0) {
+            return;
+        }
+
+        if (infinite_grid_ && infinite_grid_->isInitialized()) {
+            auto fov_rad = glm::radians(settings_.fov);
+            auto projection = glm::perspective(
+                static_cast<float>(fov_rad),
+                static_cast<float>(render_size.x) / render_size.y,
+                0.1f,
+                1000.0f);
+
+            glm::mat4 view = context.viewport.getViewMatrix();
+            infinite_grid_->render(view, projection);
         }
     }
 

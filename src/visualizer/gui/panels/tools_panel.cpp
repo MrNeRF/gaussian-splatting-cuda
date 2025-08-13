@@ -38,8 +38,6 @@ namespace gs::gui::panels {
         }
 
         ImGui::Spacing();
-
-        // Remove the Tool Manager button - not needed
     }
 
     namespace detail {
@@ -142,7 +140,7 @@ namespace gs::gui::panels {
             } else if (tool_name == "World Transform") {
                 return "[⊕]"; // Transform icon
             } else if (tool_name == "Background") {
-                return "[◐]"; // Background/color icon
+                return "[●]"; // Background/color icon
             }
 
             // No warning needed - just return default icon
