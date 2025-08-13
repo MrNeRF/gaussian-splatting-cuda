@@ -32,7 +32,8 @@ do
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
         --iter 30000 \
-        --headless
+        --headless \
+	--strategy mcmc
 
     # End timer for this scene
     scene_end=$(date +%s)
