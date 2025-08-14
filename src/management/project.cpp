@@ -134,10 +134,17 @@ namespace gs::management {
     }
 
     bool LichtFeldProjectFile::writeToFile(const std::filesystem::path& filepath) const {
+
+        std::filesystem::path targetPath = filepath.empty() ? m_outputfile_name : filepath;
+        if (targetPath.empty()) {
+            std::cerr << "LichtFeldProjectFile::writeToFile - no output file was set" << std::endl;
+            return false;
+        }
+
         try {
-            std::ofstream file(filepath);
+            std::ofstream file(targetPath);
             if (!file.is_open()) {
-                std::cerr << "Cannot open file for writing: " << filepath << std::endl;
+                std::cerr << "Cannot open file for writing: " << targetPath << std::endl;
                 return false;
             }
 

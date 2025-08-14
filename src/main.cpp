@@ -1,6 +1,7 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
 #include "core/training_setup.hpp"
+#include "management/project.hpp"
 #include <c10/cuda/CUDAAllocatorConfig.h>
 #include <print>
 
@@ -29,6 +30,9 @@ int main(int argc, char* argv[]) {
     auto params = std::move(*params_result);
     // no gui
     if (params->optimization.headless) {
+
+        auto project = std::make_shared<gs::management::LichtFeldProjectFile>();
+
         if (params->dataset.data_path.empty()) {
             std::println(stderr, "Error: Headless mode requires --data-path");
             return -1;

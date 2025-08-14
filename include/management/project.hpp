@@ -100,6 +100,8 @@ namespace gs::management {
         bool validateYamlStructure(const YAML::Node& node) const;
         ProjectData parseProjectData(const YAML::Node& node) const;
         YAML::Node serializeProjectData(const ProjectData& data) const;
+        void setOutputFileName(const std::filesystem::path& filepath) { m_outputfile_name = filepath; }
+        std::filesystem::path getOutputPath() const { return m_outputfile_name; }
 
     public:
         LichtFeldProjectFile();
@@ -107,7 +109,8 @@ namespace gs::management {
 
         // Main interface methods
         bool readFromFile(const std::filesystem::path& filepath);
-        bool writeToFile(const std::filesystem::path& filepath) const;
+        // if the user gave a path - use path else use the one that was given in setOutputFileName
+        bool writeToFile(const std::filesystem::path& filepath = {}) const;
 
         // Data access methods
         const ProjectData& getProjectData() const { return project_data_; }
@@ -129,6 +132,9 @@ namespace gs::management {
         // Utility methods
         std::string generateCreationTimeStamp() const;
         bool validateProjectData() const;
+
+    private:
+        std::filesystem::path m_outputfile_name;
     };
 
 } // namespace gs::management
