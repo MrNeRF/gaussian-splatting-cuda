@@ -295,7 +295,7 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
 
 #ifdef _WIN32
     // Windows doesn't support CUDACachingAllocator expandable_segments
-    if (iter % 10 == 0 || iter == _params->stop_refine || iter == _params->iterations)
+    if (iter % 10 == 0)
         c10::cuda::CUDACachingAllocator::emptyCache();
 #endif
 }
