@@ -6,6 +6,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include <print>
+
 namespace gs::management {
 
     // Static member definitions
@@ -110,8 +112,8 @@ namespace gs::management {
             if (path.extension() != EXTENSION) {
                 throw std::runtime_error(std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", path.string()));
             }
-            output_file_name_ = path;
         }
+        output_file_name_ = path;
     }
 
     LichtFeldProject::LichtFeldProject(const ProjectData& initialData)
@@ -339,6 +341,30 @@ namespace gs::management {
         return !project_data_.project_name.empty() &&
                !project_data_.data.data_path.empty() &&
                !project_data_.data.data_type.empty();
+    }
+
+    std::shared_ptr<LichtFeldProject> GetLichtFeldProject(const gs::param::DatasetConfig& data,
+                                                          const std::string& project_name) {
+        auto project = std::make_shared<gs::management::LichtFeldProject>(true);
+
+        project->setProjectName(project_name);
+        if (data.project_path.extension() != ".ls") {
+            std::cerr << std::format("project_path must be .ls file: {}", data.project_path.string()) << std::endl;
+            return nullptr;
+        }
+        try {
+            if (data.project_path.parent_path().empty()) {
+                project->setOutputFileName(data.output_path / data.project_path);
+            } else {
+                project->setOutputFileName(data.project_path);
+            }
+            project->setDataInfo(data.data_path);
+        } catch (const std::exception& e) {
+            std::cerr << "Error writing project file: " << e.what() << std::endl;
+            return nullptr;
+        }
+
+        return project;
     }
 
 } // namespace gs::management

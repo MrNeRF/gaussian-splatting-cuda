@@ -7,6 +7,8 @@
 #include <vector>
 #include <yaml-cpp/yaml.h>
 
+#include "core/parameters.hpp"
+
 namespace gs::management {
 
     // Version structure for semantic versioning
@@ -144,5 +146,8 @@ namespace gs::management {
         bool update_file_on_change_ = false; // if true update file on every change
         mutable std::mutex io_mutex_;
     };
+
+    std::shared_ptr<LichtFeldProject> GetLichtFeldProject(const gs::param::DatasetConfig& data,
+                                                          const std::string& project_name = "LichtFeldStudioProject");
 
 } // namespace gs::management

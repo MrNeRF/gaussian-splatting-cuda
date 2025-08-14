@@ -38,10 +38,11 @@ int main(int argc, char* argv[]) {
 
         std::println("Starting headless training...");
 
-        auto project = std::make_shared<gs::management::LichtFeldProject>(true);
-        project->setProjectName("project");
-        project->setOutputFileName(params->dataset.output_path); // if we give a dir - file name is derived from the project name
-        project->setDataInfo(params->dataset.data_path);
+        auto project = gs::management::GetLichtFeldProject(params->dataset);
+        if (!project) {
+            std::println(stderr, "project creation failed");
+            return -1;
+        }
 
         // Save config
         auto save_result = gs::param::save_training_parameters_to_json(*params, params->dataset.output_path);
