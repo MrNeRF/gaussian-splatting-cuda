@@ -1,12 +1,11 @@
 #pragma once
 
-#include "scene/scene_manager.hpp"
 #include <functional>
 #include <string>
 #include <unordered_map>
 
 namespace gs {
-
+    class SceneManager;
     class CommandProcessor {
     public:
         using CommandHandler = std::function<std::string()>;

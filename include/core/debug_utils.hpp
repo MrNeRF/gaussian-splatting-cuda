@@ -149,7 +149,7 @@ inline void PrintTorchMat(const torch::Tensor& mat) {
 }
 
 template <typename MatType>
-inline void PrintGLMMat(const MatType& mat) {
+void PrintGLMMat(const MatType& mat) {
     static_assert(std::is_same<MatType, glm::mat2>::value ||
                       std::is_same<MatType, glm::mat3>::value ||
                       std::is_same<MatType, glm::mat4>::value,
