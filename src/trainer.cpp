@@ -88,8 +88,8 @@ namespace gs {
                                                   const torch::Tensor& weights,
                                                   const float w) {
         
-        const float kOut = 0.125f;
-        const float kIn = 0.875f;
+        const float kOut = 0.333f;
+        const float kIn =  0.667f;
 
         // Convert the float weight map to a clean boolean mask
         auto bool_mask = (weights > 0.5f);
