@@ -9,9 +9,9 @@
 namespace gs::management {
 
     // Static member definitions
-    const Version LichtFeldProjectFile::CURRENT_VERSION(0, 0, 1);
-    const std::string LichtFeldProjectFile::FILE_HEADER = "# LichtFeld Project File";
-    const std::string LichtFeldProjectFile::EXTENSION = ".ls";
+    const Version LichtFeldProject::CURRENT_VERSION(0, 0, 1);
+    const std::string LichtFeldProject::FILE_HEADER = "# LichtFeld Project File";
+    const std::string LichtFeldProject::EXTENSION = ".ls";
 
     // Version implementation
     Version::Version(const std::string& versionStr) {
@@ -90,7 +90,7 @@ namespace gs::management {
     }
 
     // LichtFeldProjectFile implementation
-    LichtFeldProjectFile::LichtFeldProjectFile(bool update_file_on_change) : update_file_on_change_(update_file_on_change) {
+    LichtFeldProject::LichtFeldProject(bool update_file_on_change) : update_file_on_change_(update_file_on_change) {
         project_data_.version = CURRENT_VERSION;
         project_data_.project_creation_time = generateCurrentTimeStamp();
         initializeMigrators();
@@ -101,30 +101,30 @@ namespace gs::management {
             }
         }
     }
-    void LichtFeldProjectFile::setOutputFileName(const std::filesystem::path& path) {
+    void LichtFeldProject::setOutputFileName(const std::filesystem::path& path) {
         if (std::filesystem::is_directory(path)) {
-            std::string project_file_name = project_data_.project_name ? project_data_.project_name : "project";
+            std::string project_file_name = project_data_.project_name.empty() ? "project" : project_data_.project_name;
             project_file_name += EXTENSION;
             output_file_name_ = path / project_file_name;
         } else if (std::filesystem::is_regular_file(path)) {
             if (path.extension() != EXTENSION) {
-                throw std::runtime_error(std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", path));
+                throw std::runtime_error(std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", path.string()));
             }
             output_file_name_ = path;
         }
     }
 
-    LichtFeldProjectFile::LichtFeldProjectFile(const ProjectData& initialData)
+    LichtFeldProject::LichtFeldProject(const ProjectData& initialData)
         : project_data_(initialData) {
         initializeMigrators();
     }
 
-    void LichtFeldProjectFile::initializeMigrators() {
+    void LichtFeldProject::initializeMigrators() {
         // Register migration classes for future versions
         // Example: migrator_registry_.registerMigrator(std::make_unique<Version001To002Migrator>());
     }
 
-    bool LichtFeldProjectFile::readFromFile(const std::filesystem::path& filepath) {
+    bool LichtFeldProject::readFromFile(const std::filesystem::path& filepath) {
         std::lock_guard<std::mutex> lock(io_mutex_);
         try {
             YAML::Node doc = YAML::LoadFile(filepath.string());
@@ -153,23 +153,31 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProjectFile::writeToFile(const std::filesystem::path& filepath) {
-        if (!std::filesystem::is_regular_file(filepath)) {
-            std::cerr << std::format("LichtFeldProjectFile: {} is not a file", filepath) << std::endl;
-            return false;
-        }
-        if (filepath.extension() != EXTENSION) {
-            std::cerr << std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", filepath) << std::endl;
-            return false;
-        }
-
+    bool LichtFeldProject::writeToFile(const std::filesystem::path& filepath) {
         std::lock_guard<std::mutex> lock(io_mutex_);
-        project_data_.project_last_update_time = generateCurrentTimeStamp();
+
         std::filesystem::path targetPath = filepath.empty() ? output_file_name_ : filepath;
         if (targetPath.empty()) {
             std::cerr << "LichtFeldProjectFile::writeToFile - no output file was set" << std::endl;
             return false;
         }
+
+        if (std::filesystem::is_directory(targetPath)) {
+            std::cerr << std::format("LichtFeldProjectFile: {} is directory and not a file", targetPath.string()) << std::endl;
+            return false;
+        }
+
+        if (!std::filesystem::is_directory(targetPath.parent_path())) {
+            std::cerr << std::format("LichtFeldProjectFile: {} parent directory does not exists", targetPath.string()) << std::endl;
+            return false;
+        }
+
+        if (targetPath.extension() != EXTENSION) {
+            std::cerr << std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", targetPath.string()) << std::endl;
+            return false;
+        }
+
+        project_data_.project_last_update_time = generateCurrentTimeStamp();
 
         try {
             std::ofstream file(targetPath);
@@ -193,7 +201,7 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProjectFile::validateYamlStructure(const YAML::Node& node) const {
+    bool LichtFeldProject::validateYamlStructure(const YAML::Node& node) const {
         // Basic validation - check required fields
         return node["version"] &&
                node["project_name"] &&
@@ -203,7 +211,7 @@ namespace gs::management {
                node["outputs"];
     }
 
-    ProjectData LichtFeldProjectFile::parseProjectData(const YAML::Node& node) const {
+    ProjectData LichtFeldProject::parseProjectData(const YAML::Node& node) const {
         ProjectData data;
 
         data.version = Version(node["version"].as<std::string>());
@@ -231,7 +239,7 @@ namespace gs::management {
         return data;
     }
 
-    YAML::Node LichtFeldProjectFile::serializeProjectData(const ProjectData& data) const {
+    YAML::Node LichtFeldProject::serializeProjectData(const ProjectData& data) const {
         YAML::Node doc;
 
         doc["version"] = data.version.toString();
@@ -247,7 +255,7 @@ namespace gs::management {
         for (const auto& ply : data.outputs.plys) {
             YAML::Node plyNode;
             plyNode["ply"]["is_imported"] = ply.is_imported;
-            plyNode["ply"]["ply_path"] = ply.ply_path;
+            plyNode["ply"]["ply_path"] = ply.ply_path.string();
             plyNode["ply"]["ply_training_iter_number"] = ply.ply_training_iter_number;
             doc["outputs"]["plys"].push_back(plyNode);
         }
@@ -255,7 +263,7 @@ namespace gs::management {
         return doc;
     }
 
-    std::string LichtFeldProjectFile::generateCurrentTimeStamp() const {
+    std::string LichtFeldProject::generateCurrentTimeStamp() const {
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);
 
@@ -265,7 +273,7 @@ namespace gs::management {
     }
 
     // Convenience methods
-    void LichtFeldProjectFile::setProjectName(const std::string& name) {
+    void LichtFeldProject::setProjectName(const std::string& name) {
         project_data_.project_name = name;
     }
 
@@ -286,7 +294,7 @@ namespace gs::management {
         return true;
     }
 
-    void LichtFeldProjectFile::setDataInfo(const std::filesystem::path& path, const std::string& type) {
+    void LichtFeldProject::setDataInfo(const std::filesystem::path& path, const std::string& type) {
         project_data_.data.data_path = path.string();
         project_data_.data.data_type = type;
 
@@ -295,7 +303,7 @@ namespace gs::management {
         }
     }
     //
-    void LichtFeldProjectFile::setDataInfo(const std::filesystem::path& path) {
+    void LichtFeldProject::setDataInfo(const std::filesystem::path& path) {
         project_data_.data.data_path = path.string();
         std::string datatype = IsColmapData(path) ? "Colmap" : "Blender";
         project_data_.data.data_type = datatype;
@@ -305,7 +313,7 @@ namespace gs::management {
         }
     }
 
-    void LichtFeldProjectFile::addPly(const PlyData& ply) {
+    void LichtFeldProject::addPly(const PlyData& ply) {
         project_data_.outputs.plys.push_back(ply);
 
         if (update_file_on_change_ && !output_file_name_.empty()) {
@@ -313,7 +321,7 @@ namespace gs::management {
         }
     }
 
-    void LichtFeldProjectFile::removePly(size_t index) {
+    void LichtFeldProject::removePly(size_t index) {
         if (index < project_data_.outputs.plys.size()) {
             project_data_.outputs.plys.erase(project_data_.outputs.plys.begin() + index);
         }
@@ -323,11 +331,11 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProjectFile::isCompatible(const Version& fileVersion) const {
+    bool LichtFeldProject::isCompatible(const Version& fileVersion) const {
         return fileVersion <= CURRENT_VERSION;
     }
 
-    bool LichtFeldProjectFile::validateProjectData() const {
+    bool LichtFeldProject::validateProjectData() const {
         return !project_data_.project_name.empty() &&
                !project_data_.data.data_path.empty() &&
                !project_data_.data.data_type.empty();

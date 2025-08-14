@@ -32,12 +32,12 @@ namespace gs::management {
     // Data structures
     struct PlyData {
         bool is_imported = false;
-        std::string ply_path;
+        std::filesystem::path ply_path;
         int ply_training_iter_number = 0;
 
         // Constructor for easy initialization
         PlyData() = default;
-        PlyData(bool imported, const std::string& path, int iter)
+        PlyData(bool imported, const std::filesystem::path& path, int iter)
             : is_imported(imported),
               ply_path(path),
               ply_training_iter_number(iter) {}
@@ -89,7 +89,7 @@ namespace gs::management {
     };
 
     // Main project file manager class
-    class LichtFeldProjectFile {
+    class LichtFeldProject {
     private:
         static const Version CURRENT_VERSION;
         static const std::string FILE_HEADER;
@@ -105,8 +105,8 @@ namespace gs::management {
         YAML::Node serializeProjectData(const ProjectData& data) const;
 
     public:
-        LichtFeldProjectFile(bool update_file_on_change = false);
-        explicit LichtFeldProjectFile(const ProjectData& initialData);
+        LichtFeldProject(bool update_file_on_change = false);
+        explicit LichtFeldProject(const ProjectData& initialData);
 
         void setOutputFileName(const std::filesystem::path& path);
         std::filesystem::path getOutputPath() const { return output_file_name_; }
