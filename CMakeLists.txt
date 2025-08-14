@@ -14,21 +14,21 @@ option(BUILD_TESTS "Build tests" OFF)
 
 # Set Torch_DIR based on platform and build type
 if (WIN32)
-    if(CMAKE_CONFIGURATION_TYPES)
+    if (CMAKE_CONFIGURATION_TYPES)
         # https://github.com/pytorch/pytorch/issues/155667
         set(Torch_DIR "${PROJ_ROOT_DIR}/external/release/libtorch/share/cmake/Torch")
-    else()
+    else ()
         if (CMAKE_BUILD_TYPE STREQUAL "Release")
             set(Torch_DIR "${PROJ_ROOT_DIR}/external/release/libtorch/share/cmake/Torch")
         elseif (CMAKE_BUILD_TYPE STREQUAL "Debug")
             set(Torch_DIR "${PROJ_ROOT_DIR}/external/debug/libtorch/share/cmake/Torch")
-        else()
+        else ()
             message(FATAL_ERROR "libtorch binaries only available for Debug and Release on Windows. Current build type: '${CMAKE_BUILD_TYPE}'")
-        endif()
-    endif()
-else()
+        endif ()
+    endif ()
+else ()
     set(Torch_DIR "${PROJ_ROOT_DIR}/external/libtorch/share/cmake/Torch")
-endif()
+endif ()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CUDA_STANDARD 20)
@@ -38,18 +38,18 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 # Parallel build
 include(ProcessorCount)
 ProcessorCount(total_cores)
-if(total_cores GREATER 1)
+if (total_cores GREATER 1)
     math(EXPR used_cores "${total_cores} - 2")
     set(ENV{MAKEFLAGS} "-j${used_cores}")
     message(STATUS "Building with ${used_cores} cores")
-endif()
+endif ()
 
 # CUDA setup
 enable_language(CUDA)
 find_package(CUDAToolkit 12.8 REQUIRED)
 
 # Create nvToolsExt target BEFORE finding Torch (PyTorch expects this)
-if(NOT TARGET CUDA::nvToolsExt)
+if (NOT TARGET CUDA::nvToolsExt)
     find_library(NVTOOLSEXT_LIBRARY
             NAMES nvToolsExt
             PATHS
@@ -61,18 +61,18 @@ if(NOT TARGET CUDA::nvToolsExt)
             NO_DEFAULT_PATH
     )
 
-    if(NVTOOLSEXT_LIBRARY)
+    if (NVTOOLSEXT_LIBRARY)
         add_library(CUDA::nvToolsExt UNKNOWN IMPORTED)
         set_target_properties(CUDA::nvToolsExt PROPERTIES
                 IMPORTED_LOCATION ${NVTOOLSEXT_LIBRARY}
         )
         message(STATUS "Created CUDA::nvToolsExt target: ${NVTOOLSEXT_LIBRARY}")
-    else()
+    else ()
         # Create empty interface library (nvToolsExt is deprecated in CUDA 12+)
         add_library(CUDA::nvToolsExt INTERFACE IMPORTED)
         message(STATUS "nvToolsExt not found (normal for CUDA 12+), created empty interface target")
-    endif()
-endif()
+    endif ()
+endif ()
 
 message(STATUS "CUDA Toolkit ${CUDAToolkit_VERSION} found at ${CUDAToolkit_TARGET_DIR}")
 
@@ -91,12 +91,12 @@ find_package(spdlog REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(Freetype REQUIRED)
 
-if(WIN32)
+if (WIN32)
     set(CMAKE_CUDA_RUNTIME_LIBRARY "Shared") # when using INTEROP in windows static and dynamic symbols are mixed
-endif()
+endif ()
 
 # Check for CUDA-OpenGL interop capability (only if enabled)
-if(ENABLE_CUDA_GL_INTEROP)
+if (ENABLE_CUDA_GL_INTEROP)
     include(CheckCXXSourceCompiles)
     set(CMAKE_REQUIRED_INCLUDES ${CUDAToolkit_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIRS})
     set(CMAKE_REQUIRED_LIBRARIES ${CUDA_LIBRARIES} ${OPENGL_LIBRARIES})
@@ -112,18 +112,18 @@ if(ENABLE_CUDA_GL_INTEROP)
         }
     " CUDA_GL_INTEROP_FOUND)
 
-    if(CUDA_GL_INTEROP_FOUND)
+    if (CUDA_GL_INTEROP_FOUND)
         message(STATUS "CUDA-OpenGL interop support: ENABLED")
         set(CUDA_GL_INTEROP_ENABLED 1)
-    else()
+    else ()
         message(WARNING "CUDA-OpenGL interop support: DISABLED (headers not found)")
         set(CUDA_GL_INTEROP_ENABLED 0)
-    endif()
-else()
+    endif ()
+else ()
     message(STATUS "CUDA-OpenGL interop support: DISABLED (by user option)")
     set(CUDA_GL_INTEROP_FOUND FALSE)
     set(CUDA_GL_INTEROP_ENABLED 0)
-endif()
+endif ()
 
 # Create a configuration header
 configure_file(
@@ -162,6 +162,7 @@ set(HOST_SOURCES
         src/training_setup.cpp
         src/geometry/bounding_box.cpp
         src/geometry/euclidean_transform.cpp
+        src/management/project.cpp
 )
 
 add_library(gaussian_host STATIC ${HOST_SOURCES})
@@ -192,9 +193,9 @@ target_link_libraries(gaussian_host
         spdlog::spdlog
 )
 
-if(UNIX)
+if (UNIX)
     target_link_libraries(gaussian_host PUBLIC dl)
-endif()
+endif ()
 
 # Fast C++ compilation with proper debug symbols
 target_compile_options(gaussian_host PRIVATE
@@ -203,30 +204,30 @@ target_compile_options(gaussian_host PRIVATE
 )
 
 # AVX2 support
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
 
-    if(COMPILER_SUPPORTS_AVX2)
+    if (COMPILER_SUPPORTS_AVX2)
         target_compile_options(gaussian_host PRIVATE
                 $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma>
         )
         target_compile_definitions(gaussian_host PRIVATE HAS_AVX2_SUPPORT)
         message(STATUS "✓ AVX2 support enabled for gaussian_host")
-    else()
+    else ()
         message(WARNING "✗ Compiler does not support AVX2")
-    endif()
-endif()
+    endif ()
+endif ()
 
 # Ensure debug symbols in debug builds
 set_target_properties(gaussian_host PROPERTIES DEBUG_POSTFIX d)
 
 add_definitions(-DPROJECT_ROOT_PATH="${PROJ_ROOT_DIR}")
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
     set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G -O0")
-endif()
+endif ()
 
 # =============================================================================
 # KERNEL LIBRARY
@@ -239,9 +240,9 @@ set(KERNEL_SOURCES
 )
 
 # Add CUDA-OpenGL interop kernels if supported
-if(CUDA_GL_INTEROP_FOUND)
+if (CUDA_GL_INTEROP_FOUND)
     list(APPEND KERNEL_SOURCES kernels/cuda_gl_interop.cu)
-endif()
+endif ()
 
 add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
 
@@ -326,51 +327,51 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 # Platform-specific settings
-if(WIN32)
+if (WIN32)
     file(GLOB TORCH_DLLS "${Torch_DIR}/../../../lib/*.dll")
-    foreach(TORCH_DLL ${TORCH_DLLS})
+    foreach (TORCH_DLL ${TORCH_DLLS})
         add_custom_command(
                 TARGET ${PROJECT_NAME}
                 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TORCH_DLL}"
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
-    endforeach()
-elseif(UNIX)
+    endforeach ()
+elseif (UNIX)
     target_link_libraries(${PROJECT_NAME} PRIVATE GL GLU)
 
     find_path(TORCH_LIB_DIR libtorch_cpu.so
             PATHS "${Torch_DIR}/../../../lib"
             NO_DEFAULT_PATH)
 
-    if(TORCH_LIB_DIR)
+    if (TORCH_LIB_DIR)
         set_target_properties(${PROJECT_NAME} PROPERTIES
                 INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIR}:${TORCH_LIB_DIR}"
                 BUILD_WITH_INSTALL_RPATH TRUE
                 INSTALL_RPATH_USE_LINK_PATH TRUE
         )
         message(STATUS "Torch library directory: ${TORCH_LIB_DIR}")
-    else()
+    else ()
         message(WARNING "Could not find Torch library directory")
-    endif()
-endif()
+    endif ()
+endif ()
 
 # Build type configuration
 function(configure_build_type target)
     get_target_property(target_type ${target} TYPE)
 
-    if(target_type STREQUAL "INTERFACE_LIBRARY")
-        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if (target_type STREQUAL "INTERFACE_LIBRARY")
+        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
             target_compile_definitions(${target} INTERFACE DEBUG_BUILD)
-        elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
             target_compile_definitions(${target} INTERFACE RELEASE_BUILD)
-        endif()
-    else()
-        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        endif ()
+    else ()
+        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
             target_compile_definitions(${target} PRIVATE DEBUG_BUILD)
-        elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+        elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
             target_compile_definitions(${target} PRIVATE RELEASE_BUILD)
-        endif()
-    endif()
+        endif ()
+    endif ()
 endfunction()
 
 configure_build_type(gaussian_host)
@@ -382,7 +383,7 @@ configure_build_type(${PROJECT_NAME})
 # =============================================================================
 # TESTING (Optional)
 # =============================================================================
-if(BUILD_TESTS)
+if (BUILD_TESTS)
     enable_testing()
     find_package(GTest CONFIG REQUIRED)
 
@@ -436,15 +437,15 @@ if(BUILD_TESTS)
             $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G -lineinfo -Xcudafe --device-debug>
     )
 
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_data")
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_data")
         add_custom_command(TARGET gaussian_tests POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${CMAKE_CURRENT_SOURCE_DIR}/test_data"
                 "$<TARGET_FILE_DIR:gaussian_tests>/test_data"
         )
-    endif()
+    endif ()
 
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt")
+    if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt")
         add_custom_command(TARGET gaussian_tests POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory
                 "$<TARGET_FILE_DIR:gaussian_tests>/tests/data"
@@ -452,7 +453,7 @@ if(BUILD_TESTS)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt"
                 "$<TARGET_FILE_DIR:gaussian_tests>/tests/data/"
         )
-    endif()
+    endif ()
 
     include(GoogleTest)
     gtest_discover_tests(gaussian_tests)
@@ -464,7 +465,7 @@ if(BUILD_TESTS)
     )
 
     message(STATUS "Tests enabled. Build with 'make gaussian_tests' and run with 'make run_tests' or 'ctest'")
-endif()
+endif ()
 
 # =============================================================================
 # BUILD INFO & OPTIMIZATIONS
@@ -486,7 +487,7 @@ message(STATUS "===========================================")
 
 # Enable ccache if available
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if (CCACHE_PROGRAM)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
     message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
-endif()
+endif ()
