@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -105,8 +106,8 @@ namespace gs::management {
         explicit LichtFeldProjectFile(const ProjectData& initialData);
 
         // Main interface methods
-        bool readFromFile(const std::string& filepath);
-        bool writeToFile(const std::string& filepath) const;
+        bool readFromFile(const std::filesystem::path& filepath);
+        bool writeToFile(const std::filesystem::path& filepath) const;
 
         // Data access methods
         const ProjectData& getProjectData() const { return project_data_; }

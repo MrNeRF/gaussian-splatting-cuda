@@ -105,9 +105,9 @@ namespace gs::management {
         // Example: migrator_registry_.registerMigrator(std::make_unique<Version001To002Migrator>());
     }
 
-    bool LichtFeldProjectFile::readFromFile(const std::string& filepath) {
+    bool LichtFeldProjectFile::readFromFile(const std::filesystem::path& filepath) {
         try {
-            YAML::Node doc = YAML::LoadFile(filepath);
+            YAML::Node doc = YAML::LoadFile(filepath.string());
 
             if (!validateYamlStructure(doc)) {
                 std::cerr << "Invalid YAML structure in file: " << filepath << std::endl;
@@ -133,7 +133,7 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProjectFile::writeToFile(const std::string& filepath) const {
+    bool LichtFeldProjectFile::writeToFile(const std::filesystem::path& filepath) const {
         try {
             std::ofstream file(filepath);
             if (!file.is_open()) {
