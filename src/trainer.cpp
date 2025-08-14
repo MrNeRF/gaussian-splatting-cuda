@@ -267,8 +267,16 @@ namespace gs {
                 return StepResult::Stop;
             }
 
-            // Use the render mode from parameters
-            RenderOutput r_output = fast_rasterize(*cam, strategy_->get_model(), background_);
+            // Use the renderer from parameters
+            RenderOutput r_output;
+            if (params_.optimization.renderer == "gsplat") {
+                r_output = gs::rasterize(*cam, strategy_->get_model(),
+                                          background_, 1.0f,
+                                          false, false, render_mode);
+            } else if (params_.optimization.renderer == "fast") {
+                r_output = fast_rasterize(*cam, strategy_->get_model(),
+                                          background_);
+            }
 
             // Apply bilateral grid if enabled
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
