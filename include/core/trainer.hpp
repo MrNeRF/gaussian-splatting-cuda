@@ -116,6 +116,8 @@ namespace gs {
         // Handle control requests
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
+        void save_ply(const std::filesystem::path & save_path, int iter_num, bool join_threads=true);
+
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;
