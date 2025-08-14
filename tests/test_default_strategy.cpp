@@ -100,8 +100,6 @@ TEST_F(DefaultStrategyTest, FullPipelineIntegrationTest) {
     EXPECT_EQ(render_output.image.sizes(), torch::IntArrayRef({3, 256, 256}));
     EXPECT_FALSE(render_output.image.isnan().any().item<bool>());
 
-    strategy->pre_backward(render_output);
-
     // Compute loss and backward
     auto loss = render_output.image.mean();
     loss.backward();
@@ -163,7 +161,6 @@ TEST_F(DefaultStrategyTest, SHDegreeIncrementWithRenderingTest) {
 
     // Render again and call post_backward at iteration 1000
     render_output = performRendering(*strategy);
-    strategy->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -185,7 +182,6 @@ TEST_F(DefaultStrategyTest, GradientFlowTest) {
 
     // Render and compute loss
     auto render_output = performRendering(*strategy);
-    strategy->pre_backward(render_output);
     auto loss = render_output.image.sum(); // Use sum for stronger gradients
     loss.backward();
 
@@ -232,7 +228,6 @@ TEST_F(DefaultStrategyTest, ResetOpacityWithRenderingTest) {
 
     // Render again
     render_output = performRendering(*strategy);
-    strategy->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -277,7 +272,6 @@ TEST_F(DefaultStrategyTest, RefinementWithActualRenderingTest) {
 
     // Run refinement step
     render_output = performRendering(*strategy);
-    strategy->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -317,7 +311,6 @@ TEST_F(DefaultStrategyTest, DuplicationMechanicsTest) {
 
     // Trigger duplication through rendering
     render_output = performRendering(*strategy);
-    strategy->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -370,7 +363,6 @@ TEST_F(DefaultStrategyTest, SplittingMechanicsTest) {
 
     // Trigger duplication through rendering
     render_output = performRendering(*strategy);
-    strategy->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -411,7 +403,6 @@ TEST_F(DefaultStrategyTest, PruningMechanicsTest) {
 
     // Trigger duplication through rendering
     render_output = performRendering(*strategy);
-    strategy->pre_backward(render_output);
     loss = render_output.image.mean();
     loss.backward();
 
@@ -440,7 +431,6 @@ TEST_F(DefaultStrategyTest, ConsistentRenderingAfterOperationsTest) {
     // Run through several iterations
     for (int iter = 1; iter <= 5; ++iter) {
         auto render_output = performRendering(*strategy);
-        strategy->pre_backward(render_output);
         auto loss = render_output.image.mean();
         loss.backward();
 

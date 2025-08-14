@@ -1,4 +1,5 @@
 #include "window_manager.hpp"
+#include "core/events.hpp"
 // clang-format off
 // CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
 #include <glad/glad.h>
@@ -8,6 +9,15 @@
 #include <print>
 
 namespace gs {
+
+    static void window_focus_callback(GLFWwindow* window, int focused) {
+        if (!focused) {
+            events::internal::WindowFocusLost{}.emit();
+            std::println("[WindowManager] Window lost focus");
+        } else {
+            std::println("[WindowManager] Window gained focus");
+        }
+    }
 
     WindowManager::WindowManager(const std::string& title, int width, int height)
         : title_(title),
@@ -57,6 +67,9 @@ namespace gs {
             glfwTerminate();
             return false;
         }
+
+        // Set window focus callback
+        glfwSetWindowFocusCallback(window_, window_focus_callback);
 
         // Enable vsync by default
         glfwSwapInterval(1);
