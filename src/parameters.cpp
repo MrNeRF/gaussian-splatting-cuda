@@ -295,6 +295,15 @@ namespace gs {
                     params.max_cap = json["max_cap"];
                 }
 
+                if (json.contains("renderer")) {
+                    std::string renderer = json["renderer"];
+                    // Validate renderer
+                    if (renderer == "gsplat" || renderer == "fast") {
+                        params.renderer = renderer;
+                    } else {
+                        std::println(stderr, "Warning: Invalid renderer '{}' in JSON. Using default 'fast'", renderer);
+                    }
+                }
                 // Handle render mode
                 if (json.contains("render_mode")) {
                     std::string mode = json["render_mode"];
@@ -432,6 +441,7 @@ namespace gs {
 
                 // Optimization configuration
                 nlohmann::json opt_json;
+                opt_json["renderer"] = params.optimization.renderer;
                 opt_json["iterations"] = params.optimization.iterations;
                 opt_json["means_lr"] = params.optimization.means_lr;
                 opt_json["shs_lr"] = params.optimization.shs_lr;

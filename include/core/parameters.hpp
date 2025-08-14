@@ -10,6 +10,7 @@
 namespace gs {
     namespace param {
         struct OptimizationParameters {
+            std::string renderer = "fast";
             size_t iterations = 30'000;
             size_t sh_degree_interval = 1'000;
             float means_lr = 0.00016f;

@@ -16,6 +16,7 @@ namespace {
         Help
     };
 
+    const std::set<std::string> VALID_RENDERERS = {"gsplat", "fast"};
     const std::set<std::string> VALID_RENDER_MODES = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
     const std::set<std::string> VALID_STRATEGIES = {"mcmc", "default"};
 
@@ -53,6 +54,7 @@ namespace {
             ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to output", {'o', "output-path"});
 
             // Optional value arguments
+            ::args::ValueFlag<std::string> renderer(parser, "renderer", "Renderer type: gsplat, fast", {"renderer"});
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
@@ -156,6 +158,14 @@ namespace {
                     parser.Help()));
             }
 
+            if (renderer) {
+                const auto renderer_val = ::args::get(renderer);
+                if (VALID_RENDERERS.find(renderer_val) == VALID_RENDERERS.end()) {
+                    return std::unexpected(std::format(
+                        "ERROR: Invalid renderer '{}'. Valid renderers are: gsplat, fast",
+                        renderer_val));
+                }
+            }
             // Validate render mode if provided
             if (render_mode) {
                 const auto mode = ::args::get(render_mode);
@@ -182,6 +192,7 @@ namespace {
             // Create lambda to apply command line overrides after JSON loading
             auto apply_cmd_overrides = [&params,
                                         // Capture values, not references
+                                        renderer_val = renderer ? std::optional<std::string>(::args::get(renderer)) : std::optional<std::string>(),
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
                                         resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
@@ -217,6 +228,7 @@ namespace {
                 };
 
                 // Apply all overrides
+                setVal(renderer_val, opt.renderer);
                 setVal(iterations_val, opt.iterations);
                 setVal(resize_factor_val, ds.resize_factor);
                 setVal(max_cap_val, opt.max_cap);

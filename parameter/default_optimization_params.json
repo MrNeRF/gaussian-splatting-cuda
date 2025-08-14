@@ -1,4 +1,5 @@
 {
+  "renderer": "fast",
   "iterations": 30000,
   "sh_degree_interval": 1000,
   "means_lr": 0.00016,
