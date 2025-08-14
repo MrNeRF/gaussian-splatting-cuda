@@ -1,16 +1,15 @@
 #include "core/fast_rasterizer.hpp"
 #include "core/fast_rasterizer_autograd.hpp"
-#include <torch/torch.h>
+#include "visualizer/core/command_processor.hpp"
 
 namespace gs {
 
     using torch::indexing::None;
     using torch::indexing::Slice;
 
-    // Main render function
     RenderOutput fast_rasterize(
         Camera& viewpoint_camera,
-        const SplatData& gaussian_model,
+        SplatData& gaussian_model,
         torch::Tensor& bg_color) {
 
         // Get camera parameters
@@ -32,8 +31,6 @@ namespace gs {
         constexpr float near_plane = 0.01f;
         constexpr float far_plane = 1e10f;
 
-        auto densification_info = torch::empty({0});
-
         fast_gs::rasterization::FastGSSettings settings;
         settings.w2c = viewpoint_camera.world_view_transform();
         settings.cam_position = viewpoint_camera.cam_position();
@@ -54,19 +51,17 @@ namespace gs {
             raw_opacities,
             sh0,
             shN,
-            densification_info,
+            gaussian_model._densification_info,
             settings);
 
         RenderOutput output;
-
-        // TODO: background color is always black, let's save some time here
         output.image = raster_outputs[0];
         output.alpha = raster_outputs[1];
+
         // output.image = image + (1.0f - alpha) * bg_color.unsqueeze(-1).unsqueeze(-1);
 
         // TODO: if the background color is blended into the image, the resulting image has alpha=1 everywhere
         // output.alpha = torch::ones_like(alpha);
-
         return output;
     }
 

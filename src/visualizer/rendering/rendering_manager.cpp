@@ -18,6 +18,7 @@ namespace gs::visualizer {
     RenderingManager::~RenderingManager() {
         // Unsubscribe from events
         event::bus().remove<events::state::SceneLoaded>(scene_loaded_handler_id_);
+        event::bus().remove<events::ui::GridSettingsChanged>(grid_settings_handler_id_);
     }
 
     void RenderingManager::initialize() {
@@ -35,6 +36,10 @@ namespace gs::visualizer {
         std::cout << "Using CPU copy for rendering (interop not available)" << std::endl;
 #endif
 
+        // Initialize infinite grid
+        infinite_grid_ = std::make_unique<RenderInfiniteGrid>();
+        infinite_grid_->init();
+
         initialized_ = true;
     }
 
@@ -49,6 +54,18 @@ namespace gs::visualizer {
         // Subscribe to SceneLoaded events
         scene_loaded_handler_id_ = events::state::SceneLoaded::when([this]([[maybe_unused]] const auto& event) {
             scene_just_loaded_ = true;
+        });
+
+        // Subscribe to GridSettingsChanged events
+        grid_settings_handler_id_ = events::ui::GridSettingsChanged::when([this](const auto& event) {
+            settings_.show_grid = event.enabled;
+            settings_.grid_plane = event.plane;
+            settings_.grid_opacity = event.opacity;
+
+            if (infinite_grid_) {
+                infinite_grid_->setPlane(static_cast<RenderInfiniteGrid::GridPlane>(event.plane));
+                infinite_grid_->setOpacity(event.opacity);
+            }
         });
     }
 
@@ -65,8 +82,8 @@ namespace gs::visualizer {
         // Check if we should skip scene rendering
         auto state = scene_manager->getCurrentState();
         bool skip_scene_render = false;
-        if (settings_.adaptive_frame_rate || settings_.use_crop_box) {
-            // at the moment - I dont want to track the cropbox too - so if
+        if (settings_.adaptive_frame_rate && not settings_.use_crop_box) {
+            // at the moment - I dont want to track the crop box too - so if
             // it is enabled - render every frame
             skip_scene_render = framerate_controller_.shouldSkipSceneRender(
                 state.is_training, scene_changed);
@@ -83,7 +100,7 @@ namespace gs::visualizer {
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Set viewport region
+        // Set viewport region for all subsequent rendering
         if (context.viewport_region) {
             glViewport(
                 static_cast<GLint>(context.viewport_region->x),
@@ -92,8 +109,15 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
-        // Render scene only if not skipping
-        drawSceneFrame(context, scene_manager, skip_scene_render);
+        // Render scene first (if we have one)
+        if (scene_manager->hasScene()) {
+            drawSceneFrame(context, scene_manager, skip_scene_render);
+        }
+
+        // Render grid on top of scene (with proper blending)
+        if (settings_.show_grid && infinite_grid_) {
+            drawGrid(context);
+        }
 
         // Update last viewport state
         prev_viewport_state_ = context.viewport;
@@ -209,6 +233,7 @@ namespace gs::visualizer {
         if (!scene_manager->hasScene()) {
             return;
         }
+
         const Viewport& render_viewport = context.viewport;
         const geometry::BoundingBox* render_crop_box = nullptr;
         if (settings_.use_crop_box && context.crop_box) {
@@ -258,7 +283,7 @@ namespace gs::visualizer {
             .render_mode = RenderMode::RGB,
             .crop_box = render_crop_box,
             .background_color = background_color,
-            .point_cloud_mode = settings_.point_cloud_mode, // Pass point cloud settings
+            .point_cloud_mode = settings_.point_cloud_mode,
             .voxel_size = settings_.voxel_size};
 
         // Get trainer for potential mutex locking
@@ -314,6 +339,55 @@ namespace gs::visualizer {
             glm::mat4 view = context.viewport.getViewMatrix();
             crop_box->render(view, projection);
         }
+    }
+
+    void RenderingManager::drawGrid(const RenderContext& context) {
+        glm::ivec2 render_size = context.viewport.windowSize;
+        if (context.viewport_region) {
+            render_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+        }
+
+        if (render_size.x <= 0 || render_size.y <= 0) {
+            std::cout << "ERROR: Invalid render size!" << std::endl;
+            return;
+        }
+
+        if (!infinite_grid_) {
+            std::cout << "ERROR: Grid object is null in drawGrid!" << std::endl;
+            return;
+        }
+
+        if (!infinite_grid_->isInitialized()) {
+            std::cout << "ERROR: Grid not initialized!" << std::endl;
+            return;
+        }
+
+        // Save OpenGL state
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
+
+        // Enable blending for grid
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        auto fov_rad = glm::radians(settings_.fov);
+        auto projection = glm::perspective(
+            static_cast<float>(fov_rad),
+            static_cast<float>(render_size.x) / render_size.y,
+            0.1f,
+            1000.0f);
+
+        glm::mat4 view = context.viewport.getViewMatrix();
+
+        infinite_grid_->render(view, projection);
+
+        // Restore state
+        if (!blend_enabled)
+            glDisable(GL_BLEND);
+        if (depth_test_enabled)
+            glEnable(GL_DEPTH_TEST);
     }
 
     void RenderingManager::drawCoordAxes(const RenderContext& context) {

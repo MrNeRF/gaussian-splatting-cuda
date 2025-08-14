@@ -1,4 +1,5 @@
 #include "core/strategy.hpp"
+#include "core/fused_adam.hpp"
 
 namespace strategy {
     void initialize_gaussians(gs::SplatData& splat_data) {
@@ -9,32 +10,34 @@ namespace strategy {
         splat_data.opacity_raw() = splat_data.opacity_raw().to(dev).set_requires_grad(true);
         splat_data.sh0() = splat_data.sh0().to(dev).set_requires_grad(true);
         splat_data.shN() = splat_data.shN().to(dev).set_requires_grad(true);
+        splat_data._densification_info = torch::zeros({2, splat_data.means().size(0)}, splat_data.means().options());
     }
 
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(
         gs::SplatData& splat_data,
         const gs::param::OptimizationParameters& params) {
-        using torch::optim::AdamOptions;
+        using Options = gs::FusedAdam::Options;
         std::vector<torch::optim::OptimizerParamGroup> groups;
 
-        // Calculate initial learning rate for position
-        groups.emplace_back(torch::optim::OptimizerParamGroup({splat_data.means()},
-                                                              std::make_unique<AdamOptions>(params.means_lr * splat_data.get_scene_scale())));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({splat_data.sh0()},
-                                                              std::make_unique<AdamOptions>(params.shs_lr)));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({splat_data.shN()},
-                                                              std::make_unique<AdamOptions>(params.shs_lr / 20.f)));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({splat_data.scaling_raw()},
-                                                              std::make_unique<AdamOptions>(params.scaling_lr)));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({splat_data.rotation_raw()},
-                                                              std::make_unique<AdamOptions>(params.rotation_lr)));
-        groups.emplace_back(torch::optim::OptimizerParamGroup({splat_data.opacity_raw()},
-                                                              std::make_unique<AdamOptions>(params.opacity_lr)));
+        // Create groups with proper unique_ptr<Options>
+        auto add_param_group = [&groups](const torch::Tensor& param, double lr) {
+            auto options = std::make_unique<Options>(lr);
+            options->eps(1e-15).betas(std::make_tuple(0.9, 0.999));
+            groups.emplace_back(
+                std::vector<torch::Tensor>{param},
+                std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options)));
+        };
 
-        for (auto& g : groups)
-            static_cast<AdamOptions&>(g.options()).eps(1e-15);
+        add_param_group(splat_data.means(), params.means_lr * splat_data.get_scene_scale());
+        add_param_group(splat_data.sh0(), params.shs_lr);
+        add_param_group(splat_data.shN(), params.shs_lr / 20.f);
+        add_param_group(splat_data.scaling_raw(), params.scaling_lr);
+        add_param_group(splat_data.rotation_raw(), params.rotation_lr);
+        add_param_group(splat_data.opacity_raw(), params.opacity_lr);
 
-        return std::make_unique<torch::optim::Adam>(groups, AdamOptions(0.f).eps(1e-15));
+        auto global_options = std::make_unique<Options>(0.f);
+        global_options->eps(1e-15);
+        return std::make_unique<gs::FusedAdam>(std::move(groups), std::move(global_options));
     }
 
     std::unique_ptr<ExponentialLR> create_scheduler(
@@ -79,13 +82,9 @@ namespace strategy {
             // Check if state exists
             auto state_it = optimizer->state().find(old_param_key);
             if (state_it != optimizer->state().end()) {
-                // Clone the state before modifying - handle both optimizer types
-                if (auto* adam_state = dynamic_cast<torch::optim::AdamParamState*>(state_it->second.get())) {
-                    auto new_state = optimizer_fn(*adam_state, new_param);
-                    saved_states[i] = std::move(new_state);
-                } else {
-                    saved_states[i] = nullptr;
-                }
+                auto* fused_adam_state = static_cast<gs::FusedAdam::AdamParamState*>(state_it->second.get());
+                auto new_state = optimizer_fn(*fused_adam_state, new_param);
+                saved_states[i] = std::move(new_state);
             } else {
                 saved_states[i] = nullptr;
             }

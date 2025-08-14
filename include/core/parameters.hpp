@@ -53,7 +53,6 @@ namespace gs {
             float grow_scale2d = 0.05f;
             float prune_scale3d = 0.1f;
             float prune_scale2d = 0.15f;
-            size_t stop_refine_scale2d = 0;
             size_t reset_every = 3'000;
             size_t pause_refine_after_reset = 0;
             bool revised_opacity = false;

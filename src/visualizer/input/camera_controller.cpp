@@ -223,4 +223,10 @@ namespace gs {
         handleWasd(event);
     }
 
+    void CameraController::resetStates() {
+        is_panning_ = false;
+        is_rotating_ = false;
+        is_orbiting_ = false;
+    }
+
 } // namespace gs

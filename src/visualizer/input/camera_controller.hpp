@@ -28,6 +28,7 @@ namespace gs {
         void handleMouseMove(const InputHandler::MouseMoveEvent& event);
         void handleMouseScroll(const InputHandler::MouseScrollEvent& event);
         void handleKey(const InputHandler::KeyEvent& event);
+        void resetStates();
 
     private:
         // Check if viewport is focused

@@ -465,40 +465,28 @@ namespace gs {
             }
 
             // Use the render mode from parameters
-            auto render_fn = [this, &cam, render_mode]() {
-                return fast_rasterize(
-                    *cam,
-                    strategy_->get_model(),
-                    background_);
-            };
-
-            RenderOutput r_output = render_fn();
+            RenderOutput r_output = fast_rasterize(*cam, strategy_->get_model(), background_);
 
             // Apply bilateral grid if enabled
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
             }
 
-            strategy_->pre_backward(r_output);
-
             // Compute loss using the factored-out function
             std::expected<torch::Tensor, std::string> loss_result;
-            const int total_iters = params_.optimization.iterations;
-
-
             
+            const int total_iters = params_.optimization.iterations;
             const int warmup_end_iter = total_iters * 0.1f;
-            const int full_penalty_end_iter = total_iters * 0.5f;
-            const int decay_end_iter = total_iters * 0.8f;
 
             if (!weights.defined() || iter < warmup_end_iter) {
-                loss_result = compute_photometric_loss( r_output,
+                loss_result = compute_photometric_loss(r_output,
                                                         gt_image,
                                                         strategy_->get_model(),
                                                         params_.optimization);
             } 
             else {
-
+                const int full_penalty_end_iter = total_iters * 0.5f;
+                const int decay_end_iter = total_iters * 0.8f;
                 float current_penalty_w = 0.0f;
                 if (out_of_mask_penalty) {
                     if (iter <= full_penalty_end_iter) {

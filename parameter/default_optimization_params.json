@@ -36,7 +36,6 @@
   "grow_scale2d": 0.05,
   "prune_scale3d": 0.1,
   "prune_scale2d": 0.15,
-  "stop_refine_scale2d": 0,
   "reset_every": 3000,
   "pause_refine_after_reset": 0,
   "revised_opacity": false,
