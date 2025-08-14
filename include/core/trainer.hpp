@@ -84,13 +84,23 @@ namespace gs {
             int iter,
             Camera* cam, // Use global Camera, not gs::Camera
             torch::Tensor gt_image,
+            torch::Tensor weights,
             RenderMode render_mode,
+            bool out_of_mask_penalty,
             std::stop_token stop_token = {});
 
         // Protected methods for computing loss - now return expected values
         std::expected<torch::Tensor, std::string> compute_photometric_loss(
             const RenderOutput& render_output,
             const torch::Tensor& gt_image,
+            const SplatData& splatData,
+            const param::OptimizationParameters& opt_params);
+            
+        std::expected<torch::Tensor, std::string> compute_photometric_loss(
+            const RenderOutput& render_output,
+            const torch::Tensor& gt_image,
+            const torch::Tensor& weights,
+            const float outOfMaskAlphaPenalty,
             const SplatData& splatData,
             const param::OptimizationParameters& opt_params);
 
@@ -111,6 +121,9 @@ namespace gs {
         // Handle control requests
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
+        // Prune gaussians using masks
+        void prune_after_training(float threshold);
+        
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;

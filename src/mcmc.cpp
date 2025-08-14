@@ -3,6 +3,7 @@
 #include "core/fused_adam.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include <c10/cuda/CUDACachingAllocator.h>
 #include <iostream>
 #include <random>
 
@@ -367,21 +368,22 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     }
 
     // Refine Gaussians
-    if (is_refining(iter)) {
+    if (is_refining(iter)) { 
         // Relocate dead Gaussians
         relocate_gs();
 
         // Add new Gaussians
         add_new_gs();
-
-#ifdef _WIN32
-        // Windows doesn't support CUDACachingAllocator expandable_segments
-        c10::cuda::CUDACachingAllocator::emptyCache();
-#endif
     }
 
     // Inject noise to positions
     inject_noise();
+
+#ifdef _WIN32
+    // Windows doesn't support CUDACachingAllocator expandable_segments
+    if (iter % 10 == 0)
+        c10::cuda::CUDACachingAllocator::emptyCache();
+#endif
 }
 
 void MCMC::step(int iter) {

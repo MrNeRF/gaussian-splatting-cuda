@@ -269,10 +269,12 @@ namespace gs::loader {
     read_colmap_cameras(const std::filesystem::path base_path,
                         const std::unordered_map<uint32_t, CameraData>& cams,
                         const std::vector<Image>& images,
-                        const std::string& images_folder = "images") {
+                        const std::string& images_folder = "images",
+                        const std::string& masks_folder = "masks") {
         std::vector<CameraData> out(images.size());
 
         std::filesystem::path images_path = base_path / images_folder;
+        std::filesystem::path masks_path = base_path / masks_folder;
 
         // Prepare tensor to store all camera locations [N, 3]
         torch::Tensor camera_locations = torch::zeros({static_cast<int64_t>(images.size()), 3}, torch::kFloat32);
@@ -290,6 +292,7 @@ namespace gs::loader {
 
             out[i] = it->second;
             out[i]._image_path = images_path / img._name;
+            out[i]._mask_path = masks_path / img._name;
             out[i]._image_name = img._name;
 
             out[i]._R = qvec2rotmat(img._qvec);

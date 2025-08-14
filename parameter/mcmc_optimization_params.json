@@ -23,7 +23,7 @@
   "eval_steps": [7000, 30000],
   "save_steps": [7000, 30000],
   "enable_eval": false,
-  "enable_save_eval_images": true,
+  "enable_save_eval_images": false,
   "use_bilateral_grid": false,
   "skip_intermediate": false,
   "bilateral_grid_X": 16,
@@ -44,5 +44,6 @@
   "antialiasing": false,
   "random": false,
   "init_num_pts": 100000,
-  "init_extent": 3.0
+  "init_extent": 3.0,
+  "attention_masks": false
 }
