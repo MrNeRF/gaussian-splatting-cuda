@@ -11,6 +11,7 @@ namespace gs::management {
     // Static member definitions
     const Version LichtFeldProjectFile::CURRENT_VERSION(0, 0, 1);
     const std::string LichtFeldProjectFile::FILE_HEADER = "# LichtFeld Project File";
+    const std::string LichtFeldProjectFile::EXTENSION = ".ls";
 
     // Version implementation
     Version::Version(const std::string& versionStr) {
@@ -100,6 +101,18 @@ namespace gs::management {
             }
         }
     }
+    void LichtFeldProjectFile::setOutputFileName(const std::filesystem::path& path) {
+        if (std::filesystem::is_directory(path)) {
+            std::string project_file_name = project_data_.project_name ? project_data_.project_name : "project";
+            project_file_name += EXTENSION;
+            output_file_name_ = path / project_file_name;
+        } else if (std::filesystem::is_regular_file(path)) {
+            if (path.extension() != EXTENSION) {
+                throw std::runtime_error(std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", path));
+            }
+            output_file_name_ = path;
+        }
+    }
 
     LichtFeldProjectFile::LichtFeldProjectFile(const ProjectData& initialData)
         : project_data_(initialData) {
@@ -141,6 +154,15 @@ namespace gs::management {
     }
 
     bool LichtFeldProjectFile::writeToFile(const std::filesystem::path& filepath) {
+        if (!std::filesystem::is_regular_file(filepath)) {
+            std::cerr << std::format("LichtFeldProjectFile: {} is not a file", filepath) << std::endl;
+            return false;
+        }
+        if (filepath.extension() != EXTENSION) {
+            std::cerr << std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", filepath) << std::endl;
+            return false;
+        }
+
         std::lock_guard<std::mutex> lock(io_mutex_);
         project_data_.project_last_update_time = generateCurrentTimeStamp();
         std::filesystem::path targetPath = filepath.empty() ? output_file_name_ : filepath;
@@ -274,7 +296,7 @@ namespace gs::management {
     }
     //
     void LichtFeldProjectFile::setDataInfo(const std::filesystem::path& path) {
-        project_data_.data.data_path = path;
+        project_data_.data.data_path = path.string();
         std::string datatype = IsColmapData(path) ? "Colmap" : "Blender";
         project_data_.data.data_type = datatype;
 

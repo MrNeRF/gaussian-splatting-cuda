@@ -93,6 +93,7 @@ namespace gs::management {
     private:
         static const Version CURRENT_VERSION;
         static const std::string FILE_HEADER;
+        static const std::string EXTENSION;
 
         ProjectData project_data_;
         MigratorRegistry migrator_registry_;
@@ -102,12 +103,13 @@ namespace gs::management {
         bool validateYamlStructure(const YAML::Node& node) const;
         ProjectData parseProjectData(const YAML::Node& node) const;
         YAML::Node serializeProjectData(const ProjectData& data) const;
-        void setOutputFileName(const std::filesystem::path& filepath) { output_file_name_ = filepath; }
-        std::filesystem::path getOutputPath() const { return output_file_name_; }
 
     public:
         LichtFeldProjectFile(bool update_file_on_change = false);
         explicit LichtFeldProjectFile(const ProjectData& initialData);
+
+        void setOutputFileName(const std::filesystem::path& path);
+        std::filesystem::path getOutputPath() const { return output_file_name_; }
 
         // Main interface methods
         bool readFromFile(const std::filesystem::path& filepath);

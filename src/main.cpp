@@ -31,14 +31,16 @@ int main(int argc, char* argv[]) {
     // no gui
     if (params->optimization.headless) {
 
-        auto project = std::make_shared<gs::management::LichtFeldProjectFile>();
-
         if (params->dataset.data_path.empty()) {
             std::println(stderr, "Error: Headless mode requires --data-path");
             return -1;
         }
 
         std::println("Starting headless training...");
+
+        auto project = std::make_shared<gs::management::LichtFeldProjectFile>();
+        project->setProjectName("project");
+        project->setOutputFileName( params->dataset.output_path / "lichtfeld.ls");
 
         // Save config
         auto save_result = gs::param::save_training_parameters_to_json(*params, params->dataset.output_path);
