@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <yaml-cpp/yaml.h>
@@ -61,6 +62,7 @@ namespace gs::management {
         Version version;
         std::string project_name;
         std::string project_creation_time;
+        std::string project_last_update_time;
         DataInfo data;
         OutputsInfo outputs;
 
@@ -100,17 +102,17 @@ namespace gs::management {
         bool validateYamlStructure(const YAML::Node& node) const;
         ProjectData parseProjectData(const YAML::Node& node) const;
         YAML::Node serializeProjectData(const ProjectData& data) const;
-        void setOutputFileName(const std::filesystem::path& filepath) { m_outputfile_name = filepath; }
-        std::filesystem::path getOutputPath() const { return m_outputfile_name; }
+        void setOutputFileName(const std::filesystem::path& filepath) { output_file_name_ = filepath; }
+        std::filesystem::path getOutputPath() const { return output_file_name_; }
 
     public:
-        LichtFeldProjectFile();
+        LichtFeldProjectFile(bool update_file_on_change = false);
         explicit LichtFeldProjectFile(const ProjectData& initialData);
 
         // Main interface methods
         bool readFromFile(const std::filesystem::path& filepath);
         // if the user gave a path - use path else use the one that was given in setOutputFileName
-        bool writeToFile(const std::filesystem::path& filepath = {}) const;
+        bool writeToFile(const std::filesystem::path& filepath = {});
 
         // Data access methods
         const ProjectData& getProjectData() const { return project_data_; }
@@ -120,7 +122,9 @@ namespace gs::management {
 
         // Convenience methods
         void setProjectName(const std::string& name);
-        void setDataInfo(const std::string& path, const std::string& type);
+        void setDataInfo(const std::filesystem::path& path, const std::string& type);
+        // detect type automatically
+        void setDataInfo(const std::filesystem::path& path);
         void addPly(const PlyData& ply);
         void removePly(size_t index);
 
@@ -130,11 +134,13 @@ namespace gs::management {
         bool isCompatible(const Version& fileVersion) const;
 
         // Utility methods
-        std::string generateCreationTimeStamp() const;
+        std::string generateCurrentTimeStamp() const;
         bool validateProjectData() const;
 
     private:
-        std::filesystem::path m_outputfile_name;
+        std::filesystem::path output_file_name_;
+        bool update_file_on_change_ = false; // if true update file on every change
+        mutable std::mutex io_mutex_;
     };
 
 } // namespace gs::management

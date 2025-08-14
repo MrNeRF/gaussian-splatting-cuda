@@ -89,10 +89,16 @@ namespace gs::management {
     }
 
     // LichtFeldProjectFile implementation
-    LichtFeldProjectFile::LichtFeldProjectFile() {
+    LichtFeldProjectFile::LichtFeldProjectFile(bool update_file_on_change) : update_file_on_change_(update_file_on_change) {
         project_data_.version = CURRENT_VERSION;
-        project_data_.project_creation_time = generateCreationTimeStamp();
+        project_data_.project_creation_time = generateCurrentTimeStamp();
         initializeMigrators();
+
+        {
+            if (update_file_on_change_ && !output_file_name_.empty()) {
+                writeToFile();
+            }
+        }
     }
 
     LichtFeldProjectFile::LichtFeldProjectFile(const ProjectData& initialData)
@@ -106,6 +112,7 @@ namespace gs::management {
     }
 
     bool LichtFeldProjectFile::readFromFile(const std::filesystem::path& filepath) {
+        std::lock_guard<std::mutex> lock(io_mutex_);
         try {
             YAML::Node doc = YAML::LoadFile(filepath.string());
 
@@ -133,9 +140,10 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProjectFile::writeToFile(const std::filesystem::path& filepath) const {
-
-        std::filesystem::path targetPath = filepath.empty() ? m_outputfile_name : filepath;
+    bool LichtFeldProjectFile::writeToFile(const std::filesystem::path& filepath) {
+        std::lock_guard<std::mutex> lock(io_mutex_);
+        project_data_.project_last_update_time = generateCurrentTimeStamp();
+        std::filesystem::path targetPath = filepath.empty() ? output_file_name_ : filepath;
         if (targetPath.empty()) {
             std::cerr << "LichtFeldProjectFile::writeToFile - no output file was set" << std::endl;
             return false;
@@ -168,6 +176,7 @@ namespace gs::management {
         return node["version"] &&
                node["project_name"] &&
                node["project_creation_time"] &&
+               node["project_last_update_time"] &&
                node["data"] &&
                node["outputs"];
     }
@@ -206,6 +215,7 @@ namespace gs::management {
         doc["version"] = data.version.toString();
         doc["project_name"] = data.project_name;
         doc["project_creation_time"] = data.project_creation_time;
+        doc["project_last_update_time"] = data.project_last_update_time;
 
         // Data section
         doc["data"]["data_path"] = data.data.data_path;
@@ -223,7 +233,7 @@ namespace gs::management {
         return doc;
     }
 
-    std::string LichtFeldProjectFile::generateCreationTimeStamp() const {
+    std::string LichtFeldProjectFile::generateCurrentTimeStamp() const {
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);
 
@@ -237,18 +247,57 @@ namespace gs::management {
         project_data_.project_name = name;
     }
 
-    void LichtFeldProjectFile::setDataInfo(const std::string& path, const std::string& type) {
-        project_data_.data.data_path = path;
+    bool IsColmapData(const std::filesystem::path& path) {
+        if (!std::filesystem::is_directory(path)) {
+            return false;
+        }
+        // Check for sparse reconstruction
+        std::filesystem::path sparse_path;
+        if (std::filesystem::exists(path / "sparse" / "0")) {
+            sparse_path = path / "sparse" / "0";
+        } else if (std::filesystem::exists(path / "sparse")) {
+            sparse_path = path / "sparse";
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    void LichtFeldProjectFile::setDataInfo(const std::filesystem::path& path, const std::string& type) {
+        project_data_.data.data_path = path.string();
         project_data_.data.data_type = type;
+
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
+        }
+    }
+    //
+    void LichtFeldProjectFile::setDataInfo(const std::filesystem::path& path) {
+        project_data_.data.data_path = path;
+        std::string datatype = IsColmapData(path) ? "Colmap" : "Blender";
+        project_data_.data.data_type = datatype;
+
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
+        }
     }
 
     void LichtFeldProjectFile::addPly(const PlyData& ply) {
         project_data_.outputs.plys.push_back(ply);
+
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
+        }
     }
 
     void LichtFeldProjectFile::removePly(size_t index) {
         if (index < project_data_.outputs.plys.size()) {
             project_data_.outputs.plys.erase(project_data_.outputs.plys.begin() + index);
+        }
+
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
         }
     }
 
