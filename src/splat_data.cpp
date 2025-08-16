@@ -178,7 +178,7 @@ namespace gs {
           _scaling(std::move(other._scaling)),
           _rotation(std::move(other._rotation)),
           _opacity(std::move(other._opacity)),
-          _max_radii2D(std::move(other._max_radii2D)) {
+          _densification_info(std::move(other._densification_info)) {
         // Move threads under lock
         std::lock_guard<std::mutex> lock(other._threads_mutex);
         _save_threads = std::move(other._save_threads);
@@ -209,7 +209,7 @@ namespace gs {
             _scaling = std::move(other._scaling);
             _rotation = std::move(other._rotation);
             _opacity = std::move(other._opacity);
-            _max_radii2D = std::move(other._max_radii2D);
+            _densification_info = other._densification_info;
 
             // Move threads under lock
             std::lock_guard<std::mutex> lock(other._threads_mutex);
@@ -236,7 +236,7 @@ namespace gs {
           _scaling{std::move(scaling)},
           _rotation{std::move(rotation)},
           _opacity{std::move(opacity)},
-          _max_radii2D{torch::zeros({_means.size(0)}).to(torch::kCUDA)} {}
+          _densification_info(std::move(_densification_info)) {}
 
     // Computed getters
     torch::Tensor SplatData::get_means() const {

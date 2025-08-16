@@ -38,8 +38,6 @@ namespace gs::gui::panels {
         }
 
         ImGui::Spacing();
-
-        // Remove the Tool Manager button - not needed
     }
 
     namespace detail {
@@ -139,12 +137,15 @@ namespace gs::gui::panels {
             // Using simple text icons for now, but could use FontAwesome or similar
             if (tool_name == "Crop Box") {
                 return "[□]"; // Box icon
-            } else if (tool_name == "World Transform") {
-                return ""; // Box icon
-            } else {
-                std::println(stderr, "Warning: tool_name '{}' has no icon", tool_name);
+            }
+            if (tool_name == "World Transform") {
+                return "[⊕]"; // Transform icon
+            }
+            if (tool_name == "Background") {
+                return "[●]"; // Background/color icon
             }
 
+            // No warning needed - just return default icon
             return "[?]"; // Default icon
         }
 

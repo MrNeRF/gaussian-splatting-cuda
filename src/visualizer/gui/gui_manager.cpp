@@ -26,8 +26,8 @@ namespace gs::gui {
         // Create components
         console_ = std::make_unique<ScriptingConsole>();
         file_browser_ = std::make_unique<FileBrowser>();
-
         scene_panel_ = std::make_unique<ScenePanel>(viewer->trainer_manager_);
+        viewport_gizmo_ = std::make_unique<ViewportGizmo>();
 
         // Initialize window states
         window_states_["console"] = false;
@@ -56,8 +56,7 @@ namespace gs::gui {
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
         io.ConfigWindowsMoveFromTitleBarOnly = true;
 
         // Platform/Renderer initialization
@@ -88,9 +87,15 @@ namespace gs::gui {
                 events::cmd::LoadFile{.path = path, .is_dataset = true}.emit();
             }
         });
+
+        // Initialize viewport gizmo
+        viewport_gizmo_->initialize();
     }
 
     void GuiManager::shutdown() {
+        if (viewport_gizmo_) {
+            viewport_gizmo_->shutdown();
+        }
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
@@ -101,16 +106,20 @@ namespace gs::gui {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
 
-        // Check if mouse is in viewport before ImGui processes the frame
+        // CRITICAL: Check mouse state BEFORE ImGui::NewFrame()
+        // This is important because ImGui updates WantCaptureMouse during NewFrame()
         ImVec2 mouse_pos = ImGui::GetMousePos();
         bool mouse_in_viewport = isPositionInViewport(mouse_pos.x, mouse_pos.y);
 
         ImGui::NewFrame();
 
-        // Prevent ImGui from capturing right/middle mouse buttons when in viewport
-        if (mouse_in_viewport && (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
-                                  ImGui::IsMouseDown(ImGuiMouseButton_Middle))) {
-            ImGui::GetIO().WantCaptureMouse = false;
+        // Override ImGui's mouse capture for right/middle buttons when in viewport
+        // This ensures that camera controls work properly
+        if (mouse_in_viewport && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+                ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+                ImGui::GetIO().WantCaptureMouse = false;
+            }
         }
 
         // Create main dockspace
@@ -219,7 +228,21 @@ namespace gs::gui {
         // Update viewport focus based on mouse position
         updateViewportFocus();
 
-        // Draw viewport focus indicator
+        // Render viewport gizmo BEFORE focus indicator - always render regardless of focus
+        if (show_viewport_gizmo_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
+            // Get camera rotation from viewport
+            const auto& viewport = viewer_->getViewport();
+            glm::mat3 camera_rotation = viewport.getRotationMatrix();
+
+            // Convert ImVec2 to glm::vec2
+            glm::vec2 viewport_pos_glm(viewport_pos_.x, viewport_pos_.y);
+            glm::vec2 viewport_size_glm(viewport_size_.x, viewport_size_.y);
+
+            // Render gizmo
+            viewport_gizmo_->render(camera_rotation, viewport_pos_glm, viewport_size_glm);
+        }
+
+        // Draw viewport focus indicator AFTER gizmo
         if (viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
             ImDrawList* draw_list = ImGui::GetForegroundDrawList();
 

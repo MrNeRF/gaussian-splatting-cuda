@@ -11,6 +11,7 @@ add_library(gs_visualizer OBJECT
         tools/crop_box_tool.cpp
         tools/tool_manager.cpp
         tools/world_transform_tool.cpp
+        tools/background_tool.cpp
 
         # Window management
         window/window_manager.cpp
@@ -19,10 +20,15 @@ add_library(gs_visualizer OBJECT
         rendering/rendering_manager.cpp
         rendering/rendering_pipeline.cpp
         rendering/render_bounding_box.cpp
+        rendering/render_infinite_grid.cpp
+        rendering/point_cloud_renderer.cpp
 
         # GUI system
         gui/gui_manager.cpp
         gui/ui_widgets.cpp
+	    gui/viewport_gizmo.cpp
+        gui/viewport_gizmo.cpp
+        gui/text_renderer.cpp
         gui/panels/main_panel.cpp
         gui/panels/training_panel.cpp
         gui/panels/crop_box_panel.cpp
@@ -45,6 +51,7 @@ add_library(gs_visualizer OBJECT
         # Training integration
         training/training_manager.cpp
         rendering/render_coordinate_axes.cpp
+        rendering/framerate_controller.cpp
 )
 
 
@@ -85,6 +92,7 @@ target_link_libraries(gs_visualizer
         nlohmann_json::nlohmann_json
         Python3::Python
         CUDA::cudart
+        Freetype::Freetype
         ${OPENGL_LIBRARIES}
         gs_loader           # Use the loader module
         gaussian_host       # For access to core functionality

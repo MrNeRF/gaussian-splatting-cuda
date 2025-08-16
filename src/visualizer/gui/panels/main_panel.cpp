@@ -72,11 +72,93 @@ namespace gs::gui::panels {
         ImGui::Text("Rendering Settings");
         ImGui::Separator();
 
+        // Get current render settings
+        auto render_manager = ctx.viewer->getRenderingManager();
+        if (!render_manager)
+            return;
+
+        auto settings = render_manager->getSettings();
+        bool settings_changed = false;
+
+        // Point Cloud Mode checkbox
+        if (ImGui::Checkbox("Point Cloud Mode", &settings.point_cloud_mode)) {
+            settings_changed = true;
+            // Emit point cloud mode changed event
+            events::ui::PointCloudModeChanged{
+                .enabled = settings.point_cloud_mode,
+                .voxel_size = settings.voxel_size}
+                .emit();
+        }
+
+        // Show voxel size slider only when in point cloud mode
+        if (settings.point_cloud_mode) {
+            if (widgets::SliderWithReset("Voxel Size", &settings.voxel_size, 0.001f, 0.1f, 0.01f)) {
+                settings_changed = true;
+                // Emit point cloud mode changed event with new voxel size
+                events::ui::PointCloudModeChanged{
+                    .enabled = settings.point_cloud_mode,
+                    .voxel_size = settings.voxel_size}
+                    .emit();
+            }
+        }
+
+        // Grid checkbox and settings
+        if (ImGui::Checkbox("Show Grid", &settings.show_grid)) {
+            settings_changed = true;
+            // Emit grid settings changed event
+            events::ui::GridSettingsChanged{
+                .enabled = settings.show_grid,
+                .plane = static_cast<int>(settings.grid_plane),
+                .opacity = settings.grid_opacity}
+                .emit();
+        }
+
+        // Show grid settings only when grid is enabled
+        if (settings.show_grid) {
+            ImGui::Indent();
+
+            // Grid plane selection
+            const char* planes[] = {"YZ (X-plane)", "XZ (Y-plane)", "XY (Z-plane)"};
+            int current_plane = static_cast<int>(settings.grid_plane);
+            if (ImGui::Combo("Plane", &current_plane, planes, IM_ARRAYSIZE(planes))) {
+                settings.grid_plane = current_plane;
+                settings_changed = true;
+                events::ui::GridSettingsChanged{
+                    .enabled = settings.show_grid,
+                    .plane = current_plane,
+                    .opacity = settings.grid_opacity}
+                    .emit();
+            }
+
+            // Grid opacity
+            if (ImGui::SliderFloat("Grid Opacity", &settings.grid_opacity, 0.0f, 1.0f)) {
+                settings_changed = true;
+                events::ui::GridSettingsChanged{
+                    .enabled = settings.show_grid,
+                    .plane = static_cast<int>(settings.grid_plane),
+                    .opacity = settings.grid_opacity}
+                    .emit();
+            }
+
+            ImGui::Unindent();
+        }
+
+        // Apply settings changes if any
+        if (settings_changed) {
+            render_manager->updateSettings(settings);
+
+            // Emit generic scene changed event
+            events::state::SceneChanged{}.emit();
+        }
+
+        ImGui::Separator();
+
         if (widgets::SliderWithReset("Scale", &config->scaling_modifier, 0.01f, 3.0f, 1.0f)) {
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
                 .scaling_modifier = config->scaling_modifier,
-                .antialiasing = std::nullopt}
+                .antialiasing = std::nullopt,
+                .background_color = std::nullopt}
                 .emit();
         }
 
@@ -84,8 +166,35 @@ namespace gs::gui::panels {
             events::ui::RenderSettingsChanged{
                 .fov = config->fov,
                 .scaling_modifier = std::nullopt,
-                .antialiasing = std::nullopt}
+                .antialiasing = std::nullopt,
+                .background_color = std::nullopt}
                 .emit();
+        }
+
+        // Display current FPS and VSync control on the same line
+        float average_fps = ctx.viewer->getAverageFPS();
+        if (average_fps > 0.0f) {
+            ImGui::Text("FPS: %6.1f", average_fps); // 6 characters total, 1 decimal place
+
+            // Add VSync checkbox on the same line
+            ImGui::SameLine();
+            ImGui::Spacing();
+            ImGui::SameLine();
+
+            // Get current VSync state from viewer
+            bool vsync_enabled = ctx.viewer->getVSyncEnabled();
+
+            if (ImGui::Checkbox("VSync", &vsync_enabled)) {
+                // Set VSync through the viewer's public interface
+                ctx.viewer->setVSync(vsync_enabled);
+            }
+
+            // Add tooltip
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Toggle Vertical Synchronization\n%s",
+                                  vsync_enabled ? "FPS capped to monitor refresh rate"
+                                                : "Uncapped FPS");
+            }
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED

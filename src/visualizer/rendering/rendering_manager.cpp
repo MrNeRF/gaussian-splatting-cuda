@@ -2,6 +2,7 @@
 #include "rendering/render_coordinate_axes.hpp"
 
 #include "internal/resource_paths.hpp"
+#include "tools/background_tool.hpp"
 #include "training/training_manager.hpp"
 
 #ifdef CUDA_GL_INTEROP_ENABLED
@@ -10,8 +11,15 @@
 
 namespace gs::visualizer {
 
-    RenderingManager::RenderingManager() = default;
-    RenderingManager::~RenderingManager() = default;
+    RenderingManager::RenderingManager() {
+        setupEventHandlers();
+    }
+
+    RenderingManager::~RenderingManager() {
+        // Unsubscribe from events
+        event::bus().remove<events::state::SceneLoaded>(scene_loaded_handler_id_);
+        event::bus().remove<events::ui::GridSettingsChanged>(grid_settings_handler_id_);
+    }
 
     void RenderingManager::initialize() {
         if (initialized_)
@@ -28,6 +36,10 @@ namespace gs::visualizer {
         std::cout << "Using CPU copy for rendering (interop not available)" << std::endl;
 #endif
 
+        // Initialize infinite grid
+        infinite_grid_ = std::make_unique<RenderInfiniteGrid>();
+        infinite_grid_->init();
+
         initialized_ = true;
     }
 
@@ -38,17 +50,57 @@ namespace gs::visualizer {
             true);
     }
 
+    void RenderingManager::setupEventHandlers() {
+        // Subscribe to SceneLoaded events
+        scene_loaded_handler_id_ = events::state::SceneLoaded::when([this]([[maybe_unused]] const auto& event) {
+            scene_just_loaded_ = true;
+        });
+
+        // Subscribe to GridSettingsChanged events
+        grid_settings_handler_id_ = events::ui::GridSettingsChanged::when([this](const auto& event) {
+            settings_.show_grid = event.enabled;
+            settings_.grid_plane = event.plane;
+            settings_.grid_opacity = event.opacity;
+
+            if (infinite_grid_) {
+                infinite_grid_->setPlane(static_cast<RenderInfiniteGrid::GridPlane>(event.plane));
+                infinite_grid_->setOpacity(event.opacity);
+            }
+        });
+    }
+
     void RenderingManager::renderFrame(const RenderContext& context, SceneManager* scene_manager) {
+        // Begin framerate tracking
+        framerate_controller_.beginFrame();
+
         if (!initialized_) {
             initialize();
         }
 
-        // Clear the entire window first
+        bool scene_changed = hasSceneChanged(context);
+
+        // Check if we should skip scene rendering
+        auto state = scene_manager->getCurrentState();
+        bool skip_scene_render = false;
+        if (settings_.adaptive_frame_rate && not settings_.use_crop_box) {
+            // at the moment - I dont want to track the crop box too - so if
+            // it is enabled - render every frame
+            skip_scene_render = framerate_controller_.shouldSkipSceneRender(
+                state.is_training, scene_changed);
+        }
+
+        // Don't skip rendering if scene was just loaded
+        if (scene_just_loaded_) {
+            skip_scene_render = false;
+            scene_just_loaded_ = false; // Reset the flag after using it
+        }
+
+        // Always clear and setup viewport (this is fast)
         glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Now render to the viewport region
+        // Set viewport region for all subsequent rendering
         if (context.viewport_region) {
             glViewport(
                 static_cast<GLint>(context.viewport_region->x),
@@ -57,8 +109,20 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
-        drawSceneFrame(context, scene_manager);
+        // Render scene first (if we have one)
+        if (scene_manager->hasScene()) {
+            drawSceneFrame(context, scene_manager, skip_scene_render);
+        }
 
+        // Render grid on top of scene (with proper blending)
+        if (settings_.show_grid && infinite_grid_) {
+            drawGrid(context);
+        }
+
+        // Update last viewport state
+        prev_viewport_state_ = context.viewport;
+
+        // Always render UI overlays (these are typically fast)
         if (settings_.show_crop_box && context.crop_box) {
             drawCropBox(context);
         }
@@ -70,6 +134,9 @@ namespace gs::visualizer {
         if (context.has_focus && context.viewport_region) {
             drawFocusIndicator(context);
         }
+
+        // End framerate tracking
+        framerate_controller_.endFrame();
     }
 
     // case world to user is defined - we shift view matrix and crop box
@@ -162,10 +229,11 @@ namespace gs::visualizer {
             glDisable(GL_BLEND);
     }
 
-    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager) {
+    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render) {
         if (!scene_manager->hasScene()) {
             return;
         }
+
         const Viewport& render_viewport = context.viewport;
         const geometry::BoundingBox* render_crop_box = nullptr;
         if (settings_.use_crop_box && context.crop_box) {
@@ -192,6 +260,19 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
+        // Don't skip render if we're in point cloud mode or if settings changed
+        if (prev_result_.valid && skip_render && !settings_.point_cloud_mode) {
+            RenderingPipeline::uploadToScreen(prev_result_, *screen_renderer_, render_size);
+            screen_renderer_->render(quad_shader_);
+            return;
+        }
+
+        // Get background color
+        glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
+        if (context.background_tool) {
+            background_color = context.background_tool->getBackgroundColor();
+        }
+
         RenderingPipeline::RenderRequest request{
             .view_rotation = rot,
             .view_translation = trans,
@@ -200,7 +281,10 @@ namespace gs::visualizer {
             .scaling_modifier = settings_.scaling_modifier,
             .antialiasing = settings_.antialiasing,
             .render_mode = RenderMode::RGB,
-            .crop_box = render_crop_box};
+            .crop_box = render_crop_box,
+            .background_color = background_color,
+            .point_cloud_mode = settings_.point_cloud_mode,
+            .voxel_size = settings_.voxel_size};
 
         // Get trainer for potential mutex locking
         auto state = scene_manager->getCurrentState();
@@ -221,6 +305,7 @@ namespace gs::visualizer {
         if (result.valid) {
             RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_size);
             screen_renderer_->render(quad_shader_);
+            prev_result_ = result;
         }
     }
 
@@ -256,6 +341,55 @@ namespace gs::visualizer {
         }
     }
 
+    void RenderingManager::drawGrid(const RenderContext& context) {
+        glm::ivec2 render_size = context.viewport.windowSize;
+        if (context.viewport_region) {
+            render_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+        }
+
+        if (render_size.x <= 0 || render_size.y <= 0) {
+            std::cout << "ERROR: Invalid render size!" << std::endl;
+            return;
+        }
+
+        if (!infinite_grid_) {
+            std::cout << "ERROR: Grid object is null in drawGrid!" << std::endl;
+            return;
+        }
+
+        if (!infinite_grid_->isInitialized()) {
+            std::cout << "ERROR: Grid not initialized!" << std::endl;
+            return;
+        }
+
+        // Save OpenGL state
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
+
+        // Enable blending for grid
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        auto fov_rad = glm::radians(settings_.fov);
+        auto projection = glm::perspective(
+            static_cast<float>(fov_rad),
+            static_cast<float>(render_size.x) / render_size.y,
+            0.1f,
+            1000.0f);
+
+        glm::mat4 view = context.viewport.getViewMatrix();
+
+        infinite_grid_->render(view, projection);
+
+        // Restore state
+        if (!blend_enabled)
+            glDisable(GL_BLEND);
+        if (depth_test_enabled)
+            glEnable(GL_DEPTH_TEST);
+    }
+
     void RenderingManager::drawCoordAxes(const RenderContext& context) {
 
         glm::ivec2 render_size = context.viewport.windowSize;
@@ -287,6 +421,81 @@ namespace gs::visualizer {
 
             coord_axes->render(view, projection);
         }
+    }
+
+    bool RenderingManager::hasCamChanged(const Viewport& current_viewport) {
+        // Compare current viewport with last known state
+        const float epsilon = 1e-6f;
+
+        bool has_changed = false;
+        // Compare viewport parameters that affect rendering
+        if (glm::length(current_viewport.getTranslation() - prev_viewport_state_.getTranslation()) > epsilon) {
+            has_changed = true;
+        }
+
+        if (!has_changed) {
+            auto current_rot = current_viewport.getRotationMatrix();
+            auto last_rot = prev_viewport_state_.getRotationMatrix();
+            auto diff = last_rot - current_rot;
+
+            if (glm::length(diff[0]) + glm::length(diff[1]) + glm::length(diff[2]) > epsilon) {
+                has_changed = true;
+            }
+        }
+
+        if (!has_changed) {
+            // Check window size changes
+            if (current_viewport.windowSize != prev_viewport_state_.windowSize) {
+                has_changed = true;
+            }
+            if (std::abs(prev_fov_ - settings_.fov) > epsilon) {
+                has_changed = true;
+            }
+        }
+
+        prev_viewport_state_ = current_viewport;
+        prev_fov_ = settings_.fov;
+
+        return has_changed;
+    }
+
+    bool RenderingManager::hasSceneChanged(const RenderContext& context) {
+        // Check if viewport has changed since last frame
+        bool scene_changed = hasCamChanged(context.viewport);
+
+        if (!scene_changed && context.world_to_user) {
+            const auto& w2u = *context.world_to_user;
+            if (!(w2u * prev_world_to_usr_inv_).isIdentity()) {
+                scene_changed = true;
+                prev_world_to_usr_inv_ = (*context.world_to_user).inv();
+            }
+        }
+        // check is user increased window size
+        if (!scene_changed && context.viewport_region) {
+            glm::ivec2 render_size = context.viewport.windowSize;
+            if (render_size != prev_render_size_) {
+                scene_changed = true;
+                prev_render_size_ = render_size;
+            }
+        }
+
+        if (!scene_changed && context.background_tool) {
+            auto background_color = context.background_tool->getBackgroundColor();
+            if (glm::length(background_color - prev_background_color_) > 0) {
+                scene_changed = true;
+                prev_background_color_ = background_color;
+            }
+        }
+
+        // Check if point cloud mode or voxel size changed
+        if (settings_.point_cloud_mode != prev_point_cloud_mode_ ||
+            std::abs(settings_.voxel_size - prev_voxel_size_) > 1e-6f) {
+            scene_changed = true;
+            prev_point_cloud_mode_ = settings_.point_cloud_mode;
+            prev_voxel_size_ = settings_.voxel_size;
+        }
+
+        return scene_changed;
     }
 
 } // namespace gs::visualizer

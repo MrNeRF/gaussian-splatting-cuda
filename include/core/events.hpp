@@ -82,6 +82,7 @@ namespace gs {
                   size_t num_gaussians;);
             EVENT(SceneCleared, );
             EVENT(ModelUpdated, int iteration; size_t num_gaussians;);
+            EVENT(SceneChanged, );
 
             // Data loading
             EVENT(DatasetLoadStarted, std::filesystem::path path;);
@@ -146,8 +147,14 @@ namespace gs {
             EVENT(RenderSettingsChanged,
                   std::optional<float> fov;
                   std::optional<float> scaling_modifier;
-                  std::optional<bool> antialiasing;);
+                  std::optional<bool> antialiasing;
+                  std::optional<glm::vec3> background_color;);
             EVENT(RenderModeChanged, std::string old_mode; std::string new_mode;);
+            EVENT(PointCloudModeChanged, bool enabled; float voxel_size;);
+            EVENT(GridSettingsChanged,
+                  bool enabled;
+                  int plane;
+                  float opacity;);
             EVENT(NodeSelected,
                   std::string path;
                   std::string type;
@@ -207,6 +214,7 @@ namespace gs {
         namespace internal {
             EVENT(TrainerReady, );
             EVENT(TrainingReadyToStart, );
+            EVENT(WindowFocusLost, );
             EVENT(RenderRequest,
                   glm::mat3 view_rotation;
                   glm::vec3 view_translation;

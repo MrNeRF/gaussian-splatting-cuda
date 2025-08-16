@@ -46,7 +46,21 @@ namespace gs {
         int primitive_primitive_indices_selector = std::get<9>(outputs);
         int instance_primitive_indices_selector = std::get<10>(outputs);
 
-        // Save for backward
+        // Store pointer to the original densification_info tensor
+        // This allows us to modify it directly in backward pass
+        // FIXME: Does anybody know how to avoid this?
+        ctx->saved_data["densification_info_ptr"] = reinterpret_cast<int64_t>(densification_info.data_ptr());
+        ctx->saved_data["densification_info_numel"] = densification_info.numel();
+        ctx->saved_data["densification_info_dtype"] = static_cast<int>(densification_info.scalar_type());
+        ctx->saved_data["densification_info_device_type"] = static_cast<int>(densification_info.device().type());
+        ctx->saved_data["densification_info_device_index"] = densification_info.device().index();
+
+        // Save for backward (without densification_info)
+        ctx->mark_non_differentiable({per_primitive_buffers,
+                                      per_tile_buffers,
+                                      per_instance_buffers,
+                                      per_bucket_buffers,
+                                      densification_info});
         ctx->save_for_backward({image,
                                 alpha,
                                 means,
@@ -57,13 +71,7 @@ namespace gs {
                                 per_tile_buffers,
                                 per_instance_buffers,
                                 per_bucket_buffers,
-                                w2c,
-                                densification_info});
-        ctx->mark_non_differentiable({per_primitive_buffers,
-                                      per_tile_buffers,
-                                      per_instance_buffers,
-                                      per_bucket_buffers,
-                                      densification_info});
+                                w2c});
 
         ctx->saved_data["cam_position"] = settings.cam_position;
         ctx->saved_data["active_sh_bases"] = settings.active_sh_bases;
@@ -103,7 +111,22 @@ namespace gs {
         const torch::Tensor& per_instance_buffers = saved[8];
         const torch::Tensor& per_bucket_buffers = saved[9];
         const torch::Tensor& w2c = saved[10];
-        torch::Tensor densification_info = saved[11]; // FIXME: this apparently is not the orginal tensor due to libtorch being weird, but its not required with MCMC anyways
+
+        // Reconstruct tensor from pointer - this creates a view of the ORIGINAL data
+        torch::Tensor densification_info = torch::empty({0});
+        int64_t numel = ctx->saved_data["densification_info_numel"].toInt();
+        if (numel > 0) {
+            void* data_ptr = reinterpret_cast<void*>(ctx->saved_data["densification_info_ptr"].toInt());
+            auto dtype = static_cast<c10::ScalarType>(ctx->saved_data["densification_info_dtype"].toInt());
+            auto device_type = static_cast<c10::DeviceType>(ctx->saved_data["densification_info_device_type"].toInt());
+            int device_index = ctx->saved_data["densification_info_device_index"].toInt();
+
+            // Create tensor view from the original data pointer
+            densification_info = torch::from_blob(
+                data_ptr,
+                {2, numel / 2}, // Assuming shape is [2, N]
+                torch::TensorOptions().dtype(dtype).device(c10::Device(device_type, device_index)));
+        }
 
         auto outputs = fast_gs::rasterization::backward_wrapper(
             densification_info,
