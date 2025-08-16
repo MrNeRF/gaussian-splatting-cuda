@@ -28,6 +28,7 @@ namespace fast_gs::rasterization {
         float3* grad_sh_coefficients_rest,
         float2* grad_mean2d_helper,
         float* grad_conic_helper,
+        float4* grad_w2c,
         float* densification_info,
         const int n_primitives,
         const int n_visible_primitives,

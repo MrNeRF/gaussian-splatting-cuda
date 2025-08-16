@@ -17,6 +17,7 @@ namespace {
     };
 
     const std::set<std::string> VALID_RENDER_MODES = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
+    const std::set<std::string> VALID_POSE_OPTS = {"none", "direct", "mlp"};
     const std::set<std::string> VALID_STRATEGIES = {"mcmc", "default"};
 
     void scale_steps_vector(std::vector<size_t>& steps, size_t scaler) {
@@ -62,6 +63,7 @@ namespace {
             ::args::ValueFlag<int> sh_degree(parser, "sh_degree", "Max SH degree [1-3]", {"sh-degree"});
             ::args::ValueFlag<float> min_opacity(parser, "min_opacity", "Minimum opacity threshold", {"min-opacity"});
             ::args::ValueFlag<std::string> render_mode(parser, "render_mode", "Render mode: RGB, D, ED, RGB_D, RGB_ED", {"render-mode"});
+            ::args::ValueFlag<std::string> pose_opt(parser, "pose_opt", "Enable pose optimization type: none, direct, mlp", {"pose-opt"});
             ::args::ValueFlag<std::string> strategy(parser, "strategy", "Optimization strategy: mcmc, default", {"strategy"});
             ::args::ValueFlag<int> init_num_pts(parser, "init_num_pts", "Number of random initialization points", {"init-num-pts"});
             ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
@@ -179,6 +181,15 @@ namespace {
                 params.optimization.strategy = strat;
             }
 
+            if (pose_opt) {
+                const auto opt = ::args::get(pose_opt);
+                if (VALID_POSE_OPTS.find(opt) == VALID_POSE_OPTS.end()) {
+                    return std::unexpected(std::format(
+                        "ERROR: Invalid pose optimization '{}'. Valid options are: none, direct, mlp",
+                        opt));
+                }
+            }
+
             // Create lambda to apply command line overrides after JSON loading
             auto apply_cmd_overrides = [&params,
                                         // Capture values, not references
@@ -194,6 +205,8 @@ namespace {
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
                                         init_num_pts_val = init_num_pts ? std::optional<int>(::args::get(init_num_pts)) : std::optional<int>(),
                                         init_extent_val = init_extent ? std::optional<float>(::args::get(init_extent)) : std::optional<float>(),
+                                        pose_opt_val = pose_opt ? std::optional<std::string>(::args::get(pose_opt)) : std::optional<std::string>(),
+                                        strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
@@ -229,6 +242,8 @@ namespace {
                 setVal(render_mode_val, opt.render_mode);
                 setVal(init_num_pts_val, opt.init_num_pts);
                 setVal(init_extent_val, opt.init_extent);
+                setVal(pose_opt_val, opt.pose_optimization);
+                setVal(strategy_val, opt.strategy);
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);

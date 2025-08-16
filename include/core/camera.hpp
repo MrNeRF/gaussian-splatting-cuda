@@ -24,6 +24,7 @@ namespace gs {
                const std::filesystem::path& image_path,
                int camera_width, int camera_height,
                int uid);
+        Camera(const Camera&, const torch::Tensor& transform);
 
         // Delete copy, allow move
         Camera(const Camera&) = delete;
