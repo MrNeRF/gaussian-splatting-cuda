@@ -16,6 +16,7 @@ namespace gs {
             const torch::Tensor& opacities_raw,                      // [N, 1]
             const torch::Tensor& sh_coefficients_0,                  // [N, 1, 3]
             const torch::Tensor& sh_coefficients_rest,               // [C, B-1, 3]
+            const torch::Tensor& w2c,                                // [C, 4, 4]
             torch::Tensor& densification_info,                       // [2, N] or empty tensor
             const fast_gs::rasterization::FastGSSettings& settings); // rasterizer settings
 
