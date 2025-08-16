@@ -287,12 +287,17 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
         prune_gs(iter);
 
         _splat_data._densification_info = torch::zeros({2, _splat_data.means().size(0)}, _splat_data.means().options());
-        c10::cuda::CUDACachingAllocator::emptyCache();
     }
 
     if (iter % _params->reset_every == 0 && iter > 0) {
         reset_opacity();
     }
+
+#ifdef _WIN32
+    // Windows doesn't support CUDACachingAllocator expandable_segments
+    if (iter % 10 == 0)
+        c10::cuda::CUDACachingAllocator::emptyCache();
+#endif
 }
 
 void DefaultStrategy::step(int iter) {
