@@ -56,6 +56,9 @@ protected:
         data.data_set_info.data_path = generateRandomPath().string();
         std::vector<std::string> data_types = {"Colmap", "Blender", "Custom"};
         data.data_set_info.data_type = data_types[std::uniform_int_distribution<>(0, data_types.size() - 1)(rng_)];
+        data.data_set_info.images = generateRandomString(8);
+        data.data_set_info.resize_factor = std::uniform_int_distribution<>(0, 5)(rng_);
+        data.data_set_info.test_every = std::uniform_int_distribution<>(0, 5)(rng_);
 
         // Generate random PLY data
         int ply_count = std::uniform_int_distribution<>(0, 5)(rng_);
@@ -88,8 +91,23 @@ protected:
             return false;
         }
 
-        if (a.project_output_folder != b.project_output_folder) {
-            std::cout << "project_output_folder mismatch: '" << a.project_output_folder << "' vs '" << b.project_output_folder << "'" << std::endl;
+        if (a.data_set_info.output_path != b.data_set_info.output_path) {
+            std::cout << "project_output_folder mismatch: '" << a.data_set_info.output_path << "' vs '" << b.data_set_info.output_path << "'" << std::endl;
+            return false;
+        }
+
+        if (a.data_set_info.images != b.data_set_info.images) {
+            std::cout << "images mismatch: '" << a.data_set_info.images << "' vs '" << b.data_set_info.images << "'" << std::endl;
+            return false;
+        }
+
+        if (a.data_set_info.resize_factor != b.data_set_info.resize_factor) {
+            std::cout << "resize_factor mismatch: '" << a.data_set_info.resize_factor << "' vs '" << b.data_set_info.resize_factor << "'" << std::endl;
+            return false;
+        }
+
+        if (a.data_set_info.test_every != b.data_set_info.test_every) {
+            std::cout << "test_every mismatch: '" << a.data_set_info.test_every << "' vs '" << b.data_set_info.test_every << "'" << std::endl;
             return false;
         }
 

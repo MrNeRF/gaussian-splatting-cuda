@@ -45,14 +45,10 @@ namespace gs::management {
               ply_training_iter_number(iter) {}
     };
 
-    struct DataSetInfo {
-        std::filesystem::path data_path;
+    struct DataSetInfo : public param::DatasetConfig {
         std::string data_type;
-
         DataSetInfo() = default;
-        DataSetInfo(const std::filesystem::path& path, const std::string& type)
-            : data_path(path),
-              data_type(type) {}
+        explicit DataSetInfo(const DatasetConfig& data_config);
     };
 
     struct OutputsInfo {
@@ -65,7 +61,6 @@ namespace gs::management {
         std::string project_name;
         std::string project_creation_time;
         std::string project_last_update_time;
-        std::filesystem::path project_output_folder = {};
         DataSetInfo data_set_info;
         OutputsInfo outputs;
 
@@ -112,8 +107,8 @@ namespace gs::management {
         explicit Project(bool update_file_on_change = false);
         explicit Project(const ProjectData& initialData, bool update_file_on_change = false);
 
-        void setProjectOutputFolder(const std::filesystem::path& path) { project_data_.project_output_folder = path; }
-        std::filesystem::path getProjectOutputFolder() const { return project_data_.project_output_folder; }
+        void setProjectOutputFolder(const std::filesystem::path& path) { project_data_.data_set_info.output_path = path; }
+        std::filesystem::path getProjectOutputFolder() const { return project_data_.data_set_info.output_path; }
 
         // project file name
         void setProjectFileName(const std::filesystem::path& path);
@@ -132,9 +127,7 @@ namespace gs::management {
 
         // Convenience methods
         void setProjectName(const std::string& name);
-        void setDataInfo(const std::filesystem::path& path, const std::string& type);
-        // detect type automatically
-        void setDataInfo(const std::filesystem::path& path);
+        void setDataInfo(const param::DatasetConfig& data_config);
         void addPly(const PlyData& ply);
         void removePly(size_t index);
 

@@ -91,6 +91,27 @@ namespace gs::management {
         return current;
     }
 
+    bool IsColmapData(const std::filesystem::path& path) {
+        if (!std::filesystem::is_directory(path)) {
+            return false;
+        }
+        // Check for sparse reconstruction
+        std::filesystem::path sparse_path;
+        if (std::filesystem::exists(path / "sparse" / "0")) {
+            sparse_path = path / "sparse" / "0";
+        } else if (std::filesystem::exists(path / "sparse")) {
+            sparse_path = path / "sparse";
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    DataSetInfo::DataSetInfo(const param::DatasetConfig& data_config) : DatasetConfig(data_config) {
+        data_type = IsColmapData(data_path) ? "Colmap" : "Blender";
+    }
+
     // LichtFeldProject implementation
     Project::Project(bool update_file_on_change) : update_file_on_change_(update_file_on_change) {
         project_data_.version = CURRENT_VERSION;
@@ -208,14 +229,26 @@ namespace gs::management {
 
     bool Project::validateJsonStructure(const nlohmann::json& json) const {
         // Basic validation - check required fields
-        return json.contains("project_info") &&
-               json.contains("version") &&
-               json.contains("project_name") &&
-               json.contains("project_creation_time") &&
-               json.contains("project_last_update_time") &&
-               json.contains("project_output_folder") &&
-               json.contains("data") &&
-               json.contains("outputs");
+        bool contains_basics = json.contains("project_info") &&
+                               json.contains("version") &&
+                               json.contains("project_name") &&
+                               json.contains("project_creation_time") &&
+                               json.contains("project_last_update_time") &&
+                               json.contains("project_output_folder") &&
+                               json.contains("data") &&
+                               json.contains("outputs");
+        if (!contains_basics) {
+            return false;
+        }
+
+        const auto& dataJson = json["data"];
+        bool contains_data = dataJson.contains("data_path") &&
+                             dataJson.contains("images") &&
+                             dataJson.contains("resize_factor") &&
+                             dataJson.contains("test_every") &&
+                             dataJson.contains("data_type");
+
+        return contains_data;
     }
 
     ProjectData Project::parseProjectData(const nlohmann::json& json) const {
@@ -225,11 +258,14 @@ namespace gs::management {
         data.project_name = json["project_name"].get<std::string>();
         data.project_creation_time = json["project_creation_time"].get<std::string>();
         data.project_last_update_time = json["project_last_update_time"].get<std::string>();
-        data.project_output_folder = std::filesystem::path(json["project_output_folder"].get<std::string>());
+        data.data_set_info.output_path = std::filesystem::path(json["project_output_folder"].get<std::string>());
 
         // Parse data section
         const auto& dataJson = json["data"];
         data.data_set_info.data_path = dataJson["data_path"].get<std::string>();
+        data.data_set_info.images = dataJson["images"].get<std::string>();
+        data.data_set_info.resize_factor = dataJson["resize_factor"].get<int>();
+        data.data_set_info.test_every = dataJson["test_every"].get<int>();
         data.data_set_info.data_type = dataJson["data_type"].get<std::string>();
 
         // Parse outputs section
@@ -267,11 +303,14 @@ namespace gs::management {
         json["project_name"] = data.project_name;
         json["project_creation_time"] = data.project_creation_time;
         json["project_last_update_time"] = data.project_last_update_time;
-        json["project_output_folder"] = data.project_output_folder.string();
+        json["project_output_folder"] = data.data_set_info.output_path;
 
         // Data section
         json["data"]["data_path"] = data.data_set_info.data_path;
         json["data"]["data_type"] = data.data_set_info.data_type;
+        json["data"]["resize_factor"] = data.data_set_info.resize_factor;
+        json["data"]["test_every"] = data.data_set_info.test_every;
+        json["data"]["images"] = data.data_set_info.images;
 
         // Outputs section
         json["outputs"]["plys"] = nlohmann::ordered_json::array();
@@ -305,35 +344,10 @@ namespace gs::management {
         project_data_.project_name = name;
     }
 
-    bool IsColmapData(const std::filesystem::path& path) {
-        if (!std::filesystem::is_directory(path)) {
-            return false;
-        }
-        // Check for sparse reconstruction
-        std::filesystem::path sparse_path;
-        if (std::filesystem::exists(path / "sparse" / "0")) {
-            sparse_path = path / "sparse" / "0";
-        } else if (std::filesystem::exists(path / "sparse")) {
-            sparse_path = path / "sparse";
-        } else {
-            return false;
-        }
+    void Project::setDataInfo(const param::DatasetConfig& data_config) {
+        project_data_.data_set_info = DataSetInfo(data_config);
+        std::string datatype = IsColmapData(project_data_.data_set_info.data_path) ? "Colmap" : "Blender";
 
-        return true;
-    }
-
-    void Project::setDataInfo(const std::filesystem::path& path, const std::string& type) {
-        project_data_.data_set_info.data_path = path.string();
-        project_data_.data_set_info.data_type = type;
-
-        if (update_file_on_change_ && !output_file_name_.empty()) {
-            writeToFile();
-        }
-    }
-
-    void Project::setDataInfo(const std::filesystem::path& path) {
-        project_data_.data_set_info.data_path = path.string();
-        std::string datatype = IsColmapData(path) ? "Colmap" : "Blender";
         project_data_.data_set_info.data_type = datatype;
 
         if (update_file_on_change_ && !output_file_name_.empty()) {
@@ -385,7 +399,7 @@ namespace gs::management {
                 project->setProjectFileName(data.project_path);
             }
             project->setProjectOutputFolder(data.output_path);
-            project->setDataInfo(data.data_path);
+            project->setDataInfo(data);
         } catch (const std::exception& e) {
             std::cerr << "Error writing project file: " << e.what() << std::endl;
             return nullptr;
