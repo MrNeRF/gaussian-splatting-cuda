@@ -45,12 +45,12 @@ namespace gs::management {
               ply_training_iter_number(iter) {}
     };
 
-    struct DataInfo {
-        std::string data_path;
+    struct DataSetInfo {
+        std::filesystem::path data_path;
         std::string data_type;
 
-        DataInfo() = default;
-        DataInfo(const std::string& path, const std::string& type)
+        DataSetInfo() = default;
+        DataSetInfo(const std::filesystem::path& path, const std::string& type)
             : data_path(path),
               data_type(type) {}
     };
@@ -65,7 +65,8 @@ namespace gs::management {
         std::string project_name;
         std::string project_creation_time;
         std::string project_last_update_time;
-        DataInfo data;
+        std::filesystem::path project_output_folder = {};
+        DataSetInfo data_set_info;
         OutputsInfo outputs;
 
         // Additional fields for future versions can be added here
@@ -107,11 +108,15 @@ namespace gs::management {
         static const std::string FILE_HEADER;
         static const std::string EXTENSION;
 
-        Project(bool update_file_on_change = false);
-        explicit Project(const ProjectData& initialData);
+        explicit Project(bool update_file_on_change = false);
+        explicit Project(const ProjectData& initialData, bool update_file_on_change = false);
 
-        void setOutputFileName(const std::filesystem::path& path);
-        std::filesystem::path getOutputPath() const { return output_file_name_; }
+        void setProjectOutputFolder(const std::filesystem::path& path) { project_data_.project_output_folder = path; }
+        std::filesystem::path getProjectOutputFolder() const { return project_data_.project_output_folder; }
+
+        // project file name
+        void setProjectFileName(const std::filesystem::path& path);
+        std::filesystem::path getProjectFileName() const { return output_file_name_; }
 
         // Main interface methods
         bool readFromFile(const std::filesystem::path& filepath);
@@ -148,6 +153,6 @@ namespace gs::management {
     };
 
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
-                                                          const std::string& project_name = "LichtFeldStudioProject");
+                                              const std::string& project_name = "LichtFeldStudioProject");
 
 } // namespace gs::management
