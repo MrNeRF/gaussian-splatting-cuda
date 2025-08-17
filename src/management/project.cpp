@@ -12,8 +12,8 @@ namespace gs::management {
 
     // Static member definitions
     const Version LichtFeldProject::CURRENT_VERSION(0, 0, 1);
-    const std::string LichtFeldProject::FILE_HEADER = "# LichtFeld Project File";
-    const std::string LichtFeldProject::EXTENSION = ".ls";
+    const std::string LichtFeldProject::FILE_HEADER = "// LichtFeld Project File";
+    const std::string LichtFeldProject::EXTENSION = ".lf_json";
 
     // Version implementation
     Version::Version(const std::string& versionStr) {
@@ -67,8 +67,8 @@ namespace gs::management {
         migrators_.push_back(std::move(migrator));
     }
 
-    YAML::Node MigratorRegistry::migrateToVersion(const YAML::Node& data, const Version& from, const Version& to) const {
-        YAML::Node current = YAML::Clone(data);
+    nlohmann::json MigratorRegistry::migrateToVersion(const nlohmann::json& data, const Version& from, const Version& to) const {
+        nlohmann::json current = data;
         Version currentVersion = from;
 
         while (currentVersion < to) {
@@ -91,18 +91,17 @@ namespace gs::management {
         return current;
     }
 
-    // LichtFeldProjectFile implementation
+    // LichtFeldProject implementation
     LichtFeldProject::LichtFeldProject(bool update_file_on_change) : update_file_on_change_(update_file_on_change) {
         project_data_.version = CURRENT_VERSION;
         project_data_.project_creation_time = generateCurrentTimeStamp();
         initializeMigrators();
 
-        {
-            if (update_file_on_change_ && !output_file_name_.empty()) {
-                writeToFile();
-            }
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
         }
     }
+
     void LichtFeldProject::setOutputFileName(const std::filesystem::path& path) {
         if (std::filesystem::is_directory(path)) {
             std::string project_file_name = project_data_.project_name.empty() ? "project" : project_data_.project_name;
@@ -110,7 +109,7 @@ namespace gs::management {
             output_file_name_ = path / project_file_name;
         } else if (std::filesystem::is_regular_file(path)) {
             if (path.extension() != EXTENSION) {
-                throw std::runtime_error(std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", path.string()));
+                throw std::runtime_error(std::format("LichtFeldProjectFile: {} expected file extension to be .lsj", path.string()));
             }
         }
         output_file_name_ = path;
@@ -129,17 +128,34 @@ namespace gs::management {
     bool LichtFeldProject::readFromFile(const std::filesystem::path& filepath) {
         std::lock_guard<std::mutex> lock(io_mutex_);
         try {
-            YAML::Node doc = YAML::LoadFile(filepath.string());
+            std::ifstream file(filepath);
+            if (!file.is_open()) {
+                std::cerr << "Cannot open file for reading: " << filepath << std::endl;
+                return false;
+            }
 
-            if (!validateYamlStructure(doc)) {
-                std::cerr << "Invalid YAML structure in file: " << filepath << std::endl;
+            // Skip header comment if present
+            std::string line;
+            file.seekg(0);
+            if (std::getline(file, line) && line.find("//") == 0) {
+                // Header found, JSON starts from next line
+            } else {
+                // No header, reset to beginning
+                file.seekg(0);
+            }
+
+            nlohmann::json doc;
+            file >> doc;
+
+            if (!validateJsonStructure(doc)) {
+                std::cerr << "Invalid JSON structure in file: " << filepath << std::endl;
                 return false;
             }
 
             // Check version and migrate if necessary
-            Version fileVersion(doc["version"].as<std::string>());
+            Version fileVersion(doc["version"].get<std::string>());
 
-            YAML::Node processedDoc = doc;
+            nlohmann::json processedDoc = doc;
             if (fileVersion < CURRENT_VERSION) {
                 std::cout << "Migrating from version " << fileVersion.toString()
                           << " to " << CURRENT_VERSION.toString() << std::endl;
@@ -170,12 +186,12 @@ namespace gs::management {
         }
 
         if (!std::filesystem::is_directory(targetPath.parent_path())) {
-            std::cerr << std::format("LichtFeldProjectFile: {} parent directory does not exists", targetPath.string()) << std::endl;
+            std::cerr << std::format("LichtFeldProjectFile: {} parent directory does not exist", targetPath.string()) << std::endl;
             return false;
         }
 
         if (targetPath.extension() != EXTENSION) {
-            std::cerr << std::format("LichtFeldProjectFile: {} expected file extesion to be .ls", targetPath.string()) << std::endl;
+            std::cerr << std::format("LichtFeldProjectFile: {} expected file extension to be .lsj", targetPath.string()) << std::endl;
             return false;
         }
 
@@ -191,9 +207,9 @@ namespace gs::management {
             // Write header comment
             file << FILE_HEADER << std::endl;
 
-            // Serialize and write YAML
-            YAML::Node doc = serializeProjectData(project_data_);
-            file << doc << std::endl;
+            // Serialize and write JSON
+            nlohmann::json doc = serializeProjectData(project_data_);
+            file << doc.dump(4) << std::endl; // Pretty print with 4-space indentation
 
             return true;
 
@@ -203,66 +219,82 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProject::validateYamlStructure(const YAML::Node& node) const {
+    bool LichtFeldProject::validateJsonStructure(const nlohmann::json& json) const {
         // Basic validation - check required fields
-        return node["version"] &&
-               node["project_name"] &&
-               node["project_creation_time"] &&
-               node["project_last_update_time"] &&
-               node["data"] &&
-               node["outputs"];
+        return json.contains("version") &&
+               json.contains("project_name") &&
+               json.contains("project_creation_time") &&
+               json.contains("project_last_update_time") &&
+               json.contains("data") &&
+               json.contains("outputs");
     }
 
-    ProjectData LichtFeldProject::parseProjectData(const YAML::Node& node) const {
+    ProjectData LichtFeldProject::parseProjectData(const nlohmann::json& json) const {
         ProjectData data;
 
-        data.version = Version(node["version"].as<std::string>());
-        data.project_name = node["project_name"].as<std::string>();
-        data.project_creation_time = node["project_creation_time"].as<std::string>();
+        data.version = Version(json["version"].get<std::string>());
+        data.project_name = json["project_name"].get<std::string>();
+        data.project_creation_time = json["project_creation_time"].get<std::string>();
+        data.project_last_update_time = json["project_last_update_time"].get<std::string>();
 
         // Parse data section
-        const auto& dataNode = node["data"];
-        data.data.data_path = dataNode["data_path"].as<std::string>();
-        data.data.data_type = dataNode["data_type"].as<std::string>();
+        const auto& dataJson = json["data"];
+        data.data.data_path = dataJson["data_path"].get<std::string>();
+        data.data.data_type = dataJson["data_type"].get<std::string>();
 
         // Parse outputs section
-        const auto& outputsNode = node["outputs"];
-        if (outputsNode["plys"]) {
-            for (const auto& plyNode : outputsNode["plys"]) {
-                const auto& ply = plyNode["ply"];
+        const auto& outputsJson = json["outputs"];
+        if (outputsJson.contains("plys") && outputsJson["plys"].is_array()) {
+            for (const auto& plyJson : outputsJson["plys"]) {
                 PlyData plyData;
-                plyData.is_imported = ply["is_imported"].as<bool>();
-                plyData.ply_path = ply["ply_path"].as<std::string>();
-                plyData.ply_training_iter_number = ply["ply_training_iter_number"].as<int>();
+                plyData.is_imported = plyJson["is_imported"].get<bool>();
+                plyData.ply_path = plyJson["ply_path"].get<std::string>();
+                plyData.ply_training_iter_number = plyJson["ply_training_iter_number"].get<int>();
                 data.outputs.plys.push_back(plyData);
             }
         }
 
+        // Store any additional fields for future compatibility
+        data.additional_fields = json;
+        // Remove known fields to keep only unknown ones
+        data.additional_fields.erase("version");
+        data.additional_fields.erase("project_name");
+        data.additional_fields.erase("project_creation_time");
+        data.additional_fields.erase("project_last_update_time");
+        data.additional_fields.erase("data");
+        data.additional_fields.erase("outputs");
+
         return data;
     }
 
-    YAML::Node LichtFeldProject::serializeProjectData(const ProjectData& data) const {
-        YAML::Node doc;
+    nlohmann::json LichtFeldProject::serializeProjectData(const ProjectData& data) const {
+        nlohmann::json json;
 
-        doc["version"] = data.version.toString();
-        doc["project_name"] = data.project_name;
-        doc["project_creation_time"] = data.project_creation_time;
-        doc["project_last_update_time"] = data.project_last_update_time;
+        json["version"] = data.version.toString();
+        json["project_name"] = data.project_name;
+        json["project_creation_time"] = data.project_creation_time;
+        json["project_last_update_time"] = data.project_last_update_time;
 
         // Data section
-        doc["data"]["data_path"] = data.data.data_path;
-        doc["data"]["data_type"] = data.data.data_type;
+        json["data"]["data_path"] = data.data.data_path;
+        json["data"]["data_type"] = data.data.data_type;
 
         // Outputs section
+        json["outputs"]["plys"] = nlohmann::json::array();
         for (const auto& ply : data.outputs.plys) {
-            YAML::Node plyNode;
-            plyNode["ply"]["is_imported"] = ply.is_imported;
-            plyNode["ply"]["ply_path"] = ply.ply_path.string();
-            plyNode["ply"]["ply_training_iter_number"] = ply.ply_training_iter_number;
-            doc["outputs"]["plys"].push_back(plyNode);
+            nlohmann::json plyJson;
+            plyJson["is_imported"] = ply.is_imported;
+            plyJson["ply_path"] = ply.ply_path.string();
+            plyJson["ply_training_iter_number"] = ply.ply_training_iter_number;
+            json["outputs"]["plys"].push_back(plyJson);
         }
 
-        return doc;
+        // Merge any additional fields
+        if (!data.additional_fields.empty()) {
+            json.update(data.additional_fields);
+        }
+
+        return json;
     }
 
     std::string LichtFeldProject::generateCurrentTimeStamp() const {
@@ -304,7 +336,7 @@ namespace gs::management {
             writeToFile();
         }
     }
-    //
+
     void LichtFeldProject::setDataInfo(const std::filesystem::path& path) {
         project_data_.data.data_path = path.string();
         std::string datatype = IsColmapData(path) ? "Colmap" : "Blender";
@@ -348,8 +380,8 @@ namespace gs::management {
         auto project = std::make_shared<gs::management::LichtFeldProject>(true);
 
         project->setProjectName(project_name);
-        if (data.project_path.extension() != ".ls") {
-            std::cerr << std::format("project_path must be .ls file: {}", data.project_path.string()) << std::endl;
+        if (data.project_path.extension() != LichtFeldProject::EXTENSION) {
+            std::cerr << std::format("project_path must be {} file: {}", LichtFeldProject::EXTENSION, data.project_path.string()) << std::endl;
             return nullptr;
         }
         try {

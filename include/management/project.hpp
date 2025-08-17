@@ -3,9 +3,9 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-#include <yaml-cpp/yaml.h>
 
 #include "core/parameters.hpp"
 
@@ -69,7 +69,7 @@ namespace gs::management {
         OutputsInfo outputs;
 
         // Additional fields for future versions can be added here
-        YAML::Node additional_fields; // For storing unknown fields during migration
+        nlohmann::json additional_fields; // For storing unknown fields during migration
     };
 
     // Migration interface for backward compatibility
@@ -77,7 +77,7 @@ namespace gs::management {
     public:
         virtual ~ProjectMigrator() = default;
         virtual bool canMigrate(const Version& from, const Version& to) const = 0;
-        virtual YAML::Node migrate(const YAML::Node& oldData, const Version& from, const Version& to) const = 0;
+        virtual nlohmann::json migrate(const nlohmann::json& oldData, const Version& from, const Version& to) const = 0;
     };
 
     // Concrete migrator implementations
@@ -87,26 +87,26 @@ namespace gs::management {
 
     public:
         void registerMigrator(std::unique_ptr<ProjectMigrator> migrator);
-        YAML::Node migrateToVersion(const YAML::Node& data, const Version& from, const Version& to) const;
+        nlohmann::json migrateToVersion(const nlohmann::json& data, const Version& from, const Version& to) const;
     };
 
     // Main project file manager class
     class LichtFeldProject {
     private:
-        static const Version CURRENT_VERSION;
-        static const std::string FILE_HEADER;
-        static const std::string EXTENSION;
-
         ProjectData project_data_;
         MigratorRegistry migrator_registry_;
 
         // Internal helper methods
         void initializeMigrators();
-        bool validateYamlStructure(const YAML::Node& node) const;
-        ProjectData parseProjectData(const YAML::Node& node) const;
-        YAML::Node serializeProjectData(const ProjectData& data) const;
+        bool validateJsonStructure(const nlohmann::json& json) const;
+        ProjectData parseProjectData(const nlohmann::json& json) const;
+        nlohmann::json serializeProjectData(const ProjectData& data) const;
 
     public:
+        static const Version CURRENT_VERSION;
+        static const std::string FILE_HEADER;
+        static const std::string EXTENSION;
+
         LichtFeldProject(bool update_file_on_change = false);
         explicit LichtFeldProject(const ProjectData& initialData);
 
