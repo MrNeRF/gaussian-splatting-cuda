@@ -7,8 +7,7 @@
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
 #include "core/training_progress.hpp"
-#include "core/parameters.hpp"
-#include "management/project.hpp"
+#include "project/project.hpp"
 
 #include <ATen/cuda/CUDAEvent.h>
 #include <atomic>

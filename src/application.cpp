@@ -1,7 +1,7 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
 #include "core/training_setup.hpp"
-#include "management/project.hpp"
+#include "project/project.hpp"
 #include "visualizer/visualizer.hpp"
 #include <print>
 
