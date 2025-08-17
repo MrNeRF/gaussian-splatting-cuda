@@ -70,7 +70,7 @@ namespace gs {
 
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
-        void setProject(std::shared_ptr<gs::management::LichtFeldProject> project) {lf_project_ = project;}
+        void setProject(std::shared_ptr<gs::management::Project> project) {lf_project_ = project;}
 
     private:
         // this is for unsubscribing in the DTOR
@@ -158,7 +158,7 @@ namespace gs {
         // camera id to cam
         std::map<int, std::shared_ptr<const Camera>> m_cam_id_to_cam;
         // LichtFeld project
-        std::shared_ptr<gs::management::LichtFeldProject> lf_project_=nullptr;
+        std::shared_ptr<gs::management::Project> lf_project_=nullptr;
     };
 
 } // namespace gs

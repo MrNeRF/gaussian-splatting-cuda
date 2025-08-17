@@ -91,7 +91,7 @@ namespace gs::management {
     };
 
     // Main project file manager class
-    class LichtFeldProject {
+    class Project {
     private:
         ProjectData project_data_;
         MigratorRegistry migrator_registry_;
@@ -107,8 +107,8 @@ namespace gs::management {
         static const std::string FILE_HEADER;
         static const std::string EXTENSION;
 
-        LichtFeldProject(bool update_file_on_change = false);
-        explicit LichtFeldProject(const ProjectData& initialData);
+        Project(bool update_file_on_change = false);
+        explicit Project(const ProjectData& initialData);
 
         void setOutputFileName(const std::filesystem::path& path);
         std::filesystem::path getOutputPath() const { return output_file_name_; }
@@ -147,7 +147,7 @@ namespace gs::management {
         mutable std::mutex io_mutex_;
     };
 
-    std::shared_ptr<LichtFeldProject> GetLichtFeldProject(const gs::param::DatasetConfig& data,
+    std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
                                                           const std::string& project_name = "LichtFeldStudioProject");
 
 } // namespace gs::management

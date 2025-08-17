@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
 
         std::println("Starting headless training...");
 
-        auto project = gs::management::GetLichtFeldProject(params->dataset);
+        auto project = gs::management::CreateNewProject(params->dataset);
         if (!project) {
             std::println(stderr, "project creation failed");
             return -1;

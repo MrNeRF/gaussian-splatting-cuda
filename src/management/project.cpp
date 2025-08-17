@@ -11,9 +11,9 @@
 namespace gs::management {
 
     // Static member definitions
-    const Version LichtFeldProject::CURRENT_VERSION(0, 0, 1);
-    const std::string LichtFeldProject::FILE_HEADER = "LichtFeldStudio Project File";
-    const std::string LichtFeldProject::EXTENSION = ".lf_json";
+    const Version Project::CURRENT_VERSION(0, 0, 1);
+    const std::string Project::FILE_HEADER = "LichtFeldStudio Project File";
+    const std::string Project::EXTENSION = ".lf_json";
 
     // Version implementation
     Version::Version(const std::string& versionStr) {
@@ -92,7 +92,7 @@ namespace gs::management {
     }
 
     // LichtFeldProject implementation
-    LichtFeldProject::LichtFeldProject(bool update_file_on_change) : update_file_on_change_(update_file_on_change) {
+    Project::Project(bool update_file_on_change) : update_file_on_change_(update_file_on_change) {
         project_data_.version = CURRENT_VERSION;
         project_data_.project_creation_time = generateCurrentTimeStamp();
         initializeMigrators();
@@ -102,7 +102,7 @@ namespace gs::management {
         }
     }
 
-    void LichtFeldProject::setOutputFileName(const std::filesystem::path& path) {
+    void Project::setOutputFileName(const std::filesystem::path& path) {
         if (std::filesystem::is_directory(path)) {
             std::string project_file_name = project_data_.project_name.empty() ? "project" : project_data_.project_name;
             project_file_name += EXTENSION;
@@ -115,17 +115,17 @@ namespace gs::management {
         output_file_name_ = path;
     }
 
-    LichtFeldProject::LichtFeldProject(const ProjectData& initialData)
+    Project::Project(const ProjectData& initialData)
         : project_data_(initialData) {
         initializeMigrators();
     }
 
-    void LichtFeldProject::initializeMigrators() {
+    void Project::initializeMigrators() {
         // Register migration classes for future versions
         // Example: migrator_registry_.registerMigrator(std::make_unique<Version001To002Migrator>());
     }
 
-    bool LichtFeldProject::readFromFile(const std::filesystem::path& filepath) {
+    bool Project::readFromFile(const std::filesystem::path& filepath) {
         std::lock_guard<std::mutex> lock(io_mutex_);
         try {
             std::ifstream file(filepath);
@@ -161,7 +161,7 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProject::writeToFile(const std::filesystem::path& filepath) {
+    bool Project::writeToFile(const std::filesystem::path& filepath) {
         std::lock_guard<std::mutex> lock(io_mutex_);
 
         std::filesystem::path targetPath = filepath.empty() ? output_file_name_ : filepath;
@@ -206,7 +206,7 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProject::validateJsonStructure(const nlohmann::json& json) const {
+    bool Project::validateJsonStructure(const nlohmann::json& json) const {
         // Basic validation - check required fields
         return json.contains("project_info") &&
                json.contains("version") &&
@@ -217,7 +217,7 @@ namespace gs::management {
                json.contains("outputs");
     }
 
-    ProjectData LichtFeldProject::parseProjectData(const nlohmann::json& json) const {
+    ProjectData Project::parseProjectData(const nlohmann::json& json) const {
         ProjectData data;
 
         data.version = Version(json["version"].get<std::string>());
@@ -256,7 +256,7 @@ namespace gs::management {
         return data;
     }
 
-    nlohmann::ordered_json LichtFeldProject::serializeProjectData(const ProjectData& data) const {
+    nlohmann::ordered_json Project::serializeProjectData(const ProjectData& data) const {
         nlohmann::ordered_json json;
 
         // Add project info as the first field
@@ -288,7 +288,7 @@ namespace gs::management {
         return json;
     }
 
-    std::string LichtFeldProject::generateCurrentTimeStamp() const {
+    std::string Project::generateCurrentTimeStamp() const {
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);
 
@@ -298,7 +298,7 @@ namespace gs::management {
     }
 
     // Convenience methods
-    void LichtFeldProject::setProjectName(const std::string& name) {
+    void Project::setProjectName(const std::string& name) {
         project_data_.project_name = name;
     }
 
@@ -319,7 +319,7 @@ namespace gs::management {
         return true;
     }
 
-    void LichtFeldProject::setDataInfo(const std::filesystem::path& path, const std::string& type) {
+    void Project::setDataInfo(const std::filesystem::path& path, const std::string& type) {
         project_data_.data.data_path = path.string();
         project_data_.data.data_type = type;
 
@@ -328,7 +328,7 @@ namespace gs::management {
         }
     }
 
-    void LichtFeldProject::setDataInfo(const std::filesystem::path& path) {
+    void Project::setDataInfo(const std::filesystem::path& path) {
         project_data_.data.data_path = path.string();
         std::string datatype = IsColmapData(path) ? "Colmap" : "Blender";
         project_data_.data.data_type = datatype;
@@ -338,7 +338,7 @@ namespace gs::management {
         }
     }
 
-    void LichtFeldProject::addPly(const PlyData& ply) {
+    void Project::addPly(const PlyData& ply) {
         project_data_.outputs.plys.push_back(ply);
 
         if (update_file_on_change_ && !output_file_name_.empty()) {
@@ -346,7 +346,7 @@ namespace gs::management {
         }
     }
 
-    void LichtFeldProject::removePly(size_t index) {
+    void Project::removePly(size_t index) {
         if (index < project_data_.outputs.plys.size()) {
             project_data_.outputs.plys.erase(project_data_.outputs.plys.begin() + index);
         }
@@ -356,23 +356,23 @@ namespace gs::management {
         }
     }
 
-    bool LichtFeldProject::isCompatible(const Version& fileVersion) const {
+    bool Project::isCompatible(const Version& fileVersion) const {
         return fileVersion <= CURRENT_VERSION;
     }
 
-    bool LichtFeldProject::validateProjectData() const {
+    bool Project::validateProjectData() const {
         return !project_data_.project_name.empty() &&
                !project_data_.data.data_path.empty() &&
                !project_data_.data.data_type.empty();
     }
 
-    std::shared_ptr<LichtFeldProject> GetLichtFeldProject(const gs::param::DatasetConfig& data,
+    std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
                                                           const std::string& project_name) {
-        auto project = std::make_shared<gs::management::LichtFeldProject>(true);
+        auto project = std::make_shared<gs::management::Project>(true);
 
         project->setProjectName(project_name);
-        if (data.project_path.extension() != LichtFeldProject::EXTENSION) {
-            std::cerr << std::format("project_path must be {} file: {}", LichtFeldProject::EXTENSION, data.project_path.string()) << std::endl;
+        if (data.project_path.extension() != Project::EXTENSION) {
+            std::cerr << std::format("project_path must be {} file: {}", Project::EXTENSION, data.project_path.string()) << std::endl;
             return nullptr;
         }
         try {
