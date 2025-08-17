@@ -52,20 +52,35 @@ namespace gs::loader {
         bool has_images_text = std::filesystem::exists(sparse_path / "images.txt");
         bool has_points_text = std::filesystem::exists(sparse_path / "points3D.txt");
 
-        if ((!has_cameras || !has_images) && (!has_cameras_text || !has_images_text)) {
-            if (!has_cameras || !has_images) {
-                return std::unexpected(std::format(
-                    "Missing required COLMAP files. cameras.bin: {}, images.bin: {}",
-                    has_cameras ? "found" : "missing",
-                    has_images ? "found" : "missing"));
-            }
-            if (!has_cameras_text || !has_images_text) {
-                return std::unexpected(std::format(
-                    "Missing required COLMAP text files. cameras.txt: {}, images.txt: {}",
-                    has_cameras_text ? "found" : "missing",
-                    has_images_text ? "found" : "missing"));
-            }
+        if (std::min(has_cameras || has_images || has_points,
+                     has_cameras_text || has_images_text || has_points_text) != 0) {
+            return std::unexpected(
+                "Found mixed COLMAP binary and text files. "
+                "Please use either binary or text format consistently.");
         }
+
+        bool trying_text = has_cameras_text || has_images_text;
+        std::cout << "Trying to load COLMAP in "
+                  << (trying_text ? "text" : "binary") << " format\n";
+
+        // If you don't have binary cameras or images AND you are not trying text: error
+        if ((!has_cameras || !has_images) &&
+            !trying_text) {
+            return std::unexpected(std::format(
+                "Missing required COLMAP files. cameras.bin: {}, images.bin: {}",
+                has_cameras ? "found" : "missing",
+                has_images ? "found" : "missing"));
+        }
+
+        // If you don't have text cameras or images AND you trying text: error
+        if ((!has_cameras_text || !has_images_text) &&
+            trying_text) {
+            return std::unexpected(std::format(
+                "Missing required COLMAP text files. cameras.txt: {}, images.txt: {}",
+                has_cameras_text ? "found" : "missing",
+                has_images_text ? "found" : "missing"));
+        }
+
 
 
         // Check for image directory
