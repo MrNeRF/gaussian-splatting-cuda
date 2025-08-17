@@ -104,7 +104,7 @@ namespace gs::loader {
                 .scene_center = torch::zeros({3}),
                 .loader_used = name(),
                 .load_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time),
-                .warnings = (has_points && has_points_text) ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found (points3D.bin|txt) - will use random initialization"}};
+                .warnings = (has_points || has_points_text) ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found (points3D.bin|txt) - will use random initialization"}};
         }
 
         // Load cameras and images
@@ -200,7 +200,7 @@ namespace gs::loader {
                 .scene_center = scene_center,
                 .loader_used = name(),
                 .load_time = load_time,
-                .warnings = (has_points && has_points_text) ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found - using random initialization"}};
+                .warnings = (has_points || has_points_text) ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found - using random initialization"}};
 
             std::println("COLMAP dataset loaded successfully in {}ms", load_time.count());
             std::println("  - {} cameras", camera_infos.size());
