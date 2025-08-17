@@ -122,6 +122,19 @@ namespace gs::loader {
         {10, {CAMERA_MODEL::THIN_PRISM_FISHEYE, 12}},
         {11, {CAMERA_MODEL::UNDEFINED, -1}}};
 
+    static const std::unordered_map<std::string, CAMERA_MODEL> camera_model_names = {
+        {"SIMPLE_PINHOLE", CAMERA_MODEL::SIMPLE_PINHOLE},
+        {"PINHOLE", CAMERA_MODEL::PINHOLE},
+        {"SIMPLE_RADIAL", CAMERA_MODEL::SIMPLE_RADIAL},
+        {"RADIAL", CAMERA_MODEL::RADIAL},
+        {"OPENCV", CAMERA_MODEL::OPENCV},
+        {"OPENCV_FISHEYE", CAMERA_MODEL::OPENCV_FISHEYE},
+        {"FULL_OPENCV", CAMERA_MODEL::FULL_OPENCV},
+        {"FOV", CAMERA_MODEL::FOV},
+        {"SIMPLE_RADIAL_FISHEYE", CAMERA_MODEL::SIMPLE_RADIAL_FISHEYE},
+        {"RADIAL_FISHEYE", CAMERA_MODEL::RADIAL_FISHEYE},
+        {"THIN_PRISM_FISHEYE", CAMERA_MODEL::THIN_PRISM_FISHEYE}};
+
     // -----------------------------------------------------------------------------
     //  Binary-file loader
     // -----------------------------------------------------------------------------
@@ -259,6 +272,162 @@ namespace gs::loader {
         if (cur != end)
             throw std::runtime_error("points3D.bin: trailing bytes");
 
+        return PointCloud(positions, colors);
+    }
+
+    // -----------------------------------------------------------------------------
+    //  Text-file loader
+    // -----------------------------------------------------------------------------
+    std::vector<std::string> read_text_file(const std::filesystem::path& file_path) {
+        std::ifstream file(file_path);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open " + file_path.string());
+        }
+        std::vector<std::string> lines;
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.starts_with("#")) {
+                continue; // Skip comment lines
+            }
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back(); // Remove trailing carriage return
+            }
+            lines.push_back(line);
+        }
+        file.close();
+        if (lines.empty()) {
+            throw std::runtime_error("File " + file_path.string() + " is empty or contains no valid lines");
+        }
+        // Ensure the last line is not empty
+        if (lines.back().empty()) {
+            lines.pop_back(); // Remove last empty line if it exists
+        }
+        return lines;
+    }
+
+
+    std::vector<std::string> split_string(const std::string& s, char delimiter) {
+        std::vector<std::string> tokens;
+        std::string token;
+        size_t start = 0;
+        size_t end = s.find(delimiter);
+
+        while (end != std::string::npos) {
+            tokens.push_back(s.substr(start, end - start));
+            start = end + 1;
+            end = s.find(delimiter, start);
+        }
+        tokens.push_back(s.substr(start));
+
+        return tokens;
+    }
+
+    // -----------------------------------------------------------------------------
+    //  images.txt
+    //  Image list with two lines of data per image:
+    //   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
+    //   POINTS2D[] as (X, Y, POINT3D_ID)
+    // -----------------------------------------------------------------------------
+    std::vector<Image> read_images_text(const std::filesystem::path& file_path) {
+        auto lines = read_text_file(file_path);
+        std::vector<Image> images;
+        if (lines.size() % 2 != 0) {
+            throw std::runtime_error("images.txt should have an even number of lines");
+        }
+        uint64_t n_images = lines.size() / 2;
+
+        for (uint64_t i = 0; i < n_images; ++i) {
+            const auto& line = lines[i * 2];
+
+            const auto tokens = split_string(line, ' ');
+            if (tokens.size() != 10) {
+                throw std::runtime_error("Invalid format in images.txt line " + std::to_string(i * 2 + 1));
+            }
+
+            auto& img = images.emplace_back(std::stoul(tokens[0]));
+            img._qvec = torch::tensor({
+                std::stof(tokens[1]), std::stof(tokens[2]),
+                std::stof(tokens[3]), std::stof(tokens[4])
+            }, torch::kFloat32);
+
+            img._tvec = torch::tensor({
+                std::stof(tokens[5]), std::stof(tokens[6]),
+                std::stof(tokens[7])
+            }, torch::kFloat32);
+
+            img._camera_id = std::stoul(tokens[8]);
+            img._name = tokens[9];
+        }
+        return images;
+    }
+
+    // -----------------------------------------------------------------------------
+    //  cameras.txt
+    //  Camera list with one line of data per camera:
+    //    CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]
+    // -----------------------------------------------------------------------------
+    std::unordered_map<uint32_t, CameraData>
+    read_cameras_text(const std::filesystem::path& file_path) {
+        auto lines = read_text_file(file_path);
+        std::unordered_map<uint32_t, CameraData> cams;
+
+        for (const auto& line : lines) {
+            const auto tokens = split_string(line, ' ');
+            if (tokens.size() < 4) {
+                throw std::runtime_error("Invalid format in cameras.txt: " + line);
+            }
+
+            CameraData cam;
+            cam._camera_ID = std::stoul(tokens[0]);
+            if (!camera_model_names.contains(tokens[1])) {
+                throw std::runtime_error("Invalid format in cameras.txt: " + line);
+            }
+            cam._camera_model = camera_model_names.at(tokens[1]);
+            cam._width = std::stoi(tokens[2]);
+            cam._height = std::stoi(tokens[3]);
+
+            // Read parameters
+            cam._params = torch::empty({static_cast<int64_t>(tokens.size() - 4)}, torch::kFloat32);
+            for (uint64_t j = 4; j < tokens.size(); ++j) {
+                cam._params[static_cast<int64_t>(j) - 4] = std::stof(tokens[j]);
+            }
+
+            cams.emplace(cam._camera_ID, std::move(cam));
+        }
+        return cams;
+    }
+
+    // -----------------------------------------------------------------------------
+    //  point3D.txt
+    //  3D point list with one line of data per point:
+    //    POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)
+    // -----------------------------------------------------------------------------
+    PointCloud read_point3D_text(const std::filesystem::path& file_path) {
+        auto lines = read_text_file(file_path);
+        uint64_t N = lines.size();
+
+        torch::Tensor positions = torch::empty({static_cast<int64_t>(N), 3}, torch::kFloat32);
+        torch::Tensor colors = torch::empty({static_cast<int64_t>(N), 3}, torch::kUInt8);
+
+        float* pos_data = positions.data_ptr<float>();
+        uint8_t* col_data = colors.data_ptr<uint8_t>();
+
+        for (uint64_t i = 0; i < N; ++i) {
+            const auto& line = lines[i];
+            const auto tokens = split_string(line, ' ');
+
+            if (tokens.size() < 8) {
+                throw std::runtime_error("Invalid format in point3D.txt: " + line);
+            }
+
+            pos_data[i * 3 + 0] = std::stof(tokens[1]);
+            pos_data[i * 3 + 1] = std::stof(tokens[2]);
+            pos_data[i * 3 + 2] = std::stof(tokens[3]);
+
+            col_data[i * 3 + 0] = std::stof(tokens[4]);
+            col_data[i * 3 + 1] = std::stof(tokens[5]);
+            col_data[i * 3 + 2] = std::stof(tokens[6]);
+        }
         return PointCloud(positions, colors);
     }
 
@@ -454,6 +623,24 @@ namespace gs::loader {
 
         auto cams = read_cameras_binary(cams_file);
         auto images = read_images_binary(images_file);
+
+        return read_colmap_cameras(base, cams, images, images_folder);
+    }
+
+    PointCloud read_colmap_point_cloud_text(const std::filesystem::path& filepath) {
+        fs::path points3d_file = get_sparse_file_path(filepath, "points3D.txt");
+        return read_point3D_text(points3d_file);
+    }
+
+    std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images_text(
+        const std::filesystem::path& base,
+        const std::string& images_folder) {
+
+        fs::path cams_file = get_sparse_file_path(base, "cameras.txt");
+        fs::path images_file = get_sparse_file_path(base, "images.txt");
+
+        auto cams = read_cameras_text(cams_file);
+        auto images = read_images_text(images_file);
 
         return read_colmap_cameras(base, cams, images, images_folder);
     }

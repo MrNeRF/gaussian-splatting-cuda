@@ -54,4 +54,12 @@ namespace gs::loader {
     // Read COLMAP point cloud
     PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath);
 
+    // Read COLMAP cameras, images, and compute nerf norm from a text file
+    std::tuple<std::vector<CameraData>, torch::Tensor> read_colmap_cameras_and_images_text(
+        const std::filesystem::path& base,
+        const std::string& images_folder = "images");
+
+    // Read COLMAP point cloud from a text file
+    PointCloud read_colmap_point_cloud_text(const std::filesystem::path& filepath);
+
 } // namespace gs::loader
