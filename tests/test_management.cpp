@@ -174,7 +174,7 @@ TEST_F(ProjectTest, WriteReadCompareRandomProject) {
     auto original_data = generateRandomProjectData();
 
     // Create temporary file path
-    std::filesystem::path temp_file = temp_dir_ / (generateRandomString(10) + ".lf_json");
+    std::filesystem::path temp_file = temp_dir_ / (generateRandomString(10) + gs::management::Project::EXTENSION);
 
     // Create project with the random data
     gs::management::Project project(original_data);
@@ -220,7 +220,7 @@ TEST_F(ProjectTest, MultipleRandomProjects) {
         SCOPED_TRACE("Test case: " + std::to_string(test_case));
 
         auto original_data = generateRandomProjectData();
-        std::filesystem::path temp_file = temp_dir_ / ("test_" + std::to_string(test_case) + ".lf_json");
+        std::filesystem::path temp_file = temp_dir_ / ("test_" + std::to_string(test_case) + gs::management::Project::EXTENSION);
 
         gs::management::Project project(original_data);
         project.setProjectFileName(temp_file);
@@ -241,7 +241,7 @@ TEST_F(ProjectTest, EmptyPlyArrayHandling) {
     auto data = generateRandomProjectData();
     data.outputs.plys.clear(); // Ensure empty PLY array
 
-    std::filesystem::path temp_file = temp_dir_ / "empty_plys.lf_json";
+    std::filesystem::path temp_file = temp_dir_ / ("empty_plys" + gs::management::Project::EXTENSION);
 
     gs::management::Project project(data);
     project.setProjectFileName(temp_file);

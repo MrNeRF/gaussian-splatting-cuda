@@ -73,7 +73,7 @@ namespace gs {
         struct DatasetConfig {
             std::filesystem::path data_path = "";
             std::filesystem::path output_path = "output";
-            std::filesystem::path project_path = "project.lf_json"; // if path is relative it will be saved to output_path/project_name.lf_json
+            std::filesystem::path project_path = "project.lfj"; // if path is relative it will be saved to output_path/project_name.lfj
             std::string images = "images";
             int resize_factor = -1;
             int test_every = 8;
