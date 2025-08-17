@@ -305,7 +305,6 @@ namespace gs::loader {
         return lines;
     }
 
-
     std::vector<std::string> split_string(const std::string& s, char delimiter) {
         std::vector<std::string> tokens;
         std::string token;
@@ -345,15 +344,13 @@ namespace gs::loader {
             }
 
             auto& img = images.emplace_back(std::stoul(tokens[0]));
-            img._qvec = torch::tensor({
-                std::stof(tokens[1]), std::stof(tokens[2]),
-                std::stof(tokens[3]), std::stof(tokens[4])
-            }, torch::kFloat32);
+            img._qvec = torch::tensor({std::stof(tokens[1]), std::stof(tokens[2]),
+                                       std::stof(tokens[3]), std::stof(tokens[4])},
+                                      torch::kFloat32);
 
-            img._tvec = torch::tensor({
-                std::stof(tokens[5]), std::stof(tokens[6]),
-                std::stof(tokens[7])
-            }, torch::kFloat32);
+            img._tvec = torch::tensor({std::stof(tokens[5]), std::stof(tokens[6]),
+                                       std::stof(tokens[7])},
+                                      torch::kFloat32);
 
             img._camera_id = std::stoul(tokens[8]);
             img._name = tokens[9];

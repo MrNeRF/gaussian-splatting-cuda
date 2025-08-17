@@ -137,7 +137,8 @@ namespace gs::management {
     }
 
     Project::Project(const ProjectData& initialData, bool update_file_on_change)
-        : project_data_(initialData), update_file_on_change_(update_file_on_change) {
+        : project_data_(initialData),
+          update_file_on_change_(update_file_on_change) {
         initializeMigrators();
     }
 

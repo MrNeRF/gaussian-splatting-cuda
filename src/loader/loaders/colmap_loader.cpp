@@ -81,8 +81,6 @@ namespace gs::loader {
                 has_images_text ? "found" : "missing"));
         }
 
-
-
         // Check for image directory
         std::filesystem::path image_dir = path / options.images_folder;
         if (!std::filesystem::exists(image_dir)) {
