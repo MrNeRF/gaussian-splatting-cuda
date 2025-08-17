@@ -399,6 +399,7 @@ if (BUILD_TESTS)
             tests/test_garden_data.cpp
             tests/torch_impl.cpp
             tests/test_geometry.cpp
+            tests/test_management.cpp
     )
 
     add_executable(gaussian_tests ${TEST_SOURCES})
