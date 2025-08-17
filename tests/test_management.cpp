@@ -101,7 +101,7 @@ protected:
         }
 
         if (a.optimization.init_num_pts != b.optimization.init_num_pts) {
-            std::cout << "init_num_pts time mismatch: '" << a.optimization.init_num_pts << "' vs '" << b.optimization.init_num_pts << "'" << std::endl;
+            std::cout << "init_num_pts mismatch: '" << a.optimization.init_num_pts << "' vs '" << b.optimization.init_num_pts << "'" << std::endl;
             return false;
         }
 
