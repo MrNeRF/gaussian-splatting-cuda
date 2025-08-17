@@ -48,7 +48,7 @@ namespace {
             // PLY viewing mode
             ::args::ValueFlag<std::string> view_ply(parser, "ply_file", "View a PLY file", {'v', "view"});
 
-            // LichtFeldStutio project arguemnts
+            // LichtFeldStudio project arguments
             ::args::ValueFlag<std::string> project_name(parser, "proj_path", "LichtFeldStutio project path. If path is relative Will be saved to output_path/project_path. path must end with .ls", {"proj_path"});
 
             // Training mode arguments
