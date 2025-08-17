@@ -17,7 +17,6 @@
     "nlohmann-json",
     "spdlog",
     "tbb",
-    "freetype",
-    "yaml-cpp"
+    "freetype"
   ]
 }

@@ -90,7 +90,6 @@ find_package(args REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(Freetype REQUIRED)
-find_package(yaml-cpp CONFIG REQUIRED)  # Add this line
 
 if (WIN32)
     set(CMAKE_CUDA_RUNTIME_LIBRARY "Shared") # when using INTEROP in windows static and dynamic symbols are mixed
@@ -192,7 +191,6 @@ target_link_libraries(gaussian_host
         fastgs_backend  # Link to fastgs
         CUDA::cudart    # Add CUDA runtime for interop
         spdlog::spdlog
-        yaml-cpp::yaml-cpp
 )
 
 if (UNIX)
