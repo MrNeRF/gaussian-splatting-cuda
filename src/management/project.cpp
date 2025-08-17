@@ -12,7 +12,7 @@ namespace gs::management {
 
     // Static member definitions
     const Version LichtFeldProject::CURRENT_VERSION(0, 0, 1);
-    const std::string LichtFeldProject::FILE_HEADER = "// LichtFeld Project File";
+    const std::string LichtFeldProject::FILE_HEADER = "LichtFeldStudio Project File";
     const std::string LichtFeldProject::EXTENSION = ".lf_json";
 
     // Version implementation
@@ -109,7 +109,7 @@ namespace gs::management {
             output_file_name_ = path / project_file_name;
         } else if (std::filesystem::is_regular_file(path)) {
             if (path.extension() != EXTENSION) {
-                throw std::runtime_error(std::format("LichtFeldProjectFile: {} expected file extension to be .lsj", path.string()));
+                throw std::runtime_error(std::format("LichtFeldProjectFile: {} expected file extension to be {}", path.string(), EXTENSION));
             }
         }
         output_file_name_ = path;
@@ -132,16 +132,6 @@ namespace gs::management {
             if (!file.is_open()) {
                 std::cerr << "Cannot open file for reading: " << filepath << std::endl;
                 return false;
-            }
-
-            // Skip header comment if present
-            std::string line;
-            file.seekg(0);
-            if (std::getline(file, line) && line.find("//") == 0) {
-                // Header found, JSON starts from next line
-            } else {
-                // No header, reset to beginning
-                file.seekg(0);
             }
 
             nlohmann::json doc;
@@ -191,7 +181,7 @@ namespace gs::management {
         }
 
         if (targetPath.extension() != EXTENSION) {
-            std::cerr << std::format("LichtFeldProjectFile: {} expected file extension to be .lsj", targetPath.string()) << std::endl;
+            std::cerr << std::format("LichtFeldProjectFile: {} expected file extension to be {}", targetPath.string(), EXTENSION) << std::endl;
             return false;
         }
 
@@ -204,11 +194,8 @@ namespace gs::management {
                 return false;
             }
 
-            // Write header comment
-            file << FILE_HEADER << std::endl;
-
             // Serialize and write JSON
-            nlohmann::json doc = serializeProjectData(project_data_);
+            nlohmann::ordered_json doc = serializeProjectData(project_data_);
             file << doc.dump(4) << std::endl; // Pretty print with 4-space indentation
 
             return true;
@@ -221,7 +208,8 @@ namespace gs::management {
 
     bool LichtFeldProject::validateJsonStructure(const nlohmann::json& json) const {
         // Basic validation - check required fields
-        return json.contains("version") &&
+        return json.contains("project_info") &&
+               json.contains("version") &&
                json.contains("project_name") &&
                json.contains("project_creation_time") &&
                json.contains("project_last_update_time") &&
@@ -257,6 +245,7 @@ namespace gs::management {
         // Store any additional fields for future compatibility
         data.additional_fields = json;
         // Remove known fields to keep only unknown ones
+        data.additional_fields.erase("project_info");
         data.additional_fields.erase("version");
         data.additional_fields.erase("project_name");
         data.additional_fields.erase("project_creation_time");
@@ -267,9 +256,11 @@ namespace gs::management {
         return data;
     }
 
-    nlohmann::json LichtFeldProject::serializeProjectData(const ProjectData& data) const {
-        nlohmann::json json;
+    nlohmann::ordered_json LichtFeldProject::serializeProjectData(const ProjectData& data) const {
+        nlohmann::ordered_json json;
 
+        // Add project info as the first field
+        json["project_info"] = FILE_HEADER;
         json["version"] = data.version.toString();
         json["project_name"] = data.project_name;
         json["project_creation_time"] = data.project_creation_time;
@@ -280,9 +271,9 @@ namespace gs::management {
         json["data"]["data_type"] = data.data.data_type;
 
         // Outputs section
-        json["outputs"]["plys"] = nlohmann::json::array();
+        json["outputs"]["plys"] = nlohmann::ordered_json::array();
         for (const auto& ply : data.outputs.plys) {
-            nlohmann::json plyJson;
+            nlohmann::ordered_json plyJson;
             plyJson["is_imported"] = ply.is_imported;
             plyJson["ply_path"] = ply.ply_path.string();
             plyJson["ply_training_iter_number"] = ply.ply_training_iter_number;

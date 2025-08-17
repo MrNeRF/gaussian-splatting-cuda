@@ -100,7 +100,7 @@ namespace gs::management {
         void initializeMigrators();
         bool validateJsonStructure(const nlohmann::json& json) const;
         ProjectData parseProjectData(const nlohmann::json& json) const;
-        nlohmann::json serializeProjectData(const ProjectData& data) const;
+        nlohmann::ordered_json serializeProjectData(const ProjectData& data) const;
 
     public:
         static const Version CURRENT_VERSION;
