@@ -268,6 +268,10 @@ namespace gs::management {
         data.data_set_info.test_every = dataJson["test_every"].get<int>();
         data.data_set_info.data_type = dataJson["data_type"].get<std::string>();
 
+        if (json.contains("training") && json["training"].contains("optimization")) {
+            data.optimization = param::OptimizationParameters::from_json(json["training"]["optimization"]);
+        }
+
         // Parse outputs section
         const auto& outputsJson = json["outputs"];
         if (outputsJson.contains("plys") && outputsJson["plys"].is_array()) {
@@ -311,6 +315,9 @@ namespace gs::management {
         json["data"]["resize_factor"] = data.data_set_info.resize_factor;
         json["data"]["test_every"] = data.data_set_info.test_every;
         json["data"]["images"] = data.data_set_info.images;
+
+        // training optimization
+        json["training"]["optimization"] = data.optimization.to_json();
 
         // Outputs section
         json["outputs"]["plys"] = nlohmann::ordered_json::array();
@@ -384,6 +391,7 @@ namespace gs::management {
     }
 
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
+                                              const param::OptimizationParameters& opt,
                                               const std::string& project_name) {
         auto project = std::make_shared<gs::management::Project>(true);
 
@@ -400,6 +408,7 @@ namespace gs::management {
             }
             project->setProjectOutputFolder(data.output_path);
             project->setDataInfo(data);
+            project->setOptimizationParams(opt);
         } catch (const std::exception& e) {
             std::cerr << "Error writing project file: " << e.what() << std::endl;
             return nullptr;

@@ -15,16 +15,9 @@ namespace gs {
 
         std::println("Starting headless training...");
 
-        auto project = gs::management::CreateNewProject(params->dataset);
+        auto project = gs::management::CreateNewProject(params->dataset, params->optimization);
         if (!project) {
             std::println(stderr, "project creation failed");
-            return -1;
-        }
-
-        // Save config
-        auto save_result = gs::param::save_training_parameters_to_json(*params, params->dataset.output_path);
-        if (!save_result) {
-            std::println(stderr, "Error saving config: {}", save_result.error());
             return -1;
         }
 

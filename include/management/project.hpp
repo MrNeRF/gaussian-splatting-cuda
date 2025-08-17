@@ -64,6 +64,8 @@ namespace gs::management {
         DataSetInfo data_set_info;
         OutputsInfo outputs;
 
+        // optimization params
+        param::OptimizationParameters optimization;
         // Additional fields for future versions can be added here
         nlohmann::json additional_fields; // For storing unknown fields during migration
     };
@@ -124,6 +126,8 @@ namespace gs::management {
         ProjectData& getProjectData() { return project_data_; }
 
         void setProjectData(const ProjectData& data) { project_data_ = data; }
+        void setOptimizationParams(const param::OptimizationParameters& opt) { project_data_.optimization = opt; }
+        [[nodiscard]] param::OptimizationParameters getOptimizationParams() const { return project_data_.optimization; }
 
         // Convenience methods
         void setProjectName(const std::string& name);
@@ -146,7 +150,7 @@ namespace gs::management {
         mutable std::mutex io_mutex_;
     };
 
-    std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
+    std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
                                               const std::string& project_name = "LichtFeldStudioProject");
 
 } // namespace gs::management

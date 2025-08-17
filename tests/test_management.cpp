@@ -60,6 +60,10 @@ protected:
         data.data_set_info.resize_factor = std::uniform_int_distribution<>(0, 5)(rng_);
         data.data_set_info.test_every = std::uniform_int_distribution<>(0, 5)(rng_);
 
+        // too lazy to test all fields - only test 2
+        data.optimization.grad_threshold = std::uniform_real_distribution<float>(0, 10)(rng_);
+        data.optimization.init_num_pts = std::uniform_int_distribution<>(0, 500000)(rng_);
+
         // Generate random PLY data
         int ply_count = std::uniform_int_distribution<>(0, 5)(rng_);
         for (int i = 0; i < ply_count; ++i) {
@@ -88,6 +92,16 @@ protected:
 
         if (a.project_creation_time != b.project_creation_time) {
             std::cout << "Creation time mismatch: '" << a.project_creation_time << "' vs '" << b.project_creation_time << "'" << std::endl;
+            return false;
+        }
+
+        if (abs(a.optimization.grad_threshold - b.optimization.grad_threshold) > 1e-5) {
+            std::cout << "grad_threshold mismatch: '" << a.optimization.grad_threshold << "' vs '" << b.optimization.grad_threshold << "'" << std::endl;
+            return false;
+        }
+
+        if (a.optimization.init_num_pts != b.optimization.init_num_pts) {
+            std::cout << "init_num_pts time mismatch: '" << a.optimization.init_num_pts << "' vs '" << b.optimization.init_num_pts << "'" << std::endl;
             return false;
         }
 
