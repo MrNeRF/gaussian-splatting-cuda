@@ -211,7 +211,8 @@ namespace gs {
         if (save_requested_.exchange(false)) {
             std::println("\nSaving checkpoint at iteration {}...", iter);
             auto checkpoint_path = params_.dataset.output_path / "checkpoints";
-            strategy_->get_model().save_ply(checkpoint_path, iter, /*join=*/true);
+            save_ply(checkpoint_path, iter, /*join=*/true);
+
             std::println("Checkpoint saved to {}", checkpoint_path.string());
 
             // Emit checkpoint saved event
@@ -225,7 +226,7 @@ namespace gs {
         if (stop_requested_.load()) {
             std::println("\nStopping training permanently at iteration {}...", iter);
             std::println("Saving final model...");
-            strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
+            save_ply(params_.dataset.output_path, iter, /*join=*/true);
             is_running_ = false;
         }
     }
@@ -374,8 +375,7 @@ namespace gs {
                         if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
                             const bool join_threads = (iter == params_.optimization.save_steps.back());
                             auto save_path = params_.dataset.output_path;
-                            strategy_->get_model().save_ply(save_path, iter, /*join=*/join_threads);
-
+                            save_ply(save_path, iter, /*join=*/join_threads);
                             // Emit checkpoint saved event
                             events::state::CheckpointSaved{
                                 .iteration = iter,
@@ -493,8 +493,7 @@ namespace gs {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                strategy_->get_model().save_ply(final_path, iter - 1, /*join=*/true);
-
+                save_ply(final_path, iter - 1, /*join=*/true);
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
                     .iteration = iter - 1,
@@ -545,6 +544,14 @@ namespace gs {
         }
 
         return cams;
+    }
+
+    void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
+        strategy_->get_model().save_ply(save_path, iter_num, /*join=*/join_threads);
+        if (lf_project_) {
+            std::filesystem::path ply_path = save_path / ("splat_" + std::to_string(iter_num) + ".ply");
+            lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num));
+        }
     }
 
 } // namespace gs
