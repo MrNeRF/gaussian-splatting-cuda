@@ -13,7 +13,7 @@ namespace gs::management {
     // Static member definitions
     const Version Project::CURRENT_VERSION(0, 0, 1);
     const std::string Project::FILE_HEADER = "LichtFeldStudio Project File";
-    const std::string Project::EXTENSION = ".lfj"; // LichtFeld Json
+    const std::string Project::EXTENSION = ".ls"; // LichtFeldStudio file
 
     // Version implementation
     Version::Version(const std::string& versionStr) {
