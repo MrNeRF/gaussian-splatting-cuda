@@ -92,6 +92,7 @@ namespace gs::management {
     };
 
     // Main project file manager class
+    // if you add additonal fields - add test add them in test_management too!
     class Project {
     private:
         ProjectData project_data_;
