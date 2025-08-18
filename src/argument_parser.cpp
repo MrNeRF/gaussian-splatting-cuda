@@ -48,6 +48,10 @@ namespace {
             // PLY viewing mode
             ::args::ValueFlag<std::string> view_ply(parser, "ply_file", "View a PLY file", {'v', "view"});
 
+            // LichtFeldStudio project arguments
+            // LichtFeldStudio project arguments
+            ::args::ValueFlag<std::string> project_name(parser, "proj_path", "LichtFeldStudio project path. If path is relative will be saved to output_path/project_path. Path must end with .lfj", {"proj_path"});
+
             // Training mode arguments
             ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to training data", {'d', "data-path"});
             ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to output", {'o', "output-path"});
@@ -185,6 +189,7 @@ namespace {
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
                                         resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
+                                        project_name_val = project_name ? std::optional<std::string>(::args::get(project_name)) : std::optional<std::string>(),
                                         images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
                                         test_every_val = test_every ? std::optional<int>(::args::get(test_every)) : std::optional<int>(),
                                         steps_scaler_val = steps_scaler ? std::optional<float>(::args::get(steps_scaler)) : std::optional<float>(),
@@ -220,6 +225,7 @@ namespace {
                 setVal(iterations_val, opt.iterations);
                 setVal(resize_factor_val, ds.resize_factor);
                 setVal(max_cap_val, opt.max_cap);
+                setVal(project_name_val, ds.project_path);
                 setVal(images_folder_val, ds.images);
                 setVal(test_every_val, ds.test_every);
                 setVal(steps_scaler_val, opt.steps_scaler);
@@ -255,6 +261,7 @@ namespace {
 
             opt.iterations *= scaler;
             opt.start_refine *= scaler;
+            opt.reset_every *= scaler;
             opt.stop_refine *= scaler;
             opt.refine_every *= scaler;
             opt.sh_degree_interval *= scaler;

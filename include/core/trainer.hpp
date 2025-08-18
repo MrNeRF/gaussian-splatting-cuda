@@ -7,6 +7,8 @@
 #include "core/metrics.hpp"
 #include "core/parameters.hpp"
 #include "core/training_progress.hpp"
+#include "project/project.hpp"
+
 #include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <expected>
@@ -67,6 +69,8 @@ namespace gs {
 
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
+        void setProject(std::shared_ptr<gs::management::Project> project) { lf_project_ = project; }
+
     private:
         // this is for unsubscribing in the DTOR
         gs::event::HandlerId train_started_handle_ = 0;
@@ -111,6 +115,8 @@ namespace gs {
         // Handle control requests
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
+        void save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads = true);
+
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;
@@ -150,6 +156,8 @@ namespace gs {
         at::cuda::CUDAEvent callback_launch_event_;
         // camera id to cam
         std::map<int, std::shared_ptr<const Camera>> m_cam_id_to_cam;
+        // LichtFeld project
+        std::shared_ptr<gs::management::Project> lf_project_ = nullptr;
     };
 
 } // namespace gs
