@@ -19,6 +19,7 @@ namespace gs::visualizer {
         // Unsubscribe from events
         event::bus().remove<events::state::SceneLoaded>(scene_loaded_handler_id_);
         event::bus().remove<events::ui::GridSettingsChanged>(grid_settings_handler_id_);
+        event::bus().remove<events::state::SceneChanged>(scene_changed_handler_id_);
     }
 
     void RenderingManager::initialize() {
@@ -54,6 +55,7 @@ namespace gs::visualizer {
         // Subscribe to SceneLoaded events
         scene_loaded_handler_id_ = events::state::SceneLoaded::when([this]([[maybe_unused]] const auto& event) {
             scene_just_loaded_ = true;
+            prev_result_.valid = false; // Invalidate cached result
         });
 
         // Subscribe to GridSettingsChanged events
@@ -66,6 +68,11 @@ namespace gs::visualizer {
                 infinite_grid_->setPlane(static_cast<RenderInfiniteGrid::GridPlane>(event.plane));
                 infinite_grid_->setOpacity(event.opacity);
             }
+        });
+
+        // Subscribe to SceneChanged events to invalidate cache
+        scene_changed_handler_id_ = events::state::SceneChanged::when([this]([[maybe_unused]] const auto& event) {
+            prev_result_.valid = false; // Invalidate cached result when scene changes
         });
     }
 
@@ -260,7 +267,7 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
-        // Don't skip render if we're in point cloud mode or if settings changed
+        // Don't skip render if we're in point cloud mode or if settings changed or if cached result is invalid
         if (prev_result_.valid && skip_render && !settings_.point_cloud_mode) {
             RenderingPipeline::uploadToScreen(prev_result_, *screen_renderer_, render_size);
             screen_renderer_->render(quad_shader_);

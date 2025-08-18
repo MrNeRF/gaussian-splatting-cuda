@@ -26,7 +26,7 @@ add_library(gs_visualizer OBJECT
         # GUI system
         gui/gui_manager.cpp
         gui/ui_widgets.cpp
-	    gui/viewport_gizmo.cpp
+        gui/viewport_gizmo.cpp
         gui/viewport_gizmo.cpp
         gui/text_renderer.cpp
         gui/panels/main_panel.cpp

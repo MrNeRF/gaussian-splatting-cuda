@@ -23,6 +23,11 @@ namespace gs {
             clearScene();
         });
 
+        // Handle add PLY command
+        cmd::AddPLY::when([this](const auto& cmd) {
+            addPLYInternal(cmd.path);
+        });
+
         // Query handlers
         query::GetSceneInfo::when([this](const auto&) {
             auto state = getCurrentState();
@@ -87,6 +92,23 @@ namespace gs {
             }
         });
 
+        // Handle PLY events to update state
+        state::PLYAdded::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            if (current_state_.type == SceneType::PLY) {
+                current_state_.num_gaussians = event.total_gaussians;
+                current_state_.num_plys = scene_ ? scene_->getSceneNodes().size() : 0;
+            }
+        });
+
+        state::PLYRemoved::when([this](const auto&) {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            if (current_state_.type == SceneType::PLY && scene_) {
+                current_state_.num_gaussians = scene_->getTotalGaussianCount();
+                current_state_.num_plys = scene_->getSceneNodes().size();
+            }
+        });
+
         // Handle render requests
         internal::RenderRequest::when([this](const auto& cmd) {
             RenderingPipeline::RenderRequest request{
@@ -122,6 +144,17 @@ namespace gs {
         } catch (const std::exception& e) {
             events::notify::Error{
                 .message = std::format("Failed to load PLY: {}", e.what()),
+                .details = std::format("Path: {}", path.string())}
+                .emit();
+        }
+    }
+
+    void SceneManager::addPLY(const std::filesystem::path& path) {
+        try {
+            addPLYInternal(path);
+        } catch (const std::exception& e) {
+            events::notify::Error{
+                .message = std::format("Failed to add PLY: {}", e.what()),
                 .details = std::format("Path: {}", path.string())}
                 .emit();
         }
@@ -183,11 +216,20 @@ namespace gs {
         auto end_time = std::chrono::high_resolution_clock::now();
         auto render_time = std::chrono::duration<float, std::milli>(end_time - start_time).count();
 
+        // Get actual gaussian count from scene
+        size_t actual_gaussians = 0;
+        if (scene_->hasModel()) {
+            const SplatData* model = scene_->getModel();
+            if (model) {
+                actual_gaussians = model->size();
+            }
+        }
+
         // Publish render completed event
         events::state::FrameRendered{
             .render_ms = render_time,
             .fps = 1000.0f / render_time,
-            .num_gaussians = static_cast<int>(current_state_.num_gaussians)}
+            .num_gaussians = static_cast<int>(actual_gaussians)}
             .emit();
 
         return result;
@@ -199,6 +241,11 @@ namespace gs {
         // Clear any existing scene
         clearScene();
 
+        // Create scene if needed
+        if (!scene_) {
+            scene_ = std::make_unique<Scene>();
+        }
+
         // Use the public loader interface
         auto loader = gs::loader::Loader::create();
 
@@ -208,7 +255,6 @@ namespace gs {
             .images_folder = "images",
             .validate_only = false,
             .progress = [this](float percent, const std::string& msg) {
-                // Could publish progress events here if needed
                 std::println("[{:5.1f}%] {}", percent, msg);
             }};
 
@@ -224,35 +270,107 @@ namespace gs {
             throw std::runtime_error("Expected PLY file but loader returned different data type");
         }
 
-        // Create scene if needed
-        if (!scene_) {
-            scene_ = std::make_unique<Scene>();
-        }
+        // Get gaussian count before moving
+        size_t gaussian_count = static_cast<size_t>((*splat_data)->size());
+        std::string name = path.stem().string();
 
-        // Set model - need to move the data out of the shared_ptr
-        scene_->setStandaloneModel(std::make_unique<SplatData>(std::move(**splat_data)));
-
-        // Update state
+        // Update state BEFORE adding to scene
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             current_state_.type = SceneType::PLY;
             current_state_.source_path = path;
-            current_state_.num_gaussians = scene_->getModel()->size();
+            current_state_.num_gaussians = gaussian_count;
             current_state_.is_training = false;
             current_state_.training_iteration.reset();
+            current_state_.num_plys = 1;
         }
 
-        // Notify
+        // Emit SceneLoaded BEFORE adding PLY
+        // This will set the panel to PLY mode and clear any existing nodes
         events::state::SceneLoaded{
             .scene = scene_.get(),
             .path = path,
             .type = events::state::SceneLoaded::Type::PLY,
-            .num_gaussians = current_state_.num_gaussians}
+            .num_gaussians = gaussian_count}
             .emit();
+
+        // Now add the PLY - this will emit PLYAdded event
+        scene_->addPLY(name, std::make_unique<SplatData>(std::move(**splat_data)));
 
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
-            .message = std::format("Loaded PLY with {} Gaussians", current_state_.num_gaussians),
+            .message = std::format("Loaded PLY '{}' with {} Gaussians", name, gaussian_count),
+            .source = "SceneManager"}
+            .emit();
+    }
+
+    void SceneManager::addPLYInternal(const std::filesystem::path& path) {
+        std::println("SceneManager: Adding PLY file to scene: {}", path.string());
+
+        // Ensure we have a scene
+        if (!scene_) {
+            scene_ = std::make_unique<Scene>();
+        }
+
+        // If not in PLY mode, do a regular load instead
+        if (current_state_.type != SceneType::PLY) {
+            loadPLYInternal(path);
+            return;
+        }
+
+        // Use the public loader interface
+        auto loader = gs::loader::Loader::create();
+
+        // Set up load options
+        gs::loader::LoadOptions options{
+            .resize_factor = -1,
+            .images_folder = "images",
+            .validate_only = false,
+            .progress = [this](float percent, const std::string& msg) {
+                std::println("[{:5.1f}%] {}", percent, msg);
+            }};
+
+        // Load the PLY file
+        auto load_result = loader->load(path, options);
+        if (!load_result) {
+            throw std::runtime_error(load_result.error());
+        }
+
+        // Extract SplatData from the result
+        auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
+        if (!splat_data || !*splat_data) {
+            throw std::runtime_error("Expected PLY file but loader returned different data type");
+        }
+
+        // Generate unique name if needed
+        std::string base_name = path.stem().string();
+        std::string name = base_name;
+        int counter = 1;
+
+        // Check if name already exists
+        auto nodes = scene_->getSceneNodes();
+        while (std::any_of(nodes.begin(), nodes.end(),
+                           [&name](const auto* node) { return node->name == name; })) {
+            name = std::format("{}_{}", base_name, counter++);
+        }
+
+        // Get gaussian count before moving
+        size_t gaussian_count = static_cast<size_t>((*splat_data)->size());
+
+        // Add to scene graph
+        scene_->addPLY(name, std::make_unique<SplatData>(std::move(**splat_data)));
+
+        // Update state AFTER adding to scene
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            current_state_.num_gaussians = scene_->getTotalGaussianCount();
+            current_state_.num_plys = scene_->getSceneNodes().size();
+        }
+
+        events::notify::Log{
+            .level = events::notify::Log::Level::Info,
+            .message = std::format("Added PLY '{}' to scene. Total: {} Gaussians in {} models",
+                                   name, current_state_.num_gaussians, current_state_.num_plys),
             .source = "SceneManager"}
             .emit();
     }
@@ -299,6 +417,7 @@ namespace gs {
                                                .size();
             current_state_.is_training = false;
             current_state_.training_iteration = 0;
+            current_state_.num_plys = 0;
         }
 
         // Notify

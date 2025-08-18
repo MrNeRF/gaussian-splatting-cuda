@@ -107,6 +107,7 @@ namespace gs::visualizer {
         bool scene_just_loaded_ = false;
         event::HandlerId scene_loaded_handler_id_ = 0;
         event::HandlerId grid_settings_handler_id_ = 0;
+        event::HandlerId scene_changed_handler_id_ = 0;
     };
 
 } // namespace gs::visualizer

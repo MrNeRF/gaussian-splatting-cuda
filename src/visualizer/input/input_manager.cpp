@@ -211,32 +211,26 @@ namespace gs::visualizer {
         if (!file_drop_callback_)
             return;
 
+        // Collect all PLY files and the first dataset directory
+        std::vector<std::filesystem::path> ply_files;
+        std::optional<std::filesystem::path> dataset_path;
+
         // Process each dropped file
         for (const auto& path_str : event.paths) {
             std::filesystem::path filepath(path_str);
 
             // Check if it's a PLY file
             if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
-                std::println("Dropped PLY file: {}", filepath.string());
-
-                if (file_drop_callback_(filepath, false)) {
-                    // Log the action
-                    events::notify::Log{
-                        .level = events::notify::Log::Level::Info,
-                        .message = std::format("Loaded PLY file via drag-and-drop: {}",
-                                               filepath.filename().string()),
-                        .source = "InputManager"}
-                        .emit();
-                    return;
-                }
+                ply_files.push_back(filepath);
+                continue;
             }
 
-            if (std::filesystem::is_directory(filepath)) {
-                // Check if it's a dataset directory
+            // Check if it's a dataset directory (only process the first one)
+            if (!dataset_path && std::filesystem::is_directory(filepath)) {
+                // Check for COLMAP dataset structure
                 bool is_colmap_dataset = false;
                 bool is_transforms_dataset = false;
 
-                // Check for COLMAP dataset structure
                 if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
                     std::filesystem::exists(filepath / "sparse" / "cameras.bin")) {
                     is_colmap_dataset = true;
@@ -249,20 +243,39 @@ namespace gs::visualizer {
                 }
 
                 if (is_colmap_dataset || is_transforms_dataset) {
-                    std::println("Dropped dataset directory: {}", filepath.string());
-
-                    if (file_drop_callback_(filepath, true)) {
-                        // Log the action
-                        events::notify::Log{
-                            .level = events::notify::Log::Level::Info,
-                            .message = std::format("Loaded {} dataset via drag-and-drop: {}",
-                                                   is_colmap_dataset ? "COLMAP" : "Transforms",
-                                                   filepath.filename().string()),
-                            .source = "InputManager"}
-                            .emit();
-                        return;
-                    }
+                    dataset_path = filepath;
+                    std::println("Found dataset directory: {}", filepath.string());
                 }
+            }
+        }
+
+        // Load all PLY files
+        if (!ply_files.empty()) {
+            std::println("Loading {} PLY file(s)", ply_files.size());
+
+            for (const auto& ply_path : ply_files) {
+                if (file_drop_callback_(ply_path, false)) {
+                    // Log the action
+                    events::notify::Log{
+                        .level = events::notify::Log::Level::Info,
+                        .message = std::format("Loaded PLY file via drag-and-drop: {}",
+                                               ply_path.filename().string()),
+                        .source = "InputManager"}
+                        .emit();
+                }
+            }
+        }
+
+        // Load dataset if found (after PLY files)
+        if (dataset_path) {
+            if (file_drop_callback_(*dataset_path, true)) {
+                // Log the action
+                events::notify::Log{
+                    .level = events::notify::Log::Level::Info,
+                    .message = std::format("Loaded dataset via drag-and-drop: {}",
+                                           dataset_path->filename().string()),
+                    .source = "InputManager"}
+                    .emit();
             }
         }
     }

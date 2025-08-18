@@ -47,6 +47,9 @@ namespace gs {
             EVENT(ShowWindow, std::string window_name; bool show;);
             EVENT(ExecuteConsole, std::string command;);
             EVENT(GoToCamView, int cam_id;);
+            EVENT(AddPLY, std::filesystem::path path; std::string name;);
+            EVENT(RemovePLY, std::string name;);
+            EVENT(SetPLYVisibility, std::string name; bool visible;);
         } // namespace cmd
 
         // ============================================================================
@@ -83,6 +86,8 @@ namespace gs {
             EVENT(SceneCleared, );
             EVENT(ModelUpdated, int iteration; size_t num_gaussians;);
             EVENT(SceneChanged, );
+            EVENT(PLYAdded, std::string name; size_t total_gaussians;);
+            EVENT(PLYRemoved, std::string name;);
 
             // Data loading
             EVENT(DatasetLoadStarted, std::filesystem::path path;);
