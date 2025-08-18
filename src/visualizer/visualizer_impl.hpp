@@ -98,6 +98,7 @@ namespace gs::visualizer {
         bool initialize();
         void update();
         void render();
+        void forceRender();
         void shutdown();
 
         // Event system

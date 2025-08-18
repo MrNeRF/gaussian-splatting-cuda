@@ -27,7 +27,15 @@ namespace gs::visualizer {
         if (cmd.is_dataset) {
             loadDataset(cmd.path);
         } else {
-            loadPLY(cmd.path);
+            // Check current mode to decide whether to add or replace
+            auto state = scene_manager_->getCurrentState();
+            if (state.type == SceneManager::SceneType::PLY) {
+                // In PLY mode, add to existing scene
+                addPLYToScene(cmd.path);
+            } else {
+                // Not in PLY mode or first PLY - load normally
+                loadPLY(cmd.path);
+            }
         }
     }
 
@@ -58,6 +66,36 @@ namespace gs::visualizer {
                 .emit();
 
             return std::unexpected(error_msg);
+        }
+    }
+
+    void DataLoadingService::addPLYToScene(const std::filesystem::path& path) {
+        try {
+            std::println("Adding PLY to scene: {}", path.string());
+
+            // Extract name from path
+            std::string name = path.stem().string();
+
+            // Emit add PLY command
+            events::cmd::AddPLY{
+                .path = path,
+                .name = name}
+                .emit();
+
+            // Log success
+            events::notify::Log{
+                .level = events::notify::Log::Level::Info,
+                .message = std::format("Added PLY '{}' to scene", name),
+                .source = "DataLoadingService"}
+                .emit();
+
+        } catch (const std::exception& e) {
+            std::string error_msg = std::format("Failed to add PLY: {}", e.what());
+
+            events::notify::Error{
+                .message = error_msg,
+                .details = std::format("Path: {}", path.string())}
+                .emit();
         }
     }
 

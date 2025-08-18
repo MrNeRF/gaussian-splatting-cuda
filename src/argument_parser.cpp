@@ -261,6 +261,7 @@ namespace {
 
             opt.iterations *= scaler;
             opt.start_refine *= scaler;
+            opt.reset_every *= scaler;
             opt.stop_refine *= scaler;
             opt.refine_every *= scaler;
             opt.sh_degree_interval *= scaler;
