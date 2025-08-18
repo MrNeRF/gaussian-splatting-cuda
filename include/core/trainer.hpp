@@ -69,7 +69,7 @@ namespace gs {
 
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
-        void setProject(std::shared_ptr<gs::management::Project> project) {lf_project_ = project;}
+        void setProject(std::shared_ptr<gs::management::Project> project) { lf_project_ = project; }
 
     private:
         // this is for unsubscribing in the DTOR
@@ -115,7 +115,7 @@ namespace gs {
         // Handle control requests
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
-        void save_ply(const std::filesystem::path & save_path, int iter_num, bool join_threads=true);
+        void save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads = true);
 
         // Member variables
         std::shared_ptr<CameraDataset> train_dataset_;
@@ -157,7 +157,7 @@ namespace gs {
         // camera id to cam
         std::map<int, std::shared_ptr<const Camera>> m_cam_id_to_cam;
         // LichtFeld project
-        std::shared_ptr<gs::management::Project> lf_project_=nullptr;
+        std::shared_ptr<gs::management::Project> lf_project_ = nullptr;
     };
 
 } // namespace gs

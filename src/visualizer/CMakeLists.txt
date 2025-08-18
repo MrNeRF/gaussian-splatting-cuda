@@ -18,10 +18,7 @@ add_library(gs_visualizer OBJECT
 
         # Rendering
         rendering/rendering_manager.cpp
-        rendering/rendering_pipeline.cpp
-        rendering/render_bounding_box.cpp
-        rendering/render_infinite_grid.cpp
-        rendering/point_cloud_renderer.cpp
+        rendering/framerate_controller.cpp
 
         # GUI system
         gui/gui_manager.cpp
@@ -50,17 +47,7 @@ add_library(gs_visualizer OBJECT
 
         # Training integration
         training/training_manager.cpp
-        rendering/render_coordinate_axes.cpp
-        rendering/framerate_controller.cpp
 )
-
-
-# CUDA-OpenGL interop support
-if (CUDA_GL_INTEROP_ENABLED)
-    target_sources(gs_visualizer PRIVATE
-            rendering/cuda_gl_interop.cpp
-    )
-endif ()
 
 # Set include directories
 target_include_directories(gs_visualizer
@@ -94,7 +81,8 @@ target_link_libraries(gs_visualizer
         CUDA::cudart
         Freetype::Freetype
         ${OPENGL_LIBRARIES}
-        gs_loader           # Use the loader module
+        gs_loader          
+	gs_rendering
         gaussian_host       # For access to core functionality
         gaussian_kernels    # For CUDA kernels if needed
 )

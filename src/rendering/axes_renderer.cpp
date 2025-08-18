@@ -1,7 +1,7 @@
-#include "rendering/render_coordinate_axes.hpp"
+#include "axes_renderer.hpp"
 #include <iostream>
 
-namespace gs {
+namespace gs::rendering {
 
     // Standard coordinate axes colors (RGB convention)
     const glm::vec3 RenderCoordinateAxes::X_AXIS_COLOR = glm::vec3(1.0f, 0.0f, 0.0f); // Red
@@ -180,4 +180,4 @@ namespace gs {
         }
     }
 
-} // namespace gs
+} // namespace gs::rendering

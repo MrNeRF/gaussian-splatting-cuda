@@ -2,10 +2,10 @@
 
 #include "geometry/bounding_box.hpp"
 
-#include "rendering/shader.hpp"
+#include "shader.hpp"
 #include <memory>
 
-namespace gs {
+namespace gs::rendering {
     class RenderBoundingBox : public geometry::BoundingBox {
     public:
         RenderBoundingBox();
@@ -55,4 +55,4 @@ namespace gs {
         // Line indices for wireframe cube (12 edges, 24 indices)
         static const unsigned int cube_line_indices_[24];
     };
-} // namespace gs
+} // namespace gs::rendering

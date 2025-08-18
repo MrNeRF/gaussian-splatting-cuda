@@ -1,10 +1,10 @@
-#include "rendering/render_infinite_grid.hpp"
-#include "internal/resource_paths.hpp"
+#include "grid_renderer.hpp"
+#include "shader_paths.hpp"
 #include <iostream>
 #include <random>
 #include <vector>
 
-namespace gs {
+namespace gs::rendering {
 
     RenderInfiniteGrid::RenderInfiniteGrid() = default;
 
@@ -19,8 +19,8 @@ namespace gs {
         try {
             // Create shader for infinite grid rendering
             shader_ = std::make_unique<Shader>(
-                (visualizer::getShaderPath("infinite_grid.vert")).string().c_str(),
-                (visualizer::getShaderPath("infinite_grid.frag")).string().c_str(),
+                (rendering::getShaderPath("infinite_grid.vert")).string().c_str(),
+                (rendering::getShaderPath("infinite_grid.frag")).string().c_str(),
                 false); // Don't use shader's buffer management
 
             // Generate OpenGL objects
@@ -194,4 +194,4 @@ namespace gs {
         }
     }
 
-} // namespace gs
+} // namespace gs::rendering

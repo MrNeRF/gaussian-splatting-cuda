@@ -5,7 +5,7 @@
 #include "cuda_gl_interop.hpp"
 #endif
 
-namespace gs {
+namespace gs::rendering {
 
     RenderingPipeline::RenderingPipeline()
         : background_(torch::zeros({3}, torch::kFloat32).to(torch::kCUDA)) {
@@ -262,4 +262,4 @@ namespace gs {
             fov_rad);
     }
 
-} // namespace gs
+} // namespace gs::rendering

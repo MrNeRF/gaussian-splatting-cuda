@@ -1,6 +1,6 @@
-#include "rendering/render_bounding_box.hpp"
+#include "bbox_renderer.hpp"
 
-namespace gs {
+namespace gs::rendering {
 
     RenderBoundingBox::RenderBoundingBox() : color_(1.0f, 1.0f, 0.0f), // Yellow by default
                                              line_width_(2.0f),
@@ -169,4 +169,4 @@ namespace gs {
         // Vertical edges
         0, 4, 1, 5, 2, 6, 3, 7};
 
-} // namespace gs
+} // namespace gs::rendering

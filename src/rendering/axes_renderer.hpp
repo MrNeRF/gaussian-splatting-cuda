@@ -1,11 +1,11 @@
 #pragma once
 
-#include "rendering/shader.hpp"
+#include "shader.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
-namespace gs {
+namespace gs::rendering {
     class RenderCoordinateAxes {
     public:
         RenderCoordinateAxes();
@@ -59,4 +59,4 @@ namespace gs {
 
         std::vector<AxisVertex> vertices_;
     };
-} // namespace gs
+} // namespace gs::rendering
