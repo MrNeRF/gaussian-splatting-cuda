@@ -38,6 +38,7 @@ namespace gs {
             size_t num_gaussians = 0;
             bool is_training = false;
             std::optional<int> training_iteration;
+            size_t num_plys = 0; // For PLY mode
         };
 
         SceneManager();
@@ -59,6 +60,7 @@ namespace gs {
 
         // High-level operations
         void loadPLY(const std::filesystem::path& path);
+        void addPLY(const std::filesystem::path& path); // New method
         void loadDataset(const std::filesystem::path& path,
                          const param::TrainingParameters& params);
         void clearScene();
@@ -80,6 +82,7 @@ namespace gs {
 
         // Internal operations
         void loadPLYInternal(const std::filesystem::path& path);
+        void addPLYInternal(const std::filesystem::path& path);
         void loadDatasetInternal(const std::filesystem::path& path,
                                  const param::TrainingParameters& params);
         void updateSceneState();

@@ -31,6 +31,7 @@ namespace gs::visualizer {
     private:
         void setupEventHandlers();
         void handleLoadFileCommand(const events::cmd::LoadFile& cmd);
+        void addPLYToScene(const std::filesystem::path& path);
 
         SceneManager* scene_manager_;
         ViewerStateManager* state_manager_;
