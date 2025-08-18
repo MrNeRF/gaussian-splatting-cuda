@@ -418,4 +418,30 @@ namespace gs::management {
         return project;
     }
 
+    std::filesystem::path FindProjectFile(const std::filesystem::path& directory) {
+        if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+            return {};
+        }
+
+        std::filesystem::path foundPath;
+        int count = 0;
+
+        for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".ls") {
+                ++count;
+                if (count == 1) {
+                    foundPath = entry.path();
+                } else {
+                    std::print("Multiple .ls files found in {}\n", directory.string());
+                    return {};
+                }
+            }
+        }
+
+        if (count == 0) {
+            return {};
+        }
+        return foundPath;
+    }
+
 } // namespace gs::management

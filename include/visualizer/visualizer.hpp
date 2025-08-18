@@ -11,6 +11,11 @@ namespace gs {
     }
 } // namespace gs
 
+namespace gs::management {
+    class Project;
+}
+
+
 namespace gs::visualizer {
 
     struct ViewerOptions {
@@ -29,6 +34,12 @@ namespace gs::visualizer {
         virtual void setParameters(const param::TrainingParameters& params) = 0;
         virtual std::expected<void, std::string> loadPLY(const std::filesystem::path& path) = 0;
         virtual std::expected<void, std::string> loadDataset(const std::filesystem::path& path) = 0;
+
+        // project handling
+        virtual bool openProject(const std::filesystem::path& path) = 0;
+        virtual bool closeProject(const std::filesystem::path& path) = 0;
+        virtual std::shared_ptr<gs::management::Project> getProject(const std::filesystem::path& path) = 0;
+
         virtual void clearScene() = 0;
 
         virtual ~Visualizer() = default;

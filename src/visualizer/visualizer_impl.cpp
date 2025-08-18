@@ -375,4 +375,33 @@ namespace gs::visualizer {
         return nullptr;
     }
 
+    bool VisualizerImpl::openProject(const std::filesystem::path& path) {
+
+        auto project = std::make_shared<gs::management::Project>();
+
+        if (!project) {
+            std::cerr << "openProject: error creating project " << std::endl;
+            return false;
+        }
+
+        if (!project->readFromFile(path)) {
+            std::cerr << "reading  project file failed " << path.string() << std::endl;
+            return false;
+        }
+
+        project_ = project;
+    }
+
+    bool VisualizerImpl::closeProject(const std::filesystem::path& path) {
+
+        if (!project_) {
+            return false;
+        }
+        return project_->writeToFile();
+    }
+
+    std::shared_ptr<gs::management::Project> VisualizerImpl::getProject(const std::filesystem::path& path) {
+        return project_;
+    }
+
 } // namespace gs::visualizer

@@ -5,6 +5,7 @@
 #include "core/memory_monitor.hpp"
 #include "core/parameters.hpp"
 #include "core/viewer_state_manager.hpp"
+#include "project/project.hpp"
 #include "gui/gui_manager.hpp"
 #include "input/input_manager.hpp"
 #include "internal/viewport.hpp"
@@ -39,6 +40,10 @@ namespace gs::visualizer {
         std::expected<void, std::string> loadPLY(const std::filesystem::path& path) override;
         std::expected<void, std::string> loadDataset(const std::filesystem::path& path) override;
         void clearScene() override;
+
+        bool openProject(const std::filesystem::path& path) override;
+        bool closeProject(const std::filesystem::path& path) override;
+        std::shared_ptr<gs::management::Project> getProject(const std::filesystem::path& path) override;
 
         // Getters for GUI (delegating to state manager)
         ViewerMode getCurrentMode() const { return state_manager_->getCurrentMode(); }
@@ -125,6 +130,8 @@ namespace gs::visualizer {
         std::unique_ptr<MemoryMonitor> memory_monitor_;
         // State
         bool gui_initialized_ = false;
+        //Project
+        std::shared_ptr<gs::management::Project> project_ = nullptr;
     };
 
 } // namespace gs::visualizer
