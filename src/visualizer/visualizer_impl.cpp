@@ -169,6 +169,14 @@ namespace gs::visualizer {
                 }
             }
         });
+
+        // Scene change event - request redraw
+        state::SceneChanged::when([this](const auto&) {
+            if (window_manager_) {
+                window_manager_->requestRedraw();
+            }
+        });
+
         internal::TrainerReady::when([this](const auto&) {
             internal::TrainingReadyToStart{}.emit();
         });
@@ -319,6 +327,12 @@ namespace gs::visualizer {
 
     void VisualizerImpl::run() {
         main_loop_->run();
+    }
+
+    void VisualizerImpl::forceRender() {
+        // Force an immediate render cycle
+        update();
+        render();
     }
 
     void VisualizerImpl::setParameters(const param::TrainingParameters& params) {

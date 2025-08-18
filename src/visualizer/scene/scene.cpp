@@ -61,6 +61,9 @@ namespace gs {
             scene_graph_.push_back(std::move(node));
         }
 
+        // Invalidate cache
+        cache_valid_ = false;
+
         // Initialize pipeline if needed
         if (!pipeline_) {
             pipeline_ = std::make_unique<RenderingPipeline>();
@@ -69,11 +72,13 @@ namespace gs {
         // Emit event with the correct total gaussian count
         events::state::PLYAdded{
             .name = name,
-            .total_gaussians = gaussian_count // Use the individual model's count, not total
-        }
+            .total_gaussians = gaussian_count}
             .emit();
 
         std::println("Added PLY '{}' with {} gaussians to scene graph", name, gaussian_count);
+
+        // Force a scene change event to trigger immediate rendering
+        events::state::SceneChanged{}.emit();
     }
 
     void Scene::removePLY(const std::string& name) {
@@ -82,6 +87,9 @@ namespace gs {
 
         if (it != scene_graph_.end()) {
             scene_graph_.erase(it);
+
+            // Invalidate cache
+            cache_valid_ = false;
 
             // Emit event
             events::state::PLYRemoved{.name = name}.emit();
@@ -98,6 +106,8 @@ namespace gs {
     void Scene::clearPLYs() {
         if (!scene_graph_.empty()) {
             scene_graph_.clear();
+            cache_valid_ = false;
+            cached_combined_model_.reset();
 
             auto old_mode = mode_;
             mode_ = Mode::Empty;
@@ -109,10 +119,12 @@ namespace gs {
         auto it = std::find_if(scene_graph_.begin(), scene_graph_.end(),
                                [&name](const SceneNode& node) { return node.name == name; });
 
-        if (it != scene_graph_.end()) {
+        if (it != scene_graph_.end() && it->visible != visible) {
             it->visible = visible;
-            std::println("Set PLY '{}' visibility to {}", name, visible);
-            // Emit scene changed event to trigger re-render
+            // Invalidate cache when visibility changes
+            cache_valid_ = false;
+
+            // Emit scene changed event to trigger re-render immediately
             events::state::SceneChanged{}.emit();
         }
     }
@@ -138,6 +150,8 @@ namespace gs {
 
     void Scene::setModelProvider(std::shared_ptr<IModelProvider> provider) {
         model_provider_ = provider;
+        cache_valid_ = false;
+        cached_combined_model_.reset();
 
         if (!pipeline_) {
             pipeline_ = std::make_unique<RenderingPipeline>();
@@ -169,6 +183,8 @@ namespace gs {
         auto old_mode = mode_;
         model_provider_.reset();
         scene_graph_.clear();
+        cache_valid_ = false;
+        cached_combined_model_.reset();
         mode_ = Mode::Empty;
 
         if (old_mode != mode_) {
@@ -178,9 +194,9 @@ namespace gs {
 
     bool Scene::hasModel() const {
         if (mode_ == Mode::Viewing) {
-            // Check if we have any visible models
-            return std::any_of(scene_graph_.begin(), scene_graph_.end(),
-                               [](const SceneNode& node) { return node.visible && node.model; });
+            // Return true if we have any models, regardless of visibility
+            // The combined model will be empty if all are invisible
+            return !scene_graph_.empty();
         } else if (mode_ == Mode::Training) {
             return model_provider_ && model_provider_->hasModel();
         }
@@ -188,13 +204,10 @@ namespace gs {
     }
 
     const SplatData* Scene::getModel() const {
-        if (mode_ == Mode::Viewing && !scene_graph_.empty()) {
-            // Return first visible model
-            for (const auto& node : scene_graph_) {
-                if (node.visible && node.model) {
-                    return node.model.get();
-                }
-            }
+        if (mode_ == Mode::Viewing) {
+            // Return cached combined model
+            rebuildCombinedModelIfNeeded();
+            return cached_combined_model_.get();
         } else if (model_provider_) {
             return model_provider_->getModel();
         }
@@ -202,17 +215,113 @@ namespace gs {
     }
 
     SplatData* Scene::getMutableModel() {
-        if (mode_ == Mode::Viewing && !scene_graph_.empty()) {
-            // Return first visible model
-            for (auto& node : scene_graph_) {
-                if (node.visible && node.model) {
-                    return node.model.get();
-                }
-            }
+        if (mode_ == Mode::Viewing) {
+            // For mutable access, we need to invalidate cache
+            cache_valid_ = false;
+            rebuildCombinedModelIfNeeded();
+            return cached_combined_model_.get();
         } else if (model_provider_) {
             return model_provider_->getMutableModel();
         }
         return nullptr;
+    }
+
+    void Scene::rebuildCombinedModelIfNeeded() const {
+        if (cache_valid_) {
+            return;
+        }
+
+        // Collect visible models
+        std::vector<const SplatData*> visible_models;
+        size_t total_gaussians = 0;
+
+        for (const auto& node : scene_graph_) {
+            if (node.visible && node.model) {
+                visible_models.push_back(node.model.get());
+                total_gaussians += node.gaussian_count;
+            }
+        }
+
+        if (visible_models.empty()) {
+            // No visible models - clear cache
+            cached_combined_model_.reset();
+            cache_valid_ = true;
+            return;
+        }
+
+        std::println("Rebuilding combined model with {} visible models, {} total gaussians",
+                     visible_models.size(), total_gaussians);
+
+        // Get device and dtype from first model
+        auto device = visible_models[0]->means().device();
+        auto dtype = visible_models[0]->means().dtype();
+
+        // Pre-allocate tensors for all visible gaussians
+        auto combined_means = torch::empty({static_cast<int64_t>(total_gaussians), 3}, dtype).to(device);
+        auto combined_sh0 = torch::empty({static_cast<int64_t>(total_gaussians),
+                                          visible_models[0]->sh0().size(1),
+                                          visible_models[0]->sh0().size(2)},
+                                         dtype)
+                                .to(device);
+        auto combined_shN = torch::empty({static_cast<int64_t>(total_gaussians),
+                                          visible_models[0]->shN().size(1),
+                                          visible_models[0]->shN().size(2)},
+                                         dtype)
+                                .to(device);
+        auto combined_opacity = torch::empty({static_cast<int64_t>(total_gaussians), 1}, dtype).to(device);
+        auto combined_scaling = torch::empty({static_cast<int64_t>(total_gaussians), 3}, dtype).to(device);
+        auto combined_rotation = torch::empty({static_cast<int64_t>(total_gaussians), 4}, dtype).to(device);
+
+        // Concatenate all visible models
+        size_t current_idx = 0;
+        int max_sh_degree = 0;
+        float avg_scene_scale = 0.0f;
+
+        for (const auto* model : visible_models) {
+            int64_t model_size = model->size();
+
+            // Copy means
+            combined_means.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->means();
+
+            // Copy SH coefficients
+            combined_sh0.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->sh0();
+            combined_shN.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->shN();
+
+            // Copy other attributes
+            combined_opacity.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->opacity_raw();
+            combined_scaling.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->scaling_raw();
+            combined_rotation.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->rotation_raw();
+
+            // Track max SH degree and average scene scale
+            max_sh_degree = std::max(max_sh_degree, model->get_active_sh_degree());
+            avg_scene_scale += model->get_scene_scale();
+
+            current_idx += model_size;
+        }
+
+        avg_scene_scale /= visible_models.size();
+
+        // Create combined SplatData
+        // Set requires_grad to match the original models
+        combined_means = combined_means.set_requires_grad(true);
+        combined_sh0 = combined_sh0.set_requires_grad(true);
+        combined_shN = combined_shN.set_requires_grad(true);
+        combined_opacity = combined_opacity.set_requires_grad(true);
+        combined_scaling = combined_scaling.set_requires_grad(true);
+        combined_rotation = combined_rotation.set_requires_grad(true);
+
+        cached_combined_model_ = std::make_unique<SplatData>(
+            max_sh_degree,
+            combined_means,
+            combined_sh0,
+            combined_shN,
+            combined_scaling,
+            combined_rotation,
+            combined_opacity,
+            avg_scene_scale);
+
+        cache_valid_ = true;
+        std::println("Combined model created with {} gaussians", cached_combined_model_->size());
     }
 
     void Scene::setStandaloneModel(std::unique_ptr<SplatData> model) {
@@ -237,44 +346,28 @@ namespace gs {
     }
 
     RenderingPipeline::RenderResult Scene::render(const RenderingPipeline::RenderRequest& request) {
-        if (!hasModel() || !pipeline_) {
+        if (!pipeline_) {
             return RenderingPipeline::RenderResult(false);
         }
 
-        // TODO: Implement proper multi-model rendering
-        // For now, we need to render each visible model separately and composite them
-        // This is a limitation of the current RenderingPipeline which expects a single SplatData
-
-        // Count visible models
-        int visible_count = 0;
-        const SplatData* last_visible_model = nullptr;
-
-        for (const auto& node : scene_graph_) {
-            if (node.visible && node.model) {
-                visible_count++;
-                last_visible_model = node.model.get();
+        // For viewing mode, we should always try to get the model
+        // even if all are invisible (will return empty combined model)
+        if (mode_ == Mode::Viewing) {
+            const SplatData* model = getModel();
+            if (!model || model->size() == 0) {
+                // No visible models to render
+                return RenderingPipeline::RenderResult(false);
             }
+            return pipeline_->render(*model, request);
+        } else if (mode_ == Mode::Training && hasModel()) {
+            const SplatData* model = getModel();
+            if (!model) {
+                return RenderingPipeline::RenderResult(false);
+            }
+            return pipeline_->render(*model, request);
         }
 
-        if (visible_count == 0) {
-            // No visible models
-            return RenderingPipeline::RenderResult(false);
-        }
-
-        if (visible_count == 1) {
-            // Single model - render normally
-            return pipeline_->render(*last_visible_model, request);
-        }
-
-        // Multiple visible models - for now, just render the first one
-        // TODO: Implement proper multi-model compositing
-        const SplatData* first_visible = getModel();
-        if (!first_visible) {
-            return RenderingPipeline::RenderResult(false);
-        }
-
-        std::println("Warning: Rendering only first visible model out of {} visible models", visible_count);
-        return pipeline_->render(*first_visible, request);
+        return RenderingPipeline::RenderResult(false);
     }
 
     void Scene::handleModelInfoQuery() {
@@ -285,11 +378,11 @@ namespace gs {
                 response.has_model = true;
                 response.num_gaussians = getTotalGaussianCount();
 
-                // Find first visible model for sh_degree and scene_scale
-                const SplatData* first_visible = getModel();
-                if (first_visible) {
-                    response.sh_degree = first_visible->get_active_sh_degree();
-                    response.scene_scale = first_visible->get_scene_scale();
+                // Get combined model to access its properties
+                const SplatData* combined = getModel();
+                if (combined) {
+                    response.sh_degree = combined->get_active_sh_degree();
+                    response.scene_scale = combined->get_scene_scale();
                 } else {
                     response.sh_degree = 0;
                     response.scene_scale = 0.0f;

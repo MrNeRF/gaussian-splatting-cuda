@@ -55,7 +55,7 @@ namespace gs {
         void clearModel();
         bool hasModel() const;
 
-        // Get model for rendering (returns first visible PLY or training model)
+        // Get model for rendering (returns combined model in PLY mode)
         const SplatData* getModel() const;
         SplatData* getMutableModel();
 
@@ -83,10 +83,20 @@ namespace gs {
 
         std::unique_ptr<RenderingPipeline> pipeline_;
 
+        // Caching for combined model
+        mutable std::unique_ptr<SplatData> cached_combined_model_;
+        mutable bool cache_valid_ = false;
+
+        // Track if pipeline needs reset
+        mutable bool pipeline_needs_reset_ = false;
+
         // Event handlers
         void handleModelInfoQuery();
         void publishModeChange(Mode old_mode, Mode new_mode);
         void setupEventHandlers();
+
+        // Helper to rebuild combined model when needed
+        void rebuildCombinedModelIfNeeded() const;
     };
 
 } // namespace gs

@@ -216,11 +216,20 @@ namespace gs {
         auto end_time = std::chrono::high_resolution_clock::now();
         auto render_time = std::chrono::duration<float, std::milli>(end_time - start_time).count();
 
+        // Get actual gaussian count from scene
+        size_t actual_gaussians = 0;
+        if (scene_->hasModel()) {
+            const SplatData* model = scene_->getModel();
+            if (model) {
+                actual_gaussians = model->size();
+            }
+        }
+
         // Publish render completed event
         events::state::FrameRendered{
             .render_ms = render_time,
             .fps = 1000.0f / render_time,
-            .num_gaussians = static_cast<int>(current_state_.num_gaussians)}
+            .num_gaussians = static_cast<int>(actual_gaussians)}
             .emit();
 
         return result;
