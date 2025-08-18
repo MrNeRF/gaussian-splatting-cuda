@@ -1,4 +1,5 @@
 #include "bbox_renderer.hpp"
+#include "shader_paths.hpp"
 
 namespace gs::rendering {
 
@@ -35,10 +36,9 @@ namespace gs::rendering {
 
         try {
             // Create shader for bounding box rendering
-            std::string shader_path = std::string(PROJECT_ROOT_PATH) + "/src/visualizer/rendering/shaders/";
             shader_ = std::make_unique<Shader>(
-                (shader_path + "bounding_box.vert").c_str(),
-                (shader_path + "bounding_box.frag").c_str(),
+                (getShaderPath("bounding_box.vert")).string().c_str(),
+                (getShaderPath("bounding_box.frag")).string().c_str(),
                 false); // Don't use shader's buffer management
 
             // Generate OpenGL objects

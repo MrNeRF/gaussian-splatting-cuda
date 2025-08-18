@@ -55,12 +55,8 @@ foreach(SHADER_FILE ${SHADER_FILES})
 endforeach()
 
 target_compile_definitions(gs_rendering PRIVATE
-    SHADER_PATH="${RENDERING_BUILD_RESOURCE_DIR}/shaders"
-    PROJECT_ROOT_PATH="${PROJECT_SOURCE_DIR}"
-    $<$<BOOL:${CUDA_GL_INTEROP_ENABLED}>:CUDA_GL_INTEROP_ENABLED>
-)
-
-# Export for installation
-install(FILES ${CMAKE_SOURCE_DIR}/include/rendering/rendering.hpp
-        DESTINATION include/rendering
+        SHADER_PATH="${RENDERING_BUILD_RESOURCE_DIR}/shaders"
+        RENDERING_SOURCE_SHADER_PATH="${RENDERING_SOURCE_RESOURCE_DIR}/shaders"
+        PROJECT_ROOT_PATH="${PROJECT_SOURCE_DIR}"
+        $<$<BOOL:${CUDA_GL_INTEROP_ENABLED}>:CUDA_GL_INTEROP_ENABLED>
 )

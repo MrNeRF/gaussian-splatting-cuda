@@ -1,4 +1,5 @@
 #include "axes_renderer.hpp"
+#include "shader_paths.hpp"
 #include <iostream>
 
 namespace gs::rendering {
@@ -59,10 +60,9 @@ namespace gs::rendering {
 
         try {
             // Create shader for coordinate axes rendering
-            std::string shader_path = std::string(PROJECT_ROOT_PATH) + "/src/visualizer/rendering/shaders/";
             shader_ = std::make_unique<Shader>(
-                (shader_path + "coordinate_axes.vert").c_str(),
-                (shader_path + "coordinate_axes.frag").c_str(),
+                (getShaderPath("coordinate_axes.vert")).string().c_str(),
+                (getShaderPath("coordinate_axes.frag")).string().c_str(),
                 false); // Don't use shader's buffer management
 
             // Generate OpenGL objects
