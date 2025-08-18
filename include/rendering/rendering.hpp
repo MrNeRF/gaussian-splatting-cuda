@@ -4,11 +4,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <optional>
-
-// Forward declarations
-namespace torch {
-    class Tensor;
-}
+#include <torch/types.h>
 
 namespace gs {
     class SplatData;

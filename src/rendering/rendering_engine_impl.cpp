@@ -1,12 +1,9 @@
 #include "rendering_engine_impl.hpp"
 #include "core/splat_data.hpp"
+#include "geometry/bounding_box.hpp"
 #include <print>
 
 namespace gs::rendering {
-
-    std::unique_ptr<RenderingEngine> RenderingEngine::create() {
-        return std::make_unique<RenderingEngineImpl>();
-    }
 
     RenderingEngineImpl::RenderingEngineImpl() = default;
 
@@ -95,9 +92,9 @@ namespace gs::rendering {
             .voxel_size = request.voxel_size};
 
         // Convert crop box if present
-        std::unique_ptr<geometry::BoundingBox> temp_crop_box;
+        std::unique_ptr<gs::geometry::BoundingBox> temp_crop_box;
         if (request.crop_box) {
-            temp_crop_box = std::make_unique<geometry::BoundingBox>();
+            temp_crop_box = std::make_unique<gs::geometry::BoundingBox>();
             temp_crop_box->setBounds(request.crop_box->min, request.crop_box->max);
             // Note: transform handling would need to be added to geometry::BoundingBox
             pipeline_req.crop_box = temp_crop_box.get();

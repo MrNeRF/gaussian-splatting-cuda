@@ -63,12 +63,12 @@ namespace gs {
         }
 
         // Rendering
-        RenderingPipeline::RenderResult render(const RenderingPipeline::RenderRequest& request);
+        gs::rendering::RenderingPipeline::RenderResult render(const gs::rendering::RenderingPipeline::RenderRequest& request);
 
     private:
         Mode mode_ = Mode::Empty;
         std::shared_ptr<IModelProvider> model_provider_;
-        std::unique_ptr<RenderingPipeline> pipeline_;
+        std::unique_ptr<gs::rendering::RenderingPipeline> pipeline_;
 
         // Event handlers
         void handleModelInfoQuery();

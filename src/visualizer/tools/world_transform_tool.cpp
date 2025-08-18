@@ -1,5 +1,6 @@
 #include "tools/world_transform_tool.hpp"
 #include "core/events.hpp"
+#include "rendering/axes_renderer.hpp"
 
 #include <imgui.h>
 
@@ -7,7 +8,7 @@ namespace gs::visualizer {
 
     WorldTransformTool::WorldTransformTool() : translation_(0.0f),
                                                angles_deg_(0.0f) {
-        coordinate_axes_ = std::make_shared<RenderCoordinateAxes>();
+        coordinate_axes_ = std::make_shared<gs::rendering::RenderCoordinateAxes>();
         world_to_user = std::make_shared<geometry::EuclideanTransform>();
         setupEventHandlers();
     }

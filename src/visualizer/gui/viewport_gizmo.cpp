@@ -1,6 +1,7 @@
 #include "gui/viewport_gizmo.hpp"
 #include "gui/text_renderer.hpp"
 #include "internal/resource_paths.hpp"
+#include "rendering/shader.hpp"
 #include <algorithm>
 #include <iostream>
 #include <numbers>
@@ -60,7 +61,7 @@ namespace gs::gui {
     void ViewportGizmo::createShaders() {
         // Use the shader system to create shaders
         try {
-            shader_ = std::make_unique<Shader>(
+            shader_ = std::make_unique<gs::rendering::Shader>(
                 (gs::visualizer::getShaderPath("viewport_gizmo.vert")).string().c_str(),
                 (gs::visualizer::getShaderPath("viewport_gizmo.frag")).string().c_str(),
                 false // Don't create buffer

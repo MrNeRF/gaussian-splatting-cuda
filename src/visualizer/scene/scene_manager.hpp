@@ -68,8 +68,8 @@ namespace gs {
         bool hasScene() const { return scene_ != nullptr && scene_->hasModel(); }
 
         // Rendering request
-        RenderingPipeline::RenderResult render(
-            const RenderingPipeline::RenderRequest& request);
+        gs::rendering::RenderingPipeline::RenderResult render(
+            const gs::rendering::RenderingPipeline::RenderRequest& request);
 
         TrainerManager* getTrainerManager() { return trainer_manager_; }
         const TrainerManager* getTrainerManager() const { return trainer_manager_; }

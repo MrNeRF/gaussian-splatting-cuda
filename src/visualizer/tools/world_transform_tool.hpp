@@ -1,10 +1,13 @@
 #pragma once
 
 #include "geometry/euclidean_transform.hpp"
-#include "rendering/render_coordinate_axes.hpp"
 #include "tools/tool_base.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+
+namespace gs::rendering {
+    class RenderCoordinateAxes;
+}
 
 namespace gs::visualizer {
 
@@ -25,7 +28,7 @@ namespace gs::visualizer {
         void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) override;
 
         // World box specific methods
-        std::shared_ptr<const gs::RenderCoordinateAxes> getAxes() { return coordinate_axes_; }
+        std::shared_ptr<const gs::rendering::RenderCoordinateAxes> getAxes() { return coordinate_axes_; }
 
         [[nodiscard]] bool ShouldShowAxes() const { return show_axes_; }
         [[nodiscard]] bool IsTrivialTrans() const;
@@ -41,7 +44,7 @@ namespace gs::visualizer {
         void setupEventHandlers();
         void drawControls(const gs::gui::UIContext& ui_ctx);
 
-        std::shared_ptr<gs::RenderCoordinateAxes> coordinate_axes_;
+        std::shared_ptr<gs::rendering::RenderCoordinateAxes> coordinate_axes_;
         std::shared_ptr<geometry::EuclideanTransform> world_to_user;
 
         // UI state

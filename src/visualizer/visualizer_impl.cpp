@@ -2,6 +2,7 @@
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
 #include "core/model_providers.hpp"
+#include "scene/scene_manager.hpp"
 #include "tools/background_tool.hpp"
 #include "tools/crop_box_tool.hpp"
 
@@ -255,7 +256,7 @@ namespace gs::visualizer {
         rendering_manager_->updateSettings(settings);
 
         // Get crop box for rendering
-        RenderBoundingBox* crop_box_ptr = nullptr;
+        gs::rendering::RenderBoundingBox* crop_box_ptr = nullptr;
         if (auto crop_box = getCropBox()) {
             crop_box_ptr = crop_box.get();
         }
@@ -277,7 +278,7 @@ namespace gs::visualizer {
             has_viewport_region = true;
         }
         // Get coord axes and world 2 user for rendering
-        const RenderCoordinateAxes* coord_axes_ptr = nullptr;
+        const gs::rendering::RenderCoordinateAxes* coord_axes_ptr = nullptr;
         if (auto coord_axes = getAxes()) {
             coord_axes_ptr = coord_axes.get();
         }
@@ -337,14 +338,14 @@ namespace gs::visualizer {
         data_loader_->clearScene();
     }
 
-    std::shared_ptr<RenderBoundingBox> VisualizerImpl::getCropBox() const {
+    std::shared_ptr<gs::rendering::RenderBoundingBox> VisualizerImpl::getCropBox() const {
         if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
             return crop_tool->getBoundingBox();
         }
         return nullptr;
     }
 
-    std::shared_ptr<const RenderCoordinateAxes> VisualizerImpl::getAxes() const {
+    std::shared_ptr<const gs::rendering::RenderCoordinateAxes> VisualizerImpl::getAxes() const {
         if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
             return world_transform->getAxes();
         }

@@ -81,10 +81,10 @@ target_link_libraries(gs_visualizer
         CUDA::cudart
         Freetype::Freetype
         ${OPENGL_LIBRARIES}
-        gs_loader          
-	gs_rendering
-        gaussian_host       # For access to core functionality
-        gaussian_kernels    # For CUDA kernels if needed
+        gs_loader
+        gs_rendering       # This is already here, good!
+        gaussian_host      # For access to core functionality
+        gaussian_kernels   # For CUDA kernels if needed
 )
 
 # Set C++ standard

@@ -2,22 +2,25 @@
 
 #include "core/events.hpp"
 #include "framerate_controller.hpp"
+#include "internal/viewport.hpp"
 #include "rendering/rendering.hpp"
 #include <memory>
 
 namespace gs {
-    class RenderBoundingBox;
-    class RenderCoordinateAxes;
+    namespace rendering {
+        class RenderBoundingBox;
+        class RenderCoordinateAxes;
+    } // namespace rendering
     namespace geometry {
         class EuclideanTransform;
     }
+    class SceneManager;
 } // namespace gs
 
 namespace gs::visualizer {
 
     // Forward declaration
     class BackgroundTool;
-    class SceneManager;
 
     struct RenderSettings {
         float fov = 60.0f;
@@ -41,11 +44,11 @@ namespace gs::visualizer {
     class RenderingManager {
     public:
         struct RenderContext {
-            const class Viewport& viewport;
+            const Viewport& viewport;
             const RenderSettings& settings;
-            const class RenderBoundingBox* crop_box;
-            const class RenderCoordinateAxes* coord_axes;
-            const class geometry::EuclideanTransform* world_to_user;
+            const gs::rendering::RenderBoundingBox* crop_box;
+            const gs::rendering::RenderCoordinateAxes* coord_axes;
+            const geometry::EuclideanTransform* world_to_user;
             const ViewportRegion* viewport_region = nullptr;
             bool has_focus = false;
             const BackgroundTool* background_tool = nullptr;

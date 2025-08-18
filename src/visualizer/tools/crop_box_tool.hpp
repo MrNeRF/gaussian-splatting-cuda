@@ -1,9 +1,12 @@
 #pragma once
 
-#include "rendering/render_bounding_box.hpp"
 #include "tools/tool_base.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+
+namespace gs::rendering {
+    class RenderBoundingBox;
+}
 
 namespace gs::visualizer {
 
@@ -24,7 +27,7 @@ namespace gs::visualizer {
         void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) override;
 
         // Crop box specific methods
-        std::shared_ptr<gs::RenderBoundingBox> getBoundingBox() { return bounding_box_; }
+        std::shared_ptr<gs::rendering::RenderBoundingBox> getBoundingBox();
         bool shouldShowBox() const { return show_crop_box_; }
         bool shouldUseBox() const { return use_crop_box_; }
 
@@ -42,7 +45,7 @@ namespace gs::visualizer {
         void updateDragging(const glm::dvec2& mouse_pos);
         void stopDragging();
 
-        std::shared_ptr<gs::RenderBoundingBox> bounding_box_;
+        std::shared_ptr<gs::rendering::RenderBoundingBox> bounding_box_;
 
         // UI state
         bool show_crop_box_ = false;

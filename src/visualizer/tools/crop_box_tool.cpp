@@ -1,5 +1,6 @@
 #include "tools/crop_box_tool.hpp"
 #include "core/events.hpp"
+#include "rendering/bbox_renderer.hpp"
 
 // clang-format off
 #include <glad/glad.h>
@@ -12,7 +13,7 @@
 namespace gs::visualizer {
 
     CropBoxTool::CropBoxTool() {
-        bounding_box_ = std::make_shared<RenderBoundingBox>();
+        bounding_box_ = std::make_shared<gs::rendering::RenderBoundingBox>();
         setupEventHandlers();
     }
 
@@ -380,4 +381,7 @@ namespace gs::visualizer {
 
         bounding_box_->setworld2BBox(rotation_transform);
     }
+
+    std::shared_ptr<gs::rendering::RenderBoundingBox> CropBoxTool::getBoundingBox() { return bounding_box_; }
+
 } // namespace gs::visualizer

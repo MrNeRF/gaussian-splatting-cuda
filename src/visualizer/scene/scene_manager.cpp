@@ -2,6 +2,7 @@
 #include "core/model_providers.hpp"
 #include "core/training_setup.hpp"
 #include "loader/loader.hpp"
+#include "rendering/rendering_pipeline.hpp"
 #include "training/training_manager.hpp"
 #include <chrono>
 #include <print>
@@ -89,7 +90,7 @@ namespace gs {
 
         // Handle render requests
         internal::RenderRequest::when([this](const auto& cmd) {
-            RenderingPipeline::RenderRequest request{
+            gs::rendering::RenderingPipeline::RenderRequest request{
                 .view_rotation = cmd.view_rotation,
                 .view_translation = cmd.view_translation,
                 .viewport_size = cmd.viewport_size,
@@ -169,11 +170,11 @@ namespace gs {
         return current_state_;
     }
 
-    RenderingPipeline::RenderResult SceneManager::render(
-        const RenderingPipeline::RenderRequest& request) {
+    gs::rendering::RenderingPipeline::RenderResult SceneManager::render(
+        const gs::rendering::RenderingPipeline::RenderRequest& request) {
 
         if (!scene_) {
-            return RenderingPipeline::RenderResult(false);
+            return gs::rendering::RenderingPipeline::RenderResult(false);
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();

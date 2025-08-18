@@ -1,7 +1,7 @@
 #include "rendering_manager.hpp"
 #include "core/splat_data.hpp"
 #include "geometry/euclidean_transform.hpp"
-#include "internal/viewport.hpp"
+#include "rendering/bbox_renderer.hpp"
 #include "rendering/rendering.hpp"
 #include "scene/scene_manager.hpp"
 #include "tools/background_tool.hpp"
@@ -125,7 +125,7 @@ namespace gs::visualizer {
         const Viewport& render_viewport = context.viewport;
         const geometry::BoundingBox* render_crop_box = nullptr;
         if (settings_.use_crop_box && context.crop_box) {
-            render_crop_box = const_cast<RenderBoundingBox*>(context.crop_box);
+            render_crop_box = const_cast<gs::rendering::RenderBoundingBox*>(context.crop_box);
         }
 
         auto rot = render_viewport.getRotationMatrix();
@@ -200,8 +200,8 @@ namespace gs::visualizer {
         // Convert crop box if present
         if (render_crop_box) {
             request.crop_box = gs::rendering::BoundingBox{
-                .min = render_crop_box->getMin(),
-                .max = render_crop_box->getMax(),
+                .min = render_crop_box->getMinBounds(),
+                .max = render_crop_box->getMaxBounds(),
                 .transform = glm::mat4(1.0f) // TODO: Add transform support
             };
         }
@@ -283,8 +283,8 @@ namespace gs::visualizer {
         if (settings_.show_crop_box && context.crop_box && engine_) {
             // Convert from internal type to rendering type
             gs::rendering::BoundingBox box{
-                .min = context.crop_box->getMin(),
-                .max = context.crop_box->getMax(),
+                .min = context.crop_box->getMinBounds(),
+                .max = context.crop_box->getMaxBounds(),
                 .transform = glm::mat4(1.0f) // TODO: get actual transform
             };
             engine_->renderBoundingBox(box, viewport);

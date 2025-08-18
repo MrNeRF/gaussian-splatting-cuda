@@ -8,7 +8,6 @@
 #include "gui/gui_manager.hpp"
 #include "input/input_manager.hpp"
 #include "internal/viewport.hpp"
-#include "rendering/render_bounding_box.hpp"
 #include "rendering/rendering_manager.hpp"
 #include "scene/scene.hpp"
 #include "scene/scene_manager.hpp"
@@ -24,7 +23,8 @@ struct GLFWwindow;
 
 namespace gs {
     class CommandProcessor;
-}
+    class SceneManager;
+} // namespace gs
 
 namespace gs::visualizer {
     class DataLoadingService;
@@ -75,8 +75,8 @@ namespace gs::visualizer {
         }
 
         // Compatibility method for crop box
-        std::shared_ptr<RenderBoundingBox> getCropBox() const;
-        std::shared_ptr<const RenderCoordinateAxes> getAxes() const;
+        std::shared_ptr<gs::rendering::RenderBoundingBox> getCropBox() const;
+        std::shared_ptr<const rendering::RenderCoordinateAxes> getAxes() const;
         std::shared_ptr<const geometry::EuclideanTransform> getWorldToUser() const;
 
         // GUI needs these for compatibility

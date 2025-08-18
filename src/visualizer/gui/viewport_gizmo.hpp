@@ -1,10 +1,12 @@
 #pragma once
 
-#include "rendering/shader.hpp"
+#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <memory>
-#include <string>
 
+namespace gs::rendering {
+    class Shader; // Forward declaration for
+}
 namespace gs::gui {
 
     class TextRenderer; // Forward declaration
@@ -38,7 +40,7 @@ namespace gs::gui {
         // OpenGL resources
         GLuint vao_ = 0;
         GLuint vbo_ = 0;
-        std::unique_ptr<Shader> shader_;
+        std::unique_ptr<gs::rendering::Shader> shader_;
 
         // Text rendering
         std::unique_ptr<TextRenderer> text_renderer_;

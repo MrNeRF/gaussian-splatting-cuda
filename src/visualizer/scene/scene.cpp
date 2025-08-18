@@ -14,7 +14,7 @@ namespace gs {
         model_provider_ = provider;
 
         if (!pipeline_) {
-            pipeline_ = std::make_unique<RenderingPipeline>();
+            pipeline_ = std::make_unique<gs::rendering::RenderingPipeline>();
         }
 
         // Update mode based on provider type
@@ -67,14 +67,14 @@ namespace gs {
         }
     }
 
-    RenderingPipeline::RenderResult Scene::render(const RenderingPipeline::RenderRequest& request) {
+    gs::rendering::RenderingPipeline::RenderResult Scene::render(const gs::rendering::RenderingPipeline::RenderRequest& request) {
         if (!hasModel() || !pipeline_) {
-            return RenderingPipeline::RenderResult(false);
+            return gs::rendering::RenderingPipeline::RenderResult(false);
         }
 
         const SplatData* model = getModel();
         if (!model) {
-            return RenderingPipeline::RenderResult(false);
+            return gs::rendering::RenderingPipeline::RenderResult(false);
         }
 
         return pipeline_->render(*model, request);

@@ -1,5 +1,6 @@
 set(RENDERING_SOURCES
         rendering_engine.cpp
+        rendering_engine_impl.cpp
         rendering_pipeline.cpp
         point_cloud_renderer.cpp
         grid_renderer.cpp
