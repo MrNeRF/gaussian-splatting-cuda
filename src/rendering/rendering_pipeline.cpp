@@ -44,9 +44,7 @@ namespace gs::rendering {
         std::unique_ptr<geometry::BoundingBox> temp_bbox;
 
         if (request.crop_box) {
-            // Try to get the concrete type if it's actually a RenderBoundingBox
-            // For this to work, we'd need to include the header, which we want to avoid
-            // So instead, we'll create a temporary geometry::BoundingBox
+            // Create a temporary geometry::BoundingBox with the full transform
             temp_bbox = std::make_unique<geometry::BoundingBox>();
             temp_bbox->setBounds(request.crop_box->getMinBounds(), request.crop_box->getMaxBounds());
             temp_bbox->setworld2BBox(request.crop_box->getworld2BBox());

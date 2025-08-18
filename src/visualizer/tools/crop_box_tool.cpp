@@ -33,6 +33,13 @@ namespace gs::visualizer {
         // Create the bounding box
         bounding_box_ = engine->createBoundingBox();
 
+        // Initialize with default bounds
+        if (bounding_box_) {
+            bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+            bounding_box_->setColor(glm::vec3(bbox_color_[0], bbox_color_[1], bbox_color_[2]));
+            bounding_box_->setLineWidth(line_width_);
+        }
+
         return bounding_box_ != nullptr;
     }
 
@@ -146,6 +153,8 @@ namespace gs::visualizer {
 
         if (ImGui::Checkbox("Use Crop Box", &use_crop_box_)) {
             settings_changed = true;
+            // Force immediate scene redraw when toggling crop box usage
+            events::state::SceneChanged{}.emit();
         }
 
         if (settings_changed) {
@@ -155,10 +164,18 @@ namespace gs::visualizer {
                 .emit();
         }
 
-        if (show_crop_box_ && bounding_box_ && bounding_box_->isInitialized()) {
+        // Check if bounding box is initialized before showing controls
+        if (!bounding_box_ || !bounding_box_->isInitialized()) {
+            ImGui::TextDisabled("Crop box not initialized");
+            return;
+        }
+
+        if (show_crop_box_) {
             // Appearance controls
             if (ImGui::ColorEdit3("Box Color", bbox_color_)) {
                 bounding_box_->setColor(glm::vec3(bbox_color_[0], bbox_color_[1], bbox_color_[2]));
+                // Force scene redraw
+                events::state::SceneChanged{}.emit();
             }
 
             float available_width = ImGui::GetContentRegionAvail().x;
@@ -168,11 +185,15 @@ namespace gs::visualizer {
             ImGui::SetNextItemWidth(slider_width);
             if (ImGui::SliderFloat("Line Width", &line_width_, 0.5f, 10.0f)) {
                 bounding_box_->setLineWidth(line_width_);
+                // Force scene redraw
+                events::state::SceneChanged{}.emit();
             }
 
             if (ImGui::Button("Reset to Default")) {
                 bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
                 bounding_box_->setworld2BBox(geometry::EuclideanTransform());
+                // Force scene redraw and invalidate cache
+                events::state::SceneChanged{}.emit();
             }
 
             // Rotation controls
@@ -280,6 +301,8 @@ namespace gs::visualizer {
 
                 if (diff_x != 0 || diff_y != 0 || diff_z != 0) {
                     updateRotationMatrix(diff_x, diff_y, diff_z);
+                    // Force scene redraw and invalidate cache
+                    events::state::SceneChanged{}.emit();
                 }
 
                 ImGui::TreePop();
@@ -360,6 +383,9 @@ namespace gs::visualizer {
                         .max_bounds = bounding_box_->getMaxBounds(),
                         .enabled = use_crop_box_}
                         .emit();
+
+                    // Force scene redraw and invalidate cache
+                    events::state::SceneChanged{}.emit();
                 }
 
                 // Display info

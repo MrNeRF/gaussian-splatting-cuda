@@ -52,6 +52,13 @@ namespace gs::visualizer {
         scene_changed_handler_id_ = events::state::SceneChanged::when([this]([[maybe_unused]] const auto& event) {
             prev_result_.valid = false; // Invalidate cached result when scene changes
         });
+
+        // Subscribe to CropBoxChanged events to invalidate cache when crop box changes
+        events::ui::CropBoxChanged::when([this]([[maybe_unused]] const auto& event) {
+            if (event.enabled) {
+                prev_result_.valid = false; // Invalidate cached result when crop box changes
+            }
+        });
     }
 
     void RenderingManager::renderFrame(const RenderContext& context, SceneManager* scene_manager) {
@@ -67,7 +74,7 @@ namespace gs::visualizer {
         // Check if we should skip scene rendering
         auto state = scene_manager->getCurrentState();
         bool skip_scene_render = false;
-        if (settings_.adaptive_frame_rate && not settings_.use_crop_box) {
+        if (settings_.adaptive_frame_rate && !settings_.use_crop_box) {
             skip_scene_render = framerate_controller_.shouldSkipSceneRender(
                 state.is_training, scene_changed);
         }
@@ -123,13 +130,14 @@ namespace gs::visualizer {
 
         const Viewport& render_viewport = context.viewport;
         const geometry::BoundingBox* render_crop_box = nullptr;
+
+        // Create a temporary geometry::BoundingBox from the IBoundingBox interface
+        std::unique_ptr<geometry::BoundingBox> temp_bbox;
         if (settings_.use_crop_box && context.crop_box) {
-            // We need to create a geometry::BoundingBox from the interface
-            // This is a temporary solution - ideally the interface would provide this
-            static geometry::BoundingBox temp_bbox;
-            temp_bbox.setBounds(context.crop_box->getMinBounds(), context.crop_box->getMaxBounds());
-            temp_bbox.setworld2BBox(context.crop_box->getworld2BBox());
-            render_crop_box = &temp_bbox;
+            temp_bbox = std::make_unique<geometry::BoundingBox>();
+            temp_bbox->setBounds(context.crop_box->getMinBounds(), context.crop_box->getMaxBounds());
+            temp_bbox->setworld2BBox(context.crop_box->getworld2BBox());
+            render_crop_box = temp_bbox.get();
         }
 
         auto rot = render_viewport.getRotationMatrix();
@@ -203,11 +211,13 @@ namespace gs::visualizer {
 
         // Convert crop box if present
         if (render_crop_box) {
+            // The transform should be the inverse of world2BBox for rendering
+            glm::mat4 transform_mat = render_crop_box->getworld2BBox().inv().toMat4();
+
             request.crop_box = gs::rendering::BoundingBox{
                 .min = render_crop_box->getMinBounds(),
                 .max = render_crop_box->getMaxBounds(),
-                .transform = glm::mat4(1.0f) // TODO: Add transform support
-            };
+                .transform = transform_mat};
         }
 
         // Get trainer for potential mutex locking
@@ -285,13 +295,23 @@ namespace gs::visualizer {
 
         // Render crop box
         if (settings_.show_crop_box && context.crop_box && engine_) {
+            // Get the actual transform from the crop box
+            auto transform = context.crop_box->getworld2BBox();
+
+            // Convert to mat4
+            glm::mat4 transform_mat = transform.inv().toMat4();
+
             // Convert from interface to rendering type
             gs::rendering::BoundingBox box{
                 .min = context.crop_box->getMinBounds(),
                 .max = context.crop_box->getMaxBounds(),
-                .transform = glm::mat4(1.0f) // TODO: get actual transform
-            };
-            engine_->renderBoundingBox(box, viewport);
+                .transform = transform_mat};
+
+            // Get color and line width from the crop box
+            glm::vec3 color = context.crop_box->getColor();
+            float line_width = context.crop_box->getLineWidth();
+
+            engine_->renderBoundingBox(box, viewport, color, line_width);
         }
 
         // Render coordinate axes

@@ -99,6 +99,10 @@ namespace gs::rendering {
 
         virtual void setworld2BBox(const geometry::EuclideanTransform& transform) = 0;
         virtual geometry::EuclideanTransform getworld2BBox() const = 0;
+
+        // Add missing methods
+        virtual glm::vec3 getColor() const = 0;
+        virtual float getLineWidth() const = 0;
     };
 
     // Interface for coordinate axes (for visualizer)

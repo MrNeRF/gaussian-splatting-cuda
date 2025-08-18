@@ -47,9 +47,14 @@ namespace gs::rendering {
             glGenBuffers(1, &EBO_);
 
             initialized_ = true;
-            // Initialize cube geometry
-            createCubeGeometry();
-            setupVertexData();
+
+            // Initialize cube geometry with default bounds if not already set
+            if (min_bounds_ == glm::vec3(0.0f) && max_bounds_ == glm::vec3(0.0f)) {
+                setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+            } else {
+                createCubeGeometry();
+                setupVertexData();
+            }
 
             // Check bindings *after* setup
             glBindVertexArray(VAO_);

@@ -40,6 +40,10 @@ namespace gs::rendering {
         // Set line width
         void setLineWidth(float width) override { line_width_ = width; }
 
+        // Get color and line width
+        glm::vec3 getColor() const override { return color_; }
+        float getLineWidth() const override { return line_width_; }
+
         // Render the bounding box
         void render(const glm::mat4& view, const glm::mat4& projection);
 

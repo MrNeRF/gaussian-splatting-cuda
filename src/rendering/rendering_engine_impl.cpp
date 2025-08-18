@@ -90,17 +90,22 @@ namespace gs::rendering {
             .scaling_modifier = request.scaling_modifier,
             .antialiasing = request.antialiasing,
             .render_mode = RenderMode::RGB,
-            .crop_box = nullptr, // Handle below
+            .crop_box = nullptr,
             .background_color = request.background_color,
             .point_cloud_mode = request.point_cloud_mode,
             .voxel_size = request.voxel_size};
 
         // Convert crop box if present
         std::unique_ptr<gs::geometry::BoundingBox> temp_crop_box;
-        if (request.crop_box) {
+        if (request.crop_box.has_value()) {
             temp_crop_box = std::make_unique<gs::geometry::BoundingBox>();
             temp_crop_box->setBounds(request.crop_box->min, request.crop_box->max);
-            pipeline_req.crop_box = nullptr;
+
+            // Convert the transform matrix to EuclideanTransform
+            geometry::EuclideanTransform transform(request.crop_box->transform);
+            temp_crop_box->setworld2BBox(transform);
+
+            pipeline_req.crop_box = temp_crop_box.get();
         }
 
         auto pipeline_result = pipeline_->render(splat_data, pipeline_req);
@@ -167,6 +172,10 @@ namespace gs::rendering {
         bbox_renderer_->setBounds(box.min, box.max);
         bbox_renderer_->setColor(color);
         bbox_renderer_->setLineWidth(line_width);
+
+        // Set the transform from the box
+        geometry::EuclideanTransform transform(box.transform);
+        bbox_renderer_->setworld2BBox(transform);
 
         auto view = createViewMatrix(viewport);
         auto proj = createProjectionMatrix(viewport);
