@@ -15,18 +15,18 @@ namespace gs::rendering {
 #endif
 
         // Fall back to source directory
-        std::filesystem::path source_path = std::filesystem::path(PROJECT_ROOT_PATH) / "src/rendering/resources/shaders" / shader_name;
+#ifdef RENDERING_SOURCE_SHADER_PATH
+        std::filesystem::path source_path = std::filesystem::path(RENDERING_SOURCE_SHADER_PATH) / shader_name;
         if (std::filesystem::exists(source_path)) {
             return source_path;
         }
-
-        // Last resort - check if we have RENDERING_SOURCE_SHADER_PATH defined
-#ifdef RENDERING_SOURCE_SHADER_PATH
-        std::filesystem::path rendering_source_path = std::filesystem::path(RENDERING_SOURCE_SHADER_PATH) / shader_name;
-        if (std::filesystem::exists(rendering_source_path)) {
-            return rendering_source_path;
-        }
 #endif
+
+        // Last resort - try relative to current file
+        std::filesystem::path fallback_path = std::filesystem::path(__FILE__).parent_path() / "resources" / "shaders" / shader_name;
+        if (std::filesystem::exists(fallback_path)) {
+            return fallback_path;
+        }
 
         throw std::runtime_error("Cannot find shader: " + shader_name);
     }

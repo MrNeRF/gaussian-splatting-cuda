@@ -1,15 +1,15 @@
 #pragma once
 
 #include "geometry/bounding_box.hpp"
-
+#include "rendering/rendering.hpp"
 #include "shader.hpp"
 #include <memory>
 
 namespace gs::rendering {
-    class RenderBoundingBox : public geometry::BoundingBox {
+    class RenderBoundingBox : public geometry::BoundingBox, public IBoundingBox {
     public:
         RenderBoundingBox();
-        ~RenderBoundingBox();
+        ~RenderBoundingBox() override;
 
         // Set the bounding box from min/max points
         void setBounds(const glm::vec3& min, const glm::vec3& max) override;
@@ -17,22 +17,31 @@ namespace gs::rendering {
         // Initialize OpenGL resources
         void init();
 
-        // Enable/disable bounding box rendering
-        // void setVisible(bool visible) { visible_ = visible; }
-        // bool isVisible() const { return visible_; }
+        // Check if initialized
+        bool isInitialized() const override { return initialized_; }
 
-        bool isInitialized() const { return initialized_; }
+        // IBoundingBox interface implementation
+        glm::vec3 getMinBounds() const override { return min_bounds_; }
+        glm::vec3 getMaxBounds() const override { return max_bounds_; }
+        glm::vec3 getCenter() const override { return BoundingBox::getCenter(); }
+        glm::vec3 getSize() const override { return BoundingBox::getSize(); }
+        glm::vec3 getLocalCenter() const override { return BoundingBox::getLocalCenter(); }
+
+        void setworld2BBox(const geometry::EuclideanTransform& transform) override {
+            BoundingBox::setworld2BBox(transform);
+        }
+        geometry::EuclideanTransform getworld2BBox() const override {
+            return BoundingBox::getworld2BBox();
+        }
 
         // Set bounding box color
-        void setColor(const glm::vec3& color) { color_ = color; }
+        void setColor(const glm::vec3& color) override { color_ = color; }
 
         // Set line width
-        void setLineWidth(float width) { line_width_ = width; }
+        void setLineWidth(float width) override { line_width_ = width; }
 
         // Render the bounding box
         void render(const glm::mat4& view, const glm::mat4& projection);
-
-        bool isInitilized() const { return initialized_; }
 
     private:
         void createCubeGeometry();

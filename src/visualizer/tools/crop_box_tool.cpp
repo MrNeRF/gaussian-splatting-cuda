@@ -1,6 +1,6 @@
 #include "tools/crop_box_tool.hpp"
 #include "core/events.hpp"
-#include "rendering/bbox_renderer.hpp"
+#include "rendering/rendering.hpp"
 
 // clang-format off
 #include <glad/glad.h>
@@ -13,19 +13,32 @@
 namespace gs::visualizer {
 
     CropBoxTool::CropBoxTool() {
-        bounding_box_ = std::make_shared<gs::rendering::RenderBoundingBox>();
+        // Don't create the bounding box here - wait for initialize()
         setupEventHandlers();
     }
 
     CropBoxTool::~CropBoxTool() = default;
 
-    bool CropBoxTool::initialize([[maybe_unused]] const ToolContext& ctx) {
-        // Bounding box OpenGL resources are initialized lazily on first render
-        return true;
+    bool CropBoxTool::initialize(const ToolContext& ctx) {
+        // Create the bounding box through the rendering engine
+        auto* rendering_manager = ctx.getRenderingManager();
+        if (!rendering_manager)
+            return false;
+
+        // Get rendering engine (it should be initialized by now)
+        auto* engine = rendering_manager->getRenderingEngine();
+        if (!engine)
+            return false;
+
+        // Create the bounding box
+        bounding_box_ = engine->createBoundingBox();
+
+        return bounding_box_ != nullptr;
     }
 
     void CropBoxTool::shutdown() {
-        // Cleanup handled by destructors
+        // Cleanup handled by smart pointer
+        bounding_box_.reset();
     }
 
     void CropBoxTool::update([[maybe_unused]] const ToolContext& ctx) {
@@ -142,7 +155,7 @@ namespace gs::visualizer {
                 .emit();
         }
 
-        if (show_crop_box_ && bounding_box_->isInitialized()) {
+        if (show_crop_box_ && bounding_box_ && bounding_box_->isInitialized()) {
             // Appearance controls
             if (ImGui::ColorEdit3("Box Color", bbox_color_)) {
                 bounding_box_->setColor(glm::vec3(bbox_color_[0], bbox_color_[1], bbox_color_[2]));
@@ -382,6 +395,8 @@ namespace gs::visualizer {
         bounding_box_->setworld2BBox(rotation_transform);
     }
 
-    std::shared_ptr<gs::rendering::RenderBoundingBox> CropBoxTool::getBoundingBox() { return bounding_box_; }
+    std::shared_ptr<gs::rendering::IBoundingBox> CropBoxTool::getBoundingBox() {
+        return bounding_box_;
+    }
 
 } // namespace gs::visualizer

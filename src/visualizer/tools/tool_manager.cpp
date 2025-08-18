@@ -145,11 +145,11 @@ namespace gs::visualizer {
     }
 
     // ToolContext implementation
-    RenderingManager* ToolManager::getRenderingManager() {
+    RenderingManager* ToolManager::getRenderingManager() const {
         return visualizer_->rendering_manager_.get();
     }
 
-    gs::SceneManager* ToolManager::getSceneManager() {
+    gs::SceneManager* ToolManager::getSceneManager() const {
         return visualizer_->scene_manager_.get();
     }
 

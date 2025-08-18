@@ -4,16 +4,12 @@
 #include "core/rasterizer.hpp"
 #include "core/splat_data.hpp"
 #include "point_cloud_renderer.hpp"
+#include "rendering/rendering.hpp"
 #include "screen_renderer.hpp"
 #include <glm/glm.hpp>
 #include <torch/torch.h>
 
 namespace gs::rendering {
-
-    // Forward declare if needed
-    namespace geometry {
-        class BoundingBox;
-    }
 
     class RenderingPipeline {
     public:
@@ -25,7 +21,7 @@ namespace gs::rendering {
             float scaling_modifier = 1.0f;
             bool antialiasing = false;
             RenderMode render_mode = RenderMode::RGB;
-            const gs::geometry::BoundingBox* crop_box = nullptr;
+            const geometry::BoundingBox* crop_box = nullptr;
             glm::vec3 background_color = glm::vec3(0.0f, 0.0f, 0.0f);
             bool point_cloud_mode = false;
             float voxel_size = 0.01f;

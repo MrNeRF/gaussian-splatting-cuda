@@ -3,7 +3,7 @@
 #include "core/events.hpp"
 #include "core/imodel_provider.hpp"
 #include "core/trainer.hpp"
-#include "rendering/rendering_pipeline.hpp"
+#include "rendering/rendering.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -70,7 +70,7 @@ namespace gs {
         }
 
         // Rendering
-        gs::rendering::RenderingPipeline::RenderResult render(const gs::rendering::RenderingPipeline::RenderRequest& request);
+        gs::rendering::RenderingPipelineResult render(const gs::rendering::RenderingPipelineRequest& request);
 
     private:
         Mode mode_ = Mode::Empty;
@@ -81,7 +81,7 @@ namespace gs {
         // For training mode - single model provider
         std::shared_ptr<IModelProvider> model_provider_;
 
-        std::unique_ptr<gs::rendering::RenderingPipeline> pipeline_;
+        std::unique_ptr<gs::rendering::RenderingEngine> rendering_engine_;
 
         // Caching for combined model
         mutable std::unique_ptr<SplatData> cached_combined_model_;

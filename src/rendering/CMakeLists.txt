@@ -6,6 +6,8 @@ set(RENDERING_SOURCES
         grid_renderer.cpp
         bbox_renderer.cpp
         axes_renderer.cpp
+        text_renderer.cpp
+        viewport_gizmo.cpp
 )
 
 # Conditionally add CUDA GL interop
@@ -16,10 +18,9 @@ endif()
 add_library(gs_rendering STATIC ${RENDERING_SOURCES})
 
 target_link_libraries(gs_rendering
-    PUBLIC
+    PRIVATE  # ALL dependencies should be PRIVATE
         ${TORCH_LIBRARIES}
         glm::glm
-    PRIVATE
         gaussian_host
         gaussian_kernels
         gsplat_backend
@@ -27,19 +28,23 @@ target_link_libraries(gs_rendering
         ${OPENGL_LIBRARIES}
         CUDA::cudart
         spdlog::spdlog
+        Freetype::Freetype
 )
 
 target_include_directories(gs_rendering
         PUBLIC
+        # ONLY expose the include directory for public headers
         $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
         PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/gsplat
-        ${CUDAToolkit_INCLUDE_DIRS}
-        ${OPENGL_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
+        # Internal paths for implementation only
+        ${CMAKE_CURRENT_SOURCE_DIR}                      # For internal includes within rendering
+        ${CMAKE_SOURCE_DIR}/include                       # For public headers
+        ${CMAKE_SOURCE_DIR}/src                          # For other internal modules
+        ${CMAKE_SOURCE_DIR}/gsplat                       # For gsplat headers
+        ${CUDAToolkit_INCLUDE_DIRS}                      # CUDA headers
+        ${OPENGL_INCLUDE_DIRS}                           # OpenGL headers
+        ${Python3_INCLUDE_DIRS}                          # Python headers
 )
 
 # Handle shaders
@@ -59,4 +64,9 @@ target_compile_definitions(gs_rendering PRIVATE
         RENDERING_SOURCE_SHADER_PATH="${RENDERING_SOURCE_RESOURCE_DIR}/shaders"
         PROJECT_ROOT_PATH="${PROJECT_SOURCE_DIR}"
         $<$<BOOL:${CUDA_GL_INTEROP_ENABLED}>:CUDA_GL_INTEROP_ENABLED>
+)
+
+# Export only the public header
+install(FILES ${CMAKE_SOURCE_DIR}/include/rendering/rendering.hpp
+        DESTINATION include/rendering
 )

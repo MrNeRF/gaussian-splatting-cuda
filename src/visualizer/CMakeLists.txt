@@ -1,4 +1,4 @@
-add_library(gs_visualizer OBJECT
+add_library(gs_visualizer STATIC
         # Core
         visualizer.cpp
         visualizer_impl.cpp
@@ -23,9 +23,6 @@ add_library(gs_visualizer OBJECT
         # GUI system
         gui/gui_manager.cpp
         gui/ui_widgets.cpp
-        gui/viewport_gizmo.cpp
-        gui/viewport_gizmo.cpp
-        gui/text_renderer.cpp
         gui/panels/main_panel.cpp
         gui/panels/training_panel.cpp
         gui/panels/crop_box_panel.cpp
@@ -59,7 +56,7 @@ target_include_directories(gs_visualizer
         # Internal paths for implementation only
         ${CMAKE_CURRENT_SOURCE_DIR}                      # For internal includes
         ${CMAKE_SOURCE_DIR}/include                       # For core headers
-        ${CMAKE_SOURCE_DIR}/src                          # For "loader/loader.hpp"
+        # REMOVE THIS LINE: ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/gsplat                       # For gsplat headers
         ${CUDAToolkit_INCLUDE_DIRS}                      # CUDA headers
         ${OPENGL_INCLUDE_DIRS}                           # OpenGL headers
@@ -79,7 +76,6 @@ target_link_libraries(gs_visualizer
         nlohmann_json::nlohmann_json
         Python3::Python
         CUDA::cudart
-        Freetype::Freetype
         ${OPENGL_LIBRARIES}
         gs_loader
         gs_rendering       # This is already here, good!

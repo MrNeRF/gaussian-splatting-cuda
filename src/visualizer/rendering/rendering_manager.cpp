@@ -1,7 +1,6 @@
 #include "rendering_manager.hpp"
 #include "core/splat_data.hpp"
 #include "geometry/euclidean_transform.hpp"
-#include "rendering/bbox_renderer.hpp"
 #include "rendering/rendering.hpp"
 #include "scene/scene_manager.hpp"
 #include "tools/background_tool.hpp"
@@ -125,7 +124,12 @@ namespace gs::visualizer {
         const Viewport& render_viewport = context.viewport;
         const geometry::BoundingBox* render_crop_box = nullptr;
         if (settings_.use_crop_box && context.crop_box) {
-            render_crop_box = const_cast<gs::rendering::RenderBoundingBox*>(context.crop_box);
+            // We need to create a geometry::BoundingBox from the interface
+            // This is a temporary solution - ideally the interface would provide this
+            static geometry::BoundingBox temp_bbox;
+            temp_bbox.setBounds(context.crop_box->getMinBounds(), context.crop_box->getMaxBounds());
+            temp_bbox.setworld2BBox(context.crop_box->getworld2BBox());
+            render_crop_box = &temp_bbox;
         }
 
         auto rot = render_viewport.getRotationMatrix();
@@ -281,7 +285,7 @@ namespace gs::visualizer {
 
         // Render crop box
         if (settings_.show_crop_box && context.crop_box && engine_) {
-            // Convert from internal type to rendering type
+            // Convert from interface to rendering type
             gs::rendering::BoundingBox box{
                 .min = context.crop_box->getMinBounds(),
                 .max = context.crop_box->getMaxBounds(),
@@ -292,8 +296,11 @@ namespace gs::visualizer {
 
         // Render coordinate axes
         if (settings_.show_coord_axes && context.coord_axes && engine_) {
-            // Just use the public interface
-            std::array<bool, 3> visible = {true, true, true}; // TODO: get from context
+            // Get visibility from interface
+            std::array<bool, 3> visible = {
+                context.coord_axes->isAxisVisible(0),
+                context.coord_axes->isAxisVisible(1),
+                context.coord_axes->isAxisVisible(2)};
             engine_->renderCoordinateAxes(viewport, 2.0f, visible);
         }
     }
@@ -420,9 +427,14 @@ namespace gs::visualizer {
             }
         }
 
-        // check is user increased window size
+        // check if user increased window size
         if (!scene_changed && context.viewport_region) {
             glm::ivec2 render_size = context.viewport.windowSize;
+            if (context.viewport_region) {
+                render_size = glm::ivec2(
+                    static_cast<int>(context.viewport_region->width),
+                    static_cast<int>(context.viewport_region->height));
+            }
             if (render_size != prev_render_size_) {
                 scene_changed = true;
                 prev_render_size_ = render_size;

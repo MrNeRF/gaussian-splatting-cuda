@@ -1,14 +1,15 @@
-#include "gui/viewport_gizmo.hpp"
-#include "gui/text_renderer.hpp"
-#include "internal/resource_paths.hpp"
-#include "rendering/shader.hpp"
+#include "viewport_gizmo.hpp"
+#include "shader.hpp"
+#include "shader_paths.hpp"
+#include "text_renderer.hpp"
+#include <GLFW/glfw3.h>
 #include <algorithm>
 #include <iostream>
 #include <numbers>
 #include <ranges>
 #include <vector>
 
-namespace gs::gui {
+namespace gs::rendering {
 
     constexpr glm::vec3 ViewportGizmo::colors_[];
 
@@ -35,7 +36,7 @@ namespace gs::gui {
 
         // Load font from our assets
         std::string font_path = std::string(PROJECT_ROOT_PATH) +
-                                "/src/visualizer/resources/assets/JetBrainsMono-Regular.ttf";
+                                "/src/rendering/resources/assets/JetBrainsMono-Regular.ttf";
         if (!text_renderer_->LoadFont(font_path, 48)) {
             std::cerr << "ViewportGizmo: Failed to load font!" << std::endl;
             text_renderer_.reset();
@@ -61,9 +62,9 @@ namespace gs::gui {
     void ViewportGizmo::createShaders() {
         // Use the shader system to create shaders
         try {
-            shader_ = std::make_unique<gs::rendering::Shader>(
-                (gs::visualizer::getShaderPath("viewport_gizmo.vert")).string().c_str(),
-                (gs::visualizer::getShaderPath("viewport_gizmo.frag")).string().c_str(),
+            shader_ = std::make_unique<Shader>(
+                (getShaderPath("viewport_gizmo.vert")).string().c_str(),
+                (getShaderPath("viewport_gizmo.frag")).string().c_str(),
                 false // Don't create buffer
             );
             std::cout << "[ViewportGizmo] Shaders created successfully" << std::endl;
@@ -429,4 +430,4 @@ namespace gs::gui {
         glActiveTexture(active_texture);
     }
 
-} // namespace gs::gui
+} // namespace gs::rendering

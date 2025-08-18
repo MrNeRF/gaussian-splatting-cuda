@@ -8,6 +8,7 @@
 #include "gui/gui_manager.hpp"
 #include "input/input_manager.hpp"
 #include "internal/viewport.hpp"
+#include "rendering/rendering.hpp"
 #include "rendering/rendering_manager.hpp"
 #include "scene/scene.hpp"
 #include "scene/scene_manager.hpp"
@@ -75,8 +76,8 @@ namespace gs::visualizer {
         }
 
         // Compatibility method for crop box
-        std::shared_ptr<gs::rendering::RenderBoundingBox> getCropBox() const;
-        std::shared_ptr<const rendering::RenderCoordinateAxes> getAxes() const;
+        std::shared_ptr<gs::rendering::IBoundingBox> getCropBox() const;
+        std::shared_ptr<const gs::rendering::ICoordinateAxes> getAxes() const;
         std::shared_ptr<const geometry::EuclideanTransform> getWorldToUser() const;
 
         // GUI needs these for compatibility

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rendering/rendering.hpp"
 #include "tools/tool_base.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -27,7 +28,7 @@ namespace gs::visualizer {
         void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) override;
 
         // Crop box specific methods
-        std::shared_ptr<gs::rendering::RenderBoundingBox> getBoundingBox();
+        std::shared_ptr<gs::rendering::IBoundingBox> getBoundingBox();
         bool shouldShowBox() const { return show_crop_box_; }
         bool shouldUseBox() const { return use_crop_box_; }
 
@@ -45,7 +46,7 @@ namespace gs::visualizer {
         void updateDragging(const glm::dvec2& mouse_pos);
         void stopDragging();
 
-        std::shared_ptr<gs::rendering::RenderBoundingBox> bounding_box_;
+        std::shared_ptr<gs::rendering::IBoundingBox> bounding_box_;
 
         // UI state
         bool show_crop_box_ = false;

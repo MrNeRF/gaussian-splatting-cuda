@@ -39,6 +39,20 @@ namespace gs::rendering {
         // Create camera for this frame
         Camera cam = createCamera(request);
 
+        // Handle crop box conversion
+        const geometry::BoundingBox* geom_bbox = nullptr;
+        std::unique_ptr<geometry::BoundingBox> temp_bbox;
+
+        if (request.crop_box) {
+            // Try to get the concrete type if it's actually a RenderBoundingBox
+            // For this to work, we'd need to include the header, which we want to avoid
+            // So instead, we'll create a temporary geometry::BoundingBox
+            temp_bbox = std::make_unique<geometry::BoundingBox>();
+            temp_bbox->setBounds(request.crop_box->getMinBounds(), request.crop_box->getMaxBounds());
+            temp_bbox->setworld2BBox(request.crop_box->getworld2BBox());
+            geom_bbox = temp_bbox.get();
+        }
+
         // Perform rendering
         auto output = gs::rasterize(
             cam,
@@ -47,8 +61,8 @@ namespace gs::rendering {
             request.scaling_modifier,
             false, // train
             request.antialiasing,
-            request.render_mode,
-            request.crop_box);
+            static_cast<gs::RenderMode>(request.render_mode),
+            geom_bbox);
 
         result.image = output.image;
         result.depth = output.depth;

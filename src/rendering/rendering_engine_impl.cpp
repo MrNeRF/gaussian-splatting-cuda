@@ -39,6 +39,9 @@ namespace gs::rendering {
         axes_renderer_ = std::make_unique<RenderCoordinateAxes>();
         axes_renderer_->init();
 
+        viewport_gizmo_ = std::make_unique<ViewportGizmo>();
+        viewport_gizmo_->initialize();
+
         initializeShaders();
 
         initialized_ = true;
@@ -57,6 +60,7 @@ namespace gs::rendering {
         screen_renderer_.reset();
         point_cloud_renderer_.reset();
         pipeline_.reset();
+        viewport_gizmo_.reset();
 
         initialized_ = false;
     }
@@ -96,8 +100,7 @@ namespace gs::rendering {
         if (request.crop_box) {
             temp_crop_box = std::make_unique<gs::geometry::BoundingBox>();
             temp_crop_box->setBounds(request.crop_box->min, request.crop_box->max);
-            // Note: transform handling would need to be added to geometry::BoundingBox
-            pipeline_req.crop_box = temp_crop_box.get();
+            pipeline_req.crop_box = nullptr;
         }
 
         auto pipeline_result = pipeline_->render(splat_data, pipeline_req);
@@ -190,6 +193,52 @@ namespace gs::rendering {
         axes_renderer_->render(view, proj);
     }
 
+    void RenderingEngineImpl::renderViewportGizmo(
+        const glm::mat3& camera_rotation,
+        const glm::vec2& viewport_pos,
+        const glm::vec2& viewport_size) {
+
+        if (!initialized_ || !viewport_gizmo_)
+            return;
+
+        viewport_gizmo_->render(camera_rotation, viewport_pos, viewport_size);
+    }
+
+    RenderingPipelineResult RenderingEngineImpl::renderWithPipeline(
+        const SplatData& model,
+        const RenderingPipelineRequest& request) {
+
+        if (!pipeline_) {
+            pipeline_ = std::make_unique<RenderingPipeline>();
+        }
+
+        // Convert from public types to internal types
+        RenderingPipeline::RenderRequest internal_request{
+            .view_rotation = request.view_rotation,
+            .view_translation = request.view_translation,
+            .viewport_size = request.viewport_size,
+            .fov = request.fov,
+            .scaling_modifier = request.scaling_modifier,
+            .antialiasing = request.antialiasing,
+            .render_mode = request.render_mode,
+            .crop_box = static_cast<const geometry::BoundingBox*>(request.crop_box),
+            .background_color = request.background_color,
+            .point_cloud_mode = request.point_cloud_mode,
+            .voxel_size = request.voxel_size};
+
+        auto result = pipeline_->render(model, internal_request);
+
+        // Convert back to public types
+        RenderingPipelineResult public_result;
+        public_result.valid = result.valid;
+        if (result.valid) {
+            public_result.image = result.image;
+            public_result.depth = result.depth;
+        }
+
+        return public_result;
+    }
+
     glm::mat4 RenderingEngineImpl::createViewMatrix(const ViewportData& viewport) const {
         glm::mat3 flip_yz = glm::mat3(1, 0, 0, 0, -1, 0, 0, 0, -1);
         glm::mat3 R_inv = glm::transpose(viewport.rotation);
@@ -215,6 +264,28 @@ namespace gs::rendering {
         float aspect = static_cast<float>(viewport.size.x) / viewport.size.y;
         float fov_rad = glm::radians(viewport.fov);
         return glm::perspective(fov_rad, aspect, 0.1f, 1000.0f);
+    }
+
+    std::shared_ptr<IBoundingBox> RenderingEngineImpl::createBoundingBox() {
+        // Make sure we're initialized first
+        if (!initialized_) {
+            throw std::runtime_error("RenderingEngine must be initialized before creating bounding boxes");
+        }
+
+        auto bbox = std::make_shared<RenderBoundingBox>();
+        bbox->init();
+        return bbox;
+    }
+
+    std::shared_ptr<ICoordinateAxes> RenderingEngineImpl::createCoordinateAxes() {
+        // Make sure we're initialized first
+        if (!initialized_) {
+            throw std::runtime_error("RenderingEngine must be initialized before creating coordinate axes");
+        }
+
+        auto axes = std::make_shared<RenderCoordinateAxes>();
+        axes->init();
+        return axes;
     }
 
 } // namespace gs::rendering

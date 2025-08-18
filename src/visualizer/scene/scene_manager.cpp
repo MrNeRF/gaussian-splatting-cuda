@@ -2,7 +2,7 @@
 #include "core/model_providers.hpp"
 #include "core/training_setup.hpp"
 #include "loader/loader.hpp"
-#include "rendering/rendering_pipeline.hpp"
+#include "rendering/rendering.hpp"
 #include "training/training_manager.hpp"
 #include <chrono>
 #include <print>
@@ -112,15 +112,18 @@ namespace gs {
 
         // Handle render requests
         internal::RenderRequest::when([this](const auto& cmd) {
-            gs::rendering::RenderingPipeline::RenderRequest request{
+            gs::rendering::RenderingPipelineRequest request{
                 .view_rotation = cmd.view_rotation,
                 .view_translation = cmd.view_translation,
                 .viewport_size = cmd.viewport_size,
                 .fov = cmd.fov,
                 .scaling_modifier = cmd.scaling_modifier,
                 .antialiasing = cmd.antialiasing,
-                .render_mode = static_cast<RenderMode>(cmd.render_mode),
-                .crop_box = static_cast<const geometry::BoundingBox*>(cmd.crop_box)};
+                .render_mode = static_cast<gs::rendering::RenderMode>(cmd.render_mode),
+                .crop_box = cmd.crop_box,
+                .background_color = glm::vec3(0.0f, 0.0f, 0.0f),
+                .point_cloud_mode = false,
+                .voxel_size = 0.01f};
 
             auto result = render(request);
 
@@ -203,11 +206,11 @@ namespace gs {
         return current_state_;
     }
 
-    gs::rendering::RenderingPipeline::RenderResult SceneManager::render(
-        const gs::rendering::RenderingPipeline::RenderRequest& request) {
+    gs::rendering::RenderingPipelineResult SceneManager::render(
+        const gs::rendering::RenderingPipelineRequest& request) {
 
         if (!scene_) {
-            return gs::rendering::RenderingPipeline::RenderResult(false);
+            return gs::rendering::RenderingPipelineResult(false);
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -354,9 +357,6 @@ namespace gs {
                            [&name](const auto* node) { return node->name == name; })) {
             name = std::format("{}_{}", base_name, counter++);
         }
-
-        // Get gaussian count before moving
-        size_t gaussian_count = static_cast<size_t>((*splat_data)->size());
 
         // Add to scene graph
         scene_->addPLY(name, std::make_unique<SplatData>(std::move(**splat_data)));

@@ -65,8 +65,9 @@ namespace gs {
         cache_valid_ = false;
 
         // Initialize pipeline if needed
-        if (!pipeline_) {
-            pipeline_ = std::make_unique<gs::rendering::RenderingPipeline>();
+        if (!rendering_engine_) {
+            rendering_engine_ = gs::rendering::RenderingEngine::create();
+            rendering_engine_->initialize();
         }
 
         // Emit event with the correct total gaussian count
@@ -153,8 +154,9 @@ namespace gs {
         cache_valid_ = false;
         cached_combined_model_.reset();
 
-        if (!pipeline_) {
-            pipeline_ = std::make_unique<gs::rendering::RenderingPipeline>();
+        if (!rendering_engine_) {
+            rendering_engine_ = gs::rendering::RenderingEngine::create();
+            rendering_engine_->initialize();
         }
 
         // Update mode based on provider type
@@ -345,17 +347,17 @@ namespace gs {
         }
     }
 
-    gs::rendering::RenderingPipeline::RenderResult Scene::render(const gs::rendering::RenderingPipeline::RenderRequest& request) {
-        if (!hasModel() || !pipeline_) {
-            return gs::rendering::RenderingPipeline::RenderResult(false);
+    gs::rendering::RenderingPipelineResult Scene::render(const gs::rendering::RenderingPipelineRequest& request) {
+        if (!hasModel() || !rendering_engine_) {
+            return gs::rendering::RenderingPipelineResult(false);
         }
 
         const SplatData* model = getModel();
         if (!model) {
-            return gs::rendering::RenderingPipeline::RenderResult(false);
+            return gs::rendering::RenderingPipelineResult(false);
         }
 
-        return pipeline_->render(*model, request);
+        return rendering_engine_->renderWithPipeline(*model, request);
     }
 
     void Scene::handleModelInfoQuery() {

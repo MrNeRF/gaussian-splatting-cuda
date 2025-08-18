@@ -46,8 +46,8 @@ namespace gs::visualizer {
         struct RenderContext {
             const Viewport& viewport;
             const RenderSettings& settings;
-            const gs::rendering::RenderBoundingBox* crop_box;
-            const gs::rendering::RenderCoordinateAxes* coord_axes;
+            const gs::rendering::IBoundingBox* crop_box;
+            const gs::rendering::ICoordinateAxes* coord_axes;
             const geometry::EuclideanTransform* world_to_user;
             const ViewportRegion* viewport_region = nullptr;
             bool has_focus = false;
@@ -74,6 +74,7 @@ namespace gs::visualizer {
         float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
         bool isPerformanceCritical() const { return framerate_controller_.isPerformanceCritical(); }
         void resetFramerateController() { framerate_controller_.reset(); }
+        gs::rendering::RenderingEngine* getRenderingEngine() { return engine_.get(); }
 
     private:
         void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render);

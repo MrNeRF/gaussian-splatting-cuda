@@ -1,4 +1,4 @@
-add_library(gs_loader OBJECT
+add_library(gs_loader STATIC
         # Implementation file only (header is in include/loader/)
         loader.cpp
 

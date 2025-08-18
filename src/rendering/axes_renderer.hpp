@@ -1,32 +1,33 @@
 #pragma once
 
+#include "rendering/rendering.hpp"
 #include "shader.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
 namespace gs::rendering {
-    class RenderCoordinateAxes {
+    class RenderCoordinateAxes : public ICoordinateAxes {
     public:
         RenderCoordinateAxes();
-        ~RenderCoordinateAxes();
+        ~RenderCoordinateAxes() override;
 
-        // Set the size (length) of the axes
-        void setSize(float size);
-        float getSize() const { return size_; }
+        // ICoordinateAxes interface implementation
+        void setSize(float size) override;
+        [[nodiscard]] float getSize() const { return size_; }
 
         // Initialize OpenGL resources
         void init();
 
         // Check if initialized
-        bool isInitialized() const { return initialized_; }
+        [[nodiscard]] bool isInitialized() const { return initialized_; }
 
         // Set line width for axes
         void setLineWidth(float width) { line_width_ = width; }
 
         // Enable/disable individual axes
-        void setAxisVisible(int axis, bool visible); // 0=X, 1=Y, 2=Z
-        bool isAxisVisible(int axis) const;
+        void setAxisVisible(int axis, bool visible) override; // 0=X, 1=Y, 2=Z
+        [[nodiscard]] bool isAxisVisible(int axis) const override;
 
         // Render the coordinate axes
         void render(const glm::mat4& view, const glm::mat4& projection);
@@ -34,6 +35,7 @@ namespace gs::rendering {
     private:
         void createAxesGeometry();
         void setupVertexData();
+        void createShaders();
         void cleanup();
 
         // OpenGL resources

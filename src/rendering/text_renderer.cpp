@@ -1,6 +1,6 @@
-#include "gui/text_renderer.hpp"
+#include "text_renderer.hpp"
 
-namespace gs::gui {
+namespace gs::rendering {
 
     static const char* textVertexShader = R"(#version 330 core
 layout (location = 0) in vec4 vertex; // <vec2 pos, vec2 tex>
@@ -313,4 +313,4 @@ void main()
         glPixelStorei(GL_UNPACK_ALIGNMENT, unpack_alignment);
     }
 
-} // namespace gs::gui
+} // namespace gs::rendering

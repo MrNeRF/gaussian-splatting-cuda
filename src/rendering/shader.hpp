@@ -96,10 +96,22 @@ namespace gs::rendering {
     class Shader {
     public:
         Shader(const char* vshader_path, const char* fshader_path, bool create_buffer = true) {
+            std::cout << "Creating shader with vertex: " << vshader_path << std::endl;
+            std::cout << "Creating shader with fragment: " << fshader_path << std::endl;
+
             GLint status;
 
             std::string vshader_source = readShaderSourceFromFile(vshader_path);
             std::string fshader_source = readShaderSourceFromFile(fshader_path);
+
+            if (vshader_source.empty()) {
+                std::cerr << "ERROR: Vertex shader source is empty!" << std::endl;
+                exit(1);
+            }
+            if (fshader_source.empty()) {
+                std::cerr << "ERROR: Fragment shader source is empty!" << std::endl;
+                exit(1);
+            }
 
             constexpr GLsizei MAX_INFO_LOG_LENGTH = 2000;
             GLsizei info_log_length;
