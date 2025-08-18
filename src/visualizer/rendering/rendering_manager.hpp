@@ -90,9 +90,9 @@ namespace gs::visualizer {
 
         // Framerate control
         FramerateController framerate_controller_;
-        class Viewport* prev_viewport_state_ = nullptr;
+        std::unique_ptr<Viewport> prev_viewport_state_;
         float prev_fov_ = 0;
-        class geometry::EuclideanTransform* prev_world_to_usr_inv_ = nullptr;
+        std::unique_ptr<geometry::EuclideanTransform> prev_world_to_usr_inv_;
         glm::vec3 prev_background_color_;
         glm::ivec2 prev_render_size_;
         gs::rendering::RenderResult prev_result_;

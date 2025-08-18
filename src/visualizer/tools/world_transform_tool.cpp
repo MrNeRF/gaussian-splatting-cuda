@@ -5,7 +5,6 @@
 #include "rendering/rendering.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <glm/gtx/euler_angles.hpp>
 #include <imgui.h>
 
 namespace gs::visualizer {

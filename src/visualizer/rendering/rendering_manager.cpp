@@ -13,7 +13,9 @@
 
 namespace gs::visualizer {
 
-    RenderingManager::RenderingManager() {
+    RenderingManager::RenderingManager()
+        : prev_viewport_state_(std::make_unique<Viewport>()),
+          prev_world_to_usr_inv_(std::make_unique<geometry::EuclideanTransform>()) {
         setupEventHandlers();
     }
 
@@ -107,12 +109,8 @@ namespace gs::visualizer {
         // Render overlays
         drawOverlays(context);
 
-        // Update last viewport state
-        if (!prev_viewport_state_) {
-            prev_viewport_state_ = new Viewport(context.viewport);
-        } else {
-            *prev_viewport_state_ = context.viewport;
-        }
+        // Update last viewport state - use copy assignment with unique_ptr
+        *prev_viewport_state_ = context.viewport;
 
         // Draw focus indicator if viewport has focus
         if (context.has_focus && context.viewport_region) {
@@ -392,10 +390,6 @@ namespace gs::visualizer {
     }
 
     bool RenderingManager::hasCamChanged(const Viewport& current_viewport) {
-        if (!prev_viewport_state_) {
-            return true;
-        }
-
         // Compare current viewport with last known state
         const float epsilon = 1e-6f;
 
@@ -435,15 +429,10 @@ namespace gs::visualizer {
         bool scene_changed = hasCamChanged(context.viewport);
 
         if (!scene_changed && context.world_to_user) {
-            if (!prev_world_to_usr_inv_) {
-                prev_world_to_usr_inv_ = new geometry::EuclideanTransform(context.world_to_user->inv());
+            const auto& w2u = *context.world_to_user;
+            if (!(w2u * *prev_world_to_usr_inv_).isIdentity()) {
                 scene_changed = true;
-            } else {
-                const auto& w2u = *context.world_to_user;
-                if (!(w2u * *prev_world_to_usr_inv_).isIdentity()) {
-                    scene_changed = true;
-                    *prev_world_to_usr_inv_ = context.world_to_user->inv();
-                }
+                *prev_world_to_usr_inv_ = context.world_to_user->inv();
             }
         }
 

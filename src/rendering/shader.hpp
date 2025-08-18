@@ -12,6 +12,7 @@
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -53,9 +54,7 @@ namespace gs::rendering {
 
     template <typename E>
     inline GLenum get_type_enum() {
-        puts("Error getting type enum.");
-        exit(0);
-        return GL_NONE;
+        throw std::runtime_error("Error getting type enum: unsupported type");
     }
 
     template <>
@@ -105,12 +104,10 @@ namespace gs::rendering {
             std::string fshader_source = readShaderSourceFromFile(fshader_path);
 
             if (vshader_source.empty()) {
-                std::cerr << "ERROR: Vertex shader source is empty!" << std::endl;
-                exit(1);
+                throw std::runtime_error("ERROR: Vertex shader source is empty!");
             }
             if (fshader_source.empty()) {
-                std::cerr << "ERROR: Fragment shader source is empty!" << std::endl;
-                exit(1);
+                throw std::runtime_error("ERROR: Fragment shader source is empty!");
             }
 
             constexpr GLsizei MAX_INFO_LOG_LENGTH = 2000;
@@ -122,9 +119,9 @@ namespace gs::rendering {
                 if (compilation_status == GL_TRUE)
                     return;
                 glGetShaderInfoLog(shader, MAX_INFO_LOG_LENGTH, &info_log_length, info_log);
-                std::cerr << "Shader compilation error:\n"
-                          << info_log << std::endl;
-                exit(1);
+                std::string error_msg = "Shader compilation error:\n";
+                error_msg += info_log;
+                throw std::runtime_error(error_msg);
             };
 
             vshader = glCreateShader(GL_VERTEX_SHADER);
@@ -147,9 +144,9 @@ namespace gs::rendering {
             glGetProgramiv(program, GL_LINK_STATUS, &status);
             if (status != GL_TRUE) {
                 glGetProgramInfoLog(program, MAX_INFO_LOG_LENGTH, nullptr, info_log);
-                std::cerr << "Shader link error:\n"
-                          << info_log << std::endl;
-                exit(1);
+                std::string error_msg = "Shader link error:\n";
+                error_msg += info_log;
+                throw std::runtime_error(error_msg);
             }
 
             if (create_buffer) {
@@ -269,8 +266,7 @@ namespace gs::rendering {
         std::string readShaderSourceFromFile(const std::string& filePath) {
             std::ifstream file(filePath);
             if (!file.is_open()) {
-                std::cerr << "Failed to open shader file: " << filePath << std::endl;
-                exit(1);
+                throw std::runtime_error("Failed to open shader file: " + filePath);
             }
             std::stringstream buffer;
             buffer << file.rdbuf();
@@ -281,8 +277,7 @@ namespace gs::rendering {
             if (uniforms.count(name) == 0) {
                 GLint location = glGetUniformLocation(program, name.c_str());
                 if (location == -1) {
-                    std::cerr << "Error: cannot find uniform '" << name << "'\n";
-                    exit(1);
+                    throw std::runtime_error("Error: cannot find uniform '" + name + "'");
                 }
                 uniforms[name] = location;
             }
@@ -293,8 +288,7 @@ namespace gs::rendering {
             if (attributes.count(name) == 0) {
                 GLint location = glGetAttribLocation(program, name.c_str());
                 if (location == -1) {
-                    puts("Error getting attribute location.");
-                    exit(0);
+                    throw std::runtime_error("Error getting attribute location for '" + name + "'");
                 }
                 attributes[name] = location;
             }
