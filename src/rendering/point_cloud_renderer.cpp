@@ -1,7 +1,7 @@
-#include "rendering/point_cloud_renderer.hpp"
-#include "internal/resource_paths.hpp"
+#include "point_cloud_renderer.hpp"
+#include "shader_paths.hpp"
 
-namespace gs {
+namespace gs::rendering {
 
     constexpr float PointCloudRenderer::cube_vertices_[];
     constexpr unsigned int PointCloudRenderer::cube_indices_[];
@@ -31,8 +31,8 @@ namespace gs {
 
         // Create shader
         shader_ = std::make_unique<Shader>(
-            (visualizer::getShaderPath("point_cloud.vert")).string().c_str(),
-            (visualizer::getShaderPath("point_cloud.frag")).string().c_str(),
+            (rendering::getShaderPath("point_cloud.vert")).string().c_str(),
+            (rendering::getShaderPath("point_cloud.frag")).string().c_str(),
             false);
 
         createCubeGeometry();
@@ -152,4 +152,4 @@ namespace gs {
         shader_->unbind();
     }
 
-} // namespace gs
+} // namespace gs::rendering

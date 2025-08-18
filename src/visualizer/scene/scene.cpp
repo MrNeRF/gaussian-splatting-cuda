@@ -65,8 +65,9 @@ namespace gs {
         cache_valid_ = false;
 
         // Initialize pipeline if needed
-        if (!pipeline_) {
-            pipeline_ = std::make_unique<RenderingPipeline>();
+        if (!rendering_engine_) {
+            rendering_engine_ = gs::rendering::RenderingEngine::create();
+            rendering_engine_->initialize();
         }
 
         // Emit event with the correct total gaussian count
@@ -153,8 +154,9 @@ namespace gs {
         cache_valid_ = false;
         cached_combined_model_.reset();
 
-        if (!pipeline_) {
-            pipeline_ = std::make_unique<RenderingPipeline>();
+        if (!rendering_engine_) {
+            rendering_engine_ = gs::rendering::RenderingEngine::create();
+            rendering_engine_->initialize();
         }
 
         // Update mode based on provider type
@@ -345,29 +347,17 @@ namespace gs {
         }
     }
 
-    RenderingPipeline::RenderResult Scene::render(const RenderingPipeline::RenderRequest& request) {
-        if (!pipeline_) {
-            return RenderingPipeline::RenderResult(false);
+    gs::rendering::RenderingPipelineResult Scene::render(const gs::rendering::RenderingPipelineRequest& request) {
+        if (!hasModel() || !rendering_engine_) {
+            return gs::rendering::RenderingPipelineResult(false);
         }
 
-        // For viewing mode, we should always try to get the model
-        // even if all are invisible (will return empty combined model)
-        if (mode_ == Mode::Viewing) {
-            const SplatData* model = getModel();
-            if (!model || model->size() == 0) {
-                // No visible models to render
-                return RenderingPipeline::RenderResult(false);
-            }
-            return pipeline_->render(*model, request);
-        } else if (mode_ == Mode::Training && hasModel()) {
-            const SplatData* model = getModel();
-            if (!model) {
-                return RenderingPipeline::RenderResult(false);
-            }
-            return pipeline_->render(*model, request);
+        const SplatData* model = getModel();
+        if (!model) {
+            return gs::rendering::RenderingPipelineResult(false);
         }
 
-        return RenderingPipeline::RenderResult(false);
+        return rendering_engine_->renderWithPipeline(*model, request);
     }
 
     void Scene::handleModelInfoQuery() {

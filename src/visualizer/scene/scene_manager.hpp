@@ -2,7 +2,7 @@
 
 #include "core/events.hpp"
 #include "core/parameters.hpp"
-#include "rendering/rendering_pipeline.hpp"
+#include "rendering/rendering.hpp"
 #include "scene/scene.hpp"
 #include <filesystem>
 #include <memory>
@@ -70,8 +70,8 @@ namespace gs {
         bool hasScene() const { return scene_ != nullptr && scene_->hasModel(); }
 
         // Rendering request
-        RenderingPipeline::RenderResult render(
-            const RenderingPipeline::RenderRequest& request);
+        gs::rendering::RenderingPipelineResult render(
+            const gs::rendering::RenderingPipelineRequest& request);
 
         TrainerManager* getTrainerManager() { return trainer_manager_; }
         const TrainerManager* getTrainerManager() const { return trainer_manager_; }
