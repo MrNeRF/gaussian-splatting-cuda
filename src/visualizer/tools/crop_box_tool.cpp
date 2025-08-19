@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <imgui.h>
+#include <iostream>
 
 namespace gs::visualizer {
 
@@ -31,7 +32,13 @@ namespace gs::visualizer {
             return false;
 
         // Create the bounding box
-        bounding_box_ = engine->createBoundingBox();
+        auto bbox_result = engine->createBoundingBox();
+        if (!bbox_result) {
+            std::cerr << "Failed to create bounding box: " << bbox_result.error() << std::endl;
+            return false;
+        }
+
+        bounding_box_ = *bbox_result;
 
         // Initialize with default bounds
         if (bounding_box_) {

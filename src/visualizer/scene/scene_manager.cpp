@@ -210,7 +210,10 @@ namespace gs {
         const gs::rendering::RenderingPipelineRequest& request) {
 
         if (!scene_) {
-            return gs::rendering::RenderingPipelineResult(false);
+            // Return invalid result
+            gs::rendering::RenderingPipelineResult result;
+            result.valid = false;
+            return result;
         }
 
         auto start_time = std::chrono::high_resolution_clock::now();

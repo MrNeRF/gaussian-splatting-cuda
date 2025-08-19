@@ -31,7 +31,15 @@ namespace gs::visualizer {
             return;
 
         engine_ = gs::rendering::RenderingEngine::create();
-        engine_->initialize();
+        auto init_result = engine_->initialize();
+        if (!init_result) {
+            // Log error and throw exception since this is critical
+            events::notify::Error{
+                .message = "Failed to initialize rendering engine",
+                .details = init_result.error()}
+                .emit();
+            throw std::runtime_error("Failed to initialize rendering engine: " + init_result.error());
+        }
 
         initialized_ = true;
     }
@@ -40,7 +48,7 @@ namespace gs::visualizer {
         // Subscribe to SceneLoaded events
         scene_loaded_handler_id_ = events::state::SceneLoaded::when([this]([[maybe_unused]] const auto& event) {
             scene_just_loaded_ = true;
-            prev_result_.valid = false; // Invalidate cached result
+            prev_result_ = gs::rendering::RenderResult{}; // Clear cached result
         });
 
         // Subscribe to GridSettingsChanged events
@@ -52,13 +60,13 @@ namespace gs::visualizer {
 
         // Subscribe to SceneChanged events to invalidate cache
         scene_changed_handler_id_ = events::state::SceneChanged::when([this]([[maybe_unused]] const auto& event) {
-            prev_result_.valid = false; // Invalidate cached result when scene changes
+            prev_result_ = gs::rendering::RenderResult{}; // Clear cached result when scene changes
         });
 
         // Subscribe to CropBoxChanged events to invalidate cache when crop box changes
         events::ui::CropBoxChanged::when([this]([[maybe_unused]] const auto& event) {
             if (event.enabled) {
-                prev_result_.valid = false; // Invalidate cached result when crop box changes
+                prev_result_ = gs::rendering::RenderResult{}; // Clear cached result when crop box changes
             }
         });
     }
@@ -174,15 +182,20 @@ namespace gs::visualizer {
         }
 
         // Don't skip render if we're in point cloud mode or if settings changed or if cached result is invalid
-        if (prev_result_.valid && skip_render && !settings_.point_cloud_mode) {
+        if (prev_result_.image && skip_render && !settings_.point_cloud_mode) {
             // Use cached result
-            if (context.viewport_region) {
-                engine_->presentToScreen(
-                    prev_result_,
-                    glm::ivec2(context.viewport_region->x, context.viewport_region->y),
-                    render_size);
-            } else {
-                engine_->presentToScreen(prev_result_, glm::ivec2(0, 0), render_size);
+            auto present_result = context.viewport_region
+                                      ? engine_->presentToScreen(
+                                            prev_result_,
+                                            glm::ivec2(context.viewport_region->x, context.viewport_region->y),
+                                            render_size)
+                                      : engine_->presentToScreen(prev_result_, glm::ivec2(0, 0), render_size);
+
+            if (!present_result) {
+                events::notify::Error{
+                    .message = "Failed to present cached frame to screen",
+                    .details = present_result.error()}
+                    .emit();
             }
             return;
         }
@@ -220,7 +233,7 @@ namespace gs::visualizer {
 
         // Get trainer for potential mutex locking
         auto state = scene_manager->getCurrentState();
-        gs::rendering::RenderResult result;
+        gs::rendering::Result<gs::rendering::RenderResult> result;
 
         if (state.is_training && scene_manager->getTrainerManager()) {
             auto trainer = scene_manager->getTrainerManager()->getTrainer();
@@ -252,16 +265,27 @@ namespace gs::visualizer {
             }
         }
 
-        if (result.valid) {
-            if (context.viewport_region) {
-                engine_->presentToScreen(
-                    result,
-                    glm::ivec2(context.viewport_region->x, context.viewport_region->y),
-                    render_size);
+        if (result && result->image) {
+            auto present_result = context.viewport_region
+                                      ? engine_->presentToScreen(
+                                            *result,
+                                            glm::ivec2(context.viewport_region->x, context.viewport_region->y),
+                                            render_size)
+                                      : engine_->presentToScreen(*result, glm::ivec2(0, 0), render_size);
+
+            if (!present_result) {
+                events::notify::Error{
+                    .message = "Failed to present frame to screen",
+                    .details = present_result.error()}
+                    .emit();
             } else {
-                engine_->presentToScreen(result, glm::ivec2(0, 0), render_size);
+                prev_result_ = *result;
             }
-            prev_result_ = result;
+        } else if (!result) {
+            events::notify::Error{
+                .message = "Failed to render gaussians",
+                .details = result.error()}
+                .emit();
         }
     }
 
@@ -285,10 +309,17 @@ namespace gs::visualizer {
 
         // Render grid
         if (settings_.show_grid && engine_) {
-            engine_->renderGrid(
+            auto grid_result = engine_->renderGrid(
                 viewport,
                 static_cast<gs::rendering::GridPlane>(settings_.grid_plane),
                 settings_.grid_opacity);
+
+            if (!grid_result) {
+                events::notify::Error{
+                    .message = "Failed to render grid",
+                    .details = grid_result.error()}
+                    .emit();
+            }
         }
 
         // Render crop box
@@ -309,7 +340,13 @@ namespace gs::visualizer {
             glm::vec3 color = context.crop_box->getColor();
             float line_width = context.crop_box->getLineWidth();
 
-            engine_->renderBoundingBox(box, viewport, color, line_width);
+            auto bbox_result = engine_->renderBoundingBox(box, viewport, color, line_width);
+            if (!bbox_result) {
+                events::notify::Error{
+                    .message = "Failed to render bounding box",
+                    .details = bbox_result.error()}
+                    .emit();
+            }
         }
 
         // Render coordinate axes
@@ -319,7 +356,14 @@ namespace gs::visualizer {
                 context.coord_axes->isAxisVisible(0),
                 context.coord_axes->isAxisVisible(1),
                 context.coord_axes->isAxisVisible(2)};
-            engine_->renderCoordinateAxes(viewport, 2.0f, visible);
+
+            auto axes_result = engine_->renderCoordinateAxes(viewport, 2.0f, visible);
+            if (!axes_result) {
+                events::notify::Error{
+                    .message = "Failed to render coordinate axes",
+                    .details = axes_result.error()}
+                    .emit();
+            }
         }
     }
 

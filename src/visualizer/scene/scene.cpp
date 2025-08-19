@@ -67,7 +67,17 @@ namespace gs {
         // Initialize pipeline if needed
         if (!rendering_engine_) {
             rendering_engine_ = gs::rendering::RenderingEngine::create();
-            rendering_engine_->initialize();
+            auto init_result = rendering_engine_->initialize();
+            if (!init_result) {
+                std::println("Failed to initialize rendering engine: {}", init_result.error());
+                rendering_engine_.reset();
+                // Emit error event
+                events::notify::Error{
+                    .message = "Failed to initialize rendering engine",
+                    .details = init_result.error()}
+                    .emit();
+                return;
+            }
         }
 
         // Emit event with the correct total gaussian count
@@ -156,7 +166,16 @@ namespace gs {
 
         if (!rendering_engine_) {
             rendering_engine_ = gs::rendering::RenderingEngine::create();
-            rendering_engine_->initialize();
+            auto init_result = rendering_engine_->initialize();
+            if (!init_result) {
+                std::println("Failed to initialize rendering engine: {}", init_result.error());
+                rendering_engine_.reset();
+                // Emit error event
+                events::notify::Error{
+                    .message = "Failed to initialize rendering engine",
+                    .details = init_result.error()}
+                    .emit();
+            }
         }
 
         // Update mode based on provider type
@@ -349,12 +368,16 @@ namespace gs {
 
     gs::rendering::RenderingPipelineResult Scene::render(const gs::rendering::RenderingPipelineRequest& request) {
         if (!hasModel() || !rendering_engine_) {
-            return gs::rendering::RenderingPipelineResult(false);
+            gs::rendering::RenderingPipelineResult result;
+            result.valid = false;
+            return result;
         }
 
         const SplatData* model = getModel();
         if (!model) {
-            return gs::rendering::RenderingPipelineResult(false);
+            gs::rendering::RenderingPipelineResult result;
+            result.valid = false;
+            return result;
         }
 
         return rendering_engine_->renderWithPipeline(*model, request);
