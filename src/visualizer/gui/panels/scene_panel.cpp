@@ -276,21 +276,21 @@ namespace gs::gui {
                 }
 
                 // Right-click context menu
-                if (ImGui::BeginPopupContextItem()) {
-                    if (ImGui::MenuItem("Remove")) {
-                        events::cmd::RemovePLY{.name = node.name}.emit();
-                    }
-                    ImGui::Separator();
-                    bool menu_visible = node.visible;
-                    if (ImGui::MenuItem("Visible", nullptr, &menu_visible)) {
-                        node.visible = menu_visible;
-                        events::cmd::SetPLYVisibility{
-                            .name = node.name,
-                            .visible = menu_visible}
-                            .emit();
-                    }
-                    ImGui::EndPopup();
-                }
+                // if (ImGui::BeginPopupContextItem()) {
+                //    if (ImGui::MenuItem("Remove")) {
+                //        events::cmd::RemovePLY{.name = node.name}.emit();
+                //    }
+                //    ImGui::Separator();
+                //    bool menu_visible = node.visible;
+                //    if (ImGui::MenuItem("Visible", nullptr, &menu_visible)) {
+                //        node.visible = menu_visible;
+                //        events::cmd::SetPLYVisibility{
+                //            .name = node.name,
+                //            .visible = menu_visible}
+                //            .emit();
+                //    }
+                //    ImGui::EndPopup();
+                //}
             }
 
             // Show total gaussian count
