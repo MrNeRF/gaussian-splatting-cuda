@@ -70,7 +70,7 @@ namespace gs {
         }
 
         // Rendering
-        gs::rendering::RenderingPipelineResult render(const gs::rendering::RenderingPipelineRequest& request);
+        gs::rendering::RenderingPipelineResult render(const gs::rendering::RenderingPipelineRequest& request) const;
 
     private:
         Mode mode_ = Mode::Empty;
@@ -80,8 +80,6 @@ namespace gs {
 
         // For training mode - single model provider
         std::shared_ptr<IModelProvider> model_provider_;
-
-        std::unique_ptr<gs::rendering::RenderingEngine> rendering_engine_;
 
         // Caching for combined model
         mutable std::unique_ptr<SplatData> cached_combined_model_;

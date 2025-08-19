@@ -23,7 +23,6 @@ namespace gs::rendering {
         if (!vao_result) {
             throw std::runtime_error(vao_result.error());
         }
-        quadVAO_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
@@ -31,27 +30,28 @@ namespace gs::rendering {
         }
         quadVBO_ = std::move(*vbo_result);
 
-        VAOBinder vao_bind(quadVAO_);
-        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(quadVBO_);
-        upload_buffer(GL_ARRAY_BUFFER, quadVertices, 24, GL_STATIC_DRAW);
+        // Build VAO using VAOBuilder
+        VAOBuilder builder(std::move(*vao_result));
 
-        VertexAttribute pos_attr{
-            .index = 0,
-            .size = 2,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = 4 * sizeof(float),
-            .offset = nullptr};
-        pos_attr.apply();
+        std::span<const float> vertices_span(quadVertices, sizeof(quadVertices) / sizeof(float));
 
-        VertexAttribute tex_attr{
-            .index = 1,
-            .size = 2,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = 4 * sizeof(float),
-            .offset = (void*)(2 * sizeof(float))};
-        tex_attr.apply();
+        builder.attachVBO(quadVBO_, vertices_span, GL_STATIC_DRAW)
+            .setAttribute({.index = 0,
+                           .size = 2,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = 4 * sizeof(float),
+                           .offset = nullptr,
+                           .divisor = 0})
+            .setAttribute({.index = 1,
+                           .size = 2,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = 4 * sizeof(float),
+                           .offset = (void*)(2 * sizeof(float)),
+                           .divisor = 0});
+
+        quadVAO_ = builder.build();
     }
 
     Result<void> ScreenQuadRenderer::render(std::shared_ptr<Shader> shader) const {

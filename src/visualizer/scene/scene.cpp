@@ -64,22 +64,6 @@ namespace gs {
         // Invalidate cache
         cache_valid_ = false;
 
-        // Initialize pipeline if needed
-        if (!rendering_engine_) {
-            rendering_engine_ = gs::rendering::RenderingEngine::create();
-            auto init_result = rendering_engine_->initialize();
-            if (!init_result) {
-                std::println("Failed to initialize rendering engine: {}", init_result.error());
-                rendering_engine_.reset();
-                // Emit error event
-                events::notify::Error{
-                    .message = "Failed to initialize rendering engine",
-                    .details = init_result.error()}
-                    .emit();
-                return;
-            }
-        }
-
         // Emit event with the correct total gaussian count
         events::state::PLYAdded{
             .name = name,
@@ -163,20 +147,6 @@ namespace gs {
         model_provider_ = provider;
         cache_valid_ = false;
         cached_combined_model_.reset();
-
-        if (!rendering_engine_) {
-            rendering_engine_ = gs::rendering::RenderingEngine::create();
-            auto init_result = rendering_engine_->initialize();
-            if (!init_result) {
-                std::println("Failed to initialize rendering engine: {}", init_result.error());
-                rendering_engine_.reset();
-                // Emit error event
-                events::notify::Error{
-                    .message = "Failed to initialize rendering engine",
-                    .details = init_result.error()}
-                    .emit();
-            }
-        }
 
         // Update mode based on provider type
         Mode old_mode = mode_;
@@ -366,21 +336,10 @@ namespace gs {
         }
     }
 
-    gs::rendering::RenderingPipelineResult Scene::render(const gs::rendering::RenderingPipelineRequest& request) {
-        if (!hasModel() || !rendering_engine_) {
-            gs::rendering::RenderingPipelineResult result;
-            result.valid = false;
-            return result;
-        }
-
-        const SplatData* model = getModel();
-        if (!model) {
-            gs::rendering::RenderingPipelineResult result;
-            result.valid = false;
-            return result;
-        }
-
-        return rendering_engine_->renderWithPipeline(*model, request);
+    gs::rendering::RenderingPipelineResult Scene::render(const gs::rendering::RenderingPipelineRequest& request) const {
+        gs::rendering::RenderingPipelineResult result;
+        result.valid = false;
+        return result;
     }
 
     void Scene::handleModelInfoQuery() {

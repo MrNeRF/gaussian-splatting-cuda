@@ -23,7 +23,6 @@ namespace gs::rendering {
         if (!vao_result) {
             return std::unexpected(vao_result.error());
         }
-        vao_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
@@ -31,8 +30,8 @@ namespace gs::rendering {
         }
         vbo_ = std::move(*vbo_result);
 
-        VAOBinder vao_bind(vao_);
-        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
+        // Build VAO using VAOBuilder
+        VAOBuilder builder(std::move(*vao_result));
 
         // Full-screen quad vertices (-1 to 1)
         float vertices[] = {
@@ -41,17 +40,18 @@ namespace gs::rendering {
             -1.0f, 1.0f,
             1.0f, 1.0f};
 
-        upload_buffer(GL_ARRAY_BUFFER, vertices, sizeof(vertices) / sizeof(vertices[0]), GL_STATIC_DRAW);
+        std::span<const float> vertices_span(vertices, sizeof(vertices) / sizeof(float));
 
-        // Set up vertex attributes
-        VertexAttribute position_attr{
-            .index = 0,
-            .size = 2,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = 2 * sizeof(float),
-            .offset = nullptr};
-        position_attr.apply();
+        builder.attachVBO(vbo_, vertices_span, GL_STATIC_DRAW)
+            .setAttribute({.index = 0,
+                           .size = 2,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = 2 * sizeof(float),
+                           .offset = nullptr,
+                           .divisor = 0});
+
+        vao_ = builder.build();
 
         // Create blue noise texture
         if (auto noise_result = createBlueNoiseTexture(); !noise_result) {

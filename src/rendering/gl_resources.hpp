@@ -177,4 +177,91 @@ namespace gs::rendering {
         glBufferData(target, data.size_bytes(), data.data(), usage);
     }
 
+    // VAO Builder for proper EBO handling
+    class VAOBuilder {
+        VAO vao_;
+        bool built_ = false;
+        GLuint current_vbo_ = 0;
+
+    public:
+        explicit VAOBuilder(VAO&& vao) : vao_(std::move(vao)) {
+            glBindVertexArray(vao_);
+        }
+
+        ~VAOBuilder() {
+            if (!built_) {
+                // If not built, unbind and clean up
+                glBindVertexArray(0);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+            }
+        }
+
+        // Move only
+        VAOBuilder(VAOBuilder&& other) noexcept
+            : vao_(std::move(other.vao_)),
+              built_(other.built_),
+              current_vbo_(other.current_vbo_) {
+            other.built_ = true; // Prevent other from unbinding
+        }
+
+        VAOBuilder(const VAOBuilder&) = delete;
+        VAOBuilder& operator=(const VAOBuilder&) = delete;
+        VAOBuilder& operator=(VAOBuilder&&) = delete;
+
+        // Attach and fill a VBO with data
+        VAOBuilder& attachVBO(const VBO& vbo, std::span<const float> data, GLenum usage = GL_STATIC_DRAW) {
+            current_vbo_ = vbo.get();
+            glBindBuffer(GL_ARRAY_BUFFER, current_vbo_);
+            glBufferData(GL_ARRAY_BUFFER, data.size_bytes(), data.data(), usage);
+            return *this;
+        }
+
+        // Attach VBO without data (for instance buffers that will be filled later)
+        VAOBuilder& attachVBO(const VBO& vbo) {
+            current_vbo_ = vbo.get();
+            glBindBuffer(GL_ARRAY_BUFFER, current_vbo_);
+            return *this;
+        }
+
+        // Set attribute for the currently bound VBO
+        VAOBuilder& setAttribute(const VertexAttribute& attr) {
+            attr.apply();
+            return *this;
+        }
+
+        // Set attribute with explicit VBO binding
+        VAOBuilder& setAttribute(const VBO& vbo, const VertexAttribute& attr) {
+            glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
+            attr.apply();
+            current_vbo_ = vbo.get();
+            return *this;
+        }
+
+        // Special handling for EBO - it stays bound to the VAO
+        VAOBuilder& attachEBO(const EBO& ebo, std::span<const unsigned int> indices, GLenum usage = GL_STATIC_DRAW) {
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo.get());
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size_bytes(), indices.data(), usage);
+            // EBO binding is now part of VAO state - no unbind!
+            return *this;
+        }
+
+        // Attach EBO without data
+        VAOBuilder& attachEBO(const EBO& ebo) {
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo.get());
+            return *this;
+        }
+
+        // Build and return the VAO
+        VAO build() {
+            built_ = true;
+            glBindVertexArray(0);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            // Note: We do NOT unbind GL_ELEMENT_ARRAY_BUFFER here - it's part of VAO state
+            return std::move(vao_);
+        }
+
+        // Get the VAO without consuming (for special cases)
+        GLuint get() const { return vao_.get(); }
+    };
+
 } // namespace gs::rendering

@@ -121,7 +121,7 @@ namespace gs::visualizer {
         *prev_viewport_state_ = context.viewport;
 
         // Draw focus indicator if viewport has focus
-        if (context.has_focus && context.viewport_region) {
+        if (context.has_focus && context.viewport_region && !settings_.point_cloud_mode) {
             drawFocusIndicator(context);
         }
 

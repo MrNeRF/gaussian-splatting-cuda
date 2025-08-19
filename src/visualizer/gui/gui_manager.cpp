@@ -121,6 +121,17 @@ namespace gs::gui {
             }
         }
 
+        // CRITICAL FIX: In point cloud mode, always disable ImGui mouse capture in viewport
+        auto* rendering_manager = viewer_->getRenderingManager();
+        if (rendering_manager) {
+            const auto& settings = rendering_manager->getSettings();
+            if (settings.point_cloud_mode && mouse_in_viewport &&
+                !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+                ImGui::GetIO().WantCaptureMouse = false;
+                ImGui::GetIO().WantCaptureKeyboard = false;
+            }
+        }
+
         // Create main dockspace
         const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(main_viewport->WorkPos);
@@ -245,7 +256,16 @@ namespace gs::gui {
         }
 
         // Draw viewport focus indicator AFTER gizmo
-        if (viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
+        // DISABLE in point cloud mode
+        bool draw_focus = viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0;
+        if (rendering_manager) {
+            const auto& settings = rendering_manager->getSettings();
+            if (settings.point_cloud_mode) {
+                draw_focus = false;
+            }
+        }
+
+        if (draw_focus) {
             ImDrawList* draw_list = ImGui::GetForegroundDrawList();
 
             // The viewport_pos_ is already relative to the window, so we just need to add the window position

@@ -11,7 +11,11 @@ namespace gs::rendering {
 
     class PointCloudRenderer {
     public:
-        PointCloudRenderer() = default;
+        PointCloudRenderer() : initialized_(false),
+                               current_point_count_(0) {
+            std::cout << "[PointCloudRenderer] Constructor called at " << this << std::endl;
+            std::cout << "[PointCloudRenderer] Stack trace would be helpful here" << std::endl;
+        }
         ~PointCloudRenderer() = default;
 
         // Initialize OpenGL resources - now returns Result
@@ -52,7 +56,7 @@ namespace gs::rendering {
         bool initialized_ = false;
         size_t current_point_count_ = 0;
 
-        // Cube vertices and indices
+        // Cube vertices
         static constexpr float cube_vertices_[] = {
             // Front face
             -0.5f, -0.5f, 0.5f,
@@ -65,6 +69,7 @@ namespace gs::rendering {
             0.5f, 0.5f, -0.5f,
             -0.5f, 0.5f, -0.5f};
 
+        // Triangle indices for solid cube (6 faces, 12 triangles, 36 indices)
         static constexpr unsigned int cube_indices_[] = {
             // Front face
             0, 1, 2, 2, 3, 0,

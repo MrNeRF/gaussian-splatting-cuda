@@ -1,16 +1,16 @@
 #include "point_cloud_renderer.hpp"
 #include "shader_paths.hpp"
-#include <format>
 #include <vector>
 
 namespace gs::rendering {
 
-    constexpr float PointCloudRenderer::cube_vertices_[];
-    constexpr unsigned int PointCloudRenderer::cube_indices_[];
-
     Result<void> PointCloudRenderer::initialize() {
-        if (initialized_)
+        std::cout << "[PointCloudRenderer] initialize() called on instance " << this << std::endl;
+
+        if (initialized_) {
+            std::cout << "[PointCloudRenderer] WARNING: Already initialized!" << std::endl;
             return {};
+        }
 
         // Create shader
         auto result = load_shader("point_cloud", "point_cloud.vert", "point_cloud.frag", false);
@@ -28,77 +28,73 @@ namespace gs::rendering {
     }
 
     Result<void> PointCloudRenderer::createCubeGeometry() {
-        // Create VAO
+        // Create all resources first
         auto vao_result = create_vao();
         if (!vao_result) {
             return std::unexpected(vao_result.error());
         }
-        cube_vao_ = std::move(*vao_result);
 
-        VAOBinder vao_bind(cube_vao_);
-
-        // Create VBO for cube vertices
         auto vbo_result = create_vbo();
         if (!vbo_result) {
             return std::unexpected(vbo_result.error());
         }
         cube_vbo_ = std::move(*vbo_result);
 
-        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(cube_vbo_);
-        upload_buffer(GL_ARRAY_BUFFER, cube_vertices_, sizeof(cube_vertices_) / sizeof(cube_vertices_[0]), GL_STATIC_DRAW);
-
-        // Set vertex attributes for cube
-        VertexAttribute cube_attr{
-            .index = 0,
-            .size = 3,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = 3 * sizeof(float),
-            .offset = nullptr};
-        cube_attr.apply();
-
-        // Create EBO for cube indices
         auto ebo_result = create_vbo(); // EBO is also a buffer
         if (!ebo_result) {
             return std::unexpected(ebo_result.error());
         }
         cube_ebo_ = std::move(*ebo_result);
 
-        BufferBinder<GL_ELEMENT_ARRAY_BUFFER> ebo_bind(cube_ebo_);
-        upload_buffer(GL_ELEMENT_ARRAY_BUFFER, cube_indices_, sizeof(cube_indices_) / sizeof(cube_indices_[0]), GL_STATIC_DRAW);
-
-        // Create instance VBO for positions and colors
         auto instance_result = create_vbo();
         if (!instance_result) {
             return std::unexpected(instance_result.error());
         }
         instance_vbo_ = std::move(*instance_result);
 
-        BufferBinder<GL_ARRAY_BUFFER> instance_bind(instance_vbo_);
+        // Build VAO using VAOBuilder
+        VAOBuilder builder(std::move(*vao_result));
 
-        // Instance position attribute
-        VertexAttribute pos_attr{
-            .index = 1,
-            .size = 3,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = 6 * sizeof(float),
-            .offset = nullptr,
-            .divisor = 1 // One per instance
-        };
-        pos_attr.apply();
+        // Setup cube geometry
+        std::span<const float> vertices_span(cube_vertices_,
+                                             sizeof(cube_vertices_) / sizeof(float));
+        builder.attachVBO(cube_vbo_, vertices_span, GL_STATIC_DRAW)
+            .setAttribute({.index = 0,
+                           .size = 3,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = 3 * sizeof(float),
+                           .offset = nullptr,
+                           .divisor = 0});
 
-        // Instance color attribute
-        VertexAttribute color_attr{
-            .index = 2,
-            .size = 3,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = 6 * sizeof(float),
-            .offset = (void*)(3 * sizeof(float)),
-            .divisor = 1 // One per instance
-        };
-        color_attr.apply();
+        // Setup instance attributes (structure only, data comes later)
+        builder.attachVBO(instance_vbo_) // Attach without data
+            .setAttribute({
+                .index = 1,
+                .size = 3,
+                .type = GL_FLOAT,
+                .normalized = GL_FALSE,
+                .stride = 6 * sizeof(float),
+                .offset = nullptr,
+                .divisor = 1 // Instance attribute
+            })
+            .setAttribute({
+                .index = 2,
+                .size = 3,
+                .type = GL_FLOAT,
+                .normalized = GL_FALSE,
+                .stride = 6 * sizeof(float),
+                .offset = (void*)(3 * sizeof(float)),
+                .divisor = 1 // Instance attribute
+            });
+
+        // Attach EBO - stays bound to VAO
+        std::span<const unsigned int> indices_span(cube_indices_,
+                                                   sizeof(cube_indices_) / sizeof(unsigned int));
+        builder.attachEBO(cube_ebo_, indices_span, GL_STATIC_DRAW);
+
+        // Build and store the VAO
+        cube_vao_ = builder.build();
 
         return {};
     }
@@ -165,13 +161,35 @@ namespace gs::rendering {
         auto pos_cpu = positions.cpu().contiguous();
         auto col_cpu = colors.cpu().contiguous();
 
+        // Validate tensor dimensions
+        if (pos_cpu.numel() == 0 || col_cpu.numel() == 0) {
+            return std::unexpected("Empty tensor after CPU conversion");
+        }
+
+        if (pos_cpu.numel() % 3 != 0) {
+            return std::unexpected("Invalid position tensor dimensions");
+        }
+
+        if (col_cpu.numel() % 3 != 0) {
+            return std::unexpected("Invalid color tensor dimensions");
+        }
+
         // Create spans for the data
+        if (!pos_cpu.data_ptr<float>() || !col_cpu.data_ptr<float>()) {
+            return std::unexpected("Null tensor data pointer");
+        }
+
         std::span<const float> pos_span(pos_cpu.data_ptr<float>(), pos_cpu.numel());
         std::span<const float> col_span(col_cpu.data_ptr<float>(), col_cpu.numel());
 
         // Upload data to GPU
         if (auto result = uploadPointData(pos_span, col_span); !result) {
             return result;
+        }
+
+        // Validate instance count
+        if (current_point_count_ > 10000000) { // 10 million sanity check
+            return std::unexpected("Instance count exceeds reasonable limit");
         }
 
         // Setup rendering state
@@ -182,17 +200,35 @@ namespace gs::rendering {
 
         // Bind shader and set uniforms
         ShaderScope s(shader_);
-        if (auto result = s->set("u_view", view); !result)
+        if (auto result = s->set("u_view", view); !result) {
             return result;
-        if (auto result = s->set("u_projection", projection); !result)
+        }
+        if (auto result = s->set("u_projection", projection); !result) {
             return result;
-        if (auto result = s->set("u_voxel_size", voxel_size); !result)
+        }
+        if (auto result = s->set("u_voxel_size", voxel_size); !result) {
             return result;
+        }
+
+        // Validate VAO
+        if (!cube_vao_ || cube_vao_.get() == 0) {
+            return std::unexpected("Invalid cube VAO");
+        }
 
         // Render instanced cubes
+        if (current_point_count_ == 0) {
+            return {};
+        }
+
         VAOBinder vao_bind(cube_vao_);
         glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0,
                                 static_cast<GLsizei>(current_point_count_));
+
+        // Check for OpenGL errors
+        GLenum gl_error = glGetError();
+        if (gl_error != GL_NO_ERROR) {
+            return std::unexpected(std::format("OpenGL error after draw call: 0x{:x}", gl_error));
+        }
 
         return {};
     }

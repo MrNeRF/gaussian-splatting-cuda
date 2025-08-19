@@ -3,7 +3,6 @@
 #include "axes_renderer.hpp"
 #include "bbox_renderer.hpp"
 #include "grid_renderer.hpp"
-#include "point_cloud_renderer.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering_pipeline.hpp"
 #include "screen_renderer.hpp"
@@ -67,7 +66,7 @@ namespace gs::rendering {
 
         // Core components
         RenderingPipeline pipeline_;
-        PointCloudRenderer point_cloud_renderer_;
+        // REMOVED: PointCloudRenderer point_cloud_renderer_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
 
         // Overlay renderers

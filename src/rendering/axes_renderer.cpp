@@ -66,13 +66,34 @@ namespace gs::rendering {
         if (!vao_result) {
             return std::unexpected(vao_result.error());
         }
-        vao_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
             return std::unexpected(vbo_result.error());
         }
         vbo_ = std::move(*vbo_result);
+
+        // Build VAO using VAOBuilder
+        VAOBuilder builder(std::move(*vao_result));
+
+        // Setup vertex attributes (data will be filled in setupVertexData)
+        builder.attachVBO(vbo_) // Attach without data initially
+            .setAttribute({.index = 0,
+                           .size = 3,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = sizeof(AxisVertex),
+                           .offset = (void*)offsetof(AxisVertex, position),
+                           .divisor = 0})
+            .setAttribute({.index = 1,
+                           .size = 3,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = sizeof(AxisVertex),
+                           .offset = (void*)offsetof(AxisVertex, color),
+                           .divisor = 0});
+
+        vao_ = builder.build();
 
         initialized_ = true;
 
@@ -113,31 +134,9 @@ namespace gs::rendering {
         if (!initialized_ || !vao_ || vertices_.empty())
             return {}; // Nothing to setup if no visible axes
 
-        VAOBinder vao_bind(vao_);
-
-        // Bind and upload vertex data
+        // Upload vertex data
         BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
         upload_buffer(GL_ARRAY_BUFFER, std::span(vertices_), GL_DYNAMIC_DRAW);
-
-        // Position attribute (location 0)
-        VertexAttribute position_attr{
-            .index = 0,
-            .size = 3,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = sizeof(AxisVertex),
-            .offset = (void*)offsetof(AxisVertex, position)};
-        position_attr.apply();
-
-        // Color attribute (location 1)
-        VertexAttribute color_attr{
-            .index = 1,
-            .size = 3,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = sizeof(AxisVertex),
-            .offset = (void*)offsetof(AxisVertex, color)};
-        color_attr.apply();
 
         return {};
     }

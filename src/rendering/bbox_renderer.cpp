@@ -1,7 +1,6 @@
 #include "bbox_renderer.hpp"
 #include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
-#include <format>
 
 namespace gs::rendering {
 
@@ -41,7 +40,6 @@ namespace gs::rendering {
         if (!vao_result) {
             return std::unexpected(vao_result.error());
         }
-        vao_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
@@ -54,6 +52,22 @@ namespace gs::rendering {
             return std::unexpected(ebo_result.error());
         }
         ebo_ = std::move(*ebo_result);
+
+        // Build VAO using VAOBuilder
+        VAOBuilder builder(std::move(*vao_result));
+
+        // We'll set up the structure now, data will come in setupVertexData
+        builder.attachVBO(vbo_) // Attach without data initially
+            .setAttribute({.index = 0,
+                           .size = 3,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = sizeof(glm::vec3),
+                           .offset = nullptr,
+                           .divisor = 0})
+            .attachEBO(ebo_); // Attach EBO without data initially
+
+        vao_ = builder.build();
 
         initialized_ = true;
 
@@ -87,25 +101,13 @@ namespace gs::rendering {
         if (!initialized_ || !vao_)
             return std::unexpected("Bounding box not initialized");
 
-        VAOBinder vao_bind(vao_);
-
-        // Bind and upload vertex data
+        // Upload vertex data
         BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
         upload_buffer(GL_ARRAY_BUFFER, std::span(vertices_), GL_DYNAMIC_DRAW);
 
-        // Bind and upload index data
+        // Upload index data
         BufferBinder<GL_ELEMENT_ARRAY_BUFFER> ebo_bind(ebo_);
         upload_buffer(GL_ELEMENT_ARRAY_BUFFER, std::span(indices_), GL_STATIC_DRAW);
-
-        // Vertex attribute setup
-        VertexAttribute position_attr{
-            .index = 0,
-            .size = 3,
-            .type = GL_FLOAT,
-            .normalized = GL_FALSE,
-            .stride = sizeof(glm::vec3),
-            .offset = nullptr};
-        position_attr.apply();
 
         return {};
     }

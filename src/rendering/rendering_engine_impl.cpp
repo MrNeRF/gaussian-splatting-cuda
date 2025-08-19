@@ -1,12 +1,13 @@
 #include "rendering_engine_impl.hpp"
-#include "core/splat_data.hpp"
 #include "framebuffer_factory.hpp"
 #include "geometry/bounding_box.hpp"
 #include <print>
 
 namespace gs::rendering {
 
-    RenderingEngineImpl::RenderingEngineImpl() = default;
+    RenderingEngineImpl::RenderingEngineImpl() {
+        std::println("Initializing RenderingEngineImpl");
+    };
 
     RenderingEngineImpl::~RenderingEngineImpl() {
         shutdown();
@@ -19,12 +20,6 @@ namespace gs::rendering {
         }
 
         std::println("Initializing rendering engine...");
-
-        // Initialize components
-        if (auto result = point_cloud_renderer_.initialize(); !result) {
-            shutdown(); // Clean up partial initialization
-            return std::unexpected(result.error());
-        }
 
         // Create screen renderer with preferred mode
         screen_renderer_ = std::make_shared<ScreenQuadRenderer>(getPreferredFrameBufferMode());
