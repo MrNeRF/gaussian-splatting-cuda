@@ -1,4 +1,5 @@
 #include "viewport_gizmo.hpp"
+#include "gl_state_guard.hpp"
 #include "shader.hpp"
 #include "shader_paths.hpp"
 #include "text_renderer.hpp"
@@ -159,28 +160,8 @@ namespace gs::rendering {
         if (!initialized_)
             return;
 
-        // Save comprehensive OpenGL state
-        GLint vp[4];
-        glGetIntegerv(GL_VIEWPORT, vp);
-        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
-        GLboolean stencil_test_enabled = glIsEnabled(GL_STENCIL_TEST);
-        GLboolean scissor_test_enabled = glIsEnabled(GL_SCISSOR_TEST);
-        GLboolean cull_face_enabled = glIsEnabled(GL_CULL_FACE);
-        GLint depth_func;
-        glGetIntegerv(GL_DEPTH_FUNC, &depth_func);
-        GLint blend_src, blend_dst;
-        glGetIntegerv(GL_BLEND_SRC, &blend_src);
-        glGetIntegerv(GL_BLEND_DST, &blend_dst);
-        GLint blend_equation_rgb, blend_equation_alpha;
-        glGetIntegerv(GL_BLEND_EQUATION_RGB, &blend_equation_rgb);
-        glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &blend_equation_alpha);
-        GLboolean depth_mask;
-        glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
-        GLboolean color_mask[4];
-        glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
-        GLint active_texture;
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &active_texture);
+        // Use RAII for OpenGL state management
+        GLStateGuard state_guard;
 
         // Calculate gizmo position (upper right of viewport)
         int gizmo_x = static_cast<int>(viewport_pos.x + viewport_size.x - size_ - margin_);
@@ -298,6 +279,9 @@ namespace gs::rendering {
             return a.depth > b.depth;
         });
 
+        // Get current viewport for relative positioning
+        auto vp = state_guard.savedState().viewport;
+
         // Make screen positions relative to the current viewport origin
         for (int i = 0; i < 3; ++i) {
             sphereInfo[i].screenPos.x -= vp[0];
@@ -394,40 +378,7 @@ namespace gs::rendering {
         shader_->unbind();
         glBindVertexArray(0);
 
-        // Restore ALL OpenGL state
-        glViewport(vp[0], vp[1], vp[2], vp[3]);
-
-        if (!depth_test_enabled)
-            glDisable(GL_DEPTH_TEST);
-        else
-            glEnable(GL_DEPTH_TEST);
-
-        if (!blend_enabled)
-            glDisable(GL_BLEND);
-        else
-            glEnable(GL_BLEND);
-
-        if (stencil_test_enabled)
-            glEnable(GL_STENCIL_TEST);
-        else
-            glDisable(GL_STENCIL_TEST);
-
-        if (scissor_test_enabled)
-            glEnable(GL_SCISSOR_TEST);
-        else
-            glDisable(GL_SCISSOR_TEST);
-
-        if (cull_face_enabled)
-            glEnable(GL_CULL_FACE);
-        else
-            glDisable(GL_CULL_FACE);
-
-        glDepthFunc(depth_func);
-        glBlendFunc(blend_src, blend_dst);
-        glBlendEquationSeparate(blend_equation_rgb, blend_equation_alpha);
-        glDepthMask(depth_mask);
-        glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
-        glActiveTexture(active_texture);
+        // State automatically restored by GLStateGuard destructor
     }
 
 } // namespace gs::rendering

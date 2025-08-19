@@ -1,5 +1,6 @@
 #include "point_cloud_renderer.hpp"
 #include "shader_paths.hpp"
+#include <vector>
 
 namespace gs::rendering {
 
@@ -82,27 +83,27 @@ namespace gs::rendering {
         return colors.clamp(0.0f, 1.0f);
     }
 
-    void PointCloudRenderer::uploadPointData(const torch::Tensor& positions, const torch::Tensor& colors) {
-        // Ensure tensors are on CPU and contiguous
-        auto pos_cpu = positions.cpu().contiguous();
-        auto col_cpu = colors.cpu().contiguous();
+    void PointCloudRenderer::uploadPointData(std::span<const float> positions, std::span<const float> colors) {
+        // Using span, we can calculate the number of points
+        size_t num_points = positions.size() / 3;
+
+        // Validate sizes
+        if (positions.size() != num_points * 3 || colors.size() != num_points * 3) {
+            throw std::runtime_error("Invalid position or color data size");
+        }
 
         // Interleave position and color data
-        size_t num_points = positions.size(0);
         std::vector<float> instance_data(num_points * 6);
-
-        auto pos_accessor = pos_cpu.accessor<float, 2>();
-        auto col_accessor = col_cpu.accessor<float, 2>();
 
         for (size_t i = 0; i < num_points; ++i) {
             // Position
-            instance_data[i * 6 + 0] = pos_accessor[i][0];
-            instance_data[i * 6 + 1] = pos_accessor[i][1];
-            instance_data[i * 6 + 2] = pos_accessor[i][2];
+            instance_data[i * 6 + 0] = positions[i * 3 + 0];
+            instance_data[i * 6 + 1] = positions[i * 3 + 1];
+            instance_data[i * 6 + 2] = positions[i * 3 + 2];
             // Color - ensure values are in [0, 1] range
-            instance_data[i * 6 + 3] = std::clamp(col_accessor[i][0], 0.0f, 1.0f);
-            instance_data[i * 6 + 4] = std::clamp(col_accessor[i][1], 0.0f, 1.0f);
-            instance_data[i * 6 + 5] = std::clamp(col_accessor[i][2], 0.0f, 1.0f);
+            instance_data[i * 6 + 3] = std::clamp(colors[i * 3 + 0], 0.0f, 1.0f);
+            instance_data[i * 6 + 4] = std::clamp(colors[i * 3 + 1], 0.0f, 1.0f);
+            instance_data[i * 6 + 5] = std::clamp(colors[i * 3 + 2], 0.0f, 1.0f);
         }
 
         // Upload to GPU
@@ -128,8 +129,16 @@ namespace gs::rendering {
         // Extract RGB colors from SH coefficients
         torch::Tensor colors = extractRGBFromSH(shs);
 
+        // Ensure tensors are on CPU and contiguous
+        auto pos_cpu = positions.cpu().contiguous();
+        auto col_cpu = colors.cpu().contiguous();
+
+        // Create spans for the data
+        std::span<const float> pos_span(pos_cpu.data_ptr<float>(), pos_cpu.numel());
+        std::span<const float> col_span(col_cpu.data_ptr<float>(), col_cpu.numel());
+
         // Upload data to GPU
-        uploadPointData(positions, colors);
+        uploadPointData(pos_span, col_span);
 
         // Setup rendering state
         glEnable(GL_DEPTH_TEST);

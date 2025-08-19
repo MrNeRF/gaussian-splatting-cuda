@@ -31,10 +31,6 @@ namespace gs::rendering {
             torch::Tensor image = torch::Tensor();
             torch::Tensor depth = torch::Tensor();
             bool valid = false;
-
-            RenderResult(bool v = false) : image(),
-                                           depth(),
-                                           valid(v) {}
         };
 
         RenderingPipeline();

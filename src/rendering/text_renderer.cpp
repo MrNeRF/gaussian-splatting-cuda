@@ -1,4 +1,5 @@
 #include "text_renderer.hpp"
+#include "gl_state_guard.hpp"
 
 namespace gs::rendering {
 
@@ -182,34 +183,8 @@ void main()
 
     void TextRenderer::RenderText(const std::string& text, float x, float y, float scale,
                                   const glm::vec3& color) {
-        // Save comprehensive OpenGL state
-        GLint current_program;
-        glGetIntegerv(GL_CURRENT_PROGRAM, &current_program);
-        GLint current_vao;
-        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &current_vao);
-        GLint current_active_texture;
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &current_active_texture);
-        GLint current_texture_binding;
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &current_texture_binding);
-        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
-        GLboolean depth_enabled = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean cull_enabled = glIsEnabled(GL_CULL_FACE);
-        GLboolean scissor_enabled = glIsEnabled(GL_SCISSOR_TEST);
-        GLboolean stencil_enabled = glIsEnabled(GL_STENCIL_TEST);
-        GLint blend_src, blend_dst;
-        glGetIntegerv(GL_BLEND_SRC_ALPHA, &blend_src);
-        glGetIntegerv(GL_BLEND_DST_ALPHA, &blend_dst);
-        GLint blend_equation_rgb, blend_equation_alpha;
-        glGetIntegerv(GL_BLEND_EQUATION_RGB, &blend_equation_rgb);
-        glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &blend_equation_alpha);
-        GLboolean depth_mask;
-        glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
-        GLboolean color_mask[4];
-        glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
-        GLint viewport[4];
-        glGetIntegerv(GL_VIEWPORT, viewport);
-        GLint unpack_alignment;
-        glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack_alignment);
+        // Use RAII for OpenGL state management
+        GLStateGuard state_guard;
 
         // Set up our rendering state
         glEnable(GL_BLEND);
@@ -277,40 +252,7 @@ void main()
             x += (ch.advance >> 6) * scale;
         }
 
-        // Restore ALL OpenGL state
-        glUseProgram(current_program);
-        glBindVertexArray(current_vao);
-        glActiveTexture(current_active_texture);
-        glBindTexture(GL_TEXTURE_2D, current_texture_binding);
-
-        if (!blend_enabled)
-            glDisable(GL_BLEND);
-        else
-            glEnable(GL_BLEND);
-
-        if (depth_enabled)
-            glEnable(GL_DEPTH_TEST);
-        else
-            glDisable(GL_DEPTH_TEST);
-
-        if (cull_enabled)
-            glEnable(GL_CULL_FACE);
-        else
-            glDisable(GL_CULL_FACE);
-
-        if (scissor_enabled)
-            glEnable(GL_SCISSOR_TEST);
-        else
-            glDisable(GL_SCISSOR_TEST);
-
-        if (stencil_enabled)
-            glEnable(GL_STENCIL_TEST);
-
-        glBlendFunc(blend_src, blend_dst);
-        glBlendEquationSeparate(blend_equation_rgb, blend_equation_alpha);
-        glDepthMask(depth_mask);
-        glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, unpack_alignment);
+        // State automatically restored by GLStateGuard destructor
     }
 
 } // namespace gs::rendering

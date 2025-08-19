@@ -16,15 +16,15 @@ namespace gs::rendering {
         RenderingEngineImpl();
         ~RenderingEngineImpl() override;
 
-        void initialize() override;
+        Result<void> initialize() override;
         void shutdown() override;
-        bool isInitialized() const override { return initialized_; }
+        bool isInitialized() const override;
 
-        RenderResult renderGaussians(
+        Result<RenderResult> renderGaussians(
             const SplatData& splat_data,
             const RenderRequest& request) override;
 
-        void presentToScreen(
+        Result<void> presentToScreen(
             const RenderResult& result,
             const glm::ivec2& viewport_pos,
             const glm::ivec2& viewport_size) override;
@@ -60,25 +60,23 @@ namespace gs::rendering {
         std::shared_ptr<ICoordinateAxes> createCoordinateAxes() override;
 
     private:
-        void initializeShaders();
+        Result<void> initializeShaders();
         glm::mat4 createProjectionMatrix(const ViewportData& viewport) const;
         glm::mat4 createViewMatrix(const ViewportData& viewport) const;
 
         // Core components
-        std::unique_ptr<RenderingPipeline> pipeline_;
-        std::unique_ptr<PointCloudRenderer> point_cloud_renderer_;
+        RenderingPipeline pipeline_;
+        PointCloudRenderer point_cloud_renderer_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
 
         // Overlay renderers
-        std::unique_ptr<RenderInfiniteGrid> grid_renderer_;
-        std::unique_ptr<RenderBoundingBox> bbox_renderer_;
-        std::unique_ptr<RenderCoordinateAxes> axes_renderer_;
-        std::unique_ptr<ViewportGizmo> viewport_gizmo_;
+        RenderInfiniteGrid grid_renderer_;
+        RenderBoundingBox bbox_renderer_;
+        RenderCoordinateAxes axes_renderer_;
+        ViewportGizmo viewport_gizmo_;
 
         // Shaders
         std::shared_ptr<Shader> quad_shader_;
-
-        bool initialized_ = false;
     };
 
 } // namespace gs::rendering

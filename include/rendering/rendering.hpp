@@ -2,9 +2,11 @@
 
 #include "geometry/euclidean_transform.hpp"
 #include <array>
+#include <expected>
 #include <glm/glm.hpp>
 #include <memory>
 #include <optional>
+#include <string>
 #include <torch/types.h>
 
 namespace gs {
@@ -12,6 +14,10 @@ namespace gs {
 }
 
 namespace gs::rendering {
+
+    // Error handling with std::expected (C++23)
+    template <typename T>
+    using Result = std::expected<T, std::string>;
 
     // Public types
     struct ViewportData {
@@ -40,7 +46,6 @@ namespace gs::rendering {
     struct RenderResult {
         std::shared_ptr<torch::Tensor> image;
         std::shared_ptr<torch::Tensor> depth;
-        bool valid = false;
     };
 
     enum class GridPlane {
@@ -77,8 +82,6 @@ namespace gs::rendering {
         torch::Tensor image;
         torch::Tensor depth;
         bool valid = false;
-
-        RenderingPipelineResult(bool v = false) : valid(v) {}
     };
 
     // Interface for bounding box manipulation (for visualizer)
@@ -123,17 +126,17 @@ namespace gs::rendering {
         virtual ~RenderingEngine() = default;
 
         // Lifecycle
-        virtual void initialize() = 0;
+        virtual Result<void> initialize() = 0;
         virtual void shutdown() = 0;
         virtual bool isInitialized() const = 0;
 
-        // Core rendering
-        virtual RenderResult renderGaussians(
+        // Core rendering with error handling
+        virtual Result<RenderResult> renderGaussians(
             const SplatData& splat_data,
             const RenderRequest& request) = 0;
 
         // Present to screen
-        virtual void presentToScreen(
+        virtual Result<void> presentToScreen(
             const RenderResult& result,
             const glm::ivec2& viewport_pos,
             const glm::ivec2& viewport_size) = 0;

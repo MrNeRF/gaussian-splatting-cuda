@@ -4,6 +4,7 @@
 #include "shader.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <span>
 #include <torch/torch.h>
 
 namespace gs::rendering {
@@ -28,7 +29,7 @@ namespace gs::rendering {
 
     private:
         void createCubeGeometry();
-        void uploadPointData(const torch::Tensor& positions, const torch::Tensor& colors);
+        void uploadPointData(std::span<const float> positions, std::span<const float> colors);
         static torch::Tensor extractRGBFromSH(const torch::Tensor& shs);
 
         // OpenGL resources
