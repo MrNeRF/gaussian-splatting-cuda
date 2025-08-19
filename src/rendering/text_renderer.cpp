@@ -6,42 +6,13 @@
 
 namespace gs::rendering {
 
-    static const char* textVertexShader = R"(#version 330 core
-layout (location = 0) in vec4 vertex; // <vec2 pos, vec2 tex>
-out vec2 TexCoords;
-
-uniform mat4 projection;
-
-void main()
-{
-    gl_Position = projection * vec4(vertex.xy, 0.0, 1.0);
-    TexCoords = vertex.zw;
-})";
-
-    static const char* textFragmentShader = R"(#version 330 core
-in vec2 TexCoords;
-out vec4 color;
-
-uniform sampler2D text;
-uniform vec3 textColor;
-
-void main()
-{
-    vec4 sampled = vec4(1.0, 1.0, 1.0, texture(text, TexCoords).r);
-    color = vec4(textColor, 1.0) * sampled;
-})";
-
     TextRenderer::TextRenderer(unsigned int width, unsigned int height)
         : screenWidth(width),
-          screenHeight(height),
-          shaderProgram(0) {
+          screenHeight(height) {
         initRenderData();
     }
 
     TextRenderer::~TextRenderer() {
-        if (shaderProgram)
-            glDeleteProgram(shaderProgram);
-
         for (auto& pair : characters) {
             glDeleteTextures(1, &pair.second.textureID);
         }
@@ -95,11 +66,6 @@ void main()
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-            GLenum err = glGetError();
-            if (err != GL_NO_ERROR) {
-                std::cerr << "OpenGL error after creating texture for character " << c << ": " << err << std::endl;
-            }
-
             Character character = {
                 texture,
                 glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
@@ -117,20 +83,28 @@ void main()
     }
 
     void TextRenderer::initRenderData() {
+        // Load shader using shader manager
+        auto result = load_shader("text_renderer", "text_renderer.vert", "text_renderer.frag", false);
+        if (!result) {
+            throw std::runtime_error(result.error().what());
+        }
+        shader_ = std::move(*result);
+
+        // Create VAO and VBO
         auto vao_result = create_vao();
         if (!vao_result) {
             throw std::runtime_error(vao_result.error().what());
         }
-        VAO_ = std::move(*vao_result);
+        vao_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
             throw std::runtime_error(vbo_result.error().what());
         }
-        VBO_ = std::move(*vbo_result);
+        vbo_ = std::move(*vbo_result);
 
-        VAOBinder vao_bind(VAO_);
-        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(VBO_);
+        VAOBinder vao_bind(vao_);
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
 
         glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
 
@@ -142,57 +116,11 @@ void main()
             .stride = 4 * sizeof(float),
             .offset = nullptr};
         attr.apply();
-
-        compileShaders();
     }
 
-    bool TextRenderer::compileShaders() {
-        GLuint vertex = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertex, 1, &textVertexShader, NULL);
-        glCompileShader(vertex);
-
-        GLint success;
-        GLchar infoLog[512];
-        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(vertex, 512, NULL, infoLog);
-            std::cerr << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n"
-                      << infoLog << std::endl;
-            return false;
-        }
-
-        GLuint fragment = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragment, 1, &textFragmentShader, NULL);
-        glCompileShader(fragment);
-
-        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(fragment, 512, NULL, infoLog);
-            std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n"
-                      << infoLog << std::endl;
-            return false;
-        }
-
-        shaderProgram = glCreateProgram();
-        glAttachShader(shaderProgram, vertex);
-        glAttachShader(shaderProgram, fragment);
-        glLinkProgram(shaderProgram);
-
-        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-        if (!success) {
-            glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-            std::cerr << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n"
-                      << infoLog << std::endl;
-            return false;
-        }
-
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
-
-        uProjection = glGetUniformLocation(shaderProgram, "projection");
-        uTextColor = glGetUniformLocation(shaderProgram, "textColor");
-
-        return true;
+    void TextRenderer::updateScreenSize(unsigned int width, unsigned int height) {
+        screenWidth = width;
+        screenHeight = height;
     }
 
     void TextRenderer::RenderText(const std::string& text, float x, float y, float scale,
@@ -211,21 +139,21 @@ void main()
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-        // Use our shader
-        glUseProgram(shaderProgram);
+        // Use shader with RAII scope
+        ShaderScope s(shader_);
 
         // Set up orthographic projection
         glm::mat4 projection = glm::ortho(0.0f, static_cast<float>(screenWidth),
                                           0.0f, static_cast<float>(screenHeight));
-        glUniformMatrix4fv(uProjection, 1, GL_FALSE, glm::value_ptr(projection));
-        glUniform3f(uTextColor, color.x, color.y, color.z);
+        s->set("projection", projection);
+        s->set("textColor", color);
 
         // Ensure we're using texture unit 0
         glActiveTexture(GL_TEXTURE0);
-        glUniform1i(glGetUniformLocation(shaderProgram, "text"), 0);
+        s->set("text", 0);
 
         // Bind our VAO
-        VAOBinder vao_bind(VAO_);
+        VAOBinder vao_bind(vao_);
 
         // Iterate through all characters
         for (char c : text) {
@@ -255,7 +183,7 @@ void main()
             glBindTexture(GL_TEXTURE_2D, ch.textureID);
 
             // Update content of VBO memory
-            BufferBinder<GL_ARRAY_BUFFER> vbo_bind(VBO_);
+            BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
             glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
 
             // Render quad
