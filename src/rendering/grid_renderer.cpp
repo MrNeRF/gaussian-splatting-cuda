@@ -1,71 +1,68 @@
 #include "grid_renderer.hpp"
 #include "shader_paths.hpp"
+#include <format>
 #include <iostream>
 #include <random>
 #include <vector>
 
 namespace gs::rendering {
 
-    void RenderInfiniteGrid::init() {
+    Result<void> RenderInfiniteGrid::init() {
         if (initialized_)
-            return;
+            return {};
 
-        try {
-            // Create shader for infinite grid rendering
-            auto result = load_shader("infinite_grid", "infinite_grid.vert", "infinite_grid.frag", false);
-            if (!result) {
-                throw std::runtime_error(result.error().what());
-            }
-            shader_ = std::move(*result);
-
-            // Create OpenGL objects using RAII
-            auto vao_result = create_vao();
-            if (!vao_result) {
-                throw std::runtime_error(vao_result.error().what());
-            }
-            vao_ = std::move(*vao_result);
-
-            auto vbo_result = create_vbo();
-            if (!vbo_result) {
-                throw std::runtime_error(vbo_result.error().what());
-            }
-            vbo_ = std::move(*vbo_result);
-
-            VAOBinder vao_bind(vao_);
-            BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
-
-            // Full-screen quad vertices (-1 to 1)
-            float vertices[] = {
-                -1.0f, -1.0f,
-                1.0f, -1.0f,
-                -1.0f, 1.0f,
-                1.0f, 1.0f};
-
-            upload_buffer(GL_ARRAY_BUFFER, vertices, 8, GL_STATIC_DRAW);
-
-            // Set up vertex attributes
-            VertexAttribute position_attr{
-                .index = 0,
-                .size = 2,
-                .type = GL_FLOAT,
-                .normalized = GL_FALSE,
-                .stride = 2 * sizeof(float),
-                .offset = nullptr};
-            position_attr.apply();
-
-            // Create blue noise texture
-            createBlueNoiseTexture();
-
-            initialized_ = true;
-
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to initialize InfiniteGrid: " << e.what() << std::endl;
-            initialized_ = false;
-            throw;
+        // Create shader for infinite grid rendering
+        auto result = load_shader("infinite_grid", "infinite_grid.vert", "infinite_grid.frag", false);
+        if (!result) {
+            return std::unexpected(result.error().what());
         }
+        shader_ = std::move(*result);
+
+        // Create OpenGL objects using RAII
+        auto vao_result = create_vao();
+        if (!vao_result) {
+            return std::unexpected(vao_result.error());
+        }
+        vao_ = std::move(*vao_result);
+
+        auto vbo_result = create_vbo();
+        if (!vbo_result) {
+            return std::unexpected(vbo_result.error());
+        }
+        vbo_ = std::move(*vbo_result);
+
+        VAOBinder vao_bind(vao_);
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
+
+        // Full-screen quad vertices (-1 to 1)
+        float vertices[] = {
+            -1.0f, -1.0f,
+            1.0f, -1.0f,
+            -1.0f, 1.0f,
+            1.0f, 1.0f};
+
+        upload_buffer(GL_ARRAY_BUFFER, vertices, 8, GL_STATIC_DRAW);
+
+        // Set up vertex attributes
+        VertexAttribute position_attr{
+            .index = 0,
+            .size = 2,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = 2 * sizeof(float),
+            .offset = nullptr};
+        position_attr.apply();
+
+        // Create blue noise texture
+        if (auto noise_result = createBlueNoiseTexture(); !noise_result) {
+            return noise_result;
+        }
+
+        initialized_ = true;
+        return {};
     }
 
-    void RenderInfiniteGrid::createBlueNoiseTexture() {
+    Result<void> RenderInfiniteGrid::createBlueNoiseTexture() {
         const int size = 32;
         std::vector<float> noise_data(size * size);
 
@@ -91,6 +88,13 @@ namespace gs::rendering {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
         glBindTexture(GL_TEXTURE_2D, 0);
+
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            return std::unexpected(std::format("Failed to create blue noise texture: OpenGL error {}", err));
+        }
+
+        return {};
     }
 
     void RenderInfiniteGrid::calculateFrustumCorners(const glm::mat4& inv_viewproj,
@@ -122,9 +126,9 @@ namespace gs::rendering {
         far_y = far_tl - far_bl;
     }
 
-    void RenderInfiniteGrid::render(const glm::mat4& view, const glm::mat4& projection) {
+    Result<void> RenderInfiniteGrid::render(const glm::mat4& view, const glm::mat4& projection) {
         if (!initialized_ || !shader_.valid())
-            return;
+            return std::unexpected("Grid renderer not initialized");
 
         // Calculate matrices
         glm::mat4 viewProj = projection * view;
@@ -154,22 +158,33 @@ namespace gs::rendering {
         // Bind shader and set uniforms
         ShaderScope s(shader_);
 
-        s->set("near_origin", near_origin);
-        s->set("near_x", near_x);
-        s->set("near_y", near_y);
-        s->set("far_origin", far_origin);
-        s->set("far_x", far_x);
-        s->set("far_y", far_y);
+        if (auto result = s->set("near_origin", near_origin); !result)
+            return result;
+        if (auto result = s->set("near_x", near_x); !result)
+            return result;
+        if (auto result = s->set("near_y", near_y); !result)
+            return result;
+        if (auto result = s->set("far_origin", far_origin); !result)
+            return result;
+        if (auto result = s->set("far_x", far_x); !result)
+            return result;
+        if (auto result = s->set("far_y", far_y); !result)
+            return result;
 
-        s->set("view_position", view_position);
-        s->set("matrix_viewProjection", viewProj);
-        s->set("plane", static_cast<int>(plane_));
-        s->set("opacity", opacity_);
+        if (auto result = s->set("view_position", view_position); !result)
+            return result;
+        if (auto result = s->set("matrix_viewProjection", viewProj); !result)
+            return result;
+        if (auto result = s->set("plane", static_cast<int>(plane_)); !result)
+            return result;
+        if (auto result = s->set("opacity", opacity_); !result)
+            return result;
 
         // Bind blue noise texture
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, blue_noise_texture_);
-        s->set("blueNoiseTex32", 0);
+        if (auto result = s->set("blueNoiseTex32", 0); !result)
+            return result;
 
         // Render the grid
         VAOBinder vao_bind(vao_);
@@ -182,6 +197,8 @@ namespace gs::rendering {
         } else {
             glBlendFunc(blend_src, blend_dst);
         }
+
+        return {};
     }
 
 } // namespace gs::rendering

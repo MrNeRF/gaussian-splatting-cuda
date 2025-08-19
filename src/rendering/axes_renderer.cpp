@@ -1,6 +1,7 @@
 #include "axes_renderer.hpp"
 #include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
+#include <format>
 #include <iostream>
 
 namespace gs::rendering {
@@ -49,42 +50,41 @@ namespace gs::rendering {
         return false;
     }
 
-    void RenderCoordinateAxes::init() {
+    Result<void> RenderCoordinateAxes::init() {
         if (isInitialized())
-            return;
+            return {};
 
-        try {
-            // Create shader for coordinate axes rendering
-            auto result = load_shader("coordinate_axes", "coordinate_axes.vert", "coordinate_axes.frag", false);
-            if (!result) {
-                throw std::runtime_error(result.error().what());
-            }
-            shader_ = std::move(*result);
-
-            // Create OpenGL objects using RAII
-            auto vao_result = create_vao();
-            if (!vao_result) {
-                throw std::runtime_error(vao_result.error().what());
-            }
-            vao_ = std::move(*vao_result);
-
-            auto vbo_result = create_vbo();
-            if (!vbo_result) {
-                throw std::runtime_error(vbo_result.error().what());
-            }
-            vbo_ = std::move(*vbo_result);
-
-            initialized_ = true;
-
-            // Initialize axes geometry
-            createAxesGeometry();
-            setupVertexData();
-
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to initialize CoordinateAxes: " << e.what() << std::endl;
-            initialized_ = false;
-            throw;
+        // Create shader for coordinate axes rendering
+        auto result = load_shader("coordinate_axes", "coordinate_axes.vert", "coordinate_axes.frag", false);
+        if (!result) {
+            return std::unexpected(result.error().what());
         }
+        shader_ = std::move(*result);
+
+        // Create OpenGL objects using RAII
+        auto vao_result = create_vao();
+        if (!vao_result) {
+            return std::unexpected(vao_result.error());
+        }
+        vao_ = std::move(*vao_result);
+
+        auto vbo_result = create_vbo();
+        if (!vbo_result) {
+            return std::unexpected(vbo_result.error());
+        }
+        vbo_ = std::move(*vbo_result);
+
+        initialized_ = true;
+
+        // Initialize axes geometry
+        createAxesGeometry();
+
+        if (auto setup_result = setupVertexData(); !setup_result) {
+            initialized_ = false;
+            return setup_result;
+        }
+
+        return {};
     }
 
     void RenderCoordinateAxes::createAxesGeometry() {
@@ -109,9 +109,9 @@ namespace gs::rendering {
         }
     }
 
-    void RenderCoordinateAxes::setupVertexData() {
+    Result<void> RenderCoordinateAxes::setupVertexData() {
         if (!initialized_ || !vao_ || vertices_.empty())
-            return;
+            return {}; // Nothing to setup if no visible axes
 
         VAOBinder vao_bind(vao_);
 
@@ -138,11 +138,13 @@ namespace gs::rendering {
             .stride = sizeof(AxisVertex),
             .offset = (void*)offsetof(AxisVertex, color)};
         color_attr.apply();
+
+        return {};
     }
 
-    void RenderCoordinateAxes::render(const glm::mat4& view, const glm::mat4& projection) {
+    Result<void> RenderCoordinateAxes::render(const glm::mat4& view, const glm::mat4& projection) {
         if (!initialized_ || !shader_.valid() || !vao_ || vertices_.empty())
-            return;
+            return {}; // Nothing to render if not initialized or no visible axes
 
         // Use GLLineGuard for line width management
         GLLineGuard line_guard(line_width_);
@@ -150,18 +152,17 @@ namespace gs::rendering {
         // Bind shader and setup uniforms
         ShaderScope s(shader_);
 
-        try {
-            // Set uniforms (axes are in world space, so no model transform needed)
-            glm::mat4 mvp = projection * view;
-            s->set("u_mvp", mvp);
-
-            // Bind VAO and draw
-            VAOBinder vao_bind(vao_);
-            glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices_.size()));
-
-        } catch (const std::exception& e) {
-            std::cerr << "Error rendering coordinate axes: " << e.what() << std::endl;
+        // Set uniforms (axes are in world space, so no model transform needed)
+        glm::mat4 mvp = projection * view;
+        if (auto result = s->set("u_mvp", mvp); !result) {
+            return result;
         }
+
+        // Bind VAO and draw
+        VAOBinder vao_bind(vao_);
+        glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices_.size()));
+
+        return {};
     }
 
 } // namespace gs::rendering

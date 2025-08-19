@@ -22,9 +22,9 @@ namespace gs::rendering {
         TextRenderer(unsigned int width, unsigned int height);
         ~TextRenderer();
 
-        bool LoadFont(const std::string& fontPath, unsigned int fontSize);
-        void RenderText(const std::string& text, float x, float y, float scale,
-                        const glm::vec3& color = glm::vec3(1.0f));
+        Result<void> LoadFont(const std::string& fontPath, unsigned int fontSize);
+        Result<void> RenderText(const std::string& text, float x, float y, float scale,
+                                const glm::vec3& color = glm::vec3(1.0f));
         void updateScreenSize(unsigned int width, unsigned int height);
 
     private:
@@ -34,7 +34,7 @@ namespace gs::rendering {
         ManagedShader shader_;
         std::map<char, Character> characters;
 
-        void initRenderData();
+        Result<void> initRenderData();
     };
 
 } // namespace gs::rendering

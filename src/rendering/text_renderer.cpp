@@ -1,5 +1,6 @@
 #include "text_renderer.hpp"
 #include "gl_state_guard.hpp"
+#include <format>
 #include <ft2build.h>
 #include <iostream>
 #include FT_FREETYPE_H
@@ -9,7 +10,9 @@ namespace gs::rendering {
     TextRenderer::TextRenderer(unsigned int width, unsigned int height)
         : screenWidth(width),
           screenHeight(height) {
-        initRenderData();
+        if (auto result = initRenderData(); !result) {
+            throw std::runtime_error(result.error());
+        }
     }
 
     TextRenderer::~TextRenderer() {
@@ -18,7 +21,8 @@ namespace gs::rendering {
         }
     }
 
-    bool TextRenderer::LoadFont(const std::string& fontPath, unsigned int fontSize) {
+    Result<void> TextRenderer::LoadFont(const std::string& fontPath, unsigned int fontSize) {
+        // Clear existing characters
         for (auto& pair : characters) {
             glDeleteTextures(1, &pair.second.textureID);
         }
@@ -26,16 +30,31 @@ namespace gs::rendering {
 
         FT_Library ft;
         if (FT_Init_FreeType(&ft)) {
-            std::cerr << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
-            return false;
+            return std::unexpected("Could not init FreeType Library");
         }
+
+        // RAII wrapper for FreeType library
+        struct FTLibraryGuard {
+            FT_Library lib;
+            ~FTLibraryGuard() {
+                if (lib)
+                    FT_Done_FreeType(lib);
+            }
+        } ft_guard{ft};
 
         FT_Face face;
         if (FT_New_Face(ft, fontPath.c_str(), 0, &face)) {
-            std::cerr << "ERROR::FREETYPE: Failed to load font from: " << fontPath << std::endl;
-            FT_Done_FreeType(ft);
-            return false;
+            return std::unexpected(std::format("Failed to load font from: {}", fontPath));
         }
+
+        // RAII wrapper for FreeType face
+        struct FTFaceGuard {
+            FT_Face face;
+            ~FTFaceGuard() {
+                if (face)
+                    FT_Done_Face(face);
+            }
+        } face_guard{face};
 
         FT_Set_Pixel_Sizes(face, 0, fontSize);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -43,7 +62,8 @@ namespace gs::rendering {
         // Load only needed characters
         for (unsigned char c : {'X', 'Y', 'Z'}) {
             if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
-                std::cerr << "ERROR::FREETYPE: Failed to load Glyph for character: " << c << std::endl;
+                // Continue with other characters even if one fails
+                std::cerr << "Warning: Failed to load glyph for character: " << c << std::endl;
                 continue;
             }
 
@@ -75,31 +95,32 @@ namespace gs::rendering {
         }
 
         glBindTexture(GL_TEXTURE_2D, 0);
-        FT_Done_Face(face);
-        FT_Done_FreeType(ft);
 
-        std::cout << "Successfully loaded font: " << fontPath << " with " << characters.size() << " characters" << std::endl;
-        return true;
+        if (characters.empty()) {
+            return std::unexpected("Failed to load any characters from font");
+        }
+
+        return {};
     }
 
-    void TextRenderer::initRenderData() {
+    Result<void> TextRenderer::initRenderData() {
         // Load shader using shader manager
         auto result = load_shader("text_renderer", "text_renderer.vert", "text_renderer.frag", false);
         if (!result) {
-            throw std::runtime_error(result.error().what());
+            return std::unexpected(result.error().what());
         }
         shader_ = std::move(*result);
 
         // Create VAO and VBO
         auto vao_result = create_vao();
         if (!vao_result) {
-            throw std::runtime_error(vao_result.error().what());
+            return std::unexpected(vao_result.error());
         }
         vao_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
-            throw std::runtime_error(vbo_result.error().what());
+            return std::unexpected(vbo_result.error());
         }
         vbo_ = std::move(*vbo_result);
 
@@ -116,6 +137,8 @@ namespace gs::rendering {
             .stride = 4 * sizeof(float),
             .offset = nullptr};
         attr.apply();
+
+        return {};
     }
 
     void TextRenderer::updateScreenSize(unsigned int width, unsigned int height) {
@@ -123,8 +146,16 @@ namespace gs::rendering {
         screenHeight = height;
     }
 
-    void TextRenderer::RenderText(const std::string& text, float x, float y, float scale,
-                                  const glm::vec3& color) {
+    Result<void> TextRenderer::RenderText(const std::string& text, float x, float y, float scale,
+                                          const glm::vec3& color) {
+        if (!shader_.valid()) {
+            return std::unexpected("Text renderer shader not initialized");
+        }
+
+        if (characters.empty()) {
+            return std::unexpected("No font loaded");
+        }
+
         // Use RAII for OpenGL state management
         GLStateGuard state_guard;
 
@@ -145,12 +176,15 @@ namespace gs::rendering {
         // Set up orthographic projection
         glm::mat4 projection = glm::ortho(0.0f, static_cast<float>(screenWidth),
                                           0.0f, static_cast<float>(screenHeight));
-        s->set("projection", projection);
-        s->set("textColor", color);
+        if (auto result = s->set("projection", projection); !result)
+            return result;
+        if (auto result = s->set("textColor", color); !result)
+            return result;
 
         // Ensure we're using texture unit 0
         glActiveTexture(GL_TEXTURE0);
-        s->set("text", 0);
+        if (auto result = s->set("text", 0); !result)
+            return result;
 
         // Bind our VAO
         VAOBinder vao_bind(vao_);
@@ -194,6 +228,7 @@ namespace gs::rendering {
         }
 
         // State automatically restored by GLStateGuard destructor
+        return {};
     }
 
 } // namespace gs::rendering

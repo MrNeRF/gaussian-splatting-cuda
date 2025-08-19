@@ -30,23 +30,23 @@ namespace gs::rendering {
             const glm::ivec2& viewport_pos,
             const glm::ivec2& viewport_size) override;
 
-        void renderGrid(
+        Result<void> renderGrid(
             const ViewportData& viewport,
             GridPlane plane,
             float opacity) override;
 
-        void renderBoundingBox(
+        Result<void> renderBoundingBox(
             const BoundingBox& box,
             const ViewportData& viewport,
             const glm::vec3& color,
             float line_width) override;
 
-        void renderCoordinateAxes(
+        Result<void> renderCoordinateAxes(
             const ViewportData& viewport,
             float size,
             const std::array<bool, 3>& visible) override;
 
-        void renderViewportGizmo(
+        Result<void> renderViewportGizmo(
             const glm::mat3& camera_rotation,
             const glm::vec2& viewport_pos,
             const glm::vec2& viewport_size) override;
@@ -57,8 +57,8 @@ namespace gs::rendering {
             const RenderingPipelineRequest& request) override;
 
         // Factory methods
-        std::shared_ptr<IBoundingBox> createBoundingBox() override;
-        std::shared_ptr<ICoordinateAxes> createCoordinateAxes() override;
+        Result<std::shared_ptr<IBoundingBox>> createBoundingBox() override;
+        Result<std::shared_ptr<ICoordinateAxes>> createCoordinateAxes() override;
 
     private:
         Result<void> initializeShaders();

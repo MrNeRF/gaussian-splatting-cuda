@@ -14,13 +14,13 @@ namespace gs::rendering {
         ViewportGizmo();  // Declare constructor (not defaulted)
         ~ViewportGizmo(); // Declare destructor
 
-        // Initialize OpenGL resources
-        void initialize();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> initialize();
 
-        // Render the gizmo
-        void render(const glm::mat3& camera_rotation,
-                    const glm::vec2& viewport_pos,
-                    const glm::vec2& viewport_size);
+        // Render the gizmo - now returns Result
+        Result<void> render(const glm::mat3& camera_rotation,
+                            const glm::vec2& viewport_pos,
+                            const glm::vec2& viewport_size);
 
         // Cleanup
         void shutdown();
@@ -32,8 +32,8 @@ namespace gs::rendering {
         int getMargin() const { return margin_; }
 
     private:
-        void generateGeometry();
-        void createShaders();
+        Result<void> generateGeometry();
+        Result<void> createShaders();
 
         // OpenGL resources using RAII
         VAO vao_;

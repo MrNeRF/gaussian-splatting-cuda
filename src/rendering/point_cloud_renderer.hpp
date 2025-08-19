@@ -14,22 +14,22 @@ namespace gs::rendering {
         PointCloudRenderer() = default;
         ~PointCloudRenderer() = default;
 
-        // Initialize OpenGL resources
-        void initialize();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> initialize();
 
-        // Render point cloud
-        void render(const SplatData& splat_data,
-                    const glm::mat4& view,
-                    const glm::mat4& projection,
-                    float voxel_size,
-                    const glm::vec3& background_color);
+        // Render point cloud - now returns Result
+        Result<void> render(const SplatData& splat_data,
+                            const glm::mat4& view,
+                            const glm::mat4& projection,
+                            float voxel_size,
+                            const glm::vec3& background_color);
 
         // Check if initialized
         bool isInitialized() const { return initialized_; }
 
     private:
-        void createCubeGeometry();
-        void uploadPointData(std::span<const float> positions, std::span<const float> colors);
+        Result<void> createCubeGeometry();
+        Result<void> uploadPointData(std::span<const float> positions, std::span<const float> colors);
         static torch::Tensor extractRGBFromSH(const torch::Tensor& shs);
 
         // OpenGL resources using RAII

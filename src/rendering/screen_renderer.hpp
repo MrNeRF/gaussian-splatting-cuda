@@ -19,11 +19,12 @@ namespace gs::rendering {
         explicit ScreenQuadRenderer(FrameBufferMode mode = FrameBufferMode::CPU);
         virtual ~ScreenQuadRenderer() = default;
 
-        virtual void render(std::shared_ptr<Shader> shader) const;
-        void render(ManagedShader& shader) const;
+        // Updated to return Result for consistency
+        virtual Result<void> render(std::shared_ptr<Shader> shader) const;
+        Result<void> render(ManagedShader& shader) const;
 
-        virtual void uploadData(const unsigned char* image, int width_, int height_);
-        void uploadFromCUDA(const torch::Tensor& cuda_image, int width, int height);
+        virtual Result<void> uploadData(const unsigned char* image, int width_, int height_);
+        Result<void> uploadFromCUDA(const torch::Tensor& cuda_image, int width, int height);
 
         bool isInteropEnabled() const;
 

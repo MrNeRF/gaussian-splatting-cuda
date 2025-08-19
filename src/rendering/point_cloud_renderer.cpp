@@ -1,5 +1,6 @@
 #include "point_cloud_renderer.hpp"
 #include "shader_paths.hpp"
+#include <format>
 #include <vector>
 
 namespace gs::rendering {
@@ -7,26 +8,30 @@ namespace gs::rendering {
     constexpr float PointCloudRenderer::cube_vertices_[];
     constexpr unsigned int PointCloudRenderer::cube_indices_[];
 
-    void PointCloudRenderer::initialize() {
+    Result<void> PointCloudRenderer::initialize() {
         if (initialized_)
-            return;
+            return {};
 
         // Create shader
         auto result = load_shader("point_cloud", "point_cloud.vert", "point_cloud.frag", false);
         if (!result) {
-            throw std::runtime_error(result.error().what());
+            return std::unexpected(result.error().what());
         }
         shader_ = std::move(*result);
 
-        createCubeGeometry();
+        if (auto geom_result = createCubeGeometry(); !geom_result) {
+            return geom_result;
+        }
+
         initialized_ = true;
+        return {};
     }
 
-    void PointCloudRenderer::createCubeGeometry() {
+    Result<void> PointCloudRenderer::createCubeGeometry() {
         // Create VAO
         auto vao_result = create_vao();
         if (!vao_result) {
-            throw std::runtime_error(vao_result.error().what());
+            return std::unexpected(vao_result.error());
         }
         cube_vao_ = std::move(*vao_result);
 
@@ -35,7 +40,7 @@ namespace gs::rendering {
         // Create VBO for cube vertices
         auto vbo_result = create_vbo();
         if (!vbo_result) {
-            throw std::runtime_error(vbo_result.error().what());
+            return std::unexpected(vbo_result.error());
         }
         cube_vbo_ = std::move(*vbo_result);
 
@@ -55,7 +60,7 @@ namespace gs::rendering {
         // Create EBO for cube indices
         auto ebo_result = create_vbo(); // EBO is also a buffer
         if (!ebo_result) {
-            throw std::runtime_error(ebo_result.error().what());
+            return std::unexpected(ebo_result.error());
         }
         cube_ebo_ = std::move(*ebo_result);
 
@@ -65,7 +70,7 @@ namespace gs::rendering {
         // Create instance VBO for positions and colors
         auto instance_result = create_vbo();
         if (!instance_result) {
-            throw std::runtime_error(instance_result.error().what());
+            return std::unexpected(instance_result.error());
         }
         instance_vbo_ = std::move(*instance_result);
 
@@ -94,6 +99,8 @@ namespace gs::rendering {
             .divisor = 1 // One per instance
         };
         color_attr.apply();
+
+        return {};
     }
 
     torch::Tensor PointCloudRenderer::extractRGBFromSH(const torch::Tensor& shs) {
@@ -103,13 +110,13 @@ namespace gs::rendering {
         return colors.clamp(0.0f, 1.0f);
     }
 
-    void PointCloudRenderer::uploadPointData(std::span<const float> positions, std::span<const float> colors) {
+    Result<void> PointCloudRenderer::uploadPointData(std::span<const float> positions, std::span<const float> colors) {
         // Using span, we can calculate the number of points
         size_t num_points = positions.size() / 3;
 
         // Validate sizes
         if (positions.size() != num_points * 3 || colors.size() != num_points * 3) {
-            throw std::runtime_error("Invalid position or color data size");
+            return std::unexpected("Invalid position or color data size");
         }
 
         // Interleave position and color data
@@ -131,15 +138,21 @@ namespace gs::rendering {
         upload_buffer(GL_ARRAY_BUFFER, std::span(instance_data), GL_DYNAMIC_DRAW);
 
         current_point_count_ = num_points;
+        return {};
     }
 
-    void PointCloudRenderer::render(const SplatData& splat_data,
-                                    const glm::mat4& view,
-                                    const glm::mat4& projection,
-                                    float voxel_size,
-                                    const glm::vec3& background_color) {
-        if (!initialized_ || splat_data.size() == 0)
-            return;
+    Result<void> PointCloudRenderer::render(const SplatData& splat_data,
+                                            const glm::mat4& view,
+                                            const glm::mat4& projection,
+                                            float voxel_size,
+                                            const glm::vec3& background_color) {
+        if (!initialized_) {
+            return std::unexpected("Renderer not initialized");
+        }
+
+        if (splat_data.size() == 0) {
+            return {}; // Nothing to render
+        }
 
         // Get positions and SH coefficients
         torch::Tensor positions = splat_data.get_means();
@@ -157,7 +170,9 @@ namespace gs::rendering {
         std::span<const float> col_span(col_cpu.data_ptr<float>(), col_cpu.numel());
 
         // Upload data to GPU
-        uploadPointData(pos_span, col_span);
+        if (auto result = uploadPointData(pos_span, col_span); !result) {
+            return result;
+        }
 
         // Setup rendering state
         glEnable(GL_DEPTH_TEST);
@@ -167,14 +182,19 @@ namespace gs::rendering {
 
         // Bind shader and set uniforms
         ShaderScope s(shader_);
-        s->set("u_view", view);
-        s->set("u_projection", projection);
-        s->set("u_voxel_size", voxel_size);
+        if (auto result = s->set("u_view", view); !result)
+            return result;
+        if (auto result = s->set("u_projection", projection); !result)
+            return result;
+        if (auto result = s->set("u_voxel_size", voxel_size); !result)
+            return result;
 
         // Render instanced cubes
         VAOBinder vao_bind(cube_vao_);
         glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0,
                                 static_cast<GLsizei>(current_point_count_));
+
+        return {};
     }
 
 } // namespace gs::rendering

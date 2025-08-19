@@ -14,8 +14,8 @@ namespace gs::rendering {
         // Set the bounding box from min/max points
         void setBounds(const glm::vec3& min, const glm::vec3& max) override;
 
-        // Initialize OpenGL resources
-        void init();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> init();
 
         // Check if initialized
         bool isInitialized() const override { return initialized_; }
@@ -44,12 +44,12 @@ namespace gs::rendering {
         glm::vec3 getColor() const override { return color_; }
         float getLineWidth() const override { return line_width_; }
 
-        // Render the bounding box
-        void render(const glm::mat4& view, const glm::mat4& projection);
+        // Render the bounding box - now returns Result
+        Result<void> render(const glm::mat4& view, const glm::mat4& projection);
 
     private:
         void createCubeGeometry();
-        void setupVertexData();
+        Result<void> setupVertexData();
 
         // Bounding box properties
         glm::vec3 color_;

@@ -1,6 +1,7 @@
 #include "bbox_renderer.hpp"
 #include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
+#include <format>
 
 namespace gs::rendering {
 
@@ -24,52 +25,50 @@ namespace gs::rendering {
         }
     }
 
-    void RenderBoundingBox::init() {
+    Result<void> RenderBoundingBox::init() {
         if (isInitialized())
-            return;
+            return {};
 
-        try {
-            // Create shader for bounding box rendering
-            auto result = load_shader("bounding_box", "bounding_box.vert", "bounding_box.frag", false);
-            if (!result) {
-                throw std::runtime_error(result.error().what());
-            }
-            shader_ = std::move(*result);
-
-            // Create OpenGL objects using RAII
-            auto vao_result = create_vao();
-            if (!vao_result) {
-                throw std::runtime_error(vao_result.error().what());
-            }
-            vao_ = std::move(*vao_result);
-
-            auto vbo_result = create_vbo();
-            if (!vbo_result) {
-                throw std::runtime_error(vbo_result.error().what());
-            }
-            vbo_ = std::move(*vbo_result);
-
-            auto ebo_result = create_vbo(); // EBO is also a buffer
-            if (!ebo_result) {
-                throw std::runtime_error(ebo_result.error().what());
-            }
-            ebo_ = std::move(*ebo_result);
-
-            initialized_ = true;
-
-            // Initialize cube geometry with default bounds if not already set
-            if (min_bounds_ == glm::vec3(0.0f) && max_bounds_ == glm::vec3(0.0f)) {
-                setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
-            } else {
-                createCubeGeometry();
-                setupVertexData();
-            }
-
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to initialize BoundingBox: " << e.what() << std::endl;
-            initialized_ = false;
-            throw;
+        // Create shader for bounding box rendering
+        auto result = load_shader("bounding_box", "bounding_box.vert", "bounding_box.frag", false);
+        if (!result) {
+            return std::unexpected(result.error().what());
         }
+        shader_ = std::move(*result);
+
+        // Create OpenGL objects using RAII
+        auto vao_result = create_vao();
+        if (!vao_result) {
+            return std::unexpected(vao_result.error());
+        }
+        vao_ = std::move(*vao_result);
+
+        auto vbo_result = create_vbo();
+        if (!vbo_result) {
+            return std::unexpected(vbo_result.error());
+        }
+        vbo_ = std::move(*vbo_result);
+
+        auto ebo_result = create_vbo(); // EBO is also a buffer
+        if (!ebo_result) {
+            return std::unexpected(ebo_result.error());
+        }
+        ebo_ = std::move(*ebo_result);
+
+        initialized_ = true;
+
+        // Initialize cube geometry with default bounds if not already set
+        if (min_bounds_ == glm::vec3(0.0f) && max_bounds_ == glm::vec3(0.0f)) {
+            setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+        } else {
+            createCubeGeometry();
+            if (auto result = setupVertexData(); !result) {
+                initialized_ = false;
+                return result;
+            }
+        }
+
+        return {};
     }
 
     void RenderBoundingBox::createCubeGeometry() {
@@ -84,9 +83,9 @@ namespace gs::rendering {
         vertices_[7] = glm::vec3(min_bounds_.x, max_bounds_.y, max_bounds_.z); // 7: +y+z
     }
 
-    void RenderBoundingBox::setupVertexData() {
+    Result<void> RenderBoundingBox::setupVertexData() {
         if (!initialized_ || !vao_)
-            return;
+            return std::unexpected("Bounding box not initialized");
 
         VAOBinder vao_bind(vao_);
 
@@ -107,11 +106,13 @@ namespace gs::rendering {
             .stride = sizeof(glm::vec3),
             .offset = nullptr};
         position_attr.apply();
+
+        return {};
     }
 
-    void RenderBoundingBox::render(const glm::mat4& view, const glm::mat4& projection) {
+    Result<void> RenderBoundingBox::render(const glm::mat4& view, const glm::mat4& projection) {
         if (!initialized_ || !shader_.valid() || !vao_)
-            return;
+            return std::unexpected("Bounding box renderer not initialized");
 
         // Use GLLineGuard for line width management
         GLLineGuard line_guard(line_width_);
@@ -119,21 +120,20 @@ namespace gs::rendering {
         // Bind shader and setup uniforms
         ShaderScope s(shader_);
 
-        try {
-            auto box2World = world2BBox_.inv().toMat4();
-            // Set uniforms
-            glm::mat4 mvp = projection * view * box2World;
+        auto box2World = world2BBox_.inv().toMat4();
+        // Set uniforms
+        glm::mat4 mvp = projection * view * box2World;
 
-            s->set("u_mvp", mvp);
-            s->set("u_color", color_);
+        if (auto result = s->set("u_mvp", mvp); !result)
+            return result;
+        if (auto result = s->set("u_color", color_); !result)
+            return result;
 
-            // Bind VAO and draw
-            VAOBinder vao_bind(vao_);
-            glDrawElements(GL_LINES, static_cast<GLsizei>(indices_.size()), GL_UNSIGNED_INT, 0);
+        // Bind VAO and draw
+        VAOBinder vao_bind(vao_);
+        glDrawElements(GL_LINES, static_cast<GLsizei>(indices_.size()), GL_UNSIGNED_INT, 0);
 
-        } catch (const std::exception& e) {
-            std::cerr << "Error rendering bounding box: " << e.what() << std::endl;
-        }
+        return {};
     }
 
     const unsigned int RenderBoundingBox::cube_line_indices_[24] = {

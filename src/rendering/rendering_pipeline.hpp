@@ -28,25 +28,25 @@ namespace gs::rendering {
         };
 
         struct RenderResult {
-            torch::Tensor image = torch::Tensor();
-            torch::Tensor depth = torch::Tensor();
+            torch::Tensor image;
+            torch::Tensor depth;
             bool valid = false;
         };
 
         RenderingPipeline();
 
-        // Main render function
-        RenderResult render(const SplatData& model, const RenderRequest& request);
+        // Main render function - now returns Result
+        Result<RenderResult> render(const SplatData& model, const RenderRequest& request);
 
-        // Static upload function
-        static void uploadToScreen(const RenderResult& result,
-                                   ScreenQuadRenderer& renderer,
-                                   const glm::ivec2& viewport_size);
+        // Static upload function - now returns Result
+        static Result<void> uploadToScreen(const RenderResult& result,
+                                           ScreenQuadRenderer& renderer,
+                                           const glm::ivec2& viewport_size);
 
     private:
-        Camera createCamera(const RenderRequest& request);
+        Result<Camera> createCamera(const RenderRequest& request);
         glm::vec2 computeFov(float fov_degrees, int width, int height);
-        RenderResult renderPointCloud(const SplatData& model, const RenderRequest& request);
+        Result<RenderResult> renderPointCloud(const SplatData& model, const RenderRequest& request);
 
         torch::Tensor background_;
         std::unique_ptr<PointCloudRenderer> point_cloud_renderer_;

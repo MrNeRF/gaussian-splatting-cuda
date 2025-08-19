@@ -4,6 +4,7 @@
 #include "text_renderer.hpp"
 #include <GLFW/glfw3.h>
 #include <algorithm>
+#include <format>
 #include <iostream>
 #include <numbers>
 #include <ranges>
@@ -16,12 +17,17 @@ namespace gs::rendering {
     ViewportGizmo::ViewportGizmo() = default;  // Define constructor here
     ViewportGizmo::~ViewportGizmo() = default; // Define destructor here
 
-    void ViewportGizmo::initialize() {
+    Result<void> ViewportGizmo::initialize() {
         if (initialized_)
-            return;
+            return {};
 
-        createShaders();
-        generateGeometry();
+        if (auto result = createShaders(); !result) {
+            return result;
+        }
+
+        if (auto result = generateGeometry(); !result) {
+            return result;
+        }
 
         // Initialize text renderer using actual window size (will be updated in render)
         int width = 1280, height = 720;
@@ -34,12 +40,13 @@ namespace gs::rendering {
         // Load font from our assets
         std::string font_path = std::string(PROJECT_ROOT_PATH) +
                                 "/src/rendering/resources/assets/JetBrainsMono-Regular.ttf";
-        if (!text_renderer_->LoadFont(font_path, 48)) {
-            std::cerr << "ViewportGizmo: Failed to load font!" << std::endl;
+        if (auto result = text_renderer_->LoadFont(font_path, 48); !result) {
+            std::cerr << "ViewportGizmo: Failed to load font: " << result.error() << std::endl;
             text_renderer_.reset();
         }
 
         initialized_ = true;
+        return {};
     }
 
     void ViewportGizmo::shutdown() {
@@ -50,25 +57,26 @@ namespace gs::rendering {
         initialized_ = false;
     }
 
-    void ViewportGizmo::createShaders() {
+    Result<void> ViewportGizmo::createShaders() {
         auto result = load_shader("viewport_gizmo", "viewport_gizmo.vert", "viewport_gizmo.frag", false);
         if (!result) {
-            throw std::runtime_error(result.error().what());
+            return std::unexpected(result.error().what());
         }
         shader_ = std::move(*result);
         std::cout << "[ViewportGizmo] Shaders created successfully" << std::endl;
+        return {};
     }
 
-    void ViewportGizmo::generateGeometry() {
+    Result<void> ViewportGizmo::generateGeometry() {
         auto vao_result = create_vao();
         if (!vao_result) {
-            throw std::runtime_error(vao_result.error().what());
+            return std::unexpected(vao_result.error());
         }
         vao_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
-            throw std::runtime_error(vbo_result.error().what());
+            return std::unexpected(vbo_result.error());
         }
         vbo_ = std::move(*vbo_result);
 
@@ -161,13 +169,15 @@ namespace gs::rendering {
             .stride = 6 * sizeof(float),
             .offset = (void*)(3 * sizeof(float))};
         normal_attr.apply();
+
+        return {};
     }
 
-    void ViewportGizmo::render(const glm::mat3& camera_rotation,
-                               const glm::vec2& viewport_pos,
-                               const glm::vec2& viewport_size) {
+    Result<void> ViewportGizmo::render(const glm::mat3& camera_rotation,
+                                       const glm::vec2& viewport_pos,
+                                       const glm::vec2& viewport_size) {
         if (!initialized_)
-            return;
+            return std::unexpected("Viewport gizmo not initialized");
 
         // Use RAII for OpenGL state management
         GLStateGuard state_guard;
@@ -225,11 +235,16 @@ namespace gs::rendering {
         for (int i = 0; i < 3; i++) {
             glm::mat4 model = rotations[i] * glm::scale(glm::mat4(1), glm::vec3(axisRad, axisRad, axisLen));
             glm::mat4 mvp = proj * view * model;
-            s->set("uMVP", mvp);
-            s->set("uModel", model);
-            s->set("uColor", colors_[i]);
-            s->set("uAlpha", 1.0f);
-            s->set("uUseLighting", 1);
+            if (auto result = s->set("uMVP", mvp); !result)
+                return result;
+            if (auto result = s->set("uModel", model); !result)
+                return result;
+            if (auto result = s->set("uColor", colors_[i]); !result)
+                return result;
+            if (auto result = s->set("uAlpha", 1.0f); !result)
+                return result;
+            if (auto result = s->set("uUseLighting", 1); !result)
+                return result;
             glDrawArrays(GL_TRIANGLES, 0, cylinder_vertex_count_);
         }
 
@@ -259,11 +274,16 @@ namespace gs::rendering {
             glm::mat4 model = glm::translate(glm::mat4(1), labelPos) *
                               glm::scale(glm::mat4(1), glm::vec3(sphereRadius * scaleFactor));
             glm::mat4 mvp = proj * view * model;
-            s->set("uMVP", mvp);
-            s->set("uModel", glm::mat4(1.0f));
-            s->set("uColor", colors_[i]);
-            s->set("uAlpha", 1.0f);
-            s->set("uUseLighting", 0);
+            if (auto result = s->set("uMVP", mvp); !result)
+                return result;
+            if (auto result = s->set("uModel", glm::mat4(1.0f)); !result)
+                return result;
+            if (auto result = s->set("uColor", colors_[i]); !result)
+                return result;
+            if (auto result = s->set("uAlpha", 1.0f); !result)
+                return result;
+            if (auto result = s->set("uUseLighting", 0); !result)
+                return result;
             glDrawArrays(GL_TRIANGLES, sphere_vertex_start_, sphere_vertex_count_);
 
             // Calculate screen position
@@ -368,12 +388,16 @@ namespace gs::rendering {
                     // Ensure proper texture unit
                     glActiveTexture(GL_TEXTURE0);
 
-                    text_renderer_->RenderText(
-                        axisLabels[idx],
-                        sphereInfo[i].screenPos.x - textWidth * 0.5f,
-                        sphereInfo[i].screenPos.y - baselineOffset + textHeight * 0.5f,
-                        scale,
-                        glm::vec3(1.0f, 1.0f, 1.0f));
+                    if (auto result = text_renderer_->RenderText(
+                            axisLabels[idx],
+                            sphereInfo[i].screenPos.x - textWidth * 0.5f,
+                            sphereInfo[i].screenPos.y - baselineOffset + textHeight * 0.5f,
+                            scale,
+                            glm::vec3(1.0f, 1.0f, 1.0f));
+                        !result) {
+                        // Continue rendering even if text fails
+                        std::cerr << "Failed to render text: " << result.error() << std::endl;
+                    }
 
                     glEnable(GL_DEPTH_TEST);
                     glDepthMask(GL_TRUE);
@@ -385,6 +409,7 @@ namespace gs::rendering {
         }
 
         // State automatically restored by GLStateGuard destructor
+        return {};
     }
 
 } // namespace gs::rendering

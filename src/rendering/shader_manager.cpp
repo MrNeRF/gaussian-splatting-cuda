@@ -14,14 +14,28 @@ namespace gs::rendering {
         : shader_(shader),
           name_(name) {}
 
-    void ManagedShader::bind() {
-        if (shader_)
+    Result<void> ManagedShader::bind() {
+        if (!shader_)
+            return std::unexpected("Shader not initialized");
+
+        try {
             shader_->bind();
+            return {};
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Failed to bind shader '{}': {}", name_, e.what()));
+        }
     }
 
-    void ManagedShader::unbind() {
-        if (shader_)
+    Result<void> ManagedShader::unbind() {
+        if (!shader_)
+            return std::unexpected("Shader not initialized");
+
+        try {
             shader_->unbind();
+            return {};
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Failed to unbind shader '{}': {}", name_, e.what()));
+        }
     }
 
     Shader* ManagedShader::operator->() {
@@ -37,11 +51,15 @@ namespace gs::rendering {
     }
 
     ShaderScope::ShaderScope(ManagedShader& shader) : shader_(&shader) {
-        shader_->bind();
+        if (auto result = shader_->bind(); result) {
+            bound_ = true;
+        }
     }
 
     ShaderScope::~ShaderScope() {
-        shader_->unbind();
+        if (bound_) {
+            shader_->unbind();
+        }
     }
 
     ManagedShader* ShaderScope::operator->() {

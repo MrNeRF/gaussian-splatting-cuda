@@ -5,8 +5,12 @@
 #include <format>
 #include <memory>
 #include <source_location>
+#include <string>
 
 namespace gs::rendering {
+
+    template <typename T>
+    using Result = std::expected<T, std::string>;
 
     struct ShaderError {
         std::string message;
@@ -18,7 +22,6 @@ namespace gs::rendering {
     template <typename T>
     using ShaderResult = std::expected<T, ShaderError>;
 
-    // Minimal shader wrapper - just adds error handling to your existing Shader class
     class ManagedShader {
         std::shared_ptr<Shader> shader_;
         std::string name_;
@@ -27,19 +30,18 @@ namespace gs::rendering {
         ManagedShader() = default;
         ManagedShader(std::shared_ptr<Shader> shader, std::string_view name);
 
-        void bind();
-        void unbind();
+        Result<void> bind();
+        Result<void> unbind();
 
         // Delegate to existing shader with error location tracking
         template <typename T>
-        ShaderResult<void> set(std::string_view uniform, const T& value,
-                               std::source_location loc = std::source_location::current()) {
+        Result<void> set(std::string_view uniform, const T& value,
+                         std::source_location loc = std::source_location::current()) {
             try {
                 shader_->set_uniform(std::string(uniform), value);
                 return {};
             } catch (const std::exception& e) {
-                return std::unexpected(ShaderError{
-                    std::format("Shader '{}': {}", name_, e.what()), loc});
+                return std::unexpected(std::format("Shader '{}': {}", name_, e.what()));
             }
         }
 
@@ -51,6 +53,7 @@ namespace gs::rendering {
     // RAII scope guard - more natural syntax
     class ShaderScope {
         ManagedShader* shader_;
+        bool bound_ = false;
 
     public:
         explicit ShaderScope(ManagedShader& shader);

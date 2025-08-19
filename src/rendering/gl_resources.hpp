@@ -2,7 +2,6 @@
 
 #include <expected>
 #include <filesystem>
-#include <format>
 #include <glad/glad.h>
 #include <source_location>
 #include <span>
@@ -10,19 +9,9 @@
 
 namespace gs::rendering {
 
-    struct GLError {
-        std::string message;
-        std::source_location location;
-
-        std::string what() const {
-            return std::format("[{}:{}] {}",
-                               std::filesystem::path(location.file_name()).filename().string(),
-                               location.line(), message);
-        }
-    };
-
+    // Consistent error handling
     template <typename T>
-    using GLResult = std::expected<T, GLError>;
+    using Result = std::expected<T, std::string>;
 
     // RAII wrappers for OpenGL resources
     template <typename Deleter>
@@ -94,20 +83,20 @@ namespace gs::rendering {
     using FBO = GLResource<FramebufferDeleter>;
 
     // Factory functions with error handling
-    inline GLResult<VAO> create_vao(std::source_location loc = std::source_location::current()) {
+    inline Result<VAO> create_vao() {
         GLuint id;
         glGenVertexArrays(1, &id);
         if (glGetError() != GL_NO_ERROR || id == 0) {
-            return std::unexpected(GLError{"Failed to create VAO", loc});
+            return std::unexpected("Failed to create VAO");
         }
         return VAO(id);
     }
 
-    inline GLResult<VBO> create_vbo(std::source_location loc = std::source_location::current()) {
+    inline Result<VBO> create_vbo() {
         GLuint id;
         glGenBuffers(1, &id);
         if (glGetError() != GL_NO_ERROR || id == 0) {
-            return std::unexpected(GLError{"Failed to create VBO", loc});
+            return std::unexpected("Failed to create VBO");
         }
         return VBO(id);
     }

@@ -16,8 +16,8 @@ namespace gs::rendering {
         void setSize(float size) override;
         [[nodiscard]] float getSize() const { return size_; }
 
-        // Initialize OpenGL resources
-        void init();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> init();
 
         // Check if initialized
         [[nodiscard]] bool isInitialized() const { return initialized_; }
@@ -29,12 +29,12 @@ namespace gs::rendering {
         void setAxisVisible(int axis, bool visible) override; // 0=X, 1=Y, 2=Z
         [[nodiscard]] bool isAxisVisible(int axis) const override;
 
-        // Render the coordinate axes
-        void render(const glm::mat4& view, const glm::mat4& projection);
+        // Render the coordinate axes - now returns Result
+        Result<void> render(const glm::mat4& view, const glm::mat4& projection);
 
     private:
         void createAxesGeometry();
-        void setupVertexData();
+        Result<void> setupVertexData();
 
         // OpenGL resources using RAII
         ManagedShader shader_;

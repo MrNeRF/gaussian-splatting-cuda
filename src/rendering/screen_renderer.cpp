@@ -1,6 +1,4 @@
 #include "screen_renderer.hpp"
-#include "config.h"
-#include <iostream>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "cuda_gl_interop.hpp"
@@ -23,13 +21,13 @@ namespace gs::rendering {
 
         auto vao_result = create_vao();
         if (!vao_result) {
-            throw std::runtime_error(vao_result.error().what());
+            throw std::runtime_error(vao_result.error());
         }
         quadVAO_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
-            throw std::runtime_error(vbo_result.error().what());
+            throw std::runtime_error(vbo_result.error());
         }
         quadVBO_ = std::move(*vbo_result);
 
@@ -56,46 +54,57 @@ namespace gs::rendering {
         tex_attr.apply();
     }
 
-    void ScreenQuadRenderer::render(std::shared_ptr<Shader> shader) const {
+    Result<void> ScreenQuadRenderer::render(std::shared_ptr<Shader> shader) const {
+        if (!shader) {
+            return std::unexpected("Shader is null");
+        }
+
         shader->bind();
 
         VAOBinder vao_bind(quadVAO_);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, getTextureID());
 
-        shader->set_uniform("screenTexture", 0);
+        try {
+            shader->set_uniform("screenTexture", 0);
+        } catch (const std::exception& e) {
+            shader->unbind();
+            return std::unexpected(std::format("Failed to set uniform: {}", e.what()));
+        }
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         shader->unbind();
+        return {};
     }
 
-    void ScreenQuadRenderer::render(ManagedShader& shader) const {
+    Result<void> ScreenQuadRenderer::render(ManagedShader& shader) const {
         ShaderScope s(shader);
 
         VAOBinder vao_bind(quadVAO_);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, getTextureID());
 
-        shader.set("screenTexture", 0);
+        if (auto result = shader.set("screenTexture", 0); !result) {
+            return result;
+        }
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
+        return {};
     }
 
-    void ScreenQuadRenderer::uploadData(const unsigned char* image, int width_, int height_) {
+    Result<void> ScreenQuadRenderer::uploadData(const unsigned char* image, int width_, int height_) {
+        if (!framebuffer) {
+            return std::unexpected("Framebuffer not initialized");
+        }
         framebuffer->uploadImage(image, width_, height_);
+        return {};
     }
 
-    void ScreenQuadRenderer::uploadFromCUDA(const torch::Tensor& cuda_image, int width, int height) {
+    Result<void> ScreenQuadRenderer::uploadFromCUDA(const torch::Tensor& cuda_image, int width, int height) {
 #ifdef CUDA_GL_INTEROP_ENABLED
         if (auto interop_fb = std::dynamic_pointer_cast<InteropFrameBuffer>(framebuffer)) {
-            try {
-                interop_fb->uploadFromCUDA(cuda_image);
-                return;
-            } catch (const std::exception& e) {
-                std::cerr << "CUDA upload failed: " << e.what() << std::endl;
-                // Fall through to CPU upload
-            }
+            return interop_fb->uploadFromCUDA(cuda_image);
         }
 #endif
         // Fallback to CPU upload
@@ -104,7 +113,7 @@ namespace gs::rendering {
             cpu_image = (cpu_image.clamp(0.0f, 1.0f) * 255.0f).to(torch::kUInt8);
         }
         cpu_image = cpu_image.to(torch::kCPU).contiguous();
-        uploadData(cpu_image.data_ptr<unsigned char>(), width, height);
+        return uploadData(cpu_image.data_ptr<unsigned char>(), width, height);
     }
 
     bool ScreenQuadRenderer::isInteropEnabled() const {
