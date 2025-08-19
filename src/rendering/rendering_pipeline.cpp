@@ -140,6 +140,9 @@ namespace gs::rendering {
 
         GLuint fbo, color_texture, depth_texture;
         glGenFramebuffers(1, &fbo);
+        if (fbo == 0) {
+            return std::unexpected("Failed to create framebuffer");
+        }
 
         // RAII cleanup for OpenGL resources
         struct FBOGuard {

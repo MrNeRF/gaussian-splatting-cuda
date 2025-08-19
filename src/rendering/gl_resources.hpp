@@ -105,7 +105,28 @@ namespace gs::rendering {
     template <GLenum Target>
     class BufferBinder {
         GLint prev_;
-        static constexpr GLenum query = (Target == GL_ARRAY_BUFFER) ? GL_ARRAY_BUFFER_BINDING : GL_ELEMENT_ARRAY_BUFFER_BINDING;
+        static constexpr GLenum query = []() constexpr->GLenum {
+            if (Target == GL_ARRAY_BUFFER)
+                return GL_ARRAY_BUFFER_BINDING;
+            if (Target == GL_ELEMENT_ARRAY_BUFFER)
+                return GL_ELEMENT_ARRAY_BUFFER_BINDING;
+            if (Target == GL_UNIFORM_BUFFER)
+                return GL_UNIFORM_BUFFER_BINDING;
+            if (Target == GL_TEXTURE_BUFFER)
+                return GL_TEXTURE_BUFFER_BINDING;
+            if (Target == GL_COPY_READ_BUFFER)
+                return GL_COPY_READ_BUFFER_BINDING;
+            if (Target == GL_COPY_WRITE_BUFFER)
+                return GL_COPY_WRITE_BUFFER_BINDING;
+            if (Target == GL_PIXEL_PACK_BUFFER)
+                return GL_PIXEL_PACK_BUFFER_BINDING;
+            if (Target == GL_PIXEL_UNPACK_BUFFER)
+                return GL_PIXEL_UNPACK_BUFFER_BINDING;
+            if (Target == GL_TRANSFORM_FEEDBACK_BUFFER)
+                return GL_TRANSFORM_FEEDBACK_BUFFER_BINDING;
+            return 0;
+        }
+        ();
 
     public:
         explicit BufferBinder(GLuint vbo) {

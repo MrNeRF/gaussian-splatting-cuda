@@ -41,7 +41,7 @@ namespace gs::rendering {
             -1.0f, 1.0f,
             1.0f, 1.0f};
 
-        upload_buffer(GL_ARRAY_BUFFER, vertices, 8, GL_STATIC_DRAW);
+        upload_buffer(GL_ARRAY_BUFFER, vertices, sizeof(vertices) / sizeof(vertices[0]), GL_STATIC_DRAW);
 
         // Set up vertex attributes
         VertexAttribute position_attr{

@@ -45,7 +45,7 @@ namespace gs::rendering {
         cube_vbo_ = std::move(*vbo_result);
 
         BufferBinder<GL_ARRAY_BUFFER> vbo_bind(cube_vbo_);
-        upload_buffer(GL_ARRAY_BUFFER, cube_vertices_, 24, GL_STATIC_DRAW);
+        upload_buffer(GL_ARRAY_BUFFER, cube_vertices_, sizeof(cube_vertices_) / sizeof(cube_vertices_[0]), GL_STATIC_DRAW);
 
         // Set vertex attributes for cube
         VertexAttribute cube_attr{
@@ -65,7 +65,7 @@ namespace gs::rendering {
         cube_ebo_ = std::move(*ebo_result);
 
         BufferBinder<GL_ELEMENT_ARRAY_BUFFER> ebo_bind(cube_ebo_);
-        upload_buffer(GL_ELEMENT_ARRAY_BUFFER, cube_indices_, 36, GL_STATIC_DRAW);
+        upload_buffer(GL_ELEMENT_ARRAY_BUFFER, cube_indices_, sizeof(cube_indices_) / sizeof(cube_indices_[0]), GL_STATIC_DRAW);
 
         // Create instance VBO for positions and colors
         auto instance_result = create_vbo();
