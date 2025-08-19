@@ -1,7 +1,8 @@
-#include "rendering/render_coordinate_axes.hpp"
+#include "axes_renderer.hpp"
+#include "shader_paths.hpp"
 #include <iostream>
 
-namespace gs {
+namespace gs::rendering {
 
     // Standard coordinate axes colors (RGB convention)
     const glm::vec3 RenderCoordinateAxes::X_AXIS_COLOR = glm::vec3(1.0f, 0.0f, 0.0f); // Red
@@ -59,10 +60,9 @@ namespace gs {
 
         try {
             // Create shader for coordinate axes rendering
-            std::string shader_path = std::string(PROJECT_ROOT_PATH) + "/src/visualizer/rendering/shaders/";
             shader_ = std::make_unique<Shader>(
-                (shader_path + "coordinate_axes.vert").c_str(),
-                (shader_path + "coordinate_axes.frag").c_str(),
+                (getShaderPath("coordinate_axes.vert")).string().c_str(),
+                (getShaderPath("coordinate_axes.frag")).string().c_str(),
                 false); // Don't use shader's buffer management
 
             // Generate OpenGL objects
@@ -180,4 +180,4 @@ namespace gs {
         }
     }
 
-} // namespace gs
+} // namespace gs::rendering

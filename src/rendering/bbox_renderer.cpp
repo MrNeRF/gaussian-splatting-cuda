@@ -1,6 +1,7 @@
-#include "rendering/render_bounding_box.hpp"
+#include "bbox_renderer.hpp"
+#include "shader_paths.hpp"
 
-namespace gs {
+namespace gs::rendering {
 
     RenderBoundingBox::RenderBoundingBox() : color_(1.0f, 1.0f, 0.0f), // Yellow by default
                                              line_width_(2.0f),
@@ -35,10 +36,9 @@ namespace gs {
 
         try {
             // Create shader for bounding box rendering
-            std::string shader_path = std::string(PROJECT_ROOT_PATH) + "/src/visualizer/rendering/shaders/";
             shader_ = std::make_unique<Shader>(
-                (shader_path + "bounding_box.vert").c_str(),
-                (shader_path + "bounding_box.frag").c_str(),
+                (getShaderPath("bounding_box.vert")).string().c_str(),
+                (getShaderPath("bounding_box.frag")).string().c_str(),
                 false); // Don't use shader's buffer management
 
             // Generate OpenGL objects
@@ -47,9 +47,14 @@ namespace gs {
             glGenBuffers(1, &EBO_);
 
             initialized_ = true;
-            // Initialize cube geometry
-            createCubeGeometry();
-            setupVertexData();
+
+            // Initialize cube geometry with default bounds if not already set
+            if (min_bounds_ == glm::vec3(0.0f) && max_bounds_ == glm::vec3(0.0f)) {
+                setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+            } else {
+                createCubeGeometry();
+                setupVertexData();
+            }
 
             // Check bindings *after* setup
             glBindVertexArray(VAO_);
@@ -169,4 +174,4 @@ namespace gs {
         // Vertical edges
         0, 4, 1, 5, 2, 6, 3, 7};
 
-} // namespace gs
+} // namespace gs::rendering

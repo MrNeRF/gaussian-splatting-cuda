@@ -1,10 +1,10 @@
 #pragma once
 
-#include "rendering/shader.hpp"
+#include "shader.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 
-namespace gs {
+namespace gs::rendering {
 
     class RenderInfiniteGrid {
     public:
@@ -57,4 +57,4 @@ namespace gs {
         bool initialized_ = false;
     };
 
-} // namespace gs
+} // namespace gs::rendering

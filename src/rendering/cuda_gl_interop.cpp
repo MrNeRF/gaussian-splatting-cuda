@@ -11,11 +11,11 @@
 // Now include CUDA GL interop (after GLAD)
 #include <cuda_gl_interop.h>
 
-#include "rendering/cuda_gl_interop.hpp"
+#include "cuda_gl_interop.hpp"
 #include <iostream>
 #include <stdexcept>
 
-namespace gs {
+namespace gs::rendering {
 
     CudaGLInteropTexture::CudaGLInteropTexture()
         : texture_id_(0),
@@ -245,7 +245,7 @@ namespace gs {
         }
     }
 
-} // namespace gs
+} // namespace gs::rendering
 
 #else // CUDA_GL_INTEROP_ENABLED not defined
 

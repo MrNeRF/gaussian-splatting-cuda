@@ -1,17 +1,21 @@
 #pragma once
 
 #include "core/events.hpp"
-#include "rendering/framerate_controller.hpp"
-#include "rendering/render_infinite_grid.hpp"
-#include "rendering/renderer.hpp"
-#include "rendering/rendering_pipeline.hpp"
-#include "rendering/shader.hpp"
-#include "scene/scene_manager.hpp"
+#include "framerate_controller.hpp"
+#include "internal/viewport.hpp"
+#include "rendering/rendering.hpp"
 #include <memory>
 
 namespace gs {
-    class RenderCoordinateAxes;
-}
+    namespace rendering {
+        class RenderBoundingBox;
+        class RenderCoordinateAxes;
+    } // namespace rendering
+    namespace geometry {
+        class EuclideanTransform;
+    }
+    class SceneManager;
+} // namespace gs
 
 namespace gs::visualizer {
 
@@ -42,12 +46,12 @@ namespace gs::visualizer {
         struct RenderContext {
             const Viewport& viewport;
             const RenderSettings& settings;
-            const RenderBoundingBox* crop_box;
-            const RenderCoordinateAxes* coord_axes;
+            const gs::rendering::IBoundingBox* crop_box;
+            const gs::rendering::ICoordinateAxes* coord_axes;
             const geometry::EuclideanTransform* world_to_user;
             const ViewportRegion* viewport_region = nullptr;
-            bool has_focus = false;                          // Indicates if the viewport has focus for input handling
-            const BackgroundTool* background_tool = nullptr; // NEW
+            bool has_focus = false;
+            const BackgroundTool* background_tool = nullptr;
         };
 
         RenderingManager();
@@ -70,35 +74,28 @@ namespace gs::visualizer {
         float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
         bool isPerformanceCritical() const { return framerate_controller_.isPerformanceCritical(); }
         void resetFramerateController() { framerate_controller_.reset(); }
-
-        // Get shader for external use (crop box rendering)
-        std::shared_ptr<Shader> getQuadShader() const { return quad_shader_; }
+        gs::rendering::RenderingEngine* getRenderingEngine() { return engine_.get(); }
 
     private:
-        void initializeShaders();
         void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render);
         void drawFocusIndicator(const RenderContext& context);
-        void drawCropBox(const RenderContext& context);
-        void drawCoordAxes(const RenderContext& context);
-        void drawGrid(const RenderContext& context);
-        bool hasCamChanged(const Viewport& current_viewport);
+        void drawOverlays(const RenderContext& context);
+        bool hasCamChanged(const class Viewport& current_viewport);
         bool hasSceneChanged(const RenderContext& context);
         void setupEventHandlers();
 
         RenderSettings settings_;
-        std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
-        std::shared_ptr<Shader> quad_shader_;
-        std::unique_ptr<RenderInfiniteGrid> infinite_grid_;
+        std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         bool initialized_ = false;
 
         // Framerate control
         FramerateController framerate_controller_;
-        Viewport prev_viewport_state_;
+        std::unique_ptr<Viewport> prev_viewport_state_;
         float prev_fov_ = 0;
-        geometry::EuclideanTransform prev_world_to_usr_inv_;
+        std::unique_ptr<geometry::EuclideanTransform> prev_world_to_usr_inv_;
         glm::vec3 prev_background_color_;
         glm::ivec2 prev_render_size_;
-        RenderingPipeline::RenderResult prev_result_;
+        gs::rendering::RenderResult prev_result_;
 
         bool prev_point_cloud_mode_ = false;
         float prev_voxel_size_ = 0.01f;

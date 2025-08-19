@@ -1,12 +1,12 @@
 #pragma once
 
 #include "core/splat_data.hpp"
-#include "rendering/shader.hpp"
+#include "shader.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <torch/torch.h>
 
-namespace gs {
+namespace gs::rendering {
 
     class PointCloudRenderer {
     public:
@@ -95,4 +95,4 @@ namespace gs {
             0, 4, 5, 5, 1, 0};
     };
 
-} // namespace gs
+} // namespace gs::rendering

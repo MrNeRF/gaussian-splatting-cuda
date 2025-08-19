@@ -1,177 +1,192 @@
-#include "tools/world_transform_tool.hpp"
-#include "core/events.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
 
+#include "tools/world_transform_tool.hpp"
+#include "gui/ui_widgets.hpp"
+#include "rendering/rendering.hpp"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 
 namespace gs::visualizer {
 
-    WorldTransformTool::WorldTransformTool() : translation_(0.0f),
-                                               angles_deg_(0.0f) {
-        coordinate_axes_ = std::make_shared<RenderCoordinateAxes>();
-        world_to_user = std::make_shared<geometry::EuclideanTransform>();
-        setupEventHandlers();
+    WorldTransformTool::WorldTransformTool()
+        : ToolBase() {
+        transform_ = std::make_shared<geometry::EuclideanTransform>();
     }
 
     WorldTransformTool::~WorldTransformTool() = default;
 
-    bool WorldTransformTool::initialize([[maybe_unused]] const ToolContext& ctx) {
-        return true;
+    bool WorldTransformTool::initialize(const ToolContext& ctx) {
+        // Get rendering manager through the context
+        auto* rendering_manager = ctx.getRenderingManager();
+        if (!rendering_manager)
+            return false;
+
+        // Get rendering engine (it should be initialized by now)
+        auto* engine = rendering_manager->getRenderingEngine();
+        if (!engine)
+            return false;
+
+        try {
+            // Create coordinate axes through the rendering engine
+            coordinate_axes_ = engine->createCoordinateAxes();
+            if (coordinate_axes_) {
+                coordinate_axes_->setSize(axes_size_);
+                // All axes visible by default
+                coordinate_axes_->setAxisVisible(0, true);
+                coordinate_axes_->setAxisVisible(1, true);
+                coordinate_axes_->setAxisVisible(2, true);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to create coordinate axes: " << e.what() << std::endl;
+            return false;
+        }
+
+        return coordinate_axes_ != nullptr;
     }
 
     void WorldTransformTool::shutdown() {
-        // Cleanup handled by destructors
+        coordinate_axes_.reset();
     }
 
     void WorldTransformTool::update([[maybe_unused]] const ToolContext& ctx) {
+        // Update axes if needed
+        updateAxes();
     }
 
     void WorldTransformTool::render([[maybe_unused]] const ToolContext& ctx) {
-        // Rendering is handled by the rendering manager based on our state
-        // This method could be used for tool-specific overlays if needed
+        // Rendering is handled by the main rendering pipeline
+        // The axes will be rendered if show_axes_ is true
     }
 
-    void WorldTransformTool::renderUI(const gui::UIContext& ui_ctx, [[maybe_unused]] bool* p_open) {
-        if (!isEnabled()) {
+    void WorldTransformTool::renderUI(const gui::UIContext& ctx, bool* open) {
+        if (!open || !*open)
             return;
-        }
 
-        drawControls(ui_ctx);
+        drawControls(ctx);
     }
 
-    void WorldTransformTool::onEnabledChanged(bool enabled) {
-        if (!enabled) {
-        }
-    }
+    void WorldTransformTool::setTransform(const geometry::EuclideanTransform& transform) {
+        *transform_ = transform;
 
-    void WorldTransformTool::setupEventHandlers() {
-        using namespace events;
-        // Listen for axes settings changes
-        tools::AxesSettingsChanged::when([this](const auto& e) {
-            show_axes_ = e.show_axes;
-        });
-    }
+        // Update UI values from transform
+        // Extract Euler angles from rotation matrix
+        glm::mat3 rot_mat = transform_->getRotationMat();
+        glm::vec3 euler = glm::eulerAngles(glm::quat_cast(rot_mat));
+        rotation_[0] = glm::degrees(euler.x);
+        rotation_[1] = glm::degrees(euler.y);
+        rotation_[2] = glm::degrees(euler.z);
 
-    float wrapAngle(float angle) {
-        angle = fmod(angle, 360.0f);
-        if (angle < 0)
-            angle += 360.0f;
-        return angle;
-    }
-
-    void WorldTransformTool::drawControls([[maybe_unused]] const gui::UIContext& ui_ctx) {
-        if (!ImGui::CollapsingHeader("World Transform")) {
-            return;
-        }
-
-        bool settings_changed = false;
-
-        if (ImGui::Checkbox("Show Coord Axes", &show_axes_)) {
-            settings_changed = true;
-        }
-
-        if (settings_changed) {
-
-            events::tools::AxesSettingsChanged{
-                .show_axes = show_axes_}
-                .emit();
-        }
-        if (ImGui::Button("Reset to Default")) {
-            coordinate_axes_->setSize(2);
-            coordinate_axes_->setLineWidth(3);
-            translation_ = glm::vec3{0};
-            angles_deg_ = glm::vec3{0};
-        }
-
-        if (show_axes_) {
-            float available_width = ImGui::GetContentRegionAvail().x;
-            float button_width = 120.0f;
-            float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
-
-            ImGui::SetNextItemWidth(slider_width);
-            if (ImGui::SliderFloat("Axes Line Width", &line_width_, 0.5f, 10.0f)) {
-                coordinate_axes_->setLineWidth(line_width_);
-            }
-            if (ImGui::SliderFloat("Axes Size", &axes_size_, 0.5f, 10.0f)) {
-                coordinate_axes_->setSize(axes_size_);
-            }
-        }
-        bool world_rot_changed = false;
-        bool world_trans_changed = false;
-
-        // Rotation controls
-        if (ImGui::TreeNode("Rotation")) {
-            ImGui::Text("Ctrl+click for faster steps");
-            ImGui::Text("Rotate w.r.t world axes (Deg) ");
-            const float step = 1.0f;
-            const float step_fast = 5.0f;
-
-            // Trans X
-            ImGui::Text("RotX:");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
-            world_rot_changed |= ImGui::InputFloat("RotX", &angles_deg_[0], step, step_fast, "%.3f");
-            angles_deg_[0] = wrapAngle(angles_deg_[0]);
-
-            ImGui::Text("RotY:");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
-            world_rot_changed |= ImGui::InputFloat("RotY", &angles_deg_[1], step, step_fast, "%.3f");
-            angles_deg_[1] = wrapAngle(angles_deg_[1]);
-
-            ImGui::Text("RotZ:");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
-            world_rot_changed |= ImGui::InputFloat("RotZ", &angles_deg_[2], step, step_fast, "%.3f");
-            angles_deg_[2] = wrapAngle(angles_deg_[2]);
-
-            ImGui::TreePop();
-        }
-
-        // Translation controls
-        if (ImGui::TreeNode("translation")) {
-            ImGui::Text("Ctrl+click for faster steps");
-            ImGui::Text("Trans w.r.t to world axes");
-
-            const float min_range = -8.0f;
-            const float max_range = 8.0f;
-            const float step = 0.01f;
-            const float step_fast = 0.1f;
-
-            // Trans X
-            ImGui::Text("X:");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
-            world_trans_changed |= ImGui::InputFloat("TransX", &translation_[0], step, step_fast, "%.3f");
-            translation_[0] = std::clamp(translation_[0], min_range, max_range);
-
-            // Trans Y
-            ImGui::Text("Y:");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
-            world_trans_changed |= ImGui::InputFloat("TransY", &translation_[1], step, step_fast, "%.3f");
-            translation_[1] = std::clamp(translation_[1], min_range, max_range);
-
-            // Trans Z
-            ImGui::Text("Z:");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
-            world_trans_changed |= ImGui::InputFloat("TransZ", &translation_[2], step, step_fast, "%.3f");
-            translation_[2] = std::clamp(translation_[2], min_range, max_range);
-
-            ImGui::Text("Translations: (%.3f, %.3f, %.3f)", translation_.x, translation_.y, translation_.z);
-            ImGui::Text("Angles: (%.3f, %.3f, %.3f)", angles_deg_.x, angles_deg_.y, angles_deg_.z);
-
-            ImGui::TreePop();
-        }
+        // Extract translation
+        glm::vec3 trans = transform_->getTranslation();
+        translation_[0] = trans.x;
+        translation_[1] = trans.y;
+        translation_[2] = trans.z;
     }
 
     bool WorldTransformTool::IsTrivialTrans() const {
-        return translation_ == glm::vec3(0.0f) && angles_deg_ == glm::vec3(0.0f);
+        return transform_->isIdentity();
     }
 
-    [[nodiscard]] std::shared_ptr<const geometry::EuclideanTransform> WorldTransformTool::GetTransform() {
-        *world_to_user = {glm::radians(angles_deg_), translation_};
-        return world_to_user;
+    void WorldTransformTool::drawControls([[maybe_unused]] const gui::UIContext& ctx) {
+        ImGui::Text("World Coordinate Transform");
+        ImGui::Separator();
+
+        // Show axes checkbox
+        if (ImGui::Checkbox("Show Coordinate Axes", &show_axes_)) {
+            if (coordinate_axes_) {
+                // Update visibility
+                coordinate_axes_->setAxisVisible(0, show_axes_);
+                coordinate_axes_->setAxisVisible(1, show_axes_);
+                coordinate_axes_->setAxisVisible(2, show_axes_);
+            }
+        }
+
+        if (show_axes_) {
+            ImGui::Indent();
+
+            // Axes appearance
+            if (ImGui::SliderFloat("Axes Size", &axes_size_, 0.5f, 10.0f)) {
+                if (coordinate_axes_) {
+                    coordinate_axes_->setSize(axes_size_);
+                }
+            }
+
+            // Note: Line width is typically set in the renderer, not the axes object
+            ImGui::SliderFloat("Line Width", &line_width_, 1.0f, 5.0f);
+
+            ImGui::Unindent();
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Transform Parameters");
+
+        bool transform_changed = false;
+
+        // Rotation controls
+        ImGui::Text("Rotation (degrees):");
+        transform_changed |= ImGui::DragFloat3("##rotation", rotation_, 0.1f);
+
+        // Translation controls
+        ImGui::Text("Translation:");
+        transform_changed |= ImGui::DragFloat3("##translation", translation_, 0.01f);
+
+        if (transform_changed) {
+            // Update transform from UI values
+            glm::vec3 rot_rad(glm::radians(rotation_[0]),
+                              glm::radians(rotation_[1]),
+                              glm::radians(rotation_[2]));
+            glm::vec3 trans(translation_[0], translation_[1], translation_[2]);
+
+            *transform_ = geometry::EuclideanTransform(rot_rad.x, rot_rad.y, rot_rad.z,
+                                                       trans.x, trans.y, trans.z);
+        }
+
+        // Reset button
+        if (ImGui::Button("Reset Transform", ImVec2(-1, 0))) {
+            resetTransform();
+        }
+
+        ImGui::Separator();
+        drawTransformInfo();
+    }
+
+    void WorldTransformTool::drawTransformInfo() {
+        ImGui::Text("Transform Info:");
+        ImGui::Indent();
+
+        if (IsTrivialTrans()) {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Identity Transform");
+        } else {
+            // Show rotation matrix
+            glm::mat3 rot = transform_->getRotationMat();
+            ImGui::Text("Rotation Matrix:");
+            ImGui::Text("[%.3f, %.3f, %.3f]", rot[0][0], rot[1][0], rot[2][0]);
+            ImGui::Text("[%.3f, %.3f, %.3f]", rot[0][1], rot[1][1], rot[2][1]);
+            ImGui::Text("[%.3f, %.3f, %.3f]", rot[0][2], rot[1][2], rot[2][2]);
+
+            // Show translation
+            glm::vec3 trans = transform_->getTranslation();
+            ImGui::Text("Translation: [%.3f, %.3f, %.3f]", trans.x, trans.y, trans.z);
+        }
+
+        ImGui::Unindent();
+    }
+
+    void WorldTransformTool::resetTransform() {
+        *transform_ = geometry::EuclideanTransform();
+
+        // Reset UI values
+        rotation_[0] = rotation_[1] = rotation_[2] = 0.0f;
+        translation_[0] = translation_[1] = translation_[2] = 0.0f;
+    }
+
+    void WorldTransformTool::updateAxes() {
+        // Update axes properties if needed
+        if (coordinate_axes_ && show_axes_) {
+            // The axes visibility and size are already set
+            // Additional updates can be done here if needed
+        }
     }
 
 } // namespace gs::visualizer

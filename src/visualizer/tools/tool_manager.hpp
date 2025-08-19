@@ -47,9 +47,9 @@ namespace gs {
             void render();
             void renderUI(const gs::gui::UIContext& ui_ctx);
 
-            // ToolContext implementation
-            RenderingManager* getRenderingManager() override;
-            gs::SceneManager* getSceneManager() override;
+            // ToolContext implementation - add const to match base class
+            RenderingManager* getRenderingManager() const override;
+            gs::SceneManager* getSceneManager() const override;
             const ::Viewport& getViewport() const override;
             ::GLFWwindow* getWindow() const override;
             void requestRender() override;
