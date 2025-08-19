@@ -5,7 +5,7 @@
 #include "cuda_gl_interop.hpp"
 #endif
 
-namespace gs {
+namespace gs::rendering {
 
     RenderingPipeline::RenderingPipeline()
         : background_(torch::zeros({3}, torch::kFloat32).to(torch::kCUDA)) {
@@ -39,6 +39,18 @@ namespace gs {
         // Create camera for this frame
         Camera cam = createCamera(request);
 
+        // Handle crop box conversion
+        const geometry::BoundingBox* geom_bbox = nullptr;
+        std::unique_ptr<geometry::BoundingBox> temp_bbox;
+
+        if (request.crop_box) {
+            // Create a temporary geometry::BoundingBox with the full transform
+            temp_bbox = std::make_unique<geometry::BoundingBox>();
+            temp_bbox->setBounds(request.crop_box->getMinBounds(), request.crop_box->getMaxBounds());
+            temp_bbox->setworld2BBox(request.crop_box->getworld2BBox());
+            geom_bbox = temp_bbox.get();
+        }
+
         // Perform rendering
         auto output = gs::rasterize(
             cam,
@@ -47,8 +59,8 @@ namespace gs {
             request.scaling_modifier,
             false, // train
             request.antialiasing,
-            request.render_mode,
-            request.crop_box);
+            static_cast<gs::RenderMode>(request.render_mode),
+            geom_bbox);
 
         result.image = output.image;
         result.depth = output.depth;
@@ -262,4 +274,4 @@ namespace gs {
             fov_rad);
     }
 
-} // namespace gs
+} // namespace gs::rendering

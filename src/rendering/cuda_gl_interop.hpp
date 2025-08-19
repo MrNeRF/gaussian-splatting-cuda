@@ -11,7 +11,7 @@
 typedef unsigned int GLuint;
 
 // Include framebuffer after forward declarations
-#include "rendering/framebuffer.hpp"
+#include "framebuffer.hpp"
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 // Only include cuda_gl_interop.h in implementation files, not headers
@@ -19,7 +19,7 @@ struct cudaGraphicsResource;
 typedef struct cudaGraphicsResource* cudaGraphicsResource_t;
 #endif
 
-namespace gs {
+namespace gs::rendering {
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 
@@ -91,4 +91,4 @@ namespace gs {
 
 #endif // CUDA_GL_INTEROP_ENABLED
 
-} // namespace gs
+} // namespace gs::rendering
