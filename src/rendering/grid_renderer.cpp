@@ -18,10 +18,11 @@ namespace gs::rendering {
 
         try {
             // Create shader for infinite grid rendering
-            shader_ = std::make_unique<Shader>(
-                (rendering::getShaderPath("infinite_grid.vert")).string().c_str(),
-                (rendering::getShaderPath("infinite_grid.frag")).string().c_str(),
-                false); // Don't use shader's buffer management
+            auto result = load_shader("infinite_grid", "infinite_grid.vert", "infinite_grid.frag", false);
+            if (!result) {
+                throw std::runtime_error(result.error().what());
+            }
+            shader_ = std::move(*result);
 
             // Generate OpenGL objects
             glGenVertexArrays(1, &vao_);
@@ -70,7 +71,7 @@ namespace gs::rendering {
             blue_noise_texture_ = 0;
         }
 
-        shader_.reset();
+        shader_ = ManagedShader();
         initialized_ = false;
     }
 
@@ -130,7 +131,7 @@ namespace gs::rendering {
     }
 
     void RenderInfiniteGrid::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!initialized_ || !shader_)
+        if (!initialized_ || !shader_.valid())
             return;
 
         // Calculate matrices
@@ -159,31 +160,29 @@ namespace gs::rendering {
         glDepthMask(GL_TRUE);
 
         // Bind shader and set uniforms
-        shader_->bind();
+        ShaderScope s(shader_);
 
-        shader_->set_uniform("near_origin", near_origin);
-        shader_->set_uniform("near_x", near_x);
-        shader_->set_uniform("near_y", near_y);
-        shader_->set_uniform("far_origin", far_origin);
-        shader_->set_uniform("far_x", far_x);
-        shader_->set_uniform("far_y", far_y);
+        s->set("near_origin", near_origin);
+        s->set("near_x", near_x);
+        s->set("near_y", near_y);
+        s->set("far_origin", far_origin);
+        s->set("far_x", far_x);
+        s->set("far_y", far_y);
 
-        shader_->set_uniform("view_position", view_position);
-        shader_->set_uniform("matrix_viewProjection", viewProj);
-        shader_->set_uniform("plane", static_cast<int>(plane_));
-        shader_->set_uniform("opacity", opacity_);
+        s->set("view_position", view_position);
+        s->set("matrix_viewProjection", viewProj);
+        s->set("plane", static_cast<int>(plane_));
+        s->set("opacity", opacity_);
 
         // Bind blue noise texture
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, blue_noise_texture_);
-        shader_->set_uniform("blueNoiseTex32", 0);
+        s->set("blueNoiseTex32", 0);
 
         // Render the grid
         glBindVertexArray(vao_);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         glBindVertexArray(0);
-
-        shader_->unbind();
 
         // Restore OpenGL state
         glDepthMask(depth_mask);

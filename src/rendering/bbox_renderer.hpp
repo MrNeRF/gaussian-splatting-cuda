@@ -2,8 +2,7 @@
 
 #include "geometry/bounding_box.hpp"
 #include "rendering/rendering.hpp"
-#include "shader.hpp"
-#include <memory>
+#include "shader_manager.hpp"
 
 namespace gs::rendering {
     class RenderBoundingBox : public geometry::BoundingBox, public IBoundingBox {
@@ -58,7 +57,7 @@ namespace gs::rendering {
         bool initialized_;
 
         // OpenGL resources
-        std::unique_ptr<Shader> shader_;
+        ManagedShader shader_;
         GLuint VAO_, VBO_, EBO_;
 
         // Cube geometry data

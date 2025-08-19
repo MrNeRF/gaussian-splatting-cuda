@@ -1,8 +1,7 @@
 #pragma once
 
-#include "shader.hpp"
+#include "shader_manager.hpp"
 #include <glm/glm.hpp>
-#include <memory>
 
 namespace gs::rendering {
 
@@ -43,7 +42,7 @@ namespace gs::rendering {
         void cleanup();
 
         // OpenGL resources
-        std::unique_ptr<Shader> shader_;
+        ManagedShader shader_;
         GLuint vao_ = 0;
         GLuint vbo_ = 0;
         GLuint blue_noise_texture_ = 0;

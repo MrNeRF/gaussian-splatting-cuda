@@ -60,10 +60,11 @@ namespace gs::rendering {
 
         try {
             // Create shader for coordinate axes rendering
-            shader_ = std::make_unique<Shader>(
-                (getShaderPath("coordinate_axes.vert")).string().c_str(),
-                (getShaderPath("coordinate_axes.frag")).string().c_str(),
-                false); // Don't use shader's buffer management
+            auto result = load_shader("coordinate_axes", "coordinate_axes.vert", "coordinate_axes.frag", false);
+            if (!result) {
+                throw std::runtime_error(result.error().what());
+            }
+            shader_ = std::move(*result);
 
             // Generate OpenGL objects
             glGenVertexArrays(1, &VAO_);
@@ -91,7 +92,7 @@ namespace gs::rendering {
             VBO_ = 0;
         }
 
-        shader_.reset();
+        shader_ = ManagedShader();
         initialized_ = false;
     }
 
@@ -142,7 +143,7 @@ namespace gs::rendering {
     }
 
     void RenderCoordinateAxes::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!initialized_ || !shader_ || VAO_ == 0 || vertices_.empty())
+        if (!initialized_ || !shader_.valid() || VAO_ == 0 || vertices_.empty())
             return;
 
         // Save current OpenGL state
@@ -155,12 +156,12 @@ namespace gs::rendering {
         glLineWidth(line_width_);
 
         // Bind shader and setup uniforms
-        shader_->bind();
+        ShaderScope s(shader_);
 
         try {
             // Set uniforms (axes are in world space, so no model transform needed)
             glm::mat4 mvp = projection * view;
-            shader_->set_uniform("u_mvp", mvp);
+            s->set("u_mvp", mvp);
 
             // Bind VAO and draw
             glBindVertexArray(VAO_);
@@ -170,8 +171,6 @@ namespace gs::rendering {
         } catch (const std::exception& e) {
             std::cerr << "Error rendering coordinate axes: " << e.what() << std::endl;
         }
-
-        shader_->unbind();
 
         // Restore OpenGL state
         glLineWidth(current_line_width);

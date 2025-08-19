@@ -7,6 +7,7 @@
 #include "rendering/rendering.hpp"
 #include "rendering_pipeline.hpp"
 #include "screen_renderer.hpp"
+#include "shader_manager.hpp"
 #include "viewport_gizmo.hpp"
 
 namespace gs::rendering {
@@ -76,7 +77,7 @@ namespace gs::rendering {
         ViewportGizmo viewport_gizmo_;
 
         // Shaders
-        std::shared_ptr<Shader> quad_shader_;
+        ManagedShader quad_shader_;
     };
 
 } // namespace gs::rendering

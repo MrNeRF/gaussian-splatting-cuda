@@ -1,6 +1,5 @@
 #include "viewport_gizmo.hpp"
 #include "gl_state_guard.hpp"
-#include "shader.hpp"
 #include "shader_paths.hpp"
 #include "text_renderer.hpp"
 #include <GLFW/glfw3.h>
@@ -55,24 +54,18 @@ namespace gs::rendering {
             glDeleteBuffers(1, &vbo_);
             vbo_ = 0;
         }
-        shader_.reset();
+        shader_ = ManagedShader();
         text_renderer_.reset();
         initialized_ = false;
     }
 
     void ViewportGizmo::createShaders() {
-        // Use the shader system to create shaders
-        try {
-            shader_ = std::make_unique<Shader>(
-                (getShaderPath("viewport_gizmo.vert")).string().c_str(),
-                (getShaderPath("viewport_gizmo.frag")).string().c_str(),
-                false // Don't create buffer
-            );
-            std::cout << "[ViewportGizmo] Shaders created successfully" << std::endl;
-        } catch (const std::exception& e) {
-            std::cerr << "[ViewportGizmo] ERROR creating shaders: " << e.what() << std::endl;
-            throw;
+        auto result = load_shader("viewport_gizmo", "viewport_gizmo.vert", "viewport_gizmo.frag", false);
+        if (!result) {
+            throw std::runtime_error(result.error().what());
         }
+        shader_ = std::move(*result);
+        std::cout << "[ViewportGizmo] Shaders created successfully" << std::endl;
     }
 
     void ViewportGizmo::generateGeometry() {
@@ -196,7 +189,7 @@ namespace gs::rendering {
         float refDist = glm::length(originCamSpace);
 
         // Use shader
-        shader_->bind();
+        ShaderScope s(shader_);
 
         // Draw axes
         const float sphereRadius = 0.198f;
@@ -216,11 +209,11 @@ namespace gs::rendering {
         for (int i = 0; i < 3; i++) {
             glm::mat4 model = rotations[i] * glm::scale(glm::mat4(1), glm::vec3(axisRad, axisRad, axisLen));
             glm::mat4 mvp = proj * view * model;
-            shader_->set_uniform("uMVP", mvp);
-            shader_->set_uniform("uModel", model);
-            shader_->set_uniform("uColor", colors_[i]);
-            shader_->set_uniform("uAlpha", 1.0f);
-            shader_->set_uniform("uUseLighting", 1);
+            s->set("uMVP", mvp);
+            s->set("uModel", model);
+            s->set("uColor", colors_[i]);
+            s->set("uAlpha", 1.0f);
+            s->set("uUseLighting", 1);
             glDrawArrays(GL_TRIANGLES, 0, cylinder_vertex_count_);
         }
 
@@ -250,11 +243,11 @@ namespace gs::rendering {
             glm::mat4 model = glm::translate(glm::mat4(1), labelPos) *
                               glm::scale(glm::mat4(1), glm::vec3(sphereRadius * scaleFactor));
             glm::mat4 mvp = proj * view * model;
-            shader_->set_uniform("uMVP", mvp);
-            shader_->set_uniform("uModel", glm::mat4(1.0f));
-            shader_->set_uniform("uColor", colors_[i]);
-            shader_->set_uniform("uAlpha", 1.0f);
-            shader_->set_uniform("uUseLighting", 0);
+            s->set("uMVP", mvp);
+            s->set("uModel", glm::mat4(1.0f));
+            s->set("uColor", colors_[i]);
+            s->set("uAlpha", 1.0f);
+            s->set("uUseLighting", 0);
             glDrawArrays(GL_TRIANGLES, sphere_vertex_start_, sphere_vertex_count_);
 
             // Calculate screen position
@@ -330,11 +323,11 @@ namespace gs::rendering {
                             glm::mat4 jModel = glm::translate(glm::mat4(1), jLabelPos) *
                                                glm::scale(glm::mat4(1), glm::vec3(sphereRadius * jScaleFactor));
                             glm::mat4 jMvp = proj * view * jModel;
-                            shader_->set_uniform("uMVP", jMvp);
-                            shader_->set_uniform("uModel", glm::mat4(1.0f));
-                            shader_->set_uniform("uColor", colors_[jdx]);
-                            shader_->set_uniform("uAlpha", 1.0f);
-                            shader_->set_uniform("uUseLighting", 0);
+                            s->set("uMVP", jMvp);
+                            s->set("uModel", glm::mat4(1.0f));
+                            s->set("uColor", colors_[jdx]);
+                            s->set("uAlpha", 1.0f);
+                            s->set("uUseLighting", 0);
                             glDrawArrays(GL_TRIANGLES, sphere_vertex_start_, sphere_vertex_count_);
                         }
                     }
@@ -375,7 +368,6 @@ namespace gs::rendering {
             glDisable(GL_STENCIL_TEST);
         }
 
-        shader_->unbind();
         glBindVertexArray(0);
 
         // State automatically restored by GLStateGuard destructor

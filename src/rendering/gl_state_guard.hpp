@@ -1,11 +1,8 @@
 #pragma once
 
-#include <GLFW/glfw3.h>
-#include <array>
 #include <concepts>
 #include <expected>
 #include <glad/glad.h>
-#include <span>
 #include <string>
 
 namespace gs::rendering {

@@ -13,7 +13,7 @@ namespace gs::rendering {
 
     Result<void> RenderingEngineImpl::initialize() {
         // Check if already initialized by checking if key components exist
-        if (quad_shader_) {
+        if (quad_shader_.valid()) {
             return {};
         }
 
@@ -51,23 +51,23 @@ namespace gs::rendering {
 
     void RenderingEngineImpl::shutdown() {
         // Just reset/clean up - safe to call multiple times
-        quad_shader_.reset();
+        quad_shader_ = ManagedShader();
         screen_renderer_.reset();
         // Other components clean up in their destructors
     }
 
     bool RenderingEngineImpl::isInitialized() const {
         // Check if key components exist
-        return quad_shader_ && screen_renderer_;
+        return quad_shader_.valid() && screen_renderer_;
     }
 
     Result<void> RenderingEngineImpl::initializeShaders() {
         try {
-            std::string shader_path = std::string(SHADER_PATH) + "/";
-            quad_shader_ = std::make_shared<Shader>(
-                (shader_path + "screen_quad.vert").c_str(),
-                (shader_path + "screen_quad.frag").c_str(),
-                true);
+            auto result = load_shader("screen_quad", "screen_quad.vert", "screen_quad.frag", true);
+            if (!result) {
+                return std::unexpected(std::string("Failed to create shaders: ") + result.error().what());
+            }
+            quad_shader_ = std::move(*result);
             return {};
         } catch (const std::exception& e) {
             return std::unexpected(std::string("Failed to create shaders: ") + e.what());
@@ -152,6 +152,8 @@ namespace gs::rendering {
 
         // Set viewport for rendering
         glViewport(viewport_pos.x, viewport_pos.y, viewport_size.x, viewport_size.y);
+
+        // Use the quad shader directly
         screen_renderer_->render(quad_shader_);
 
         return {};

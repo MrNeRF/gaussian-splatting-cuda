@@ -31,10 +31,11 @@ namespace gs::rendering {
             return;
 
         // Create shader
-        shader_ = std::make_unique<Shader>(
-            (rendering::getShaderPath("point_cloud.vert")).string().c_str(),
-            (rendering::getShaderPath("point_cloud.frag")).string().c_str(),
-            false);
+        auto result = load_shader("point_cloud", "point_cloud.vert", "point_cloud.frag", false);
+        if (!result) {
+            throw std::runtime_error(result.error().what());
+        }
+        shader_ = std::move(*result);
 
         createCubeGeometry();
         initialized_ = true;
@@ -147,18 +148,16 @@ namespace gs::rendering {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // Bind shader and set uniforms
-        shader_->bind();
-        shader_->set_uniform("u_view", view);
-        shader_->set_uniform("u_projection", projection);
-        shader_->set_uniform("u_voxel_size", voxel_size);
+        ShaderScope s(shader_);
+        s->set("u_view", view);
+        s->set("u_projection", projection);
+        s->set("u_voxel_size", voxel_size);
 
         // Render instanced cubes
         glBindVertexArray(cube_vao_);
         glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0,
                                 static_cast<GLsizei>(current_point_count_));
         glBindVertexArray(0);
-
-        shader_->unbind();
     }
 
 } // namespace gs::rendering

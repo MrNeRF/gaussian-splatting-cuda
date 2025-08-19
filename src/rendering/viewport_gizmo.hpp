@@ -1,12 +1,12 @@
 #pragma once
 
+#include "shader_manager.hpp"
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <memory>
 
 namespace gs::rendering {
 
-    class Shader;
     class TextRenderer;
 
     class ViewportGizmo {
@@ -38,7 +38,7 @@ namespace gs::rendering {
         // OpenGL resources
         GLuint vao_ = 0;
         GLuint vbo_ = 0;
-        std::unique_ptr<Shader> shader_;
+        ManagedShader shader_;
 
         // Text rendering
         std::unique_ptr<TextRenderer> text_renderer_;

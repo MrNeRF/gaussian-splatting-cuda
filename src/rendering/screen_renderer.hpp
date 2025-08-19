@@ -3,6 +3,7 @@
 #include "cuda_gl_interop.hpp"
 #include "framebuffer.hpp"
 #include "shader.hpp"
+#include "shader_manager.hpp"
 
 #include <memory>
 
@@ -58,6 +59,19 @@ namespace gs::rendering {
             glDrawArrays(GL_TRIANGLES, 0, 6);
 
             shader->unbind();
+        }
+
+        // New overload for ManagedShader
+        void render(ManagedShader& shader) const {
+            ShaderScope s(shader);
+
+            glBindVertexArray(quadVAO);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, getTextureID());
+
+            shader.set("screenTexture", 0);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
         }
 
         virtual void uploadData(const unsigned char* image, int width_, int height_) {

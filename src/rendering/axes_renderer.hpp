@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rendering/rendering.hpp"
-#include "shader.hpp"
+#include "shader_manager.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -39,7 +39,7 @@ namespace gs::rendering {
         void cleanup();
 
         // OpenGL resources
-        std::unique_ptr<Shader> shader_;
+        ManagedShader shader_;
         GLuint VAO_, VBO_;
 
         // Axes properties

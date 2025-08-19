@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/splat_data.hpp"
-#include "shader.hpp"
+#include "shader_manager.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <span>
@@ -46,7 +46,7 @@ namespace gs::rendering {
         int fbo_height_ = 0;
 
         // Shaders
-        std::unique_ptr<Shader> shader_;
+        ManagedShader shader_;
 
         // State
         bool initialized_ = false;
