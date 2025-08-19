@@ -3,13 +3,13 @@
 #include "core/camera.hpp"
 #include "core/rasterizer.hpp"
 #include "core/splat_data.hpp"
-#include "rendering/point_cloud_renderer.hpp"
-#include "rendering/render_bounding_box.hpp"
-#include "rendering/renderer.hpp"
+#include "point_cloud_renderer.hpp"
+#include "rendering/rendering.hpp"
+#include "screen_renderer.hpp"
 #include <glm/glm.hpp>
 #include <torch/torch.h>
 
-namespace gs {
+namespace gs::rendering {
 
     class RenderingPipeline {
     public:
@@ -21,7 +21,7 @@ namespace gs {
             float scaling_modifier = 1.0f;
             bool antialiasing = false;
             RenderMode render_mode = RenderMode::RGB;
-            const geometry::BoundingBox* crop_box = nullptr; // crop box
+            const geometry::BoundingBox* crop_box = nullptr;
             glm::vec3 background_color = glm::vec3(0.0f, 0.0f, 0.0f);
             bool point_cloud_mode = false;
             float voxel_size = 0.01f;
@@ -56,4 +56,4 @@ namespace gs {
         std::unique_ptr<PointCloudRenderer> point_cloud_renderer_;
     };
 
-} // namespace gs
+} // namespace gs::rendering

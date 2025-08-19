@@ -12,7 +12,7 @@ namespace gs {
 
     void* WindowManager::callback_handler_ = nullptr;
 
-    static void window_focus_callback(GLFWwindow* window, int focused) {
+    static void window_focus_callback(GLFWwindow*, int focused) {
         if (!focused) {
             events::internal::WindowFocusLost{}.emit();
             std::println("[WindowManager] Window lost focus");

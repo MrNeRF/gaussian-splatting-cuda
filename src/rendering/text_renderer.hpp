@@ -10,7 +10,7 @@
 #include <string>
 #include FT_FREETYPE_H
 
-namespace gs::gui {
+namespace gs::rendering {
 
     // Character structure to hold glyph data
     struct Character {
@@ -44,4 +44,4 @@ namespace gs::gui {
         bool compileShaders();
     };
 
-} // namespace gs::gui
+} // namespace gs::rendering

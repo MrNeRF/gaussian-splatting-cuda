@@ -283,11 +283,9 @@ target_compile_options(gaussian_kernels PRIVATE
 # =============================================================================
 # MODULES
 # =============================================================================
-# Loader module
 add_subdirectory(src/loader)
-
-# Visualizer module
 add_subdirectory(src/visualizer)
+add_subdirectory(src/rendering)
 
 # =============================================================================
 # MAIN EXECUTABLE

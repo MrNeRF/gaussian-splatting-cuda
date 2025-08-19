@@ -1,13 +1,13 @@
 #pragma once
 
-#include "rendering/shader.hpp"
+#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <memory>
-#include <string>
 
-namespace gs::gui {
+namespace gs::rendering {
 
-    class TextRenderer; // Forward declaration
+    class Shader;
+    class TextRenderer;
 
     class ViewportGizmo {
     public:
@@ -61,4 +61,4 @@ namespace gs::gui {
         };
     };
 
-} // namespace gs::gui
+} // namespace gs::rendering
