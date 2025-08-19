@@ -69,9 +69,6 @@ namespace gs {
             return model_provider_;
         }
 
-        // Rendering
-        gs::rendering::RenderingPipelineResult render(const gs::rendering::RenderingPipelineRequest& request) const;
-
     private:
         Mode mode_ = Mode::Empty;
 

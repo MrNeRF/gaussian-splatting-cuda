@@ -336,12 +336,6 @@ namespace gs {
         }
     }
 
-    gs::rendering::RenderingPipelineResult Scene::render(const gs::rendering::RenderingPipelineRequest& request) const {
-        gs::rendering::RenderingPipelineResult result;
-        result.valid = false;
-        return result;
-    }
-
     void Scene::handleModelInfoQuery() {
         events::query::ModelInfo response;
 

@@ -231,6 +231,9 @@ namespace gs::visualizer {
                 .transform = transform_mat};
         }
 
+        // Start timing for performance metrics
+        auto start_time = std::chrono::high_resolution_clock::now();
+
         // Get trainer for potential mutex locking
         auto state = scene_manager->getCurrentState();
         gs::rendering::Result<gs::rendering::RenderResult> result;
@@ -264,6 +267,23 @@ namespace gs::visualizer {
                 }
             }
         }
+
+        // End timing
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto render_time = std::chrono::duration<float, std::milli>(end_time - start_time).count();
+
+        // Get actual gaussian count from scene
+        size_t actual_gaussians = 0;
+        if (scene_manager->getScene() && scene_manager->getScene()->hasModel()) {
+            actual_gaussians = scene_manager->getScene()->getTotalGaussianCount();
+        }
+
+        // Publish render completed event with timing
+        events::state::FrameRendered{
+            .render_ms = render_time,
+            .fps = 1000.0f / render_time,
+            .num_gaussians = static_cast<int>(actual_gaussians)}
+            .emit();
 
         if (result && result->image) {
             auto present_result = context.viewport_region

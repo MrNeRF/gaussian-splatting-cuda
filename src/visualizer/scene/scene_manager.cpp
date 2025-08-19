@@ -2,7 +2,6 @@
 #include "core/model_providers.hpp"
 #include "core/training_setup.hpp"
 #include "loader/loader.hpp"
-#include "rendering/rendering.hpp"
 #include "training/training_manager.hpp"
 #include <chrono>
 #include <print>
@@ -109,31 +108,6 @@ namespace gs {
                 current_state_.num_plys = scene_->getSceneNodes().size();
             }
         });
-
-        // Handle render requests
-        internal::RenderRequest::when([this](const auto& cmd) {
-            gs::rendering::RenderingPipelineRequest request{
-                .view_rotation = cmd.view_rotation,
-                .view_translation = cmd.view_translation,
-                .viewport_size = cmd.viewport_size,
-                .fov = cmd.fov,
-                .scaling_modifier = cmd.scaling_modifier,
-                .antialiasing = cmd.antialiasing,
-                .render_mode = static_cast<gs::rendering::RenderMode>(cmd.render_mode),
-                .crop_box = cmd.crop_box,
-                .background_color = glm::vec3(0.0f, 0.0f, 0.0f),
-                .point_cloud_mode = false,
-                .voxel_size = 0.01f};
-
-            auto result = render(request);
-
-            internal::RenderComplete{
-                .request_id = cmd.request_id,
-                .success = result.valid,
-                .render_ms = 0.0f // TODO: Add timing
-            }
-                .emit();
-        });
     }
 
     void SceneManager::setScene(std::unique_ptr<Scene> scene) {
@@ -204,42 +178,6 @@ namespace gs {
     SceneManager::SceneState SceneManager::getCurrentState() const {
         std::lock_guard<std::mutex> lock(state_mutex_);
         return current_state_;
-    }
-
-    gs::rendering::RenderingPipelineResult SceneManager::render(
-        const gs::rendering::RenderingPipelineRequest& request) {
-
-        if (!scene_) {
-            // Return invalid result
-            gs::rendering::RenderingPipelineResult result;
-            result.valid = false;
-            return result;
-        }
-
-        auto start_time = std::chrono::high_resolution_clock::now();
-
-        auto result = scene_->render(request);
-
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto render_time = std::chrono::duration<float, std::milli>(end_time - start_time).count();
-
-        // Get actual gaussian count from scene
-        size_t actual_gaussians = 0;
-        if (scene_->hasModel()) {
-            const SplatData* model = scene_->getModel();
-            if (model) {
-                actual_gaussians = model->size();
-            }
-        }
-
-        // Publish render completed event
-        events::state::FrameRendered{
-            .render_ms = render_time,
-            .fps = 1000.0f / render_time,
-            .num_gaussians = static_cast<int>(actual_gaussians)}
-            .emit();
-
-        return result;
     }
 
     void SceneManager::loadPLYInternal(const std::filesystem::path& path) {
