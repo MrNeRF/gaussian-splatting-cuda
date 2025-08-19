@@ -1,10 +1,6 @@
 #include "rendering_pipeline.hpp"
 #include <print>
 
-#ifdef CUDA_GL_INTEROP_ENABLED
-#include "cuda_gl_interop.hpp"
-#endif
-
 namespace gs::rendering {
 
     RenderingPipeline::RenderingPipeline()
@@ -196,19 +192,16 @@ namespace gs::rendering {
             return;
         }
 
-#ifdef CUDA_GL_INTEROP_ENABLED
-        auto interop_renderer = dynamic_cast<ScreenQuadRendererInterop*>(&renderer);
-
-        if (interop_renderer && interop_renderer->isInteropEnabled()) {
+        // Try direct CUDA upload if available
+        if (renderer.isInteropEnabled() && result.image.is_cuda()) {
             // Keep data on GPU - convert [C, H, W] to [H, W, C] format
             auto image_hwc = result.image.permute({1, 2, 0}).contiguous();
 
             if (image_hwc.size(0) == viewport_size.y && image_hwc.size(1) == viewport_size.x) {
-                interop_renderer->uploadFromCUDA(image_hwc, viewport_size.x, viewport_size.y);
+                renderer.uploadFromCUDA(image_hwc, viewport_size.x, viewport_size.y);
                 return;
             }
         }
-#endif
 
         // Fallback to CPU copy
         auto image = (result.image * 255)

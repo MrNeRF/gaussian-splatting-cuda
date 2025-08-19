@@ -1,5 +1,6 @@
 #include "rendering_engine_impl.hpp"
 #include "core/splat_data.hpp"
+#include "framebuffer_factory.hpp"
 #include "geometry/bounding_box.hpp"
 #include <print>
 
@@ -23,11 +24,8 @@ namespace gs::rendering {
             // Initialize components
             point_cloud_renderer_.initialize();
 
-#ifdef CUDA_GL_INTEROP_ENABLED
-            screen_renderer_ = std::make_shared<ScreenQuadRendererInterop>(true);
-#else
-            screen_renderer_ = std::make_shared<ScreenQuadRenderer>();
-#endif
+            // Create screen renderer with preferred mode
+            screen_renderer_ = std::make_shared<ScreenQuadRenderer>(getPreferredFrameBufferMode());
 
             grid_renderer_.init();
             bbox_renderer_.init();
