@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gl_resources.hpp"
 #include "shader_manager.hpp"
 #include <glm/glm.hpp>
 
@@ -13,8 +14,8 @@ namespace gs::rendering {
             XY = 2  // Z plane (XY grid)
         };
 
-        RenderInfiniteGrid();
-        ~RenderInfiniteGrid();
+        RenderInfiniteGrid() = default;
+        ~RenderInfiniteGrid() = default;
 
         // Initialize OpenGL resources
         void init();
@@ -39,13 +40,12 @@ namespace gs::rendering {
         void calculateFrustumCorners(const glm::mat4& inv_viewproj,
                                      glm::vec3& near_origin, glm::vec3& near_x, glm::vec3& near_y,
                                      glm::vec3& far_origin, glm::vec3& far_x, glm::vec3& far_y);
-        void cleanup();
 
-        // OpenGL resources
+        // OpenGL resources using RAII
         ManagedShader shader_;
-        GLuint vao_ = 0;
-        GLuint vbo_ = 0;
-        GLuint blue_noise_texture_ = 0;
+        VAO vao_;
+        VBO vbo_;
+        Texture blue_noise_texture_;
 
         // Grid parameters
         GridPlane plane_ = GridPlane::XZ;

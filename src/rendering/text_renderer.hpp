@@ -1,14 +1,12 @@
 #pragma once
 
-#include <ft2build.h>
+#include "gl_resources.hpp"
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <iostream>
 #include <map>
 #include <string>
-#include FT_FREETYPE_H
 
 namespace gs::rendering {
 
@@ -35,7 +33,8 @@ namespace gs::rendering {
 
     private:
         unsigned int screenWidth, screenHeight;
-        GLuint VAO, VBO;
+        VAO VAO_;
+        VBO VBO_;
         GLuint shaderProgram;
         GLint uProjection, uTextColor;
         std::map<char, Character> characters;

@@ -1,4 +1,5 @@
 #include "axes_renderer.hpp"
+#include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
 #include <iostream>
 
@@ -9,9 +10,7 @@ namespace gs::rendering {
     const glm::vec3 RenderCoordinateAxes::Y_AXIS_COLOR = glm::vec3(0.0f, 1.0f, 0.0f); // Green
     const glm::vec3 RenderCoordinateAxes::Z_AXIS_COLOR = glm::vec3(0.0f, 0.0f, 1.0f); // Blue
 
-    RenderCoordinateAxes::RenderCoordinateAxes() : VAO_(0),
-                                                   VBO_(0),
-                                                   size_(2.0f),
+    RenderCoordinateAxes::RenderCoordinateAxes() : size_(2.0f),
                                                    line_width_(3.0f),
                                                    initialized_(false) {
         // All axes visible by default
@@ -21,10 +20,6 @@ namespace gs::rendering {
 
         // Reserve space for 6 vertices (2 per axis: origin + endpoint)
         vertices_.reserve(6);
-    }
-
-    RenderCoordinateAxes::~RenderCoordinateAxes() {
-        cleanup();
     }
 
     void RenderCoordinateAxes::setSize(float size) {
@@ -66,9 +61,18 @@ namespace gs::rendering {
             }
             shader_ = std::move(*result);
 
-            // Generate OpenGL objects
-            glGenVertexArrays(1, &VAO_);
-            glGenBuffers(1, &VBO_);
+            // Create OpenGL objects using RAII
+            auto vao_result = create_vao();
+            if (!vao_result) {
+                throw std::runtime_error(vao_result.error().what());
+            }
+            vao_ = std::move(*vao_result);
+
+            auto vbo_result = create_vbo();
+            if (!vbo_result) {
+                throw std::runtime_error(vbo_result.error().what());
+            }
+            vbo_ = std::move(*vbo_result);
 
             initialized_ = true;
 
@@ -78,22 +82,9 @@ namespace gs::rendering {
 
         } catch (const std::exception& e) {
             std::cerr << "Failed to initialize CoordinateAxes: " << e.what() << std::endl;
-            cleanup();
+            initialized_ = false;
+            throw;
         }
-    }
-
-    void RenderCoordinateAxes::cleanup() {
-        if (VAO_ != 0) {
-            glDeleteVertexArrays(1, &VAO_);
-            VAO_ = 0;
-        }
-        if (VBO_ != 0) {
-            glDeleteBuffers(1, &VBO_);
-            VBO_ = 0;
-        }
-
-        shader_ = ManagedShader();
-        initialized_ = false;
     }
 
     void RenderCoordinateAxes::createAxesGeometry() {
@@ -119,41 +110,42 @@ namespace gs::rendering {
     }
 
     void RenderCoordinateAxes::setupVertexData() {
-        if (!initialized_ || VAO_ == 0 || vertices_.empty())
+        if (!initialized_ || !vao_ || vertices_.empty())
             return;
 
-        glBindVertexArray(VAO_);
+        VAOBinder vao_bind(vao_);
 
         // Bind and upload vertex data
-        glBindBuffer(GL_ARRAY_BUFFER, VBO_);
-        glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(AxisVertex),
-                     vertices_.data(), GL_DYNAMIC_DRAW);
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
+        upload_buffer(GL_ARRAY_BUFFER, std::span(vertices_), GL_DYNAMIC_DRAW);
 
         // Position attribute (location 0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(AxisVertex),
-                              (void*)offsetof(AxisVertex, position));
-        glEnableVertexAttribArray(0);
+        VertexAttribute position_attr{
+            .index = 0,
+            .size = 3,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = sizeof(AxisVertex),
+            .offset = (void*)offsetof(AxisVertex, position)};
+        position_attr.apply();
 
         // Color attribute (location 1)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(AxisVertex),
-                              (void*)offsetof(AxisVertex, color));
-        glEnableVertexAttribArray(1);
-
-        glBindVertexArray(0);
+        VertexAttribute color_attr{
+            .index = 1,
+            .size = 3,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = sizeof(AxisVertex),
+            .offset = (void*)offsetof(AxisVertex, color)};
+        color_attr.apply();
     }
 
     void RenderCoordinateAxes::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!initialized_ || !shader_.valid() || VAO_ == 0 || vertices_.empty())
+        if (!initialized_ || !shader_.valid() || !vao_ || vertices_.empty())
             return;
 
-        // Save current OpenGL state
-        GLfloat current_line_width;
-        glGetFloatv(GL_LINE_WIDTH, &current_line_width);
-        GLboolean line_smooth_enabled = glIsEnabled(GL_LINE_SMOOTH);
-
-        // Enable line rendering
-        glEnable(GL_LINE_SMOOTH);
-        glLineWidth(line_width_);
+        // Use GLLineGuard for line width management
+        GLLineGuard line_guard(line_width_);
 
         // Bind shader and setup uniforms
         ShaderScope s(shader_);
@@ -164,18 +156,11 @@ namespace gs::rendering {
             s->set("u_mvp", mvp);
 
             // Bind VAO and draw
-            glBindVertexArray(VAO_);
+            VAOBinder vao_bind(vao_);
             glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices_.size()));
-            glBindVertexArray(0);
 
         } catch (const std::exception& e) {
             std::cerr << "Error rendering coordinate axes: " << e.what() << std::endl;
-        }
-
-        // Restore OpenGL state
-        glLineWidth(current_line_width);
-        if (!line_smooth_enabled) {
-            glDisable(GL_LINE_SMOOTH);
         }
     }
 

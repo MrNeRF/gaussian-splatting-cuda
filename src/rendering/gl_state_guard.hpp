@@ -187,5 +187,4 @@ namespace gs::rendering {
                 glDisable(GL_LINE_SMOOTH);
         }
     };
-
 } // namespace gs::rendering

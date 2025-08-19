@@ -13,11 +13,8 @@ namespace gs::rendering {
 
     constexpr glm::vec3 ViewportGizmo::colors_[];
 
-    ViewportGizmo::ViewportGizmo() = default;
-
-    ViewportGizmo::~ViewportGizmo() {
-        shutdown();
-    }
+    ViewportGizmo::ViewportGizmo() = default;  // Define constructor here
+    ViewportGizmo::~ViewportGizmo() = default; // Define destructor here
 
     void ViewportGizmo::initialize() {
         if (initialized_)
@@ -46,14 +43,8 @@ namespace gs::rendering {
     }
 
     void ViewportGizmo::shutdown() {
-        if (vao_) {
-            glDeleteVertexArrays(1, &vao_);
-            vao_ = 0;
-        }
-        if (vbo_) {
-            glDeleteBuffers(1, &vbo_);
-            vbo_ = 0;
-        }
+        vao_ = VAO();
+        vbo_ = VBO();
         shader_ = ManagedShader();
         text_renderer_.reset();
         initialized_ = false;
@@ -69,10 +60,20 @@ namespace gs::rendering {
     }
 
     void ViewportGizmo::generateGeometry() {
-        glGenVertexArrays(1, &vao_);
-        glGenBuffers(1, &vbo_);
-        glBindVertexArray(vao_);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+        auto vao_result = create_vao();
+        if (!vao_result) {
+            throw std::runtime_error(vao_result.error().what());
+        }
+        vao_ = std::move(*vao_result);
+
+        auto vbo_result = create_vbo();
+        if (!vbo_result) {
+            throw std::runtime_error(vbo_result.error().what());
+        }
+        vbo_ = std::move(*vbo_result);
+
+        VAOBinder vao_bind(vao_);
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
 
         std::vector<float> vertices;
         vertices.reserve(10000);
@@ -139,12 +140,27 @@ namespace gs::rendering {
         }
         sphere_vertex_count_ = (vertices.size() / 6) - sphere_vertex_start_;
 
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-        glBindVertexArray(0);
+        upload_buffer(GL_ARRAY_BUFFER, std::span(vertices), GL_STATIC_DRAW);
+
+        // Position attribute
+        VertexAttribute position_attr{
+            .index = 0,
+            .size = 3,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = 6 * sizeof(float),
+            .offset = nullptr};
+        position_attr.apply();
+
+        // Normal attribute
+        VertexAttribute normal_attr{
+            .index = 1,
+            .size = 3,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = 6 * sizeof(float),
+            .offset = (void*)(3 * sizeof(float))};
+        normal_attr.apply();
     }
 
     void ViewportGizmo::render(const glm::mat3& camera_rotation,
@@ -203,7 +219,7 @@ namespace gs::rendering {
             glm::mat4(1)                                                         // Z
         };
 
-        glBindVertexArray(vao_);
+        VAOBinder vao_bind(vao_);
 
         // Draw axis cylinders
         for (int i = 0; i < 3; i++) {
@@ -367,8 +383,6 @@ namespace gs::rendering {
 
             glDisable(GL_STENCIL_TEST);
         }
-
-        glBindVertexArray(0);
 
         // State automatically restored by GLStateGuard destructor
     }

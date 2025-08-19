@@ -7,25 +7,6 @@ namespace gs::rendering {
     constexpr float PointCloudRenderer::cube_vertices_[];
     constexpr unsigned int PointCloudRenderer::cube_indices_[];
 
-    PointCloudRenderer::PointCloudRenderer() = default;
-
-    PointCloudRenderer::~PointCloudRenderer() {
-        if (cube_vao_)
-            glDeleteVertexArrays(1, &cube_vao_);
-        if (cube_vbo_)
-            glDeleteBuffers(1, &cube_vbo_);
-        if (cube_ebo_)
-            glDeleteBuffers(1, &cube_ebo_);
-        if (instance_vbo_)
-            glDeleteBuffers(1, &instance_vbo_);
-        if (fbo_)
-            glDeleteFramebuffers(1, &fbo_);
-        if (color_texture_)
-            glDeleteTextures(1, &color_texture_);
-        if (depth_texture_)
-            glDeleteTextures(1, &depth_texture_);
-    }
-
     void PointCloudRenderer::initialize() {
         if (initialized_)
             return;
@@ -43,38 +24,76 @@ namespace gs::rendering {
 
     void PointCloudRenderer::createCubeGeometry() {
         // Create VAO
-        glGenVertexArrays(1, &cube_vao_);
-        glBindVertexArray(cube_vao_);
+        auto vao_result = create_vao();
+        if (!vao_result) {
+            throw std::runtime_error(vao_result.error().what());
+        }
+        cube_vao_ = std::move(*vao_result);
+
+        VAOBinder vao_bind(cube_vao_);
 
         // Create VBO for cube vertices
-        glGenBuffers(1, &cube_vbo_);
-        glBindBuffer(GL_ARRAY_BUFFER, cube_vbo_);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices_), cube_vertices_, GL_STATIC_DRAW);
+        auto vbo_result = create_vbo();
+        if (!vbo_result) {
+            throw std::runtime_error(vbo_result.error().what());
+        }
+        cube_vbo_ = std::move(*vbo_result);
+
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(cube_vbo_);
+        upload_buffer(GL_ARRAY_BUFFER, cube_vertices_, 24, GL_STATIC_DRAW);
 
         // Set vertex attributes for cube
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
+        VertexAttribute cube_attr{
+            .index = 0,
+            .size = 3,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = 3 * sizeof(float),
+            .offset = nullptr};
+        cube_attr.apply();
 
         // Create EBO for cube indices
-        glGenBuffers(1, &cube_ebo_);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cube_ebo_);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cube_indices_), cube_indices_, GL_STATIC_DRAW);
+        auto ebo_result = create_vbo(); // EBO is also a buffer
+        if (!ebo_result) {
+            throw std::runtime_error(ebo_result.error().what());
+        }
+        cube_ebo_ = std::move(*ebo_result);
+
+        BufferBinder<GL_ELEMENT_ARRAY_BUFFER> ebo_bind(cube_ebo_);
+        upload_buffer(GL_ELEMENT_ARRAY_BUFFER, cube_indices_, 36, GL_STATIC_DRAW);
 
         // Create instance VBO for positions and colors
-        glGenBuffers(1, &instance_vbo_);
-        glBindBuffer(GL_ARRAY_BUFFER, instance_vbo_);
+        auto instance_result = create_vbo();
+        if (!instance_result) {
+            throw std::runtime_error(instance_result.error().what());
+        }
+        instance_vbo_ = std::move(*instance_result);
+
+        BufferBinder<GL_ARRAY_BUFFER> instance_bind(instance_vbo_);
 
         // Instance position attribute
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribDivisor(1, 1); // One per instance
+        VertexAttribute pos_attr{
+            .index = 1,
+            .size = 3,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = 6 * sizeof(float),
+            .offset = nullptr,
+            .divisor = 1 // One per instance
+        };
+        pos_attr.apply();
 
         // Instance color attribute
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(2);
-        glVertexAttribDivisor(2, 1); // One per instance
-
-        glBindVertexArray(0);
+        VertexAttribute color_attr{
+            .index = 2,
+            .size = 3,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = 6 * sizeof(float),
+            .offset = (void*)(3 * sizeof(float)),
+            .divisor = 1 // One per instance
+        };
+        color_attr.apply();
     }
 
     torch::Tensor PointCloudRenderer::extractRGBFromSH(const torch::Tensor& shs) {
@@ -108,9 +127,8 @@ namespace gs::rendering {
         }
 
         // Upload to GPU
-        glBindBuffer(GL_ARRAY_BUFFER, instance_vbo_);
-        glBufferData(GL_ARRAY_BUFFER, instance_data.size() * sizeof(float),
-                     instance_data.data(), GL_DYNAMIC_DRAW);
+        BufferBinder<GL_ARRAY_BUFFER> bind(instance_vbo_);
+        upload_buffer(GL_ARRAY_BUFFER, std::span(instance_data), GL_DYNAMIC_DRAW);
 
         current_point_count_ = num_points;
     }
@@ -154,10 +172,9 @@ namespace gs::rendering {
         s->set("u_voxel_size", voxel_size);
 
         // Render instanced cubes
-        glBindVertexArray(cube_vao_);
+        VAOBinder vao_bind(cube_vao_);
         glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0,
                                 static_cast<GLsizei>(current_point_count_));
-        glBindVertexArray(0);
     }
 
 } // namespace gs::rendering

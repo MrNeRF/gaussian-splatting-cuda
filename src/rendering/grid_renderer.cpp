@@ -6,12 +6,6 @@
 
 namespace gs::rendering {
 
-    RenderInfiniteGrid::RenderInfiniteGrid() = default;
-
-    RenderInfiniteGrid::~RenderInfiniteGrid() {
-        cleanup();
-    }
-
     void RenderInfiniteGrid::init() {
         if (initialized_)
             return;
@@ -24,12 +18,21 @@ namespace gs::rendering {
             }
             shader_ = std::move(*result);
 
-            // Generate OpenGL objects
-            glGenVertexArrays(1, &vao_);
-            glGenBuffers(1, &vbo_);
+            // Create OpenGL objects using RAII
+            auto vao_result = create_vao();
+            if (!vao_result) {
+                throw std::runtime_error(vao_result.error().what());
+            }
+            vao_ = std::move(*vao_result);
 
-            glBindVertexArray(vao_);
-            glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+            auto vbo_result = create_vbo();
+            if (!vbo_result) {
+                throw std::runtime_error(vbo_result.error().what());
+            }
+            vbo_ = std::move(*vbo_result);
+
+            VAOBinder vao_bind(vao_);
+            BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
 
             // Full-screen quad vertices (-1 to 1)
             float vertices[] = {
@@ -38,13 +41,17 @@ namespace gs::rendering {
                 -1.0f, 1.0f,
                 1.0f, 1.0f};
 
-            glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+            upload_buffer(GL_ARRAY_BUFFER, vertices, 8, GL_STATIC_DRAW);
 
             // Set up vertex attributes
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-
-            glBindVertexArray(0);
+            VertexAttribute position_attr{
+                .index = 0,
+                .size = 2,
+                .type = GL_FLOAT,
+                .normalized = GL_FALSE,
+                .stride = 2 * sizeof(float),
+                .offset = nullptr};
+            position_attr.apply();
 
             // Create blue noise texture
             createBlueNoiseTexture();
@@ -53,26 +60,9 @@ namespace gs::rendering {
 
         } catch (const std::exception& e) {
             std::cerr << "Failed to initialize InfiniteGrid: " << e.what() << std::endl;
-            cleanup();
+            initialized_ = false;
+            throw;
         }
-    }
-
-    void RenderInfiniteGrid::cleanup() {
-        if (vao_ != 0) {
-            glDeleteVertexArrays(1, &vao_);
-            vao_ = 0;
-        }
-        if (vbo_ != 0) {
-            glDeleteBuffers(1, &vbo_);
-            vbo_ = 0;
-        }
-        if (blue_noise_texture_ != 0) {
-            glDeleteTextures(1, &blue_noise_texture_);
-            blue_noise_texture_ = 0;
-        }
-
-        shader_ = ManagedShader();
-        initialized_ = false;
     }
 
     void RenderInfiniteGrid::createBlueNoiseTexture() {
@@ -87,10 +77,12 @@ namespace gs::rendering {
             noise_data[i] = dist(rng);
         }
 
-        // Create texture
-        glGenTextures(1, &blue_noise_texture_);
-        glBindTexture(GL_TEXTURE_2D, blue_noise_texture_);
+        // Create texture using RAII
+        GLuint tex_id;
+        glGenTextures(1, &tex_id);
+        blue_noise_texture_ = Texture(tex_id);
 
+        glBindTexture(GL_TEXTURE_2D, blue_noise_texture_);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, size, size, 0, GL_RED, GL_FLOAT, noise_data.data());
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -180,9 +172,8 @@ namespace gs::rendering {
         s->set("blueNoiseTex32", 0);
 
         // Render the grid
-        glBindVertexArray(vao_);
+        VAOBinder vao_bind(vao_);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        glBindVertexArray(0);
 
         // Restore OpenGL state
         glDepthMask(depth_mask);

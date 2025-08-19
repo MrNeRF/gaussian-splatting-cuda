@@ -1,16 +1,16 @@
 #pragma once
 
+#include "gl_resources.hpp"
 #include "rendering/rendering.hpp"
 #include "shader_manager.hpp"
 #include <glm/glm.hpp>
-#include <memory>
 #include <vector>
 
 namespace gs::rendering {
     class RenderCoordinateAxes : public ICoordinateAxes {
     public:
         RenderCoordinateAxes();
-        ~RenderCoordinateAxes() override;
+        ~RenderCoordinateAxes() override = default;
 
         // ICoordinateAxes interface implementation
         void setSize(float size) override;
@@ -35,18 +35,17 @@ namespace gs::rendering {
     private:
         void createAxesGeometry();
         void setupVertexData();
-        void createShaders();
-        void cleanup();
 
-        // OpenGL resources
+        // OpenGL resources using RAII
         ManagedShader shader_;
-        GLuint VAO_, VBO_;
+        VAO vao_;
+        VBO vbo_;
 
         // Axes properties
         float size_;
         float line_width_;
         bool initialized_;
-        bool axis_visible_[3]; // X, Y, Z visibility
+        bool axis_visible_[3]{}; // X, Y, Z visibility
 
         // Standard colors for coordinate axes
         static const glm::vec3 X_AXIS_COLOR; // Red

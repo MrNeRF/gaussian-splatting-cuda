@@ -1,10 +1,12 @@
 #pragma once
 
 #include <expected>
+#include <filesystem>
 #include <format>
 #include <glad/glad.h>
 #include <source_location>
 #include <span>
+#include <utility>
 
 namespace gs::rendering {
 
@@ -23,7 +25,7 @@ namespace gs::rendering {
     using GLResult = std::expected<T, GLError>;
 
     // RAII wrappers for OpenGL resources
-    template <auto Deleter>
+    template <typename Deleter>
     class GLResource {
         GLuint id_ = 0;
 
@@ -31,16 +33,20 @@ namespace gs::rendering {
         GLResource() = default;
         explicit GLResource(GLuint id) : id_(id) {}
         ~GLResource() {
-            if (id_)
-                Deleter(1, &id_);
+            if (id_) {
+                Deleter deleter;
+                deleter(1, &id_);
+            }
         }
 
         // Move only
         GLResource(GLResource&& other) noexcept : id_(std::exchange(other.id_, 0)) {}
         GLResource& operator=(GLResource&& other) noexcept {
             if (this != &other) {
-                if (id_)
-                    Deleter(1, &id_);
+                if (id_) {
+                    Deleter deleter;
+                    deleter(1, &id_);
+                }
                 id_ = std::exchange(other.id_, 0);
             }
             return *this;
@@ -55,12 +61,37 @@ namespace gs::rendering {
         explicit operator bool() const { return id_ != 0; }
     };
 
+    // Deleter functors
+    struct VAODeleter {
+        void operator()(GLsizei n, const GLuint* arrays) const {
+            glDeleteVertexArrays(n, arrays);
+        }
+    };
+
+    struct BufferDeleter {
+        void operator()(GLsizei n, const GLuint* buffers) const {
+            glDeleteBuffers(n, buffers);
+        }
+    };
+
+    struct TextureDeleter {
+        void operator()(GLsizei n, const GLuint* textures) const {
+            glDeleteTextures(n, textures);
+        }
+    };
+
+    struct FramebufferDeleter {
+        void operator()(GLsizei n, const GLuint* framebuffers) const {
+            glDeleteFramebuffers(n, framebuffers);
+        }
+    };
+
     // Specific resource types
-    using VAO = GLResource<glDeleteVertexArrays>;
-    using VBO = GLResource<glDeleteBuffers>;
-    using EBO = GLResource<glDeleteBuffers>;
-    using Texture = GLResource<glDeleteTextures>;
-    using FBO = GLResource<glDeleteFramebuffers>;
+    using VAO = GLResource<VAODeleter>;
+    using VBO = GLResource<BufferDeleter>;
+    using EBO = GLResource<BufferDeleter>;
+    using Texture = GLResource<TextureDeleter>;
+    using FBO = GLResource<FramebufferDeleter>;
 
     // Factory functions with error handling
     inline GLResult<VAO> create_vao(std::source_location loc = std::source_location::current()) {
@@ -88,7 +119,7 @@ namespace gs::rendering {
         static constexpr GLenum query = (Target == GL_ARRAY_BUFFER) ? GL_ARRAY_BUFFER_BINDING : GL_ELEMENT_ARRAY_BUFFER_BINDING;
 
     public:
-        explicit BufferBinder(const VBO& vbo) {
+        explicit BufferBinder(GLuint vbo) {
             glGetIntegerv(query, &prev_);
             glBindBuffer(Target, vbo);
         }
@@ -99,7 +130,7 @@ namespace gs::rendering {
         GLint prev_;
 
     public:
-        explicit VAOBinder(const VAO& vao) {
+        explicit VAOBinder(GLuint vao) {
             glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prev_);
             glBindVertexArray(vao);
         }
@@ -126,7 +157,13 @@ namespace gs::rendering {
 
     // Convenience function for buffer data upload
     template <typename T>
-    void upload_buffer(GLenum target, std::span<const T> data, GLenum usage = GL_STATIC_DRAW) {
+    void upload_buffer(GLenum target, const T* data, std::size_t count, GLenum usage = GL_STATIC_DRAW) {
+        glBufferData(target, count * sizeof(T), data, usage);
+    }
+
+    // Overload for dynamic spans
+    template <typename T>
+    void upload_buffer(GLenum target, std::span<T> data, GLenum usage = GL_STATIC_DRAW) {
         glBufferData(target, data.size_bytes(), data.data(), usage);
     }
 

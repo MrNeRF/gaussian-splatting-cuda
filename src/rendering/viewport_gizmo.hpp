@@ -1,18 +1,18 @@
 #pragma once
 
+#include "gl_resources.hpp"
 #include "shader_manager.hpp"
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <memory>
 
 namespace gs::rendering {
 
-    class TextRenderer;
+    class TextRenderer; // Forward declaration
 
     class ViewportGizmo {
     public:
-        ViewportGizmo();
-        ~ViewportGizmo();
+        ViewportGizmo();  // Declare constructor (not defaulted)
+        ~ViewportGizmo(); // Declare destructor
 
         // Initialize OpenGL resources
         void initialize();
@@ -35,9 +35,9 @@ namespace gs::rendering {
         void generateGeometry();
         void createShaders();
 
-        // OpenGL resources
-        GLuint vao_ = 0;
-        GLuint vbo_ = 0;
+        // OpenGL resources using RAII
+        VAO vao_;
+        VBO vbo_;
         ManagedShader shader_;
 
         // Text rendering

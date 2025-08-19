@@ -1,23 +1,17 @@
 #include "bbox_renderer.hpp"
+#include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
 
 namespace gs::rendering {
 
     RenderBoundingBox::RenderBoundingBox() : color_(1.0f, 1.0f, 0.0f), // Yellow by default
                                              line_width_(2.0f),
-                                             initialized_(false),
-                                             VAO_(0),
-                                             VBO_(0),
-                                             EBO_(0) {
+                                             initialized_(false) {
         // Initialize vertices vector with 8 vertices
         vertices_.resize(8);
 
         // Initialize indices vector with line indices
         indices_.assign(cube_line_indices_, cube_line_indices_ + 24);
-    }
-
-    RenderBoundingBox::~RenderBoundingBox() {
-        cleanup();
     }
 
     void RenderBoundingBox::setBounds(const glm::vec3& min, const glm::vec3& max) {
@@ -42,10 +36,24 @@ namespace gs::rendering {
             }
             shader_ = std::move(*result);
 
-            // Generate OpenGL objects
-            glGenVertexArrays(1, &VAO_);
-            glGenBuffers(1, &VBO_);
-            glGenBuffers(1, &EBO_);
+            // Create OpenGL objects using RAII
+            auto vao_result = create_vao();
+            if (!vao_result) {
+                throw std::runtime_error(vao_result.error().what());
+            }
+            vao_ = std::move(*vao_result);
+
+            auto vbo_result = create_vbo();
+            if (!vbo_result) {
+                throw std::runtime_error(vbo_result.error().what());
+            }
+            vbo_ = std::move(*vbo_result);
+
+            auto ebo_result = create_vbo(); // EBO is also a buffer
+            if (!ebo_result) {
+                throw std::runtime_error(ebo_result.error().what());
+            }
+            ebo_ = std::move(*ebo_result);
 
             initialized_ = true;
 
@@ -57,35 +65,11 @@ namespace gs::rendering {
                 setupVertexData();
             }
 
-            // Check bindings *after* setup
-            glBindVertexArray(VAO_);
-            GLint vao_check, ebo_check;
-            glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao_check);
-            glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &ebo_check);
-            glBindVertexArray(0);
-
         } catch (const std::exception& e) {
             std::cerr << "Failed to initialize BoundingBox: " << e.what() << std::endl;
-            cleanup();
+            initialized_ = false;
+            throw;
         }
-    }
-
-    void RenderBoundingBox::cleanup() {
-        if (VAO_ != 0) {
-            glDeleteVertexArrays(1, &VAO_);
-            VAO_ = 0;
-        }
-        if (VBO_ != 0) {
-            glDeleteBuffers(1, &VBO_);
-            VBO_ = 0;
-        }
-        if (EBO_ != 0) {
-            glDeleteBuffers(1, &EBO_);
-            EBO_ = 0;
-        }
-
-        shader_ = ManagedShader();
-        initialized_ = false;
     }
 
     void RenderBoundingBox::createCubeGeometry() {
@@ -101,46 +85,41 @@ namespace gs::rendering {
     }
 
     void RenderBoundingBox::setupVertexData() {
-        if (!initialized_ || VAO_ == 0)
+        if (!initialized_ || !vao_)
             return;
 
-        glBindVertexArray(VAO_);
+        VAOBinder vao_bind(vao_);
 
         // Bind and upload vertex data
-        glBindBuffer(GL_ARRAY_BUFFER, VBO_);
-        glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(glm::vec3),
-                     vertices_.data(), GL_DYNAMIC_DRAW);
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
+        upload_buffer(GL_ARRAY_BUFFER, std::span(vertices_), GL_DYNAMIC_DRAW);
 
-        // ✅ Bind and upload index data WHILE VAO is bound!
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_.size() * sizeof(unsigned int),
-                     indices_.data(), GL_STATIC_DRAW);
+        // Bind and upload index data
+        BufferBinder<GL_ELEMENT_ARRAY_BUFFER> ebo_bind(ebo_);
+        upload_buffer(GL_ELEMENT_ARRAY_BUFFER, std::span(indices_), GL_STATIC_DRAW);
 
         // Vertex attribute setup
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
-        glEnableVertexAttribArray(0);
-
-        glBindVertexArray(0); // VAO now remembers VBO + EBO + attributes
+        VertexAttribute position_attr{
+            .index = 0,
+            .size = 3,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = sizeof(glm::vec3),
+            .offset = nullptr};
+        position_attr.apply();
     }
 
     void RenderBoundingBox::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!initialized_ || !shader_.valid() || VAO_ == 0)
+        if (!initialized_ || !shader_.valid() || !vao_)
             return;
 
-        // Save current OpenGL state
-        GLfloat current_line_width;
-        glGetFloatv(GL_LINE_WIDTH, &current_line_width);
-        GLboolean line_smooth_enabled = glIsEnabled(GL_LINE_SMOOTH);
-
-        // Enable line rendering
-        glEnable(GL_LINE_SMOOTH);
-        glLineWidth(line_width_);
+        // Use GLLineGuard for line width management
+        GLLineGuard line_guard(line_width_);
 
         // Bind shader and setup uniforms
         ShaderScope s(shader_);
 
         try {
-
             auto box2World = world2BBox_.inv().toMat4();
             // Set uniforms
             glm::mat4 mvp = projection * view * box2World;
@@ -149,19 +128,11 @@ namespace gs::rendering {
             s->set("u_color", color_);
 
             // Bind VAO and draw
-            glBindVertexArray(VAO_);
-
+            VAOBinder vao_bind(vao_);
             glDrawElements(GL_LINES, static_cast<GLsizei>(indices_.size()), GL_UNSIGNED_INT, 0);
-            glBindVertexArray(0);
 
         } catch (const std::exception& e) {
             std::cerr << "Error rendering bounding box: " << e.what() << std::endl;
-        }
-
-        // Restore OpenGL state
-        glLineWidth(current_line_width);
-        if (!line_smooth_enabled) {
-            glDisable(GL_LINE_SMOOTH);
         }
     }
 

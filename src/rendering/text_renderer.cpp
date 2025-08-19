@@ -1,5 +1,8 @@
 #include "text_renderer.hpp"
 #include "gl_state_guard.hpp"
+#include <ft2build.h>
+#include <iostream>
+#include FT_FREETYPE_H
 
 namespace gs::rendering {
 
@@ -31,17 +34,11 @@ void main()
     TextRenderer::TextRenderer(unsigned int width, unsigned int height)
         : screenWidth(width),
           screenHeight(height),
-          VAO(0),
-          VBO(0),
           shaderProgram(0) {
         initRenderData();
     }
 
     TextRenderer::~TextRenderer() {
-        if (VAO)
-            glDeleteVertexArrays(1, &VAO);
-        if (VBO)
-            glDeleteBuffers(1, &VBO);
         if (shaderProgram)
             glDeleteProgram(shaderProgram);
 
@@ -120,15 +117,32 @@ void main()
     }
 
     void TextRenderer::initRenderData() {
-        glGenVertexArrays(1, &VAO);
-        glGenBuffers(1, &VBO);
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        auto vao_result = create_vao();
+        if (!vao_result) {
+            throw std::runtime_error(vao_result.error().what());
+        }
+        VAO_ = std::move(*vao_result);
+
+        auto vbo_result = create_vbo();
+        if (!vbo_result) {
+            throw std::runtime_error(vbo_result.error().what());
+        }
+        VBO_ = std::move(*vbo_result);
+
+        VAOBinder vao_bind(VAO_);
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(VBO_);
+
         glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
+
+        VertexAttribute attr{
+            .index = 0,
+            .size = 4,
+            .type = GL_FLOAT,
+            .normalized = GL_FALSE,
+            .stride = 4 * sizeof(float),
+            .offset = nullptr};
+        attr.apply();
+
         compileShaders();
     }
 
@@ -211,7 +225,7 @@ void main()
         glUniform1i(glGetUniformLocation(shaderProgram, "text"), 0);
 
         // Bind our VAO
-        glBindVertexArray(VAO);
+        VAOBinder vao_bind(VAO_);
 
         // Iterate through all characters
         for (char c : text) {
@@ -241,9 +255,8 @@ void main()
             glBindTexture(GL_TEXTURE_2D, ch.textureID);
 
             // Update content of VBO memory
-            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+            BufferBinder<GL_ARRAY_BUFFER> vbo_bind(VBO_);
             glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
 
             // Render quad
             glDrawArrays(GL_TRIANGLES, 0, 6);

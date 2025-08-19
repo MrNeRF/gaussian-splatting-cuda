@@ -2,6 +2,7 @@
 
 #include "cuda_gl_interop.hpp"
 #include "framebuffer.hpp"
+#include "gl_resources.hpp"
 #include "shader.hpp"
 #include "shader_manager.hpp"
 
@@ -9,13 +10,13 @@
 
 namespace gs::rendering {
     class ScreenQuadRenderer {
-    public:
-        GLuint quadVAO;
-        GLuint quadVBO;
+    protected:
+        VAO quadVAO_;
+        VBO quadVBO_;
 
+    public:
         std::shared_ptr<FrameBuffer> framebuffer;
 
-    public:
         ScreenQuadRenderer() {
             framebuffer = std::make_shared<FrameBuffer>();
 
@@ -29,20 +30,39 @@ namespace gs::rendering {
                 1.0f, -1.0f, 1.0f, 0.0f,
                 1.0f, 1.0f, 1.0f, 1.0f};
 
-            glGenVertexArrays(1, &quadVAO);
-            glGenBuffers(1, &quadVBO);
-            glBindVertexArray(quadVAO);
+            auto vao_result = create_vao();
+            if (!vao_result) {
+                throw std::runtime_error(vao_result.error().what());
+            }
+            quadVAO_ = std::move(*vao_result);
 
-            glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+            auto vbo_result = create_vbo();
+            if (!vbo_result) {
+                throw std::runtime_error(vbo_result.error().what());
+            }
+            quadVBO_ = std::move(*vbo_result);
 
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+            VAOBinder vao_bind(quadVAO_);
+            BufferBinder<GL_ARRAY_BUFFER> vbo_bind(quadVBO_);
+            upload_buffer(GL_ARRAY_BUFFER, quadVertices, 24, GL_STATIC_DRAW);
 
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+            VertexAttribute pos_attr{
+                .index = 0,
+                .size = 2,
+                .type = GL_FLOAT,
+                .normalized = GL_FALSE,
+                .stride = 4 * sizeof(float),
+                .offset = nullptr};
+            pos_attr.apply();
 
-            glBindVertexArray(0);
+            VertexAttribute tex_attr{
+                .index = 1,
+                .size = 2,
+                .type = GL_FLOAT,
+                .normalized = GL_FALSE,
+                .stride = 4 * sizeof(float),
+                .offset = (void*)(2 * sizeof(float))};
+            tex_attr.apply();
         }
 
         virtual ~ScreenQuadRenderer() = default;
@@ -50,7 +70,7 @@ namespace gs::rendering {
         virtual void render(std::shared_ptr<Shader> shader) const {
             shader->bind();
 
-            glBindVertexArray(quadVAO);
+            VAOBinder vao_bind(quadVAO_);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, getTextureID());
 
@@ -65,7 +85,7 @@ namespace gs::rendering {
         void render(ManagedShader& shader) const {
             ShaderScope s(shader);
 
-            glBindVertexArray(quadVAO);
+            VAOBinder vao_bind(quadVAO_);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, getTextureID());
 
@@ -141,7 +161,7 @@ namespace gs::rendering {
         void render(std::shared_ptr<Shader> shader) const override {
             shader->bind();
 
-            glBindVertexArray(quadVAO);
+            VAOBinder vao_bind(quadVAO_);
             glActiveTexture(GL_TEXTURE0);
 
             // Use interop texture if available

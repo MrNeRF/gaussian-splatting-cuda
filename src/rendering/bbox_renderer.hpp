@@ -1,6 +1,7 @@
 #pragma once
 
 #include "geometry/bounding_box.hpp"
+#include "gl_resources.hpp"
 #include "rendering/rendering.hpp"
 #include "shader_manager.hpp"
 
@@ -8,7 +9,7 @@ namespace gs::rendering {
     class RenderBoundingBox : public geometry::BoundingBox, public IBoundingBox {
     public:
         RenderBoundingBox();
-        ~RenderBoundingBox() override;
+        ~RenderBoundingBox() override = default;
 
         // Set the bounding box from min/max points
         void setBounds(const glm::vec3& min, const glm::vec3& max) override;
@@ -49,16 +50,17 @@ namespace gs::rendering {
     private:
         void createCubeGeometry();
         void setupVertexData();
-        void cleanup();
 
         // Bounding box properties
         glm::vec3 color_;
         float line_width_;
         bool initialized_;
 
-        // OpenGL resources
+        // OpenGL resources using RAII
         ManagedShader shader_;
-        GLuint VAO_, VBO_, EBO_;
+        VAO vao_;
+        VBO vbo_;
+        EBO ebo_;
 
         // Cube geometry data
         std::vector<glm::vec3> vertices_;
