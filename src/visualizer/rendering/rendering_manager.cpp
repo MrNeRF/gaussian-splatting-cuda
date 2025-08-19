@@ -120,11 +120,6 @@ namespace gs::visualizer {
         // Update last viewport state - use copy assignment with unique_ptr
         *prev_viewport_state_ = context.viewport;
 
-        // Draw focus indicator if viewport has focus
-        if (context.has_focus && context.viewport_region && !settings_.point_cloud_mode) {
-            drawFocusIndicator(context);
-        }
-
         // End framerate tracking
         framerate_controller_.endFrame();
     }
@@ -385,72 +380,6 @@ namespace gs::visualizer {
                     .emit();
             }
         }
-    }
-
-    void RenderingManager::drawFocusIndicator(const RenderContext& context) {
-        // Save current OpenGL state
-        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
-
-        // Setup for 2D overlay rendering
-        glDisable(GL_DEPTH_TEST);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        // Set viewport to full window for overlay
-        glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
-
-        // Use immediate mode for simple border (or you could use a shader)
-        glMatrixMode(GL_PROJECTION);
-        glPushMatrix();
-        glLoadIdentity();
-        glOrtho(0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y, 0, -1, 1);
-
-        glMatrixMode(GL_MODELVIEW);
-        glPushMatrix();
-        glLoadIdentity();
-
-        // Draw border
-        float x = context.viewport_region->x;
-        float y = context.viewport_region->y;
-        float w = context.viewport_region->width;
-        float h = context.viewport_region->height;
-
-        // Animated glow effect
-        float time = static_cast<float>(glfwGetTime());
-        float glow = (sin(time * 3.0f) + 1.0f) * 0.5f;
-
-        glLineWidth(3.0f);
-        glBegin(GL_LINE_LOOP);
-        glColor4f(0.2f, 0.6f, 1.0f, 0.5f + glow * 0.3f);
-        glVertex2f(x, y);
-        glVertex2f(x + w, y);
-        glVertex2f(x + w, y + h);
-        glVertex2f(x, y + h);
-        glEnd();
-
-        // Inner glow
-        glLineWidth(1.0f);
-        float inset = 1.0f;
-        glBegin(GL_LINE_LOOP);
-        glColor4f(0.4f, 0.8f, 1.0f, 0.3f + glow * 0.2f);
-        glVertex2f(x + inset, y + inset);
-        glVertex2f(x + w - inset, y + inset);
-        glVertex2f(x + w - inset, y + h - inset);
-        glVertex2f(x + inset, y + h - inset);
-        glEnd();
-
-        // Restore matrices
-        glPopMatrix();
-        glMatrixMode(GL_PROJECTION);
-        glPopMatrix();
-        glMatrixMode(GL_MODELVIEW);
-
-        // Restore OpenGL state
-        if (depth_test_enabled)
-            glEnable(GL_DEPTH_TEST);
-        if (!blend_enabled)
-            glDisable(GL_BLEND);
     }
 
     bool RenderingManager::hasCamChanged(const Viewport& current_viewport) {

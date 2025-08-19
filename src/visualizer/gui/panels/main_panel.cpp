@@ -82,23 +82,31 @@ namespace gs::gui::panels {
 
         // Point Cloud Mode checkbox
         if (ImGui::Checkbox("Point Cloud Mode", &settings.point_cloud_mode)) {
-            settings_changed = true;
-            // Emit point cloud mode changed event
+            // Don't set settings_changed here to avoid double update
+            // Just emit the event and update settings directly
             events::ui::PointCloudModeChanged{
                 .enabled = settings.point_cloud_mode,
                 .voxel_size = settings.voxel_size}
                 .emit();
+
+            // Update settings immediately for point cloud mode
+            render_manager->updateSettings(settings);
+
+            // Emit scene changed to trigger re-render
+            events::state::SceneChanged{}.emit();
         }
 
         // Show voxel size slider only when in point cloud mode
         if (settings.point_cloud_mode) {
             if (widgets::SliderWithReset("Voxel Size", &settings.voxel_size, 0.001f, 0.1f, 0.01f)) {
-                settings_changed = true;
-                // Emit point cloud mode changed event with new voxel size
+                // Same here - don't use settings_changed flag
                 events::ui::PointCloudModeChanged{
                     .enabled = settings.point_cloud_mode,
                     .voxel_size = settings.voxel_size}
                     .emit();
+
+                render_manager->updateSettings(settings);
+                events::state::SceneChanged{}.emit();
             }
         }
 
@@ -143,7 +151,7 @@ namespace gs::gui::panels {
             ImGui::Unindent();
         }
 
-        // Apply settings changes if any
+        // Apply settings changes if any (but not for point cloud mode which was already handled)
         if (settings_changed) {
             render_manager->updateSettings(settings);
 

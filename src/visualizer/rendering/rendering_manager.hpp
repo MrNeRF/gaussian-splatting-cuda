@@ -78,7 +78,6 @@ namespace gs::visualizer {
 
     private:
         void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render);
-        void drawFocusIndicator(const RenderContext& context);
         void drawOverlays(const RenderContext& context);
         bool hasCamChanged(const class Viewport& current_viewport);
         bool hasSceneChanged(const RenderContext& context);

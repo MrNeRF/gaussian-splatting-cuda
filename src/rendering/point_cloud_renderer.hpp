@@ -11,10 +11,8 @@ namespace gs::rendering {
 
     class PointCloudRenderer {
     public:
-        PointCloudRenderer() : initialized_(false),
-                               current_point_count_(0) {
+        PointCloudRenderer() {
             std::cout << "[PointCloudRenderer] Constructor called at " << this << std::endl;
-            std::cout << "[PointCloudRenderer] Stack trace would be helpful here" << std::endl;
         }
         ~PointCloudRenderer() = default;
 
