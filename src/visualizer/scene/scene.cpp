@@ -122,11 +122,6 @@ namespace gs {
             return;
         }
 
-        if (visible_models.size() == 1) {
-            // Single model - can't copy due to deleted copy constructor
-            // Need to combine even for single model
-        }
-
         std::println("Scene: Rebuilding combined model with {} visible models, {} total gaussians",
                      visible_models.size(), total_gaussians);
 

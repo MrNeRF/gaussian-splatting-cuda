@@ -235,7 +235,6 @@ namespace gs::visualizer {
         }
 
         // Speed control works even when GUI has focus
-        // CHANGED: Now handle both PRESS and REPEAT actions
         if (key_ctrl_pressed_ && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
             if (key == GLFW_KEY_EQUAL || key == GLFW_KEY_KP_ADD) {
                 updateCameraSpeed(true);
