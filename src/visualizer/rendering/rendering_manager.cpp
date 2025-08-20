@@ -77,11 +77,19 @@ namespace gs::visualizer {
         bool scene_changed = hasSceneChanged(context);
 
         // Check if we should skip scene rendering
-        auto state = scene_manager->getCurrentState();
         bool skip_scene_render = false;
-        if (settings_.adaptive_frame_rate && !settings_.use_crop_box) {
+        if (settings_.adaptive_frame_rate && !settings_.use_crop_box && scene_manager) {
+            // Get state to check if training
+            bool is_training = scene_manager->isTraining();
+            if (is_training) {
+                auto state = scene_manager->getState();
+                if (auto* training_state = std::get_if<SceneManager::TrainingState>(&state)) {
+                    is_training = training_state->is_running;
+                }
+            }
+
             skip_scene_render = framerate_controller_.shouldSkipSceneRender(
-                state.is_training, scene_changed);
+                is_training, scene_changed);
         }
 
         // Don't skip rendering if scene was just loaded
@@ -104,6 +112,101 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
+        // Simplified scene access
+        if (!skip_scene_render && scene_manager) {
+            const SplatData* model = scene_manager->getModelForRendering();
+            if (model && model->size() > 0) {
+                // Prepare render request
+                glm::ivec2 render_size = context.viewport.windowSize;
+                if (context.viewport_region) {
+                    render_size = glm::ivec2(
+                        static_cast<int>(context.viewport_region->width),
+                        static_cast<int>(context.viewport_region->height));
+                }
+
+                // Get background color
+                glm::vec3 bg_color = glm::vec3(0.0f, 0.0f, 0.0f);
+                if (context.background_tool) {
+                    bg_color = context.background_tool->getBackgroundColor();
+                }
+
+                gs::rendering::RenderRequest request{
+                    .viewport = {
+                        .rotation = context.viewport.getRotationMatrix(),
+                        .translation = context.viewport.getTranslation(),
+                        .size = render_size,
+                        .fov = settings_.fov},
+                    .scaling_modifier = settings_.scaling_modifier,
+                    .antialiasing = settings_.antialiasing,
+                    .background_color = bg_color,
+                    .crop_box = std::nullopt,
+                    .point_cloud_mode = settings_.point_cloud_mode,
+                    .voxel_size = settings_.voxel_size};
+
+                // Add crop box if enabled
+                if (settings_.use_crop_box && context.crop_box) {
+                    auto transform = context.crop_box->getworld2BBox();
+                    request.crop_box = gs::rendering::BoundingBox{
+                        .min = context.crop_box->getMinBounds(),
+                        .max = context.crop_box->getMaxBounds(),
+                        .transform = transform.inv().toMat4()};
+                }
+
+                // Render the gaussians
+                auto render_result = engine_->renderGaussians(*model, request);
+                if (render_result) {
+                    // Present to screen
+                    glm::ivec2 viewport_pos(0, 0);
+                    if (context.viewport_region) {
+                        viewport_pos = glm::ivec2(
+                            static_cast<int>(context.viewport_region->x),
+                            static_cast<int>(context.viewport_region->y));
+                    }
+
+                    auto present_result = engine_->presentToScreen(
+                        *render_result,
+                        viewport_pos,
+                        render_size);
+
+                    if (!present_result) {
+                        events::notify::Error{
+                            .message = "Failed to present render result",
+                            .details = present_result.error()}
+                            .emit();
+                    }
+
+                    // Cache the result for potential reuse
+                    prev_result_ = *render_result;
+                } else {
+                    events::notify::Error{
+                        .message = "Failed to render gaussians",
+                        .details = render_result.error()}
+                        .emit();
+                }
+            }
+        } else if (skip_scene_render && prev_result_.image) {
+            // Reuse cached result if we're skipping scene render
+            glm::ivec2 viewport_pos(0, 0);
+            glm::ivec2 render_size = context.viewport.windowSize;
+            if (context.viewport_region) {
+                viewport_pos = glm::ivec2(
+                    static_cast<int>(context.viewport_region->x),
+                    static_cast<int>(context.viewport_region->y));
+                render_size = glm::ivec2(
+                    static_cast<int>(context.viewport_region->width),
+                    static_cast<int>(context.viewport_region->height));
+            }
+
+            auto present_result = engine_->presentToScreen(
+                prev_result_,
+                viewport_pos,
+                render_size);
+
+            if (!present_result) {
+                // Don't spam errors for cached results
+            }
+        }
+
         // Render overlays
         drawOverlays(context);
 
@@ -113,7 +216,6 @@ namespace gs::visualizer {
         // End framerate tracking
         framerate_controller_.endFrame();
     }
-
     void RenderingManager::drawOverlays(const RenderContext& context) {
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {

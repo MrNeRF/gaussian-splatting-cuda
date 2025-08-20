@@ -1,3 +1,4 @@
+// scene_manager.hpp
 #pragma once
 
 #include "core/events.hpp"
@@ -6,47 +7,31 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
-#include <optional>
+#include <variant>
 
 namespace gs {
 
     // Forward declarations
+    class Trainer;
     class TrainerManager;
     class SplatData;
 
-    /**
-     * @brief Manages scene lifecycle and coordinates between components
-     *
-     * The SceneManager is responsible for:
-     * - Loading and managing scenes (PLY files, datasets)
-     * - Coordinating between Scene, TrainerManager, and other components
-     * - Managing scene state transitions
-     * - Handling all scene-related events
-     */
     class SceneManager {
     public:
-        enum class SceneType {
-            None,
-            PLY,
-            Dataset
+        // Clear state representation
+        struct EmptyState {};
+
+        struct ViewingState {
+            std::vector<std::filesystem::path> ply_paths;
         };
 
-        struct SceneState {
-            SceneType type = SceneType::None;
-            std::filesystem::path source_path;
-            size_t num_gaussians = 0;
-            bool is_training = false;
-            std::optional<int> training_iteration;
-            size_t num_plys = 0; // For PLY mode
+        struct TrainingState {
+            std::filesystem::path dataset_path;
+            bool is_running = false;
+            int current_iteration = 0;
         };
 
-        struct SceneInfo {
-            SceneType type = SceneType::None;
-            std::filesystem::path source_path;
-            size_t num_gaussians = 0;
-            bool is_training = false;
-            bool has_model = false;
-        };
+        using State = std::variant<EmptyState, ViewingState, TrainingState>;
 
         SceneManager();
         ~SceneManager();
@@ -55,53 +40,75 @@ namespace gs {
         SceneManager(const SceneManager&) = delete;
         SceneManager& operator=(const SceneManager&) = delete;
 
-        // Scene management
-        void setScene(std::unique_ptr<Scene> scene);
-        Scene* getScene() { return scene_.get(); }
-        const Scene* getScene() const { return scene_.get(); }
-
-        // Trainer management link
-        void setTrainerManager(TrainerManager* trainer_manager) {
-            trainer_manager_ = trainer_manager;
+        // State queries - direct, no events
+        const State& getState() const {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            return state_;
         }
 
-        // High-level operations
+        bool isEmpty() const {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            return std::holds_alternative<EmptyState>(state_);
+        }
+
+        bool isViewing() const {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            return std::holds_alternative<ViewingState>(state_);
+        }
+
+        bool isTraining() const {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            return std::holds_alternative<TrainingState>(state_);
+        }
+
+        // Scene access
+        Scene& getScene() { return scene_; }
+        const Scene& getScene() const { return scene_; }
+
+        // Trainer manager link
+        void setTrainerManager(TrainerManager* tm) { trainer_manager_ = tm; }
+        TrainerManager* getTrainerManager() { return trainer_manager_; }
+
+        // Operations
         void loadPLY(const std::filesystem::path& path);
-        void addPLY(const std::filesystem::path& path);
+        void addPLY(const std::filesystem::path& path, const std::string& name = "");
+        void removePLY(const std::string& name);
+        void setPLYVisibility(const std::string& name, bool visible);
+
         void loadDataset(const std::filesystem::path& path,
                          const param::TrainingParameters& params);
-        void clearScene();
+        void clear();
 
-        // State queries - DIRECT METHODS, NO EVENTS!
-        SceneState getCurrentState() const;
-        bool hasScene() const { return scene_ != nullptr && scene_->hasModel(); }
+        // For rendering - gets appropriate model
+        const SplatData* getModelForRendering() const;
 
-        // Direct query methods (replace query events)
+        // Direct info queries (replace events)
+        struct SceneInfo {
+            bool has_model = false;
+            size_t num_gaussians = 0;
+            size_t num_nodes = 0;
+            std::string source_type;
+            std::filesystem::path source_path;
+        };
+
         SceneInfo getSceneInfo() const;
-        std::vector<std::string> getRenderModes() const;
-
-        TrainerManager* getTrainerManager() { return trainer_manager_; }
-        const TrainerManager* getTrainerManager() const { return trainer_manager_; }
 
     private:
-        // Event handlers
+        void transitionTo(State new_state);
         void setupEventHandlers();
+        void updateTrainingModel();
+        void emitSceneChanged();
 
-        // Internal operations
-        void loadPLYInternal(const std::filesystem::path& path);
-        void addPLYInternal(const std::filesystem::path& path);
-        void loadDatasetInternal(const std::filesystem::path& path,
-                                 const param::TrainingParameters& params);
-        void updateSceneState();
-
-        // Member variables
-        std::unique_ptr<Scene> scene_;
-        TrainerManager* trainer_manager_ = nullptr;
-
+        Scene scene_;
         mutable std::mutex state_mutex_;
-        SceneState current_state_;
+        State state_ = EmptyState{};
 
-        // Cached parameters for dataset loading
+        // Training support
+        TrainerManager* trainer_manager_ = nullptr;
+        mutable std::unique_ptr<SplatData> training_model_snapshot_;
+        mutable bool training_snapshot_valid_ = false;
+
+        // Cache for parameters
         std::optional<param::TrainingParameters> cached_params_;
     };
 

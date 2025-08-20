@@ -1,11 +1,10 @@
+// visualizer_impl.cpp
 #include "visualizer_impl.hpp"
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
-#include "core/model_providers.hpp"
 #include "scene/scene_manager.hpp"
 #include "tools/background_tool.hpp"
 #include "tools/crop_box_tool.hpp"
-
 #include <tools/world_transform_tool.hpp>
 
 namespace gs::visualizer {
@@ -24,10 +23,8 @@ namespace gs::visualizer {
         anti_aliasing_ = options.antialiasing;
         state_manager_->setAntiAliasing(options.antialiasing);
 
-        // Create scene manager
+        // Create scene manager - it creates its own Scene internally
         scene_manager_ = std::make_unique<SceneManager>();
-        auto scene = std::make_unique<Scene>();
-        scene_manager_->setScene(std::move(scene));
 
         // Create trainer manager
         trainer_manager_ = std::make_shared<TrainerManager>();

@@ -80,50 +80,52 @@ namespace gs::gui::widgets {
     }
 
     void DrawModeStatus(const UIContext& ctx) {
-        // FIX: Direct call instead of query event
         auto* scene_manager = ctx.viewer->getSceneManager();
         if (!scene_manager) {
             ImGui::Text("Mode: Unknown");
             return;
         }
 
-        auto state = scene_manager->getCurrentState();
-
         const char* mode_str = "Unknown";
         ImVec4 mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
 
-        switch (state.type) {
-        case SceneManager::SceneType::None:
+        if (scene_manager->isEmpty()) {
             mode_str = "Empty";
             mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
-            break;
-        case SceneManager::SceneType::PLY:
+        } else if (scene_manager->isViewing()) {
             mode_str = "PLY Viewer";
             mode_color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);
-            break;
-        case SceneManager::SceneType::Dataset:
-            if (state.is_training) {
-                mode_str = "Training";
-                mode_color = ImVec4(1.0f, 0.6f, 0.2f, 1.0f);
-            } else {
-                mode_str = "Dataset (Ready)";
-                mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+        } else if (scene_manager->isTraining()) {
+            auto state = scene_manager->getState();
+            if (auto* training = std::get_if<SceneManager::TrainingState>(&state)) {
+                if (training->is_running) {
+                    mode_str = "Training";
+                    mode_color = ImVec4(1.0f, 0.6f, 0.2f, 1.0f);
+                } else {
+                    mode_str = "Dataset (Ready)";
+                    mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+                }
             }
-            break;
         }
 
         ImGui::TextColored(mode_color, "Mode: %s", mode_str);
 
-        if (state.num_gaussians > 0) {
-            ImGui::Text("Gaussians: %zu", state.num_gaussians);
+        auto info = scene_manager->getSceneInfo();
+        if (info.num_gaussians > 0) {
+            ImGui::Text("Gaussians: %zu", info.num_gaussians);
         }
 
-        if (state.type == SceneManager::SceneType::PLY && state.num_plys > 0) {
-            ImGui::Text("PLY Models: %zu", state.num_plys);
+        if (info.source_type == "PLY" && info.num_nodes > 0) {
+            ImGui::Text("PLY Models: %zu", info.num_nodes);
         }
 
-        if (state.training_iteration.has_value()) {
-            ImGui::Text("Iteration: %d", *state.training_iteration);
+        if (scene_manager->isTraining()) {
+            auto state = scene_manager->getState();
+            if (auto* training = std::get_if<SceneManager::TrainingState>(&state)) {
+                if (training->current_iteration > 0) {
+                    ImGui::Text("Iteration: %d", training->current_iteration);
+                }
+            }
         }
     }
 

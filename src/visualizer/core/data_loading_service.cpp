@@ -1,3 +1,4 @@
+// data_loading_service.cpp
 #include "core/data_loading_service.hpp"
 #include "core/viewer_state_manager.hpp"
 #include "scene/scene_manager.hpp"
@@ -27,14 +28,13 @@ namespace gs::visualizer {
         if (cmd.is_dataset) {
             loadDataset(cmd.path);
         } else {
-            // Check current mode to decide whether to add or replace
-            auto state = scene_manager_->getCurrentState();
-            if (state.type == SceneManager::SceneType::PLY) {
-                // In PLY mode, add to existing scene
-                addPLYToScene(cmd.path);
+            // Check if we should add or replace
+            if (scene_manager_->isViewing()) {
+                // In PLY viewing mode, add to existing
+                scene_manager_->addPLY(cmd.path);
             } else {
-                // Not in PLY mode or first PLY - load normally
-                loadPLY(cmd.path);
+                // Not in viewing mode - load as new scene
+                scene_manager_->loadPLY(cmd.path);
             }
         }
     }
@@ -76,11 +76,8 @@ namespace gs::visualizer {
             // Extract name from path
             std::string name = path.stem().string();
 
-            // Emit add PLY command
-            events::cmd::AddPLY{
-                .path = path,
-                .name = name}
-                .emit();
+            // Add through scene manager
+            scene_manager_->addPLY(path, name);
 
             // Log success
             events::notify::Log{
@@ -136,7 +133,7 @@ namespace gs::visualizer {
 
     void DataLoadingService::clearScene() {
         try {
-            scene_manager_->clearScene();
+            scene_manager_->clear(); // Changed from clearScene() to clear()
             state_manager_->reset();
 
             events::notify::Log{

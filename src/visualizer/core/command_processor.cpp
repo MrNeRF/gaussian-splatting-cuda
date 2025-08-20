@@ -122,51 +122,27 @@ namespace gs {
     std::string CommandProcessor::handleModelInfo() {
         std::ostringstream result;
 
-        // FIX: Direct calls instead of query events
         if (scene_manager_) {
-            auto sceneInfo = scene_manager_->getSceneInfo();
+            auto info = scene_manager_->getSceneInfo();
 
-            if (sceneInfo.has_model) {
+            if (info.has_model) {
                 result << "Scene Information:\n";
-                result << "  Type: ";
+                result << "  Type: " << info.source_type << "\n";
+                result << "  Source: " << info.source_path.filename().string() << "\n";
+                result << "  Number of Gaussians: " << info.num_gaussians << "\n";
 
-                switch (sceneInfo.type) {
-                case SceneManager::SceneType::None:
-                    result << "None";
-                    break;
-                case SceneManager::SceneType::PLY:
-                    result << "PLY";
-                    break;
-                case SceneManager::SceneType::Dataset:
-                    result << "Dataset";
-                    break;
-                default:
-                    result << "Unknown";
-                    break;
+                if (info.source_type == "PLY") {
+                    result << "  Number of Nodes: " << info.num_nodes << "\n";
                 }
 
-                result << "\n";
-                result << "  Source: " << sceneInfo.source_path.filename().string() << "\n";
-                result << "  Number of Gaussians: " << sceneInfo.num_gaussians << "\n";
-
-                if (sceneInfo.is_training) {
+                if (scene_manager_->isTraining()) {
                     result << "  Training Mode: Active\n";
-                }
-
-                // Get more detailed model info from the scene
-                if (scene_manager_->getScene()) {
-                    auto modelInfo = scene_manager_->getScene()->getModelInfo();
-
-                    if (modelInfo.has_model) {
-                        result << "  SH Degree: " << modelInfo.sh_degree << "\n";
-                        result << "  Scene Scale: " << modelInfo.scene_scale << "\n";
-                    }
                 }
             } else {
                 result << "No scene loaded";
             }
         } else {
-            result << "Failed to query scene information";
+            result << "No scene manager available";
         }
 
         return result.str();
@@ -193,17 +169,17 @@ namespace gs {
     }
 
     std::string CommandProcessor::handleTensorInfo(const std::string& tensor_name) {
-        if (!scene_manager_ || !scene_manager_->hasScene()) {
-            return "No model available";
+        if (!scene_manager_) {
+            return "No scene manager available";
         }
 
         if (tensor_name.empty()) {
             return "Usage: tensor_info <tensor_name>\nAvailable: means, scaling, rotation, shs, opacity";
         }
 
-        SplatData* model = scene_manager_->getScene()->getMutableModel();
+        const SplatData* model = scene_manager_->getModelForRendering();
         if (!model) {
-            return "Model not available";
+            return "No model available";
         }
 
         torch::Tensor tensor;
