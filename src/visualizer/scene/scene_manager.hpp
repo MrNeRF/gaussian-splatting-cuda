@@ -32,8 +32,6 @@ namespace gs {
 
         struct TrainingState {
             std::filesystem::path dataset_path;
-            bool is_running = false;
-            int current_iteration = 0;
         };
 
         using State = std::variant<EmptyState, ViewingState, TrainingState>;
@@ -104,6 +102,7 @@ namespace gs {
         // Trainer manager link
         void setTrainerManager(TrainerManager* tm) { trainer_manager_ = tm; }
         TrainerManager* getTrainerManager() { return trainer_manager_; }
+        const TrainerManager* getTrainerManager() const { return trainer_manager_; }
 
         // Operations
         void loadPLY(const std::filesystem::path& path);
@@ -118,7 +117,7 @@ namespace gs {
         // For rendering - gets appropriate model
         const SplatData* getModelForRendering() const;
 
-        // Direct info queries (replace events)
+        // Direct info queries
         struct SceneInfo {
             bool has_model = false;
             size_t num_gaussians = 0;

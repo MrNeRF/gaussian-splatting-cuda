@@ -31,6 +31,7 @@ namespace gs {
         cmd::ClearScene::when([this](const auto&) {
             clear();
         });
+<<<<<<< Updated upstream
 
         // Training state updates
         state::TrainingStarted::when([this](const auto&) {
@@ -62,6 +63,8 @@ namespace gs {
                 training->is_running = false;
             }
         });
+=======
+>>>>>>> Stashed changes
     }
 
     void SceneManager::loadPLY(const std::filesystem::path& path) {
@@ -228,11 +231,9 @@ namespace gs {
                 throw std::runtime_error("No trainer manager available");
             }
 
-            // Transition to training state
+            // Transition to training state - only store the dataset path
             TrainingState new_state;
             new_state.dataset_path = path;
-            new_state.is_running = false;
-            new_state.current_iteration = 0;
             transitionTo(new_state);
 
             // Emit events
@@ -313,6 +314,7 @@ namespace gs {
                 info.source_path = viewing->ply_paths.back();
             }
         } else if (auto* training = std::get_if<TrainingState>(&state_)) {
+            // Query trainer manager for current state
             info.has_model = trainer_manager_ && trainer_manager_->getTrainer();
             if (info.has_model) {
                 info.num_gaussians = trainer_manager_->getTrainer()

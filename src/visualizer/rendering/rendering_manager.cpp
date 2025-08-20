@@ -124,12 +124,13 @@ namespace gs::visualizer {
         // Check if we should skip scene rendering
         bool skip_scene_render = false;
         if (settings_.adaptive_frame_rate && !settings_.use_crop_box && scene_manager) {
-            // Get state to check if training
-            bool is_training = scene_manager->isTraining();
-            if (is_training) {
-                auto state = scene_manager->getState();
-                if (auto* training_state = std::get_if<SceneManager::TrainingState>(&state)) {
-                    is_training = training_state->is_running;
+            // Check if actively training (not just in training mode)
+            bool is_training = false;
+            if (scene_manager->isTraining()) {
+                // Query the TrainerManager directly for running state
+                const auto* trainer_manager = scene_manager->getTrainerManager();
+                if (trainer_manager) {
+                    is_training = trainer_manager->isRunning();
                 }
             }
 

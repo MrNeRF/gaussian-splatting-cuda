@@ -88,7 +88,11 @@ namespace gs::gui::widgets {
         const char* mode_str = "Unknown";
         ImVec4 mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
 
+<<<<<<< Updated upstream
         SceneManager::ViewerMode mode = scene_manager->getCurrentMode(); // Use SceneManager:: namespace
+=======
+        SceneManager::ViewerMode mode = scene_manager->getCurrentMode();
+>>>>>>> Stashed changes
         switch (mode) {
         case SceneManager::ViewerMode::Empty:
             mode_str = "Empty";
@@ -99,15 +103,25 @@ namespace gs::gui::widgets {
             mode_color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);
             break;
         case SceneManager::ViewerMode::Training: {
+<<<<<<< Updated upstream
             auto state = scene_manager->getState();
             if (auto* training = std::get_if<SceneManager::TrainingState>(&state)) {
                 if (training->is_running) {
+=======
+            // Query TrainerManager directly for training state
+            auto* trainer_manager = scene_manager->getTrainerManager();
+            if (trainer_manager && trainer_manager->hasTrainer()) {
+                if (trainer_manager->isRunning()) {
+>>>>>>> Stashed changes
                     mode_str = "Training";
                     mode_color = ImVec4(1.0f, 0.6f, 0.2f, 1.0f);
                 } else {
                     mode_str = "Dataset (Ready)";
                     mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
                 }
+            } else {
+                mode_str = "Dataset (No Trainer)";
+                mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
             }
         } break;
         }
@@ -123,13 +137,19 @@ namespace gs::gui::widgets {
             ImGui::Text("PLY Models: %zu", info.num_nodes);
         }
 
+        // Query training iteration directly from TrainerManager
         if (scene_manager->isTraining()) {
-            auto state = scene_manager->getState();
-            if (auto* training = std::get_if<SceneManager::TrainingState>(&state)) {
-                if (training->current_iteration > 0) {
-                    ImGui::Text("Iteration: %d", training->current_iteration);
+            auto* trainer_manager = scene_manager->getTrainerManager();
+            if (trainer_manager && trainer_manager->isRunning()) {
+                int iteration = trainer_manager->getCurrentIteration();
+                if (iteration > 0) {
+                    ImGui::Text("Iteration: %d", iteration);
                 }
             }
         }
     }
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 } // namespace gs::gui::widgets
