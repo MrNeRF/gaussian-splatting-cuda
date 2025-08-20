@@ -21,6 +21,7 @@ add_library(gs_visualizer STATIC
         gui/panels/crop_box_panel.cpp
         gui/panels/scene_panel.cpp
         gui/panels/tools_panel.cpp
+        gui/panels/world_transform_panel.cpp
         gui/windows/scripting_console.cpp
         gui/windows/file_browser.cpp
         gui/windows/camera_controls.cpp

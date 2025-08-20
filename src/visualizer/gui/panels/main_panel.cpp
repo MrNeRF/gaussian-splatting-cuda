@@ -238,7 +238,7 @@ namespace gs::gui::panels {
 
             // Add tooltip
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Toggle Vertical Synchronization\\n%s",
+                ImGui::SetTooltip("Toggle Vertical Synchronization\\\\n%s",
                                   vsync_enabled ? "FPS capped to monitor refresh rate"
                                                 : "Uncapped FPS");
             }

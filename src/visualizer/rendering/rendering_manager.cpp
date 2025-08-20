@@ -256,12 +256,25 @@ namespace gs::visualizer {
             // Use background color from settings
             glm::vec3 bg_color = settings_.background_color;
 
+            // Create viewport data
+            gs::rendering::ViewportData viewport_data{
+                .rotation = context.viewport.getRotationMatrix(),
+                .translation = context.viewport.getTranslation(),
+                .size = render_size,
+                .fov = settings_.fov};
+
+            // Apply world transform if not identity
+            if (!settings_.world_transform.isIdentity()) {
+                glm::mat3 world_rot = settings_.world_transform.getRotationMat();
+                glm::vec3 world_trans = settings_.world_transform.getTranslation();
+
+                // Transform the camera position and rotation
+                viewport_data.rotation = world_rot * viewport_data.rotation;
+                viewport_data.translation = world_rot * viewport_data.translation + world_trans;
+            }
+
             gs::rendering::RenderRequest request{
-                .viewport = {
-                    .rotation = context.viewport.getRotationMatrix(),
-                    .translation = context.viewport.getTranslation(),
-                    .size = render_size,
-                    .fov = settings_.fov},
+                .viewport = viewport_data,
                 .scaling_modifier = settings_.scaling_modifier,
                 .antialiasing = settings_.antialiasing,
                 .background_color = bg_color,

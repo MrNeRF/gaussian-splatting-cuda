@@ -37,6 +37,9 @@ namespace gs::visualizer {
         float axes_size = 2.0f;
         std::array<bool, 3> axes_visibility = {true, true, true};
 
+        // World transform
+        geometry::EuclideanTransform world_transform;
+
         // Grid
         bool show_grid = true;
         int grid_plane = 1;
