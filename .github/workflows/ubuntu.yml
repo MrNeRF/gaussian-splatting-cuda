@@ -29,7 +29,7 @@ jobs:
       - name: Setup vcpkg
         run: |
           apt-get update
-          apt-get install -y zip tar pkg-config python3 xinerama xcursor xorg libglu1-mesa
+          apt-get install -y zip tar pkg-config python3 libxinerama-dev libxcursor-dev xorg-dev libglu1-mesa-dev
           cd ..
           git clone https://github.com/microsoft/vcpkg.git
           ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
