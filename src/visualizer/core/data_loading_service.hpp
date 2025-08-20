@@ -11,12 +11,10 @@ namespace gs {
 }
 
 namespace gs::visualizer {
-    class ViewerStateManager;
 
     class DataLoadingService {
     public:
-        DataLoadingService(SceneManager* scene_manager,
-                           ViewerStateManager* state_manager);
+        explicit DataLoadingService(SceneManager* scene_manager);
         ~DataLoadingService();
 
         // Set parameters for dataset loading
@@ -34,7 +32,6 @@ namespace gs::visualizer {
         void addPLYToScene(const std::filesystem::path& path);
 
         SceneManager* scene_manager_;
-        ViewerStateManager* state_manager_;
         param::TrainingParameters params_;
     };
 

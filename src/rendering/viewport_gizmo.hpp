@@ -1,26 +1,26 @@
 #pragma once
 
-#include <glad/glad.h>
+#include "gl_resources.hpp"
+#include "shader_manager.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 
 namespace gs::rendering {
 
-    class Shader;
-    class TextRenderer;
+    class TextRenderer; // Forward declaration
 
     class ViewportGizmo {
     public:
-        ViewportGizmo();
-        ~ViewportGizmo();
+        ViewportGizmo();  // Declare constructor (not defaulted)
+        ~ViewportGizmo(); // Declare destructor
 
-        // Initialize OpenGL resources
-        void initialize();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> initialize();
 
-        // Render the gizmo
-        void render(const glm::mat3& camera_rotation,
-                    const glm::vec2& viewport_pos,
-                    const glm::vec2& viewport_size);
+        // Render the gizmo - now returns Result
+        Result<void> render(const glm::mat3& camera_rotation,
+                            const glm::vec2& viewport_pos,
+                            const glm::vec2& viewport_size);
 
         // Cleanup
         void shutdown();
@@ -32,13 +32,13 @@ namespace gs::rendering {
         int getMargin() const { return margin_; }
 
     private:
-        void generateGeometry();
-        void createShaders();
+        Result<void> generateGeometry();
+        Result<void> createShaders();
 
-        // OpenGL resources
-        GLuint vao_ = 0;
-        GLuint vbo_ = 0;
-        std::unique_ptr<Shader> shader_;
+        // OpenGL resources using RAII
+        VAO vao_;
+        VBO vbo_;
+        ManagedShader shader_;
 
         // Text rendering
         std::unique_ptr<TextRenderer> text_renderer_;

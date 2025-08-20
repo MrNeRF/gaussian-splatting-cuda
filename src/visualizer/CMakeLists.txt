@@ -5,7 +5,6 @@ add_library(gs_visualizer STATIC
         core/main_loop.cpp
         core/data_loading_service.cpp
         core/command_processor.cpp
-        core/viewer_state_manager.cpp
 
         # Tools
         tools/crop_box_tool.cpp
@@ -38,9 +37,7 @@ add_library(gs_visualizer STATIC
         scene/scene_manager.cpp
 
         # Input handling
-        input/input_handler.cpp
-        input/input_manager.cpp
-        input/camera_controller.cpp
+        input/input_controller.cpp
 
         # Training integration
         training/training_manager.cpp
@@ -94,7 +91,7 @@ target_compile_options(gs_visualizer PRIVATE
         $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O3>
 )
 
-# Handle resources (shaders and assets)
+## Handle resources (shaders and assets)
 set(VISUALIZER_BUILD_RESOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources")
 set(VISUALIZER_SOURCE_RESOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources")
 
@@ -109,11 +106,18 @@ foreach (SHADER_FILE ${SHADER_FILES})
     configure_file(${SHADER_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/shaders/${SHADER_NAME}" COPYONLY)
 endforeach ()
 
-# Copy assets to build directory
+# Copy assets from resources/assets if they exist
 file(GLOB ASSET_FILES "${VISUALIZER_SOURCE_RESOURCE_DIR}/assets/*")
 foreach (ASSET_FILE ${ASSET_FILES})
     get_filename_component(ASSET_NAME ${ASSET_FILE} NAME)
     configure_file(${ASSET_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/assets/${ASSET_NAME}" COPYONLY)
+endforeach ()
+
+# ALSO copy assets from gui/assets (where your font actually is!)
+file(GLOB GUI_ASSET_FILES "${CMAKE_CURRENT_SOURCE_DIR}/gui/assets/*")
+foreach (GUI_ASSET_FILE ${GUI_ASSET_FILES})
+    get_filename_component(ASSET_NAME ${GUI_ASSET_FILE} NAME)
+    configure_file(${GUI_ASSET_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/assets/${ASSET_NAME}" COPYONLY)
 endforeach ()
 
 # Compile definitions

@@ -1,73 +1,60 @@
 #pragma once
 
 #include "core/splat_data.hpp"
-#include "shader.hpp"
+#include "gl_resources.hpp"
+#include "shader_manager.hpp"
 #include <glm/glm.hpp>
-#include <memory>
+#include <span>
 #include <torch/torch.h>
 
 namespace gs::rendering {
 
     class PointCloudRenderer {
     public:
-        PointCloudRenderer();
-        ~PointCloudRenderer();
+        PointCloudRenderer() {
+            std::cout << "[PointCloudRenderer] Constructor called at " << this << std::endl;
+        }
+        ~PointCloudRenderer() = default;
 
-        // Initialize OpenGL resources
-        void initialize();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> initialize();
 
-        // Render point cloud
-        void render(const SplatData& splat_data,
-                    const glm::mat4& view,
-                    const glm::mat4& projection,
-                    float voxel_size,
-                    const glm::vec3& background_color);
+        // Render point cloud - now returns Result
+        Result<void> render(const SplatData& splat_data,
+                            const glm::mat4& view,
+                            const glm::mat4& projection,
+                            float voxel_size,
+                            const glm::vec3& background_color);
 
         // Check if initialized
         bool isInitialized() const { return initialized_; }
 
     private:
-        void createCubeGeometry();
-        void uploadPointData(const torch::Tensor& positions, const torch::Tensor& colors);
+        Result<void> createCubeGeometry();
+        Result<void> uploadPointData(std::span<const float> positions, std::span<const float> colors);
         static torch::Tensor extractRGBFromSH(const torch::Tensor& shs);
 
-        // OpenGL resources
-        GLuint cube_vao_ = 0;
-        GLuint cube_vbo_ = 0;
-        GLuint cube_ebo_ = 0;
-        GLuint instance_vbo_ = 0; // For positions and colors
+        // OpenGL resources using RAII
+        VAO cube_vao_;
+        VBO cube_vbo_;
+        EBO cube_ebo_;
+        VBO instance_vbo_; // For positions and colors
 
-        // Framebuffer resources
-        GLuint fbo_ = 0;
-        GLuint color_texture_ = 0;
-        GLuint depth_texture_ = 0;
+        // Framebuffer resources using RAII
+        FBO fbo_;
+        Texture color_texture_;
+        Texture depth_texture_;
         int fbo_width_ = 0;
         int fbo_height_ = 0;
 
         // Shaders
-        std::unique_ptr<Shader> shader_;
+        ManagedShader shader_;
 
         // State
         bool initialized_ = false;
         size_t current_point_count_ = 0;
 
-        // Cube vertices and indices
-        /*
-         * Cube vertex positions.
-         * Coordinate system: Right-handed, +X is right, +Y is up, +Z is forward (out of
-         * the screen).
-         * Vertices are ordered as follows:
-         *   0: (-0.5, -0.5,  0.5) // Front-bottom-left
-         *   1: ( 0.5, -0.5,  0.5) // Front-bottom-right
-         *   2: ( 0.5,  0.5,  0.5) // Front-top-right
-         *   3: (-0.5,  0.5,  0.5) // Front-top-left
-         *   4: (-0.5, -0.5, -0.5) // Back-bottom-left
-         *   5: ( 0.5, -0.5, -0.5) // Back-bottom-right
-         *   6: ( 0.5,  0.5, -0.5) // Back-top-right
-         *   7: (-0.5,  0.5, -0.5) // Back-top-left
-         * Winding order for faces: Counter-clockwise when looking at the face from
-         * outside the cube.
-         */
+        // Cube vertices
         static constexpr float cube_vertices_[] = {
             // Front face
             -0.5f, -0.5f, 0.5f,
@@ -80,6 +67,7 @@ namespace gs::rendering {
             0.5f, 0.5f, -0.5f,
             -0.5f, 0.5f, -0.5f};
 
+        // Triangle indices for solid cube (6 faces, 12 triangles, 36 indices)
         static constexpr unsigned int cube_indices_[] = {
             // Front face
             0, 1, 2, 2, 3, 0,

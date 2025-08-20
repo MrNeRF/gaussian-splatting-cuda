@@ -1,23 +1,17 @@
 #include "bbox_renderer.hpp"
+#include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
 
 namespace gs::rendering {
 
     RenderBoundingBox::RenderBoundingBox() : color_(1.0f, 1.0f, 0.0f), // Yellow by default
                                              line_width_(2.0f),
-                                             initialized_(false),
-                                             VAO_(0),
-                                             VBO_(0),
-                                             EBO_(0) {
+                                             initialized_(false) {
         // Initialize vertices vector with 8 vertices
         vertices_.resize(8);
 
         // Initialize indices vector with line indices
         indices_.assign(cube_line_indices_, cube_line_indices_ + 24);
-    }
-
-    RenderBoundingBox::~RenderBoundingBox() {
-        cleanup();
     }
 
     void RenderBoundingBox::setBounds(const glm::vec3& min, const glm::vec3& max) {
@@ -30,61 +24,65 @@ namespace gs::rendering {
         }
     }
 
-    void RenderBoundingBox::init() {
+    Result<void> RenderBoundingBox::init() {
         if (isInitialized())
-            return;
+            return {};
 
-        try {
-            // Create shader for bounding box rendering
-            shader_ = std::make_unique<Shader>(
-                (getShaderPath("bounding_box.vert")).string().c_str(),
-                (getShaderPath("bounding_box.frag")).string().c_str(),
-                false); // Don't use shader's buffer management
+        // Create shader for bounding box rendering
+        auto result = load_shader("bounding_box", "bounding_box.vert", "bounding_box.frag", false);
+        if (!result) {
+            return std::unexpected(result.error().what());
+        }
+        shader_ = std::move(*result);
 
-            // Generate OpenGL objects
-            glGenVertexArrays(1, &VAO_);
-            glGenBuffers(1, &VBO_);
-            glGenBuffers(1, &EBO_);
+        // Create OpenGL objects using RAII
+        auto vao_result = create_vao();
+        if (!vao_result) {
+            return std::unexpected(vao_result.error());
+        }
 
-            initialized_ = true;
+        auto vbo_result = create_vbo();
+        if (!vbo_result) {
+            return std::unexpected(vbo_result.error());
+        }
+        vbo_ = std::move(*vbo_result);
 
-            // Initialize cube geometry with default bounds if not already set
-            if (min_bounds_ == glm::vec3(0.0f) && max_bounds_ == glm::vec3(0.0f)) {
-                setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
-            } else {
-                createCubeGeometry();
-                setupVertexData();
+        auto ebo_result = create_vbo(); // EBO is also a buffer
+        if (!ebo_result) {
+            return std::unexpected(ebo_result.error());
+        }
+        ebo_ = std::move(*ebo_result);
+
+        // Build VAO using VAOBuilder
+        VAOBuilder builder(std::move(*vao_result));
+
+        // We'll set up the structure now, data will come in setupVertexData
+        builder.attachVBO(vbo_) // Attach without data initially
+            .setAttribute({.index = 0,
+                           .size = 3,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = sizeof(glm::vec3),
+                           .offset = nullptr,
+                           .divisor = 0})
+            .attachEBO(ebo_); // Attach EBO without data initially
+
+        vao_ = builder.build();
+
+        initialized_ = true;
+
+        // Initialize cube geometry with default bounds if not already set
+        if (min_bounds_ == glm::vec3(0.0f) && max_bounds_ == glm::vec3(0.0f)) {
+            setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+        } else {
+            createCubeGeometry();
+            if (auto result = setupVertexData(); !result) {
+                initialized_ = false;
+                return result;
             }
-
-            // Check bindings *after* setup
-            glBindVertexArray(VAO_);
-            GLint vao_check, ebo_check;
-            glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao_check);
-            glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &ebo_check);
-            glBindVertexArray(0);
-
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to initialize BoundingBox: " << e.what() << std::endl;
-            cleanup();
-        }
-    }
-
-    void RenderBoundingBox::cleanup() {
-        if (VAO_ != 0) {
-            glDeleteVertexArrays(1, &VAO_);
-            VAO_ = 0;
-        }
-        if (VBO_ != 0) {
-            glDeleteBuffers(1, &VBO_);
-            VBO_ = 0;
-        }
-        if (EBO_ != 0) {
-            glDeleteBuffers(1, &EBO_);
-            EBO_ = 0;
         }
 
-        shader_.reset();
-        initialized_ = false;
+        return {};
     }
 
     void RenderBoundingBox::createCubeGeometry() {
@@ -99,71 +97,76 @@ namespace gs::rendering {
         vertices_[7] = glm::vec3(min_bounds_.x, max_bounds_.y, max_bounds_.z); // 7: +y+z
     }
 
-    void RenderBoundingBox::setupVertexData() {
-        if (!initialized_ || VAO_ == 0)
-            return;
+    Result<void> RenderBoundingBox::setupVertexData() {
+        if (!initialized_ || !vao_)
+            return std::unexpected("Bounding box not initialized");
 
-        glBindVertexArray(VAO_);
+        // Upload vertex data
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
+        upload_buffer(GL_ARRAY_BUFFER, std::span(vertices_), GL_DYNAMIC_DRAW);
 
-        // Bind and upload vertex data
-        glBindBuffer(GL_ARRAY_BUFFER, VBO_);
-        glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(glm::vec3),
-                     vertices_.data(), GL_DYNAMIC_DRAW);
+        // Upload index data
+        BufferBinder<GL_ELEMENT_ARRAY_BUFFER> ebo_bind(ebo_);
+        upload_buffer(GL_ELEMENT_ARRAY_BUFFER, std::span(indices_), GL_STATIC_DRAW);
 
-        // ✅ Bind and upload index data WHILE VAO is bound!
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_.size() * sizeof(unsigned int),
-                     indices_.data(), GL_STATIC_DRAW);
-
-        // Vertex attribute setup
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
-        glEnableVertexAttribArray(0);
-
-        glBindVertexArray(0); // VAO now remembers VBO + EBO + attributes
+        return {};
     }
 
-    void RenderBoundingBox::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!initialized_ || !shader_ || VAO_ == 0)
-            return;
+    Result<void> RenderBoundingBox::render(const glm::mat4& view, const glm::mat4& projection) {
+        if (!initialized_ || !shader_.valid() || !vao_)
+            return std::unexpected("Bounding box renderer not initialized");
 
-        // Save current OpenGL state
-        GLfloat current_line_width;
-        glGetFloatv(GL_LINE_WIDTH, &current_line_width);
-        GLboolean line_smooth_enabled = glIsEnabled(GL_LINE_SMOOTH);
+        // Save current state that we'll modify
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean depth_mask;
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
+        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
+        GLint blend_src, blend_dst;
+        if (blend_enabled) {
+            glGetIntegerv(GL_BLEND_SRC_RGB, &blend_src);
+            glGetIntegerv(GL_BLEND_DST_RGB, &blend_dst);
+        }
 
-        // Enable line rendering
-        glEnable(GL_LINE_SMOOTH);
-        glLineWidth(line_width_);
+        // Set state for wireframe rendering:
+        // - Enable depth test so box respects depth
+        // - Disable depth writing so wireframe doesn't occlude things behind it
+        // - Enable blending for potential transparency
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // Use GLLineGuard for line width management
+        GLLineGuard line_guard(line_width_);
 
         // Bind shader and setup uniforms
-        shader_->bind();
+        ShaderScope s(shader_);
 
-        try {
+        auto box2World = world2BBox_.inv().toMat4();
+        // Set uniforms
+        glm::mat4 mvp = projection * view * box2World;
 
-            auto box2World = world2BBox_.inv().toMat4();
-            // Set uniforms
-            glm::mat4 mvp = projection * view * box2World;
+        if (auto result = s->set("u_mvp", mvp); !result)
+            return result;
+        if (auto result = s->set("u_color", color_); !result)
+            return result;
 
-            shader_->set_uniform("u_mvp", mvp);
-            shader_->set_uniform("u_color", color_);
+        // Bind VAO and draw
+        VAOBinder vao_bind(vao_);
+        glDrawElements(GL_LINES, static_cast<GLsizei>(indices_.size()), GL_UNSIGNED_INT, 0);
 
-            // Bind VAO and draw
-            glBindVertexArray(VAO_);
-
-            glDrawElements(GL_LINES, static_cast<GLsizei>(indices_.size()), GL_UNSIGNED_INT, 0);
-            glBindVertexArray(0);
-
-        } catch (const std::exception& e) {
-            std::cerr << "Error rendering bounding box: " << e.what() << std::endl;
+        // Restore state
+        glDepthMask(depth_mask);
+        if (!depth_test_enabled) {
+            glDisable(GL_DEPTH_TEST);
+        }
+        if (!blend_enabled) {
+            glDisable(GL_BLEND);
+        } else {
+            glBlendFunc(blend_src, blend_dst);
         }
 
-        shader_->unbind();
-
-        // Restore OpenGL state
-        glLineWidth(current_line_width);
-        if (!line_smooth_enabled) {
-            glDisable(GL_LINE_SMOOTH);
-        }
+        return {};
     }
 
     const unsigned int RenderBoundingBox::cube_line_indices_[24] = {

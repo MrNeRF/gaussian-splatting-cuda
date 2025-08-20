@@ -1,23 +1,85 @@
 #include "config.h"
 
-#ifdef CUDA_GL_INTEROP_ENABLED
-
 // clang-format off
 // CRITICAL: GLAD must be included before GLFW to avoid OpenGL header conflicts
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 // clang-format on
 
-// Now include CUDA GL interop (after GLAD)
-#include <cuda_gl_interop.h>
-
 #include "cuda_gl_interop.hpp"
+#include <format>
 #include <iostream>
-#include <stdexcept>
+
+#ifdef CUDA_GL_INTEROP_ENABLED
+// Only include CUDA GL interop when enabled
+#include <cuda_gl_interop.h>
+#endif
 
 namespace gs::rendering {
 
-    CudaGLInteropTexture::CudaGLInteropTexture()
+    // Implementation for CudaGraphicsResourceDeleter
+    void CudaGraphicsResourceDeleter::operator()(void* resource) const {
+#ifdef CUDA_GL_INTEROP_ENABLED
+        if (resource) {
+            cudaGraphicsUnregisterResource(static_cast<cudaGraphicsResource_t>(resource));
+        }
+#endif
+    }
+
+    // Implementation for disabled interop version
+    CudaGLInteropTextureImpl<false>::~CudaGLInteropTextureImpl() {
+        cleanup();
+    }
+
+    Result<void> CudaGLInteropTextureImpl<false>::init(int width, int height) {
+        width_ = width;
+        height_ = height;
+
+        // Create regular OpenGL texture
+        glGenTextures(1, &texture_id_);
+        glBindTexture(GL_TEXTURE_2D, texture_id_);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        GLenum gl_err = glGetError();
+        if (gl_err != GL_NO_ERROR) {
+            cleanup();
+            return std::unexpected(std::format("OpenGL error during texture creation: {}", gl_err));
+        }
+
+        return {};
+    }
+
+    Result<void> CudaGLInteropTextureImpl<false>::resize(int new_width, int new_height) {
+        if (width_ != new_width || height_ != new_height) {
+            return init(new_width, new_height);
+        }
+        return {};
+    }
+
+    Result<void> CudaGLInteropTextureImpl<false>::updateFromTensor(const torch::Tensor& image) {
+        // CPU fallback - this should not be called for non-interop version
+        return std::unexpected("CUDA-GL interop not available - use regular framebuffer upload");
+    }
+
+    void CudaGLInteropTextureImpl<false>::cleanup() {
+        if (texture_id_ != 0) {
+            glDeleteTextures(1, &texture_id_);
+            texture_id_ = 0;
+        }
+    }
+
+#ifdef CUDA_GL_INTEROP_ENABLED
+    // Full implementation for when interop is enabled
+    CudaGLInteropTextureImpl<true>::CudaGLInteropTextureImpl()
         : texture_id_(0),
           cuda_resource_(nullptr),
           width_(0),
@@ -25,11 +87,11 @@ namespace gs::rendering {
           is_registered_(false) {
     }
 
-    CudaGLInteropTexture::~CudaGLInteropTexture() {
+    CudaGLInteropTextureImpl<true>::~CudaGLInteropTextureImpl() {
         cleanup();
     }
 
-    void CudaGLInteropTexture::init(int width, int height) {
+    Result<void> CudaGLInteropTextureImpl<true>::init(int width, int height) {
         // Clean up any existing resources
         cleanup();
 
@@ -57,154 +119,165 @@ namespace gs::rendering {
         GLenum gl_err = glGetError();
         if (gl_err != GL_NO_ERROR) {
             cleanup();
-            throw std::runtime_error("OpenGL error during texture creation: " +
-                                     std::to_string(gl_err));
+            return std::unexpected(std::format("OpenGL error during texture creation: {}", gl_err));
         }
 
         // Clear any previous CUDA errors
         cudaGetLastError();
 
         // Register texture with CUDA
+        cudaGraphicsResource_t raw_resource;
         cudaError_t err = cudaGraphicsGLRegisterImage(
-            &cuda_resource_, texture_id_, GL_TEXTURE_2D,
+            &raw_resource, texture_id_, GL_TEXTURE_2D,
             cudaGraphicsRegisterFlagsWriteDiscard);
 
         if (err != cudaSuccess) {
             cleanup();
-            throw std::runtime_error("Failed to register OpenGL texture with CUDA: " +
-                                     std::string(cudaGetErrorString(err)));
+            return std::unexpected(std::format("Failed to register OpenGL texture with CUDA: {}",
+                                               cudaGetErrorString(err)));
         }
 
+        cuda_resource_.reset(raw_resource);
         is_registered_ = true;
+        return {};
     }
 
-    void CudaGLInteropTexture::resize(int new_width, int new_height) {
+    Result<void> CudaGLInteropTextureImpl<true>::resize(int new_width, int new_height) {
         if (width_ != new_width || height_ != new_height) {
-            init(new_width, new_height);
+            return init(new_width, new_height);
         }
+        return {};
     }
 
-    void CudaGLInteropTexture::updateFromTensor(const torch::Tensor& image) {
+    Result<void> CudaGLInteropTextureImpl<true>::updateFromTensor(const torch::Tensor& image) {
         if (!is_registered_) {
-            throw std::runtime_error("Texture not initialized");
+            return std::unexpected("Texture not initialized");
         }
 
         // Ensure tensor is CUDA, float32, and [H, W, C] format
-        TORCH_CHECK(image.is_cuda(), "Image must be on CUDA");
-        TORCH_CHECK(image.dim() == 3, "Image must be [H, W, C]");
-        TORCH_CHECK(image.size(2) == 3 || image.size(2) == 4,
-                    "Image must have 3 or 4 channels");
+        if (!image.is_cuda()) {
+            return std::unexpected("Image must be on CUDA");
+        }
+        if (image.dim() != 3) {
+            return std::unexpected("Image must be [H, W, C]");
+        }
+        if (image.size(2) != 3 && image.size(2) != 4) {
+            return std::unexpected("Image must have 3 or 4 channels");
+        }
 
         const int h = image.size(0);
         const int w = image.size(1);
         const int c = image.size(2);
 
         // Resize if needed
-        resize(w, h);
+        if (auto result = resize(w, h); !result) {
+            return result;
+        }
 
         // Map CUDA resource
-        cudaError_t err = cudaGraphicsMapResources(1, &cuda_resource_, 0);
+        auto raw_resource = static_cast<cudaGraphicsResource_t>(cuda_resource_.get());
+        cudaError_t err = cudaGraphicsMapResources(1, &raw_resource, 0);
         if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to map CUDA resource: " +
-                                     std::string(cudaGetErrorString(err)));
+            return std::unexpected(std::format("Failed to map CUDA resource: {}",
+                                               cudaGetErrorString(err)));
         }
 
-        try {
-            // Get CUDA array from mapped resource
-            cudaArray_t cuda_array;
-            err = cudaGraphicsSubResourceGetMappedArray(&cuda_array, cuda_resource_, 0, 0);
-            if (err != cudaSuccess) {
-                throw std::runtime_error("Failed to get CUDA array: " +
-                                         std::string(cudaGetErrorString(err)));
+        // RAII unmap guard
+        struct UnmapGuard {
+            cudaGraphicsResource_t* resource;
+            ~UnmapGuard() {
+                if (resource) {
+                    cudaGraphicsUnmapResources(1, resource, 0);
+                }
             }
+        } unmap_guard{&raw_resource};
 
-            // Convert to RGBA uint8 if needed
-            torch::Tensor rgba_image;
-            if (c == 3) {
-                // Add alpha channel
-                rgba_image = torch::cat({image,
-                                         torch::ones({h, w, 1}, image.options())},
-                                        2);
-            } else {
-                rgba_image = image;
-            }
-
-            // Ensure proper format (uint8)
-            if (rgba_image.dtype() != torch::kUInt8) {
-                rgba_image = (rgba_image.clamp(0.0f, 1.0f) * 255.0f).to(torch::kUInt8);
-            }
-
-            // Make contiguous
-            rgba_image = rgba_image.contiguous();
-
-            // Copy to CUDA array
-            err = cudaMemcpy2DToArray(
-                cuda_array,
-                0, 0, // offset
-                rgba_image.data_ptr<uint8_t>(),
-                w * 4, // pitch (RGBA = 4 bytes per pixel)
-                w * 4, // width in bytes
-                h,     // height
-                cudaMemcpyDeviceToDevice);
-
-            if (err != cudaSuccess) {
-                throw std::runtime_error("Failed to copy to CUDA array: " +
-                                         std::string(cudaGetErrorString(err)));
-            }
-
-            // Synchronize to ensure copy is complete
-            cudaDeviceSynchronize();
-
-        } catch (...) {
-            // Always unmap on error
-            cudaGraphicsUnmapResources(1, &cuda_resource_, 0);
-            throw;
-        }
-
-        // Unmap resource
-        err = cudaGraphicsUnmapResources(1, &cuda_resource_, 0);
+        // Get CUDA array from mapped resource
+        cudaArray_t cuda_array;
+        err = cudaGraphicsSubResourceGetMappedArray(&cuda_array, raw_resource, 0, 0);
         if (err != cudaSuccess) {
-            throw std::runtime_error("Failed to unmap CUDA resource: " +
-                                     std::string(cudaGetErrorString(err)));
+            return std::unexpected(std::format("Failed to get CUDA array: {}",
+                                               cudaGetErrorString(err)));
         }
+
+        // Convert to RGBA uint8 if needed
+        torch::Tensor rgba_image;
+        if (c == 3) {
+            // Add alpha channel
+            rgba_image = torch::cat({image,
+                                     torch::ones({h, w, 1}, image.options())},
+                                    2);
+        } else {
+            rgba_image = image;
+        }
+
+        // Ensure proper format (uint8)
+        if (rgba_image.dtype() != torch::kUInt8) {
+            rgba_image = (rgba_image.clamp(0.0f, 1.0f) * 255.0f).to(torch::kUInt8);
+        }
+
+        // Make contiguous
+        rgba_image = rgba_image.contiguous();
+
+        // Copy to CUDA array
+        err = cudaMemcpy2DToArray(
+            cuda_array,
+            0, 0, // offset
+            rgba_image.data_ptr<uint8_t>(),
+            w * 4, // pitch (RGBA = 4 bytes per pixel)
+            w * 4, // width in bytes
+            h,     // height
+            cudaMemcpyDeviceToDevice);
+
+        if (err != cudaSuccess) {
+            return std::unexpected(std::format("Failed to copy to CUDA array: {}",
+                                               cudaGetErrorString(err)));
+        }
+
+        // Synchronize to ensure copy is complete
+        cudaDeviceSynchronize();
+
+        return {};
     }
 
-    void CudaGLInteropTexture::cleanup() {
-        if (is_registered_ && cuda_resource_) {
-            cudaGraphicsUnregisterResource(cuda_resource_);
-            cuda_resource_ = nullptr;
-            is_registered_ = false;
-        }
+    void CudaGLInteropTextureImpl<true>::cleanup() {
+        cuda_resource_.reset();
+        is_registered_ = false;
 
         if (texture_id_ != 0) {
             glDeleteTextures(1, &texture_id_);
             texture_id_ = 0;
         }
     }
+#endif // CUDA_GL_INTEROP_ENABLED
 
     // InteropFrameBuffer implementation
     InteropFrameBuffer::InteropFrameBuffer(bool use_interop)
         : FrameBuffer(),
           use_interop_(use_interop) {
         if (use_interop_) {
-            try {
-                interop_texture_.init(width, height);
-            } catch (const std::exception& e) {
-                std::cerr << "Failed to initialize CUDA-GL interop: " << e.what() << std::endl;
+            interop_texture_.emplace();
+            if (auto result = interop_texture_->init(width, height); !result) {
+                std::cerr << "Failed to initialize CUDA-GL interop: " << result.error() << std::endl;
                 std::cerr << "Falling back to CPU copy mode" << std::endl;
+                interop_texture_.reset();
                 use_interop_ = false;
             }
         }
     }
 
-    void InteropFrameBuffer::uploadFromCUDA(const torch::Tensor& cuda_image) {
-        if (!use_interop_) {
+    Result<void> InteropFrameBuffer::uploadFromCUDA(const torch::Tensor& cuda_image) {
+        if (!use_interop_ || !interop_texture_) {
             // Fallback to CPU copy
-            auto cpu_image = cuda_image.to(torch::kCPU).contiguous();
+            auto cpu_image = cuda_image;
+            if (cuda_image.is_cuda()) {
+                cpu_image = cuda_image.to(torch::kCPU);
+            }
+            cpu_image = cpu_image.contiguous();
 
             // Handle both [H, W, C] and [C, H, W] formats
             torch::Tensor formatted;
-            if (cuda_image.size(-1) == 3 || cuda_image.size(-1) == 4) {
+            if (cpu_image.size(-1) == 3 || cpu_image.size(-1) == 4) {
                 // Already [H, W, C]
                 formatted = cpu_image;
             } else {
@@ -219,39 +292,30 @@ namespace gs::rendering {
 
             uploadImage(formatted.data_ptr<unsigned char>(),
                         formatted.size(1), formatted.size(0));
-            return;
+            return {};
         }
 
         // Direct CUDA update
-        try {
-            interop_texture_.updateFromTensor(cuda_image);
-        } catch (const std::exception& e) {
-            std::cerr << "CUDA-GL interop update failed: " << e.what() << std::endl;
+        auto result = interop_texture_->updateFromTensor(cuda_image);
+        if (!result) {
+            std::cerr << "CUDA-GL interop update failed: " << result.error() << std::endl;
             std::cerr << "Falling back to CPU copy" << std::endl;
             use_interop_ = false;
-            uploadFromCUDA(cuda_image); // Retry with CPU fallback
+            interop_texture_.reset();
+            return uploadFromCUDA(cuda_image); // Retry with CPU fallback
         }
+        return {};
     }
 
     void InteropFrameBuffer::resize(int new_width, int new_height) {
         FrameBuffer::resize(new_width, new_height);
-        if (use_interop_) {
-            try {
-                interop_texture_.resize(new_width, new_height);
-            } catch (const std::exception& e) {
-                std::cerr << "Failed to resize interop texture: " << e.what() << std::endl;
+        if (use_interop_ && interop_texture_) {
+            if (auto result = interop_texture_->resize(new_width, new_height); !result) {
+                std::cerr << "Failed to resize interop texture: " << result.error() << std::endl;
                 use_interop_ = false;
+                interop_texture_.reset();
             }
         }
     }
 
 } // namespace gs::rendering
-
-#else // CUDA_GL_INTEROP_ENABLED not defined
-
-// Stub implementation when interop is not available
-namespace gs {
-    // Empty implementation - all functionality handled by preprocessor in header
-}
-
-#endif // CUDA_GL_INTEROP_ENABLED

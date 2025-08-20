@@ -1,8 +1,8 @@
 #pragma once
 
-#include "shader.hpp"
+#include "gl_resources.hpp"
+#include "shader_manager.hpp"
 #include <glm/glm.hpp>
-#include <memory>
 
 namespace gs::rendering {
 
@@ -14,17 +14,17 @@ namespace gs::rendering {
             XY = 2  // Z plane (XY grid)
         };
 
-        RenderInfiniteGrid();
-        ~RenderInfiniteGrid();
+        RenderInfiniteGrid() = default;
+        ~RenderInfiniteGrid() = default;
 
-        // Initialize OpenGL resources
-        void init();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> init();
 
         // Check if initialized
         bool isInitialized() const { return initialized_; }
 
-        // Render the infinite grid
-        void render(const glm::mat4& view, const glm::mat4& projection);
+        // Render the infinite grid - now returns Result
+        Result<void> render(const glm::mat4& view, const glm::mat4& projection);
 
         // Set grid parameters
         void setOpacity(float opacity) { opacity_ = glm::clamp(opacity, 0.0f, 1.0f); }
@@ -36,17 +36,16 @@ namespace gs::rendering {
         GridPlane getPlane() const { return plane_; }
 
     private:
-        void createBlueNoiseTexture();
+        Result<void> createBlueNoiseTexture();
         void calculateFrustumCorners(const glm::mat4& inv_viewproj,
                                      glm::vec3& near_origin, glm::vec3& near_x, glm::vec3& near_y,
                                      glm::vec3& far_origin, glm::vec3& far_x, glm::vec3& far_y);
-        void cleanup();
 
-        // OpenGL resources
-        std::unique_ptr<Shader> shader_;
-        GLuint vao_ = 0;
-        GLuint vbo_ = 0;
-        GLuint blue_noise_texture_ = 0;
+        // OpenGL resources using RAII
+        ManagedShader shader_;
+        VAO vao_;
+        VBO vbo_;
+        Texture blue_noise_texture_;
 
         // Grid parameters
         GridPlane plane_ = GridPlane::XZ;

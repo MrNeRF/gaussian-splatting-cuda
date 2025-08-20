@@ -1,23 +1,23 @@
 #pragma once
 
+#include "gl_resources.hpp"
 #include "rendering/rendering.hpp"
-#include "shader.hpp"
+#include "shader_manager.hpp"
 #include <glm/glm.hpp>
-#include <memory>
 #include <vector>
 
 namespace gs::rendering {
     class RenderCoordinateAxes : public ICoordinateAxes {
     public:
         RenderCoordinateAxes();
-        ~RenderCoordinateAxes() override;
+        ~RenderCoordinateAxes() override = default;
 
         // ICoordinateAxes interface implementation
         void setSize(float size) override;
         [[nodiscard]] float getSize() const { return size_; }
 
-        // Initialize OpenGL resources
-        void init();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> init();
 
         // Check if initialized
         [[nodiscard]] bool isInitialized() const { return initialized_; }
@@ -29,24 +29,23 @@ namespace gs::rendering {
         void setAxisVisible(int axis, bool visible) override; // 0=X, 1=Y, 2=Z
         [[nodiscard]] bool isAxisVisible(int axis) const override;
 
-        // Render the coordinate axes
-        void render(const glm::mat4& view, const glm::mat4& projection);
+        // Render the coordinate axes - now returns Result
+        Result<void> render(const glm::mat4& view, const glm::mat4& projection);
 
     private:
         void createAxesGeometry();
-        void setupVertexData();
-        void createShaders();
-        void cleanup();
+        Result<void> setupVertexData();
 
-        // OpenGL resources
-        std::unique_ptr<Shader> shader_;
-        GLuint VAO_, VBO_;
+        // OpenGL resources using RAII
+        ManagedShader shader_;
+        VAO vao_;
+        VBO vbo_;
 
         // Axes properties
         float size_;
         float line_width_;
         bool initialized_;
-        bool axis_visible_[3]; // X, Y, Z visibility
+        bool axis_visible_[3]{}; // X, Y, Z visibility
 
         // Standard colors for coordinate axes
         static const glm::vec3 X_AXIS_COLOR; // Red
