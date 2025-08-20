@@ -22,7 +22,7 @@ jobs:
       - name: Install GCC 14 and dependencies
         run: |
           apt-get update
-          apt-get install -y git curl zip unzip tar cmake gcc-14 g++-14
+          apt-get install -y git curl zip unzip tar pkg-config cmake gcc-14 g++-14
           update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 \
                               --slave /usr/bin/g++ g++ /usr/bin/g++-14
 
