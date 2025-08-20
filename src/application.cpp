@@ -48,6 +48,7 @@ namespace gs {
                                                       .height = 720,
                                                       .antialiasing = params->optimization.antialiasing,
                                                       .enable_cuda_interop = true});
+        params->dataset.output_path;
 
         // Set parameters
         viewer->setParameters(*params);

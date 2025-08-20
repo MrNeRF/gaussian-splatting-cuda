@@ -397,16 +397,26 @@ namespace gs::management {
         auto project = std::make_shared<gs::management::Project>(true);
 
         project->setProjectName(project_name);
-        if (data.project_path.extension() != Project::EXTENSION) {
-            std::cerr << std::format("project_path must be {} file: {}", Project::EXTENSION, data.project_path.string()) << std::endl;
+        if (data.output_path.empty()) {
+            std::cerr << std::format("output_path is empty") << std::endl;
+            return nullptr;
+        }
+        std::filesystem::path project_path = data.project_path;
+        if (project_path.empty()) {
+            project_path = data.output_path / "project.ls";
+            std::cerr << std::format("project_path is empty - creating new project.ls file") << std::endl;
+        }
+
+        if (project_path.extension() != Project::EXTENSION) {
+            std::cerr << std::format("project_path must be {} file: {}", Project::EXTENSION, project_path.string()) << std::endl;
             return nullptr;
         }
         try {
-            if (data.project_path.parent_path().empty()) {
-                project->setProjectFileName(data.output_path / data.project_path);
-            } else {
-                project->setProjectFileName(data.project_path);
+            if (project_path.parent_path().empty()) {
+                std::cerr << std::format("project_path must have paraent directory: project_path: {} ", project_path.string()) << std::endl;
+                return nullptr;
             }
+            project->setProjectFileName(project_path);
             project->setProjectOutputFolder(data.output_path);
             project->setDataInfo(data);
             project->setOptimizationParams(opt);
