@@ -38,9 +38,7 @@ add_library(gs_visualizer STATIC
         scene/scene_manager.cpp
 
         # Input handling
-        input/input_handler.cpp
-        input/input_manager.cpp
-        input/camera_controller.cpp
+        input/input_controller.cpp
 
         # Training integration
         training/training_manager.cpp

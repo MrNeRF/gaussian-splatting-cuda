@@ -1,12 +1,6 @@
 #include "tools/crop_box_tool.hpp"
 #include "core/events.hpp"
 #include "rendering/rendering.hpp"
-
-// clang-format off
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-// clang-format on
-
 #include <cmath>
 #include <imgui.h>
 #include <iostream>
@@ -14,7 +8,6 @@
 namespace gs::visualizer {
 
     CropBoxTool::CropBoxTool() {
-        // Don't create the bounding box here - wait for initialize()
         setupEventHandlers();
     }
 
@@ -55,16 +48,19 @@ namespace gs::visualizer {
         bounding_box_.reset();
     }
 
-    void CropBoxTool::update([[maybe_unused]] const ToolContext& ctx) {
+    void CropBoxTool::update(const ToolContext& ctx) {
         // Nothing to update per frame for crop box
+        (void)ctx;
     }
 
-    void CropBoxTool::render([[maybe_unused]] const ToolContext& ctx) {
+    void CropBoxTool::render(const ToolContext& ctx) {
         // Rendering is handled by the rendering manager based on our state
         // This method could be used for tool-specific overlays if needed
+        (void)ctx;
     }
 
-    void CropBoxTool::renderUI([[maybe_unused]] const gs::gui::UIContext& ui_ctx, [[maybe_unused]] bool* p_open) {
+    void CropBoxTool::renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) {
+        (void)p_open;
         if (!isEnabled()) {
             return;
         }
@@ -77,7 +73,6 @@ namespace gs::visualizer {
             // Optionally disable crop box when tool is disabled
             show_crop_box_ = false;
             use_crop_box_ = false;
-            is_dragging_ = false;
 
             events::tools::CropBoxSettingsChanged{
                 .show_box = false,
@@ -96,58 +91,9 @@ namespace gs::visualizer {
         });
     }
 
-    bool CropBoxTool::isMouseOverHandle([[maybe_unused]] const glm::dvec2& mouse_pos) const {
-        // For now, just return false
-        return false;
-    }
+    void CropBoxTool::drawControls(const gs::gui::UIContext& ui_ctx) {
+        (void)ui_ctx;
 
-    void CropBoxTool::startDragging(const glm::dvec2& mouse_pos) {
-        is_dragging_ = true;
-        drag_start_pos_ = mouse_pos;
-        drag_start_box_min_ = bounding_box_->getMinBounds();
-        drag_start_box_max_ = bounding_box_->getMaxBounds();
-
-        // Determine which handle is being dragged
-        // This would involve projecting handles to screen space
-        current_handle_ = DragHandle::Center; // Simplified
-    }
-
-    void CropBoxTool::updateDragging(const glm::dvec2& mouse_pos) {
-        if (!is_dragging_)
-            return;
-
-        glm::dvec2 delta = mouse_pos - drag_start_pos_;
-
-        // Convert screen delta to world space delta
-        // This is simplified - real implementation would use proper unprojection
-        float scale = 0.01f;
-        glm::vec3 world_delta(delta.x * scale, -delta.y * scale, 0.0f);
-
-        // Update bounds based on which handle is being dragged
-        switch (current_handle_) {
-        case DragHandle::Center:
-            bounding_box_->setBounds(
-                drag_start_box_min_ + world_delta,
-                drag_start_box_max_ + world_delta);
-            break;
-        // Add cases for other handles...
-        default:
-            break;
-        }
-
-        events::ui::CropBoxChanged{
-            .min_bounds = bounding_box_->getMinBounds(),
-            .max_bounds = bounding_box_->getMaxBounds(),
-            .enabled = use_crop_box_}
-            .emit();
-    }
-
-    void CropBoxTool::stopDragging() {
-        is_dragging_ = false;
-        current_handle_ = DragHandle::None;
-    }
-
-    void CropBoxTool::drawControls([[maybe_unused]] const gs::gui::UIContext& ui_ctx) {
         if (!ImGui::CollapsingHeader("Crop Box")) {
             return;
         }

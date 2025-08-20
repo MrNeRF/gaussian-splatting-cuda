@@ -6,11 +6,6 @@
 #include "tools/background_tool.hpp"
 #include "training/training_manager.hpp"
 
-// clang-format off
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-// clang-format on
-
 namespace gs::visualizer {
 
     RenderingManager::RenderingManager()

@@ -6,7 +6,7 @@
 #include "core/parameters.hpp"
 #include "core/viewer_state_manager.hpp"
 #include "gui/gui_manager.hpp"
-#include "input/input_manager.hpp"
+#include "input/input_controller.hpp"
 #include "internal/viewport.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering/rendering_manager.hpp"
@@ -112,7 +112,7 @@ namespace gs::visualizer {
         // Core components
         Viewport viewport_;
         std::unique_ptr<WindowManager> window_manager_;
-        std::unique_ptr<InputManager> input_manager_;
+        std::unique_ptr<InputController> input_controller_;
         std::unique_ptr<RenderingManager> rendering_manager_;
         std::unique_ptr<SceneManager> scene_manager_;
         std::unique_ptr<ViewerStateManager> state_manager_;

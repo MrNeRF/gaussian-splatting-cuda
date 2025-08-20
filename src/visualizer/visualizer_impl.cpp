@@ -81,15 +81,13 @@ namespace gs::visualizer {
         main_loop_->setShouldCloseCallback([this]() { return window_manager_->shouldClose(); });
 
         // Set up GUI connections
-        gui_manager_->setScriptExecutor([this](const std::string& command) -> std::string {
-            return command_processor_->processCommand(command);
+        gui_manager_->setScriptExecutor([this](const std::string& cmd) {
+            return command_processor_->processCommand(cmd);
         });
 
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
         });
-
-        // Remove input manager setup from here - it's not created yet!
     }
 
     void VisualizerImpl::setupEventHandlers() {
@@ -188,39 +186,21 @@ namespace gs::visualizer {
             return false;
         }
 
-        // Create input manager
-        input_manager_ = std::make_unique<InputManager>(window_manager_->getWindow(), viewport_);
-        input_manager_->initialize();
-        input_manager_->setTrainingManager(trainer_manager_);
+        // Initialize GUI first (sets up ImGui callbacks)
+        gui_manager_->init();
+        gui_initialized_ = true;
 
-        // Set viewport focus check
-        input_manager_->setViewportFocusCheck([this]() {
-            return gui_manager_ && gui_manager_->isViewportFocused();
-        });
-
-        // Set position check for mouse events
-        input_manager_->setPositionCheck([this](double x, double y) {
-            return gui_manager_ && gui_manager_->isPositionInViewport(x, y);
-        });
-
-        // Set up input callbacks after input_manager_ is created
-        input_manager_->setupCallbacks(
-            [this]() { return gui_manager_ && gui_manager_->isAnyWindowActive(); },
-            [this](const std::filesystem::path& path, bool is_dataset) {
-                // The actual loading is now handled by DataLoadingService via events
-                events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
-                return true;
-            });
+        // Create simplified input controller AFTER ImGui is initialized
+        input_controller_ = std::make_unique<InputController>(
+            window_manager_->getWindow(), viewport_);
+        input_controller_->initialize(); // Must be AFTER gui_manager_->init()
+        input_controller_->setTrainingManager(trainer_manager_);
 
         // CRITICAL: Initialize rendering BEFORE tools
         rendering_manager_->initialize();
 
         // Initialize tools AFTER rendering is ready
         tool_manager_->initialize();
-
-        // Initialize GUI last
-        gui_manager_->init();
-        gui_initialized_ = true;
 
         return true;
     }
@@ -237,10 +217,20 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::render() {
-        // Update input routing based on current focus
-        if (input_manager_) {
-            input_manager_->updateInputRouting();
+        // Update input controller with viewport bounds
+        if (gui_manager_) {
+            auto pos = gui_manager_->getViewportPos();
+            auto size = gui_manager_->getViewportSize();
+            input_controller_->updateViewportBounds(pos.x, pos.y, size.x, size.y);
         }
+
+        // Update point cloud mode in input controller
+        auto* rendering_manager = getRenderingManager();
+        if (rendering_manager) {
+            const auto& settings = rendering_manager->getSettings();
+            input_controller_->setPointCloudMode(settings.point_cloud_mode);
+        }
+
         // Update rendering settings from state manager
         RenderSettings settings = rendering_manager_->getSettings();
 
@@ -286,6 +276,7 @@ namespace gs::visualizer {
 
             has_viewport_region = true;
         }
+
         // Get coord axes and world 2 user for rendering
         const gs::rendering::ICoordinateAxes* coord_axes_ptr = nullptr;
         if (auto coord_axes = getAxes()) {
