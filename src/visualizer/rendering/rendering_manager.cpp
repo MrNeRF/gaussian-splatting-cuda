@@ -163,12 +163,12 @@ namespace gs::visualizer {
             }
         }
 
-        // Setup viewport
+        // ONLY viewport management stays here - this is application-level concern
         glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Set viewport region for all subsequent rendering
+        // Set viewport region for rendering
         if (context.viewport_region) {
             glViewport(
                 static_cast<GLint>(context.viewport_region->x),
@@ -195,7 +195,7 @@ namespace gs::visualizer {
 
             engine_->presentToScreen(cached_result_, viewport_pos, render_size);
 
-            // CRITICAL FIX: Always render overlays even when using cached model!
+            // Always render overlays even when using cached model
             renderOverlays(context);
         }
 
@@ -210,15 +210,7 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
-        // Clear before starting
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // Enable depth testing for model
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
-        glDepthMask(GL_TRUE);
-
-        // 1. Render model (expensive, cache it)
+        // Render model
         if (model && model->size() > 0) {
             // Get background color
             glm::vec3 bg_color = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -281,9 +273,10 @@ namespace gs::visualizer {
             }
         }
 
-        // 2. Render overlays (with proper depth handling)
+        // Render overlays
         renderOverlays(context);
     }
+
     void RenderingManager::renderOverlays(const RenderContext& context) {
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
@@ -302,22 +295,8 @@ namespace gs::visualizer {
             .size = render_size,
             .fov = settings_.fov};
 
-        // CRITICAL: Clear depth buffer so overlays are always visible on top
-        glClear(GL_DEPTH_BUFFER_BIT);
-
-        // Enable depth testing but with special settings for overlays
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-
-        // Enable blending for transparency
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        // 1. Grid - render first with depth writing
+        // Grid
         if (settings_.show_grid && engine_) {
-            // Grid should write to depth buffer
-            glDepthMask(GL_TRUE);
-
             auto grid_result = engine_->renderGrid(
                 viewport,
                 static_cast<gs::rendering::GridPlane>(settings_.grid_plane),
@@ -328,11 +307,8 @@ namespace gs::visualizer {
             }
         }
 
-        // 2. Crop box wireframe - render without depth writing
+        // Crop box wireframe
         if (settings_.show_crop_box && context.crop_box && engine_) {
-            // Disable depth writing for wireframe
-            glDepthMask(GL_FALSE);
-
             auto transform = context.crop_box->getworld2BBox();
 
             gs::rendering::BoundingBox box{
@@ -347,16 +323,10 @@ namespace gs::visualizer {
             if (!bbox_result) {
                 std::println("Failed to render bounding box: {}", bbox_result.error());
             }
-
-            // Re-enable depth writing
-            glDepthMask(GL_TRUE);
         }
 
-        // 3. Coordinate axes - always on top
+        // Coordinate axes
         if (settings_.show_coord_axes && context.coord_axes && engine_) {
-            // Disable depth testing completely for axes
-            glDisable(GL_DEPTH_TEST);
-
             std::array<bool, 3> visible = {
                 context.coord_axes->isAxisVisible(0),
                 context.coord_axes->isAxisVisible(1),
@@ -366,13 +336,6 @@ namespace gs::visualizer {
             if (!axes_result) {
                 std::println("Failed to render coordinate axes: {}", axes_result.error());
             }
-
-            // Re-enable depth testing
-            glEnable(GL_DEPTH_TEST);
         }
-
-        // Restore default OpenGL state
-        glDepthMask(GL_TRUE);
-        glDepthFunc(GL_LESS);
     }
 } // namespace gs::visualizer

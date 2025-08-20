@@ -1,7 +1,6 @@
 #include "grid_renderer.hpp"
 #include "shader_paths.hpp"
 #include <format>
-#include <iostream>
 #include <random>
 #include <vector>
 
@@ -149,11 +148,16 @@ namespace gs::rendering {
         glGetIntegerv(GL_BLEND_SRC_RGB, &blend_src);
         glGetIntegerv(GL_BLEND_DST_RGB, &blend_dst);
         GLboolean blend_enabled = glIsEnabled(GL_BLEND);
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
 
-        // Set rendering state
+        // Clear depth buffer so grid is always visible
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        // Set rendering state for grid
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDepthMask(GL_TRUE);
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE); // Grid writes to depth buffer
 
         // Bind shader and set uniforms
         ShaderScope s(shader_);
@@ -196,6 +200,9 @@ namespace gs::rendering {
             glDisable(GL_BLEND);
         } else {
             glBlendFunc(blend_src, blend_dst);
+        }
+        if (!depth_test_enabled) {
+            glDisable(GL_DEPTH_TEST);
         }
 
         return {};

@@ -145,6 +145,12 @@ namespace gs::rendering {
         if (!initialized_ || !shader_.valid() || !vao_ || vertices_.empty())
             return {}; // Nothing to render if not initialized or no visible axes
 
+        // Save depth test state
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
+
+        // Axes should be always visible on top of everything
+        glDisable(GL_DEPTH_TEST);
+
         // Use GLLineGuard for line width management
         GLLineGuard line_guard(line_width_);
 
@@ -154,12 +160,21 @@ namespace gs::rendering {
         // Set uniforms (axes are in world space, so no model transform needed)
         glm::mat4 mvp = projection * view;
         if (auto result = s->set("u_mvp", mvp); !result) {
+            // Restore state before returning
+            if (depth_test_enabled) {
+                glEnable(GL_DEPTH_TEST);
+            }
             return result;
         }
 
         // Bind VAO and draw
         VAOBinder vao_bind(vao_);
         glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices_.size()));
+
+        // Restore depth test state
+        if (depth_test_enabled) {
+            glEnable(GL_DEPTH_TEST);
+        }
 
         return {};
     }

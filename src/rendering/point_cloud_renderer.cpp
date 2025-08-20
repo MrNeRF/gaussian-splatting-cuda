@@ -1,4 +1,5 @@
 #include "point_cloud_renderer.hpp"
+#include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
 #include <vector>
 
@@ -150,6 +151,9 @@ namespace gs::rendering {
             return {}; // Nothing to render
         }
 
+        // Use comprehensive state guard to isolate our state changes
+        GLStateGuard state_guard;
+
         // Get positions and SH coefficients
         torch::Tensor positions = splat_data.get_means();
         torch::Tensor shs = splat_data.get_shs();
@@ -192,9 +196,10 @@ namespace gs::rendering {
             return std::unexpected("Instance count exceeds reasonable limit");
         }
 
-        // Setup rendering state
+        // Setup rendering state for point cloud
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
+        glDepthMask(GL_TRUE);
         glClearColor(background_color.r, background_color.g, background_color.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -230,6 +235,7 @@ namespace gs::rendering {
             return std::unexpected(std::format("OpenGL error after draw call: 0x{:x}", gl_error));
         }
 
+        // State automatically restored by GLStateGuard destructor
         return {};
     }
 

@@ -116,6 +116,26 @@ namespace gs::rendering {
         if (!initialized_ || !shader_.valid() || !vao_)
             return std::unexpected("Bounding box renderer not initialized");
 
+        // Save current state that we'll modify
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean depth_mask;
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
+        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
+        GLint blend_src, blend_dst;
+        if (blend_enabled) {
+            glGetIntegerv(GL_BLEND_SRC_RGB, &blend_src);
+            glGetIntegerv(GL_BLEND_DST_RGB, &blend_dst);
+        }
+
+        // Set state for wireframe rendering:
+        // - Enable depth test so box respects depth
+        // - Disable depth writing so wireframe doesn't occlude things behind it
+        // - Enable blending for potential transparency
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
         // Use GLLineGuard for line width management
         GLLineGuard line_guard(line_width_);
 
@@ -134,6 +154,17 @@ namespace gs::rendering {
         // Bind VAO and draw
         VAOBinder vao_bind(vao_);
         glDrawElements(GL_LINES, static_cast<GLsizei>(indices_.size()), GL_UNSIGNED_INT, 0);
+
+        // Restore state
+        glDepthMask(depth_mask);
+        if (!depth_test_enabled) {
+            glDisable(GL_DEPTH_TEST);
+        }
+        if (!blend_enabled) {
+            glDisable(GL_BLEND);
+        } else {
+            glBlendFunc(blend_src, blend_dst);
+        }
 
         return {};
     }
