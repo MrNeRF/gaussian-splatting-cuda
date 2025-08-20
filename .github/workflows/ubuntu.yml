@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: nvidia/cuda:12.8.0-devel-ubuntu24.04
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/../vcpkg
 
     steps:
       - name: Checkout source
