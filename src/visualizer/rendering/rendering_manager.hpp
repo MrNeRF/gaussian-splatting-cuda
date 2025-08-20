@@ -99,10 +99,11 @@ namespace gs::visualizer {
         std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         FramerateController framerate_controller_;
 
-        // Minimal state
+        // State tracking
         std::atomic<bool> needs_render_{true};
         gs::rendering::RenderResult cached_result_;
         size_t last_model_ptr_ = 0;
+        glm::ivec2 last_render_size_{0, 0};
         std::chrono::steady_clock::time_point last_training_render_;
 
         // Settings

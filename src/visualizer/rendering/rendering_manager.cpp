@@ -51,6 +51,12 @@ namespace gs::visualizer {
             markDirty();
         });
 
+        // Window resize - ADD THIS!
+        events::ui::WindowResized::when([this](const auto&) {
+            markDirty();
+            cached_result_ = {}; // Clear cache on resize since dimensions changed
+        });
+
         // Grid settings
         events::ui::GridSettingsChanged::when([this](const auto& event) {
             std::lock_guard<std::mutex> lock(settings_mutex_);
@@ -66,6 +72,20 @@ namespace gs::visualizer {
         });
 
         events::state::SceneChanged::when([this](const auto&) {
+            markDirty();
+        });
+
+        // PLY visibility changes
+        events::cmd::SetPLYVisibility::when([this](const auto&) {
+            markDirty();
+        });
+
+        // PLY added/removed
+        events::state::PLYAdded::when([this](const auto&) {
+            markDirty();
+        });
+
+        events::state::PLYRemoved::when([this](const auto&) {
             markDirty();
         });
 
@@ -138,27 +158,42 @@ namespace gs::visualizer {
             initialize();
         }
 
+        // Calculate current render size
+        glm::ivec2 current_size = context.viewport.windowSize;
+        if (context.viewport_region) {
+            current_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+        }
+
+        // Detect viewport size change and invalidate cache
+        if (current_size != last_render_size_) {
+            needs_render_ = true;
+            cached_result_ = {}; // Clear cache - it's the wrong resolution!
+            last_render_size_ = current_size;
+        }
+
         // Get current model
         const SplatData* model = scene_manager ? scene_manager->getModelForRendering() : nullptr;
         size_t model_ptr = reinterpret_cast<size_t>(model);
 
-        // Detect model switch (PLY -> Training, etc)
+        // Detect model switch (PLY -> Training, invisible, etc)
         if (model_ptr != last_model_ptr_) {
             needs_render_ = true;
             last_model_ptr_ = model_ptr;
-            cached_result_ = {}; // Clear cache on model switch
+            cached_result_ = {}; // Always clear cache on model change
         }
 
-        // Check if camera moved
-        bool camera_moved = context.has_focus;
-
-        // Decision: should we render?
+        // Check if we should render
         bool should_render = false;
 
-        if (needs_render_) {
+        // Always render if we don't have a cached result
+        if (!cached_result_.image) {
+            should_render = true;
+        } else if (needs_render_) {
             should_render = true;
             needs_render_ = false;
-        } else if (camera_moved) {
+        } else if (context.has_focus) {
             should_render = true;
         } else if (scene_manager && scene_manager->hasDataset()) {
             // Check if actively training
@@ -173,7 +208,7 @@ namespace gs::visualizer {
             }
         }
 
-        // ONLY viewport management stays here - this is application-level concern
+        // Clear and set viewport
         glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -187,32 +222,28 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
-        if (should_render) {
+        if (should_render || !model) {
+            // ALWAYS render when we should OR when there's no model (to clear the view)
             doFullRender(context, scene_manager, model);
         } else if (cached_result_.image) {
-            // Reuse cached model result
+            // Only use cache if we have a model and a cached result
             glm::ivec2 viewport_pos(0, 0);
-            glm::ivec2 render_size = context.viewport.windowSize;
+            glm::ivec2 render_size = current_size;
 
             if (context.viewport_region) {
                 viewport_pos = glm::ivec2(
                     static_cast<int>(context.viewport_region->x),
                     static_cast<int>(context.viewport_region->y));
-                render_size = glm::ivec2(
-                    static_cast<int>(context.viewport_region->width),
-                    static_cast<int>(context.viewport_region->height));
             }
 
             engine_->presentToScreen(cached_result_, viewport_pos, render_size);
-
-            // Always render overlays even when using cached model
             renderOverlays(context);
         }
 
         framerate_controller_.endFrame();
     }
 
-    void RenderingManager::doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model) {
+    void RenderingManager::doFullRender(const RenderContext& context, [[maybe_unused]] SceneManager* scene_manager, const SplatData* model) {
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
             render_size = glm::ivec2(
@@ -220,7 +251,7 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
-        // Render model
+        // Render model if available
         if (model && model->size() > 0) {
             // Use background color from settings
             glm::vec3 bg_color = settings_.background_color;
@@ -280,7 +311,7 @@ namespace gs::visualizer {
             }
         }
 
-        // Render overlays
+        // Always render overlays
         renderOverlays(context);
     }
 
