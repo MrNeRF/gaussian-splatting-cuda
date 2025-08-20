@@ -3,8 +3,8 @@
 #include "geometry/euclidean_transform.hpp"
 #include "rendering/rendering.hpp"
 #include "scene/scene_manager.hpp"
-#include "tools/background_tool.hpp"
 #include "training/training_manager.hpp"
+#include <glad/glad.h>
 #include <print>
 
 namespace gs::visualizer {
@@ -45,6 +45,9 @@ namespace gs::visualizer {
             if (event.antialiasing) {
                 settings_.antialiasing = *event.antialiasing;
             }
+            if (event.background_color) {
+                settings_.background_color = *event.background_color;
+            }
             markDirty();
         });
 
@@ -67,12 +70,19 @@ namespace gs::visualizer {
         });
 
         // Crop box changes
-        events::ui::CropBoxChanged::when([this](const auto&) {
+        events::ui::CropBoxChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
+            settings_.crop_min = event.min_bounds;
+            settings_.crop_max = event.max_bounds;
+            settings_.use_crop_box = event.enabled;
             markDirty();
         });
 
         // Point cloud mode changes
-        events::ui::PointCloudModeChanged::when([this](const auto&) {
+        events::ui::PointCloudModeChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
+            settings_.point_cloud_mode = event.enabled;
+            settings_.voxel_size = event.voxel_size;
             markDirty();
         });
     }
@@ -212,11 +222,8 @@ namespace gs::visualizer {
 
         // Render model
         if (model && model->size() > 0) {
-            // Get background color
-            glm::vec3 bg_color = glm::vec3(0.0f, 0.0f, 0.0f);
-            if (context.background_tool) {
-                bg_color = context.background_tool->getBackgroundColor();
-            }
+            // Use background color from settings
+            glm::vec3 bg_color = settings_.background_color;
 
             gs::rendering::RenderRequest request{
                 .viewport = {
@@ -232,11 +239,11 @@ namespace gs::visualizer {
                 .voxel_size = settings_.voxel_size};
 
             // Add crop box if enabled
-            if (settings_.use_crop_box && context.crop_box) {
-                auto transform = context.crop_box->getworld2BBox();
+            if (settings_.use_crop_box) {
+                auto transform = settings_.crop_transform;
                 request.crop_box = gs::rendering::BoundingBox{
-                    .min = context.crop_box->getMinBounds(),
-                    .max = context.crop_box->getMaxBounds(),
+                    .min = settings_.crop_min,
+                    .max = settings_.crop_max,
                     .transform = transform.inv().toMat4()};
             }
 
@@ -308,31 +315,23 @@ namespace gs::visualizer {
         }
 
         // Crop box wireframe
-        if (settings_.show_crop_box && context.crop_box && engine_) {
-            auto transform = context.crop_box->getworld2BBox();
+        if (settings_.show_crop_box && engine_) {
+            auto transform = settings_.crop_transform;
 
             gs::rendering::BoundingBox box{
-                .min = context.crop_box->getMinBounds(),
-                .max = context.crop_box->getMaxBounds(),
+                .min = settings_.crop_min,
+                .max = settings_.crop_max,
                 .transform = transform.inv().toMat4()};
 
-            glm::vec3 color = context.crop_box->getColor();
-            float line_width = context.crop_box->getLineWidth();
-
-            auto bbox_result = engine_->renderBoundingBox(box, viewport, color, line_width);
+            auto bbox_result = engine_->renderBoundingBox(box, viewport, settings_.crop_color, settings_.crop_line_width);
             if (!bbox_result) {
                 std::println("Failed to render bounding box: {}", bbox_result.error());
             }
         }
 
         // Coordinate axes
-        if (settings_.show_coord_axes && context.coord_axes && engine_) {
-            std::array<bool, 3> visible = {
-                context.coord_axes->isAxisVisible(0),
-                context.coord_axes->isAxisVisible(1),
-                context.coord_axes->isAxisVisible(2)};
-
-            auto axes_result = engine_->renderCoordinateAxes(viewport, 2.0f, visible);
+        if (settings_.show_coord_axes && engine_) {
+            auto axes_result = engine_->renderCoordinateAxes(viewport, settings_.axes_size, settings_.axes_visibility);
             if (!axes_result) {
                 std::println("Failed to render coordinate axes: {}", axes_result.error());
             }

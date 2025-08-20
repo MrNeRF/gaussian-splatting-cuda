@@ -6,12 +6,6 @@ add_library(gs_visualizer STATIC
         core/data_loading_service.cpp
         core/command_processor.cpp
 
-        # Tools
-        tools/crop_box_tool.cpp
-        tools/tool_manager.cpp
-        tools/world_transform_tool.cpp
-        tools/background_tool.cpp
-
         # Window management
         window/window_manager.cpp
 
