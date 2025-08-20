@@ -1,10 +1,20 @@
 #pragma once
 
-// Include shader.hpp which already has the proper GLAD includes
-#include "shader.hpp"
-#include <iostream>
+// clang-format off
+// CRITICAL: GLAD must be included before other OpenGL usage
+#include <glad/glad.h>
+// clang-format on
+
+#include <expected>
+#include <stdexcept>
+#include <string>
 
 namespace gs::rendering {
+
+    // Consistent error handling
+    template <typename T>
+    using Result = std::expected<T, std::string>;
+
     class FrameBuffer {
 
     private:
@@ -18,7 +28,10 @@ namespace gs::rendering {
 
     public:
         FrameBuffer() {
-            init(width, height);
+            auto result = init(width, height);
+            if (!result) {
+                throw std::runtime_error(result.error());
+            }
         }
 
         virtual ~FrameBuffer() { // Made virtual for proper inheritance
@@ -27,7 +40,7 @@ namespace gs::rendering {
             glDeleteTextures(1, &depthTexture);
         }
 
-        void init(int w, int h) {
+        Result<void> init(int w, int h) {
             width = w;
             height = h;
 
@@ -58,10 +71,11 @@ namespace gs::rendering {
                                    GL_TEXTURE_2D, depthTexture, 0);
 
             if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-                std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+                return std::unexpected("Framebuffer is not complete");
             }
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            return {};
         }
 
         virtual void resize(int newWidth, int newHeight) { // Made virtual

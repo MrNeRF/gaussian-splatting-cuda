@@ -1,87 +1,95 @@
 #include "rendering_engine_impl.hpp"
-#include "core/splat_data.hpp"
+#include "framebuffer_factory.hpp"
 #include "geometry/bounding_box.hpp"
 #include <print>
 
 namespace gs::rendering {
 
-    RenderingEngineImpl::RenderingEngineImpl() = default;
+    RenderingEngineImpl::RenderingEngineImpl() {
+        std::println("Initializing RenderingEngineImpl");
+    };
 
     RenderingEngineImpl::~RenderingEngineImpl() {
-        if (initialized_) {
-            shutdown();
-        }
+        shutdown();
     }
 
-    void RenderingEngineImpl::initialize() {
-        if (initialized_)
-            return;
+    Result<void> RenderingEngineImpl::initialize() {
+        // Check if already initialized by checking if key components exist
+        if (quad_shader_.valid()) {
+            return {};
+        }
 
         std::println("Initializing rendering engine...");
 
-        // Initialize components
-        pipeline_ = std::make_unique<RenderingPipeline>();
-        point_cloud_renderer_ = std::make_unique<PointCloudRenderer>();
-        point_cloud_renderer_->initialize();
+        // Create screen renderer with preferred mode
+        screen_renderer_ = std::make_shared<ScreenQuadRenderer>(getPreferredFrameBufferMode());
 
-#ifdef CUDA_GL_INTEROP_ENABLED
-        screen_renderer_ = std::make_shared<ScreenQuadRendererInterop>(true);
-#else
-        screen_renderer_ = std::make_shared<ScreenQuadRenderer>();
-#endif
+        if (auto result = grid_renderer_.init(); !result) {
+            shutdown();
+            return std::unexpected(result.error());
+        }
 
-        grid_renderer_ = std::make_unique<RenderInfiniteGrid>();
-        grid_renderer_->init();
+        if (auto result = bbox_renderer_.init(); !result) {
+            shutdown();
+            return std::unexpected(result.error());
+        }
 
-        bbox_renderer_ = std::make_unique<RenderBoundingBox>();
-        bbox_renderer_->init();
+        if (auto result = axes_renderer_.init(); !result) {
+            shutdown();
+            return std::unexpected(result.error());
+        }
 
-        axes_renderer_ = std::make_unique<RenderCoordinateAxes>();
-        axes_renderer_->init();
+        if (auto result = viewport_gizmo_.initialize(); !result) {
+            shutdown();
+            return std::unexpected(result.error());
+        }
 
-        viewport_gizmo_ = std::make_unique<ViewportGizmo>();
-        viewport_gizmo_->initialize();
+        auto shader_result = initializeShaders();
+        if (!shader_result) {
+            shutdown(); // Clean up partial initialization
+            return std::unexpected(shader_result.error());
+        }
 
-        initializeShaders();
-
-        initialized_ = true;
         std::println("Rendering engine initialized successfully");
+        return {};
     }
 
     void RenderingEngineImpl::shutdown() {
-        if (!initialized_)
-            return;
-
-        // Cleanup in reverse order
-        axes_renderer_.reset();
-        bbox_renderer_.reset();
-        grid_renderer_.reset();
-        quad_shader_.reset();
+        // Just reset/clean up - safe to call multiple times
+        quad_shader_ = ManagedShader();
         screen_renderer_.reset();
-        point_cloud_renderer_.reset();
-        pipeline_.reset();
-        viewport_gizmo_.reset();
-
-        initialized_ = false;
+        // Other components clean up in their destructors
     }
 
-    void RenderingEngineImpl::initializeShaders() {
-        std::string shader_path = std::string(SHADER_PATH) + "/";
-        quad_shader_ = std::make_shared<Shader>(
-            (shader_path + "screen_quad.vert").c_str(),
-            (shader_path + "screen_quad.frag").c_str(),
-            true);
+    bool RenderingEngineImpl::isInitialized() const {
+        // Check if key components exist
+        return quad_shader_.valid() && screen_renderer_;
     }
 
-    RenderResult RenderingEngineImpl::renderGaussians(
+    Result<void> RenderingEngineImpl::initializeShaders() {
+        auto result = load_shader("screen_quad", "screen_quad.vert", "screen_quad.frag", true);
+        if (!result) {
+            return std::unexpected(std::string("Failed to create shaders: ") + result.error().what());
+        }
+        quad_shader_ = std::move(*result);
+        return {};
+    }
+
+    Result<RenderResult> RenderingEngineImpl::renderGaussians(
         const SplatData& splat_data,
         const RenderRequest& request) {
 
-        if (!initialized_) {
-            return RenderResult{.valid = false};
+        if (!isInitialized()) {
+            return std::unexpected("Rendering engine not initialized");
         }
 
-        // Convert to internal pipeline request
+        // Validate request
+        if (request.viewport.size.x <= 0 || request.viewport.size.y <= 0 ||
+            request.viewport.size.x > 16384 || request.viewport.size.y > 16384) {
+            return std::unexpected("Invalid viewport dimensions");
+        }
+
+        // Convert to internal pipeline request using designated initializers
         RenderingPipeline::RenderRequest pipeline_req{
             .view_rotation = request.viewport.rotation,
             .view_translation = request.viewport.translation,
@@ -108,120 +116,125 @@ namespace gs::rendering {
             pipeline_req.crop_box = temp_crop_box.get();
         }
 
-        auto pipeline_result = pipeline_->render(splat_data, pipeline_req);
+        auto pipeline_result = pipeline_.render(splat_data, pipeline_req);
+
+        if (!pipeline_result) {
+            return std::unexpected(pipeline_result.error());
+        }
 
         // Convert result
-        RenderResult result;
-        result.valid = pipeline_result.valid;
-        if (pipeline_result.valid) {
-            result.image = std::make_shared<torch::Tensor>(pipeline_result.image);
-            result.depth = std::make_shared<torch::Tensor>(pipeline_result.depth);
-        }
+        RenderResult result{
+            .image = std::make_shared<torch::Tensor>(pipeline_result->image),
+            .depth = std::make_shared<torch::Tensor>(pipeline_result->depth)};
 
         return result;
     }
-
-    void RenderingEngineImpl::presentToScreen(
+    Result<void> RenderingEngineImpl::presentToScreen(
         const RenderResult& result,
         const glm::ivec2& viewport_pos,
         const glm::ivec2& viewport_size) {
 
-        if (!initialized_ || !result.valid || !result.image)
-            return;
+        if (!isInitialized()) {
+            return std::unexpected("Rendering engine not initialized");
+        }
+
+        if (!result.image) {
+            return std::unexpected("Invalid render result");
+        }
 
         // Convert back to internal result type
         RenderingPipeline::RenderResult internal_result;
-        internal_result.valid = result.valid;
         internal_result.image = *result.image;
-        if (result.depth) {
-            internal_result.depth = *result.depth;
-        }
+        internal_result.depth = result.depth ? *result.depth : torch::Tensor();
+        internal_result.valid = true;
 
-        RenderingPipeline::uploadToScreen(internal_result, *screen_renderer_, viewport_size);
+        if (auto upload_result = RenderingPipeline::uploadToScreen(internal_result, *screen_renderer_, viewport_size);
+            !upload_result) {
+            return upload_result;
+        }
 
         // Set viewport for rendering
         glViewport(viewport_pos.x, viewport_pos.y, viewport_size.x, viewport_size.y);
-        screen_renderer_->render(quad_shader_);
+
+        // Use the quad shader directly
+        return screen_renderer_->render(quad_shader_);
     }
 
-    void RenderingEngineImpl::renderGrid(
+    Result<void> RenderingEngineImpl::renderGrid(
         const ViewportData& viewport,
         GridPlane plane,
         float opacity) {
 
-        if (!initialized_ || !grid_renderer_)
-            return;
+        if (!isInitialized() || !grid_renderer_.isInitialized())
+            return std::unexpected("Grid renderer not initialized");
 
         auto view = createViewMatrix(viewport);
         auto proj = createProjectionMatrix(viewport);
 
-        grid_renderer_->setPlane(static_cast<RenderInfiniteGrid::GridPlane>(plane));
-        grid_renderer_->setOpacity(opacity);
-        grid_renderer_->render(view, proj);
+        grid_renderer_.setPlane(static_cast<RenderInfiniteGrid::GridPlane>(plane));
+        grid_renderer_.setOpacity(opacity);
+
+        return grid_renderer_.render(view, proj);
     }
 
-    void RenderingEngineImpl::renderBoundingBox(
+    Result<void> RenderingEngineImpl::renderBoundingBox(
         const BoundingBox& box,
         const ViewportData& viewport,
         const glm::vec3& color,
         float line_width) {
 
-        if (!initialized_ || !bbox_renderer_)
-            return;
+        if (!isInitialized() || !bbox_renderer_.isInitialized())
+            return std::unexpected("Bounding box renderer not initialized");
 
-        bbox_renderer_->setBounds(box.min, box.max);
-        bbox_renderer_->setColor(color);
-        bbox_renderer_->setLineWidth(line_width);
+        bbox_renderer_.setBounds(box.min, box.max);
+        bbox_renderer_.setColor(color);
+        bbox_renderer_.setLineWidth(line_width);
 
         // Set the transform from the box
         geometry::EuclideanTransform transform(box.transform);
-        bbox_renderer_->setworld2BBox(transform);
+        bbox_renderer_.setworld2BBox(transform);
 
         auto view = createViewMatrix(viewport);
         auto proj = createProjectionMatrix(viewport);
 
-        bbox_renderer_->render(view, proj);
+        return bbox_renderer_.render(view, proj);
     }
 
-    void RenderingEngineImpl::renderCoordinateAxes(
+    Result<void> RenderingEngineImpl::renderCoordinateAxes(
         const ViewportData& viewport,
         float size,
         const std::array<bool, 3>& visible) {
 
-        if (!initialized_ || !axes_renderer_)
-            return;
+        if (!isInitialized() || !axes_renderer_.isInitialized())
+            return std::unexpected("Axes renderer not initialized");
 
-        axes_renderer_->setSize(size);
+        axes_renderer_.setSize(size);
         for (int i = 0; i < 3; ++i) {
-            axes_renderer_->setAxisVisible(i, visible[i]);
+            axes_renderer_.setAxisVisible(i, visible[i]);
         }
 
         auto view = createViewMatrix(viewport);
         auto proj = createProjectionMatrix(viewport);
 
-        axes_renderer_->render(view, proj);
+        return axes_renderer_.render(view, proj);
     }
 
-    void RenderingEngineImpl::renderViewportGizmo(
+    Result<void> RenderingEngineImpl::renderViewportGizmo(
         const glm::mat3& camera_rotation,
         const glm::vec2& viewport_pos,
         const glm::vec2& viewport_size) {
 
-        if (!initialized_ || !viewport_gizmo_)
-            return;
+        if (!isInitialized())
+            return std::unexpected("Viewport gizmo not initialized");
 
-        viewport_gizmo_->render(camera_rotation, viewport_pos, viewport_size);
+        return viewport_gizmo_.render(camera_rotation, viewport_pos, viewport_size);
     }
 
     RenderingPipelineResult RenderingEngineImpl::renderWithPipeline(
         const SplatData& model,
         const RenderingPipelineRequest& request) {
 
-        if (!pipeline_) {
-            pipeline_ = std::make_unique<RenderingPipeline>();
-        }
-
-        // Convert from public types to internal types
+        // Convert from public types to internal types using designated initializers
         RenderingPipeline::RenderRequest internal_request{
             .view_rotation = request.view_rotation,
             .view_translation = request.view_translation,
@@ -235,14 +248,21 @@ namespace gs::rendering {
             .point_cloud_mode = request.point_cloud_mode,
             .voxel_size = request.voxel_size};
 
-        auto result = pipeline_->render(model, internal_request);
+        auto result = pipeline_.render(model, internal_request);
 
         // Convert back to public types
         RenderingPipelineResult public_result;
-        public_result.valid = result.valid;
-        if (result.valid) {
-            public_result.image = result.image;
-            public_result.depth = result.depth;
+
+        if (!result) {
+            public_result.valid = false;
+            // Log error but don't expose internal error details
+            std::cerr << "Pipeline render error: " << result.error() << std::endl;
+        } else {
+            public_result.valid = result->valid;
+            if (result->valid) {
+                public_result.image = result->image;
+                public_result.depth = result->depth;
+            }
         }
 
         return public_result;
@@ -275,25 +295,29 @@ namespace gs::rendering {
         return glm::perspective(fov_rad, aspect, 0.1f, 1000.0f);
     }
 
-    std::shared_ptr<IBoundingBox> RenderingEngineImpl::createBoundingBox() {
+    Result<std::shared_ptr<IBoundingBox>> RenderingEngineImpl::createBoundingBox() {
         // Make sure we're initialized first
-        if (!initialized_) {
-            throw std::runtime_error("RenderingEngine must be initialized before creating bounding boxes");
+        if (!isInitialized()) {
+            return std::unexpected("RenderingEngine must be initialized before creating bounding boxes");
         }
 
         auto bbox = std::make_shared<RenderBoundingBox>();
-        bbox->init();
+        if (auto result = bbox->init(); !result) {
+            return std::unexpected(result.error());
+        }
         return bbox;
     }
 
-    std::shared_ptr<ICoordinateAxes> RenderingEngineImpl::createCoordinateAxes() {
+    Result<std::shared_ptr<ICoordinateAxes>> RenderingEngineImpl::createCoordinateAxes() {
         // Make sure we're initialized first
-        if (!initialized_) {
-            throw std::runtime_error("RenderingEngine must be initialized before creating coordinate axes");
+        if (!isInitialized()) {
+            return std::unexpected("RenderingEngine must be initialized before creating coordinate axes");
         }
 
         auto axes = std::make_shared<RenderCoordinateAxes>();
-        axes->init();
+        if (auto result = axes->init(); !result) {
+            return std::unexpected(result.error());
+        }
         return axes;
     }
 

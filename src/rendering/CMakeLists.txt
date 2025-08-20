@@ -8,6 +8,9 @@ set(RENDERING_SOURCES
         axes_renderer.cpp
         text_renderer.cpp
         viewport_gizmo.cpp
+        framebuffer_factory.cpp
+        shader_manager.cpp
+        screen_renderer.cpp
 )
 
 # Conditionally add CUDA GL interop

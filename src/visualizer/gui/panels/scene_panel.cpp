@@ -40,19 +40,14 @@ namespace gs::gui {
     }
 
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
-        // Switch mode based on type
         if (event.type == events::state::SceneLoaded::Type::PLY) {
             m_currentMode = DisplayMode::PLYSceneGraph;
-            // Clear any existing nodes
             m_plyNodes.clear();
             m_selectedPLYIndex = -1;
-            // Don't try to update nodes here - wait for PLYAdded events
         } else if (event.type == events::state::SceneLoaded::Type::Dataset) {
             m_currentMode = DisplayMode::DatasetImages;
-            // Clear PLY nodes when switching to dataset mode
             m_plyNodes.clear();
             m_selectedPLYIndex = -1;
-            // Load the image list from the dataset
             if (!event.path.empty()) {
                 loadImageCams(event.path);
             }
@@ -108,9 +103,6 @@ namespace gs::gui {
     }
 
     void ScenePanel::updatePLYNodes() {
-        // Query scene for current nodes
-        events::query::GetSceneInfo{}.emit();
-
         // For now, we'll rebuild the node list when we get events
         // In a more sophisticated implementation, we'd query the scene directly
     }

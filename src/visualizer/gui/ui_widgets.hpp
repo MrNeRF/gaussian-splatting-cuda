@@ -18,9 +18,4 @@ namespace gs::gui::widgets {
 
     // Mode display helpers
     void DrawModeStatus(const UIContext& ctx);
-    const char* GetTrainerStateString(int state);
-
-    // Console command execution
-    std::string executeConsoleCommand(const std::string& command,
-                                      visualizer::VisualizerImpl* viewer);
 } // namespace gs::gui::widgets
