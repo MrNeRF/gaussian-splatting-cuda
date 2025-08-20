@@ -390,6 +390,10 @@ namespace gs::visualizer {
             std::cerr << "reading  project file failed " << path.string() << std::endl;
             return false;
         }
+        if (!project->validateProjectData()) {
+            std::cerr << "failed to validate project" << std::endl;
+            return false;
+        }
 
         project_ = project;
     }
@@ -402,7 +406,7 @@ namespace gs::visualizer {
         return project_->writeToFile();
     }
 
-    std::shared_ptr<gs::management::Project> VisualizerImpl::getProject(const std::filesystem::path& path) {
+    std::shared_ptr<gs::management::Project> VisualizerImpl::getProject() {
         return project_;
     }
 

@@ -48,7 +48,31 @@ namespace gs {
                                                       .height = 720,
                                                       .antialiasing = params->optimization.antialiasing,
                                                       .enable_cuda_interop = true});
-        params->dataset.output_path;
+
+        if (!params->dataset.project_path.empty() &&
+            !std::filesystem::exists(params->dataset.project_path)) {
+            std::println(stderr, "project file does not exists {}", params->dataset.project_path.string());
+            return -1;
+        }
+
+        if (std::filesystem::exists(params->dataset.project_path)) {
+            bool success = viewer->openProject(params->dataset.project_path);
+            if (!success) {
+                std::println(stderr, "error opening existing project");
+                return -1;
+            }
+            if (!params->ply_path.empty()) {
+                std::println(stderr, "can not open ply and open project from commandline");
+                return -1;
+            }
+            if (!params->dataset.data_path.empty()) {
+                std::println(stderr, "can open new data_path and project from commandline");
+                return -1;
+            }
+            auto project = viewer->getProject();
+
+            // params->dataset = static_cast<param::DatasetConfig>(project->getProjectData().data_set_info);
+        }
 
         // Set parameters
         viewer->setParameters(*params);

@@ -44,7 +44,7 @@ namespace gs::visualizer {
 
         bool openProject(const std::filesystem::path& path) override;
         bool closeProject(const std::filesystem::path& path) override;
-        std::shared_ptr<gs::management::Project> getProject(const std::filesystem::path& path) override;
+        std::shared_ptr<gs::management::Project> getProject() override;
 
         // Getters for GUI (delegating to state manager)
         ViewerMode getCurrentMode() const { return state_manager_->getCurrentMode(); }
