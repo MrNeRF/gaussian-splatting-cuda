@@ -2,9 +2,11 @@
 
 #include "geometry/euclidean_transform.hpp"
 #include <array>
+#include <expected>
 #include <glm/glm.hpp>
 #include <memory>
 #include <optional>
+#include <string>
 #include <torch/types.h>
 
 namespace gs {
@@ -12,6 +14,10 @@ namespace gs {
 }
 
 namespace gs::rendering {
+
+    // Error handling with std::expected (C++23)
+    template <typename T>
+    using Result = std::expected<T, std::string>;
 
     // Public types
     struct ViewportData {
@@ -40,7 +46,6 @@ namespace gs::rendering {
     struct RenderResult {
         std::shared_ptr<torch::Tensor> image;
         std::shared_ptr<torch::Tensor> depth;
-        bool valid = false;
     };
 
     enum class GridPlane {
@@ -77,8 +82,6 @@ namespace gs::rendering {
         torch::Tensor image;
         torch::Tensor depth;
         bool valid = false;
-
-        RenderingPipelineResult(bool v = false) : valid(v) {}
     };
 
     // Interface for bounding box manipulation (for visualizer)
@@ -123,40 +126,40 @@ namespace gs::rendering {
         virtual ~RenderingEngine() = default;
 
         // Lifecycle
-        virtual void initialize() = 0;
+        virtual Result<void> initialize() = 0;
         virtual void shutdown() = 0;
         virtual bool isInitialized() const = 0;
 
-        // Core rendering
-        virtual RenderResult renderGaussians(
+        // Core rendering with error handling
+        virtual Result<RenderResult> renderGaussians(
             const SplatData& splat_data,
             const RenderRequest& request) = 0;
 
         // Present to screen
-        virtual void presentToScreen(
+        virtual Result<void> presentToScreen(
             const RenderResult& result,
             const glm::ivec2& viewport_pos,
             const glm::ivec2& viewport_size) = 0;
 
-        // Overlay rendering
-        virtual void renderGrid(
+        // Overlay rendering - now returns Result for consistency
+        virtual Result<void> renderGrid(
             const ViewportData& viewport,
             GridPlane plane = GridPlane::XZ,
             float opacity = 0.5f) = 0;
 
-        virtual void renderBoundingBox(
+        virtual Result<void> renderBoundingBox(
             const BoundingBox& box,
             const ViewportData& viewport,
             const glm::vec3& color = glm::vec3(1.0f, 1.0f, 0.0f),
             float line_width = 2.0f) = 0;
 
-        virtual void renderCoordinateAxes(
+        virtual Result<void> renderCoordinateAxes(
             const ViewportData& viewport,
             float size = 2.0f,
             const std::array<bool, 3>& visible = {true, true, true}) = 0;
 
         // Viewport gizmo rendering
-        virtual void renderViewportGizmo(
+        virtual Result<void> renderViewportGizmo(
             const glm::mat3& camera_rotation,
             const glm::vec2& viewport_pos,
             const glm::vec2& viewport_size) = 0;
@@ -166,9 +169,9 @@ namespace gs::rendering {
             const SplatData& model,
             const RenderingPipelineRequest& request) = 0;
 
-        // Factory methods for tools
-        virtual std::shared_ptr<IBoundingBox> createBoundingBox() = 0;
-        virtual std::shared_ptr<ICoordinateAxes> createCoordinateAxes() = 0;
+        // Factory methods - now return Result
+        virtual Result<std::shared_ptr<IBoundingBox>> createBoundingBox() = 0;
+        virtual Result<std::shared_ptr<ICoordinateAxes>> createCoordinateAxes() = 0;
     };
 
 } // namespace gs::rendering

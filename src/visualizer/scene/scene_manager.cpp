@@ -1,10 +1,7 @@
 #include "scene/scene_manager.hpp"
-#include "core/model_providers.hpp"
 #include "core/training_setup.hpp"
 #include "loader/loader.hpp"
-#include "rendering/rendering.hpp"
 #include "training/training_manager.hpp"
-#include <chrono>
 #include <print>
 
 namespace gs {
@@ -13,443 +10,307 @@ namespace gs {
         setupEventHandlers();
     }
 
-    SceneManager::~SceneManager() {
-        // Cleanup handled automatically
-    }
+    SceneManager::~SceneManager() = default;
 
     void SceneManager::setupEventHandlers() {
         using namespace events;
 
-        cmd::ClearScene::when([this](const auto&) {
-            clearScene();
-        });
-
-        // Handle add PLY command
+        // Handle PLY commands
         cmd::AddPLY::when([this](const auto& cmd) {
-            addPLYInternal(cmd.path);
+            addPLY(cmd.path, cmd.name);
         });
 
-        // Query handlers
-        query::GetSceneInfo::when([this](const auto&) {
-            auto state = getCurrentState();
-
-            query::SceneInfo response;
-
-            // Map internal state to response
-            switch (state.type) {
-            case SceneType::None:
-                response.type = query::SceneInfo::Type::None;
-                break;
-            case SceneType::PLY:
-                response.type = query::SceneInfo::Type::PLY;
-                break;
-            case SceneType::Dataset:
-                response.type = query::SceneInfo::Type::Dataset;
-                break;
-            }
-
-            response.source_path = state.source_path;
-            response.num_gaussians = state.num_gaussians;
-            response.is_training = state.is_training;
-            response.has_model = hasScene();
-
-            response.emit();
+        cmd::RemovePLY::when([this](const auto& cmd) {
+            removePLY(cmd.name);
         });
 
-        query::GetRenderCapabilities::when([this](const auto&) {
-            query::RenderCapabilities response;
-
-            response.modes = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
-            response.supports_antialiasing = true;
-            response.supports_depth = true;
-            response.max_width = 4096;
-            response.max_height = 4096;
-
-            response.emit();
+        cmd::SetPLYVisibility::when([this](const auto& cmd) {
+            setPLYVisibility(cmd.name, cmd.visible);
         });
 
-        // Training event handlers
-        state::TrainingStarted::when([this](const auto&) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (current_state_.type == SceneType::Dataset) {
-                current_state_.is_training = true;
-                current_state_.training_iteration = 0;
-            }
+        cmd::ClearScene::when([this](const auto&) {
+            clear();
         });
-
-        state::TrainingCompleted::when([this](const auto& event) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (current_state_.type == SceneType::Dataset) {
-                current_state_.is_training = false;
-                current_state_.training_iteration = event.iteration;
-            }
-        });
-
-        state::ModelUpdated::when([this](const auto& event) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            current_state_.num_gaussians = event.num_gaussians;
-            if (current_state_.is_training) {
-                current_state_.training_iteration = event.iteration;
-            }
-        });
-
-        // Handle PLY events to update state
-        state::PLYAdded::when([this](const auto& event) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (current_state_.type == SceneType::PLY) {
-                current_state_.num_gaussians = event.total_gaussians;
-                current_state_.num_plys = scene_ ? scene_->getSceneNodes().size() : 0;
-            }
-        });
-
-        state::PLYRemoved::when([this](const auto&) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (current_state_.type == SceneType::PLY && scene_) {
-                current_state_.num_gaussians = scene_->getTotalGaussianCount();
-                current_state_.num_plys = scene_->getSceneNodes().size();
-            }
-        });
-
-        // Handle render requests
-        internal::RenderRequest::when([this](const auto& cmd) {
-            gs::rendering::RenderingPipelineRequest request{
-                .view_rotation = cmd.view_rotation,
-                .view_translation = cmd.view_translation,
-                .viewport_size = cmd.viewport_size,
-                .fov = cmd.fov,
-                .scaling_modifier = cmd.scaling_modifier,
-                .antialiasing = cmd.antialiasing,
-                .render_mode = static_cast<gs::rendering::RenderMode>(cmd.render_mode),
-                .crop_box = cmd.crop_box,
-                .background_color = glm::vec3(0.0f, 0.0f, 0.0f),
-                .point_cloud_mode = false,
-                .voxel_size = 0.01f};
-
-            auto result = render(request);
-
-            internal::RenderComplete{
-                .request_id = cmd.request_id,
-                .success = result.valid,
-                .render_ms = 0.0f // TODO: Add timing
-            }
-                .emit();
-        });
-    }
-
-    void SceneManager::setScene(std::unique_ptr<Scene> scene) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        scene_ = std::move(scene);
-        updateSceneState();
     }
 
     void SceneManager::loadPLY(const std::filesystem::path& path) {
         try {
-            loadPLYInternal(path);
+            std::println("SceneManager: Loading PLY file: {}", path.string());
+
+            // Clear existing scene
+            clear();
+
+            // Load the PLY
+            auto loader = gs::loader::Loader::create();
+            gs::loader::LoadOptions options{
+                .resize_factor = -1,
+                .images_folder = "images",
+                .validate_only = false};
+
+            auto load_result = loader->load(path, options);
+            if (!load_result) {
+                throw std::runtime_error(load_result.error());
+            }
+
+            auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
+            if (!splat_data || !*splat_data) {
+                throw std::runtime_error("Expected PLY file but got different data type");
+            }
+
+            // Add to scene
+            std::string name = path.stem().string();
+            scene_.addNode(name, std::make_unique<SplatData>(std::move(**splat_data)));
+
+            // Update content state
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                content_type_ = ContentType::PLYFiles;
+                ply_paths_.clear();
+                ply_paths_.push_back(path);
+            }
+
+            // Emit events
+            events::state::SceneLoaded{
+                .scene = nullptr,
+                .path = path,
+                .type = events::state::SceneLoaded::Type::PLY,
+                .num_gaussians = scene_.getTotalGaussianCount()}
+                .emit();
+
+            events::state::PLYAdded{
+                .name = name,
+                .total_gaussians = scene_.getTotalGaussianCount()}
+                .emit();
+
+            emitSceneChanged();
+
         } catch (const std::exception& e) {
             events::notify::Error{
                 .message = std::format("Failed to load PLY: {}", e.what()),
-                .details = std::format("Path: {}", path.string())}
+                .details = path.string()}
                 .emit();
         }
     }
 
-    void SceneManager::addPLY(const std::filesystem::path& path) {
+    void SceneManager::addPLY(const std::filesystem::path& path, const std::string& name_hint) {
         try {
-            addPLYInternal(path);
+            // If not in PLY mode, switch to it
+            if (content_type_ != ContentType::PLYFiles) {
+                loadPLY(path);
+                return;
+            }
+
+            std::println("SceneManager: Adding PLY to scene: {}", path.string());
+
+            // Load the PLY
+            auto loader = gs::loader::Loader::create();
+            gs::loader::LoadOptions options{
+                .resize_factor = -1,
+                .images_folder = "images",
+                .validate_only = false};
+
+            auto load_result = loader->load(path, options);
+            if (!load_result) {
+                throw std::runtime_error(load_result.error());
+            }
+
+            auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
+            if (!splat_data || !*splat_data) {
+                throw std::runtime_error("Expected PLY file");
+            }
+
+            // Generate unique name
+            std::string base_name = name_hint.empty() ? path.stem().string() : name_hint;
+            std::string name = base_name;
+            int counter = 1;
+
+            while (scene_.getNode(name) != nullptr) {
+                name = std::format("{}_{}", base_name, counter++);
+            }
+
+            scene_.addNode(name, std::make_unique<SplatData>(std::move(**splat_data)));
+
+            // Update paths
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                ply_paths_.push_back(path);
+            }
+
+            events::state::PLYAdded{
+                .name = name,
+                .total_gaussians = scene_.getTotalGaussianCount()}
+                .emit();
+
+            emitSceneChanged();
+
         } catch (const std::exception& e) {
             events::notify::Error{
                 .message = std::format("Failed to add PLY: {}", e.what()),
-                .details = std::format("Path: {}", path.string())}
+                .details = path.string()}
                 .emit();
         }
+    }
+
+    void SceneManager::removePLY(const std::string& name) {
+        scene_.removeNode(name);
+
+        // If no nodes left, transition to empty
+        if (scene_.getNodeCount() == 0) {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            content_type_ = ContentType::Empty;
+            ply_paths_.clear();
+        }
+
+        events::state::PLYRemoved{.name = name}.emit();
+        emitSceneChanged();
+    }
+
+    void SceneManager::setPLYVisibility(const std::string& name, bool visible) {
+        scene_.setNodeVisibility(name, visible);
+        emitSceneChanged();
     }
 
     void SceneManager::loadDataset(const std::filesystem::path& path,
                                    const param::TrainingParameters& params) {
         try {
-            trainer_manager_->clearTrainer(); // mainly to stop training thread
-            cached_params_ = params;          // Cache for potential reloads
-            loadDatasetInternal(path, params);
+            std::println("SceneManager: Loading dataset: {}", path.string());
+
+            // Stop any existing training
+            if (trainer_manager_) {
+                trainer_manager_->clearTrainer();
+            }
+
+            // Clear scene
+            clear();
+
+            // Setup training
+            auto dataset_params = params;
+            dataset_params.dataset.data_path = path;
+            cached_params_ = dataset_params;
+
+            auto setup_result = gs::setupTraining(dataset_params);
+            if (!setup_result) {
+                throw std::runtime_error(setup_result.error());
+            }
+
+            // Pass trainer to manager
+            if (trainer_manager_) {
+                trainer_manager_->setTrainer(std::move(setup_result->trainer));
+            } else {
+                throw std::runtime_error("No trainer manager available");
+            }
+
+            // Update content state
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                content_type_ = ContentType::Dataset;
+                dataset_path_ = path;
+            }
+
+            // Emit events
+            const size_t num_gaussians = trainer_manager_->getTrainer()
+                                             ->get_strategy()
+                                             .get_model()
+                                             .size();
+
+            events::state::SceneLoaded{
+                .scene = nullptr,
+                .path = path,
+                .type = events::state::SceneLoaded::Type::Dataset,
+                .num_gaussians = num_gaussians}
+                .emit();
+
+            events::state::DatasetLoadCompleted{
+                .path = path,
+                .success = true,
+                .error = std::nullopt,
+                .num_images = setup_result->dataset->size().value(),
+                .num_points = num_gaussians}
+                .emit();
+
+            emitSceneChanged();
+
         } catch (const std::exception& e) {
             events::notify::Error{
                 .message = std::format("Failed to load dataset: {}", e.what()),
-                .details = std::format("Path: {}", path.string())}
+                .details = path.string()}
                 .emit();
         }
     }
 
-    void SceneManager::clearScene() {
-        // because if we are training while clearing scene - everything crashes...
-        events::cmd::StopTraining{}.emit();
-
-        std::lock_guard<std::mutex> lock(state_mutex_);
-
-        // Clear trainer if we're in dataset mode
-        if (current_state_.type == SceneType::Dataset && trainer_manager_) {
+    void SceneManager::clear() {
+        // Stop training if active
+        if (trainer_manager_ && content_type_ == ContentType::Dataset) {
+            events::cmd::StopTraining{}.emit();
             trainer_manager_->clearTrainer();
         }
 
-        // Clear scene
-        if (scene_) {
-            scene_->clearModel();
+        scene_.clear();
+
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            content_type_ = ContentType::Empty;
+            ply_paths_.clear();
+            dataset_path_.clear();
         }
 
-        // Update state
-        current_state_ = SceneState{};
-
-        // Notify
         events::state::SceneCleared{}.emit();
+        emitSceneChanged();
     }
 
-    SceneManager::SceneState SceneManager::getCurrentState() const {
+    const SplatData* SceneManager::getModelForRendering() const {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        return current_state_;
-    }
 
-    gs::rendering::RenderingPipelineResult SceneManager::render(
-        const gs::rendering::RenderingPipelineRequest& request) {
-
-        if (!scene_) {
-            return gs::rendering::RenderingPipelineResult(false);
-        }
-
-        auto start_time = std::chrono::high_resolution_clock::now();
-
-        auto result = scene_->render(request);
-
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto render_time = std::chrono::duration<float, std::milli>(end_time - start_time).count();
-
-        // Get actual gaussian count from scene
-        size_t actual_gaussians = 0;
-        if (scene_->hasModel()) {
-            const SplatData* model = scene_->getModel();
-            if (model) {
-                actual_gaussians = model->size();
+        if (content_type_ == ContentType::PLYFiles) {
+            return scene_.getCombinedModel();
+        } else if (content_type_ == ContentType::Dataset) {
+            if (trainer_manager_ && trainer_manager_->getTrainer()) {
+                return &trainer_manager_->getTrainer()->get_strategy().get_model();
             }
         }
 
-        // Publish render completed event
-        events::state::FrameRendered{
-            .render_ms = render_time,
-            .fps = 1000.0f / render_time,
-            .num_gaussians = static_cast<int>(actual_gaussians)}
-            .emit();
-
-        return result;
+        return nullptr;
     }
 
-    void SceneManager::loadPLYInternal(const std::filesystem::path& path) {
-        std::println("SceneManager: Loading PLY file: {}", path.string());
+    SceneManager::SceneInfo SceneManager::getSceneInfo() const {
+        std::lock_guard<std::mutex> lock(state_mutex_);
 
-        // Clear any existing scene
-        clearScene();
+        SceneInfo info;
 
-        // Create scene if needed
-        if (!scene_) {
-            scene_ = std::make_unique<Scene>();
+        switch (content_type_) {
+        case ContentType::Empty:
+            info.source_type = "Empty";
+            break;
+
+        case ContentType::PLYFiles:
+            info.has_model = scene_.hasNodes();
+            info.num_gaussians = scene_.getTotalGaussianCount();
+            info.num_nodes = scene_.getNodeCount();
+            info.source_type = "PLY";
+            if (!ply_paths_.empty()) {
+                info.source_path = ply_paths_.back();
+            }
+            break;
+
+        case ContentType::Dataset:
+            info.has_model = trainer_manager_ && trainer_manager_->getTrainer();
+            if (info.has_model) {
+                info.num_gaussians = trainer_manager_->getTrainer()
+                                         ->get_strategy()
+                                         .get_model()
+                                         .size();
+            }
+            info.num_nodes = 1;
+            info.source_type = "Dataset";
+            info.source_path = dataset_path_;
+            break;
         }
 
-        // Use the public loader interface
-        auto loader = gs::loader::Loader::create();
-
-        // Set up load options
-        gs::loader::LoadOptions options{
-            .resize_factor = -1,
-            .images_folder = "images",
-            .validate_only = false,
-            .progress = [this](float percent, const std::string& msg) {
-                std::println("[{:5.1f}%] {}", percent, msg);
-            }};
-
-        // Load the PLY file
-        auto load_result = loader->load(path, options);
-        if (!load_result) {
-            throw std::runtime_error(load_result.error());
-        }
-
-        // Extract SplatData from the result
-        auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
-        if (!splat_data || !*splat_data) {
-            throw std::runtime_error("Expected PLY file but loader returned different data type");
-        }
-
-        // Get gaussian count before moving
-        size_t gaussian_count = static_cast<size_t>((*splat_data)->size());
-        std::string name = path.stem().string();
-
-        // Update state BEFORE adding to scene
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            current_state_.type = SceneType::PLY;
-            current_state_.source_path = path;
-            current_state_.num_gaussians = gaussian_count;
-            current_state_.is_training = false;
-            current_state_.training_iteration.reset();
-            current_state_.num_plys = 1;
-        }
-
-        // Emit SceneLoaded BEFORE adding PLY
-        // This will set the panel to PLY mode and clear any existing nodes
-        events::state::SceneLoaded{
-            .scene = scene_.get(),
-            .path = path,
-            .type = events::state::SceneLoaded::Type::PLY,
-            .num_gaussians = gaussian_count}
-            .emit();
-
-        // Now add the PLY - this will emit PLYAdded event
-        scene_->addPLY(name, std::make_unique<SplatData>(std::move(**splat_data)));
-
-        events::notify::Log{
-            .level = events::notify::Log::Level::Info,
-            .message = std::format("Loaded PLY '{}' with {} Gaussians", name, gaussian_count),
-            .source = "SceneManager"}
-            .emit();
+        return info;
     }
 
-    void SceneManager::addPLYInternal(const std::filesystem::path& path) {
-        std::println("SceneManager: Adding PLY file to scene: {}", path.string());
-
-        // Ensure we have a scene
-        if (!scene_) {
-            scene_ = std::make_unique<Scene>();
-        }
-
-        // If not in PLY mode, do a regular load instead
-        if (current_state_.type != SceneType::PLY) {
-            loadPLYInternal(path);
-            return;
-        }
-
-        // Use the public loader interface
-        auto loader = gs::loader::Loader::create();
-
-        // Set up load options
-        gs::loader::LoadOptions options{
-            .resize_factor = -1,
-            .images_folder = "images",
-            .validate_only = false,
-            .progress = [this](float percent, const std::string& msg) {
-                std::println("[{:5.1f}%] {}", percent, msg);
-            }};
-
-        // Load the PLY file
-        auto load_result = loader->load(path, options);
-        if (!load_result) {
-            throw std::runtime_error(load_result.error());
-        }
-
-        // Extract SplatData from the result
-        auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
-        if (!splat_data || !*splat_data) {
-            throw std::runtime_error("Expected PLY file but loader returned different data type");
-        }
-
-        // Generate unique name if needed
-        std::string base_name = path.stem().string();
-        std::string name = base_name;
-        int counter = 1;
-
-        // Check if name already exists
-        auto nodes = scene_->getSceneNodes();
-        while (std::any_of(nodes.begin(), nodes.end(),
-                           [&name](const auto* node) { return node->name == name; })) {
-            name = std::format("{}_{}", base_name, counter++);
-        }
-
-        // Add to scene graph
-        scene_->addPLY(name, std::make_unique<SplatData>(std::move(**splat_data)));
-
-        // Update state AFTER adding to scene
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            current_state_.num_gaussians = scene_->getTotalGaussianCount();
-            current_state_.num_plys = scene_->getSceneNodes().size();
-        }
-
-        events::notify::Log{
-            .level = events::notify::Log::Level::Info,
-            .message = std::format("Added PLY '{}' to scene. Total: {} Gaussians in {} models",
-                                   name, current_state_.num_gaussians, current_state_.num_plys),
-            .source = "SceneManager"}
-            .emit();
-    }
-
-    void SceneManager::loadDatasetInternal(const std::filesystem::path& path,
-                                           const param::TrainingParameters& params) {
-        std::println("SceneManager: Loading dataset: {}", path.string());
-
-        // Clear any existing scene
-        clearScene();
-
-        // Setup training
-        auto dataset_params = params;
-        dataset_params.dataset.data_path = path;
-
-        auto setup_result = gs::setupTraining(dataset_params);
-        if (!setup_result) {
-            throw std::runtime_error(setup_result.error());
-        }
-
-        // Pass trainer to manager
-        if (trainer_manager_) {
-            trainer_manager_->setTrainer(std::move(setup_result->trainer));
-        } else {
-            throw std::runtime_error("No trainer manager available");
-        }
-
-        // Create scene if needed
-        if (!scene_) {
-            scene_ = std::make_unique<Scene>();
-        }
-
-        // Link scene to trainer
-        scene_->linkToTrainer(trainer_manager_->getTrainer());
-
-        // Update state
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            current_state_.type = SceneType::Dataset;
-            current_state_.source_path = path;
-            current_state_.num_gaussians = trainer_manager_->getTrainer()
-                                               ->get_strategy()
-                                               .get_model()
-                                               .size();
-            current_state_.is_training = false;
-            current_state_.training_iteration = 0;
-            current_state_.num_plys = 0;
-        }
-
-        // Notify
-        size_t num_images = setup_result->dataset->size().value();
-
-        events::state::SceneLoaded{
-            .scene = scene_.get(),
-            .path = path,
-            .type = events::state::SceneLoaded::Type::Dataset,
-            .num_gaussians = current_state_.num_gaussians}
-            .emit();
-
-        events::state::DatasetLoadCompleted{
-            .path = path,
-            .success = true,
-            .error = std::nullopt,
-            .num_images = num_images,
-            .num_points = current_state_.num_gaussians}
-            .emit();
-
-        events::notify::Log{
-            .level = events::notify::Log::Level::Info,
-            .message = std::format("Loaded dataset with {} images and {} initial Gaussians",
-                                   num_images, current_state_.num_gaussians),
-            .source = "SceneManager"}
-            .emit();
-    }
-
-    void SceneManager::updateSceneState() {
-        // This would be called when scene changes internally
-        // For now, we handle updates through events
+    void SceneManager::emitSceneChanged() {
+        events::state::SceneChanged{}.emit();
     }
 
 } // namespace gs

@@ -75,11 +75,7 @@ namespace gs::gui {
 
         applyDefaultStyle();
 
-        // Configure components
-        setScriptExecutor([this](const std::string& cmd) {
-            return widgets::executeConsoleCommand(cmd, viewer_);
-        });
-
+        // Configure file browser callback
         setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
             window_states_["file_browser"] = false;
@@ -120,6 +116,17 @@ namespace gs::gui {
             if (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
                 ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
                 ImGui::GetIO().WantCaptureMouse = false;
+            }
+        }
+
+        // CRITICAL FIX: In point cloud mode, always disable ImGui mouse capture in viewport
+        auto* rendering_manager = viewer_->getRenderingManager();
+        if (rendering_manager) {
+            const auto& settings = rendering_manager->getSettings();
+            if (settings.point_cloud_mode && mouse_in_viewport &&
+                !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+                ImGui::GetIO().WantCaptureMouse = false;
+                ImGui::GetIO().WantCaptureKeyboard = false;
             }
         }
 
@@ -247,7 +254,16 @@ namespace gs::gui {
         }
 
         // Draw viewport focus indicator AFTER gizmo
-        if (viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
+        // DISABLE in point cloud mode
+        bool draw_focus = viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0;
+        if (rendering_manager) {
+            const auto& settings = rendering_manager->getSettings();
+            if (settings.point_cloud_mode) {
+                draw_focus = false;
+            }
+        }
+
+        if (draw_focus) {
             ImDrawList* draw_list = ImGui::GetForegroundDrawList();
 
             // The viewport_pos_ is already relative to the window, so we just need to add the window position

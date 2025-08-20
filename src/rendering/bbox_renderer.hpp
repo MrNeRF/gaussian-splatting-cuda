@@ -1,21 +1,21 @@
 #pragma once
 
 #include "geometry/bounding_box.hpp"
+#include "gl_resources.hpp"
 #include "rendering/rendering.hpp"
-#include "shader.hpp"
-#include <memory>
+#include "shader_manager.hpp"
 
 namespace gs::rendering {
     class RenderBoundingBox : public geometry::BoundingBox, public IBoundingBox {
     public:
         RenderBoundingBox();
-        ~RenderBoundingBox() override;
+        ~RenderBoundingBox() override = default;
 
         // Set the bounding box from min/max points
         void setBounds(const glm::vec3& min, const glm::vec3& max) override;
 
-        // Initialize OpenGL resources
-        void init();
+        // Initialize OpenGL resources - now returns Result
+        Result<void> init();
 
         // Check if initialized
         bool isInitialized() const override { return initialized_; }
@@ -44,22 +44,23 @@ namespace gs::rendering {
         glm::vec3 getColor() const override { return color_; }
         float getLineWidth() const override { return line_width_; }
 
-        // Render the bounding box
-        void render(const glm::mat4& view, const glm::mat4& projection);
+        // Render the bounding box - now returns Result
+        Result<void> render(const glm::mat4& view, const glm::mat4& projection);
 
     private:
         void createCubeGeometry();
-        void setupVertexData();
-        void cleanup();
+        Result<void> setupVertexData();
 
         // Bounding box properties
         glm::vec3 color_;
         float line_width_;
         bool initialized_;
 
-        // OpenGL resources
-        std::unique_ptr<Shader> shader_;
-        GLuint VAO_, VBO_, EBO_;
+        // OpenGL resources using RAII
+        ManagedShader shader_;
+        VAO vao_;
+        VBO vbo_;
+        EBO ebo_;
 
         // Cube geometry data
         std::vector<glm::vec3> vertices_;

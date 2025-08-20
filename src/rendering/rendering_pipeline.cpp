@@ -1,10 +1,6 @@
 #include "rendering_pipeline.hpp"
 #include <print>
 
-#ifdef CUDA_GL_INTEROP_ENABLED
-#include "cuda_gl_interop.hpp"
-#endif
-
 namespace gs::rendering {
 
     RenderingPipeline::RenderingPipeline()
@@ -12,17 +8,14 @@ namespace gs::rendering {
         point_cloud_renderer_ = std::make_unique<PointCloudRenderer>();
     }
 
-    RenderingPipeline::RenderResult RenderingPipeline::render(
+    Result<RenderingPipeline::RenderResult> RenderingPipeline::render(
         const SplatData& model,
         const RenderRequest& request) {
-
-        RenderResult result;
 
         // Validate dimensions
         if (request.viewport_size.x <= 0 || request.viewport_size.y <= 0 ||
             request.viewport_size.x > 16384 || request.viewport_size.y > 16384) {
-            result.valid = false;
-            return result;
+            return std::unexpected("Invalid viewport dimensions");
         }
 
         // Check if we should use point cloud rendering
@@ -37,7 +30,11 @@ namespace gs::rendering {
         background_[2] = request.background_color.b;
 
         // Create camera for this frame
-        Camera cam = createCamera(request);
+        auto cam_result = createCamera(request);
+        if (!cam_result) {
+            return std::unexpected(cam_result.error());
+        }
+        Camera cam = std::move(*cam_result);
 
         // Handle crop box conversion
         const geometry::BoundingBox* geom_bbox = nullptr;
@@ -51,33 +48,39 @@ namespace gs::rendering {
             geom_bbox = temp_bbox.get();
         }
 
-        // Perform rendering
-        auto output = gs::rasterize(
-            cam,
-            model,
-            background_,
-            request.scaling_modifier,
-            false, // train
-            request.antialiasing,
-            static_cast<gs::RenderMode>(request.render_mode),
-            geom_bbox);
+        try {
+            // Perform rendering
+            auto output = gs::rasterize(
+                cam,
+                model,
+                background_,
+                request.scaling_modifier,
+                false, // train
+                request.antialiasing,
+                static_cast<gs::RenderMode>(request.render_mode),
+                geom_bbox);
 
-        result.image = output.image;
-        result.depth = output.depth;
-        result.valid = true;
+            RenderResult result;
+            result.image = output.image;
+            result.depth = output.depth;
+            result.valid = true;
+            return result;
 
-        return result;
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Rasterization failed: {}", e.what()));
+        }
     }
 
-    RenderingPipeline::RenderResult RenderingPipeline::renderPointCloud(
+    Result<RenderingPipeline::RenderResult> RenderingPipeline::renderPointCloud(
         const SplatData& model,
         const RenderRequest& request) {
 
-        RenderResult result;
-
         // Initialize point cloud renderer if needed
         if (!point_cloud_renderer_->isInitialized()) {
-            point_cloud_renderer_->initialize();
+            if (auto result = point_cloud_renderer_->initialize(); !result) {
+                return std::unexpected(std::format("Failed to initialize point cloud renderer: {}",
+                                                   result.error()));
+            }
         }
 
         // Save current OpenGL state
@@ -85,6 +88,18 @@ namespace gs::rendering {
         GLint current_fbo;
         glGetIntegerv(GL_VIEWPORT, current_viewport);
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_fbo);
+
+        // RAII guard to restore state
+        struct StateGuard {
+            GLint viewport[4];
+            GLint fbo;
+            ~StateGuard() {
+                glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+            }
+        } state_guard{
+            {current_viewport[0], current_viewport[1], current_viewport[2], current_viewport[3]},
+            current_fbo};
 
         // Create view matrix using the same convention as Viewport::getViewMatrix()
         glm::mat3 flip_yz = glm::mat3(
@@ -117,13 +132,36 @@ namespace gs::rendering {
         float fov_rad = glm::radians(request.fov);
         glm::mat4 projection = glm::perspective(fov_rad, aspect, 0.1f, 1000.0f);
 
-        // Create framebuffer for offscreen rendering
+        // Create framebuffer for offscreen rendering using RAII
+        auto fbo_result = create_vao(); // Using create_vao as proxy for FBO creation
+        if (!fbo_result) {
+            return std::unexpected("Failed to create framebuffer");
+        }
+
         GLuint fbo, color_texture, depth_texture;
         glGenFramebuffers(1, &fbo);
+        if (fbo == 0) {
+            return std::unexpected("Failed to create framebuffer");
+        }
+
+        // RAII cleanup for OpenGL resources
+        struct FBOGuard {
+            GLuint fbo, color_tex, depth_tex;
+            ~FBOGuard() {
+                if (fbo)
+                    glDeleteFramebuffers(1, &fbo);
+                if (color_tex)
+                    glDeleteTextures(1, &color_tex);
+                if (depth_tex)
+                    glDeleteTextures(1, &depth_tex);
+            }
+        } fbo_guard{fbo, 0, 0};
+
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
         // Color texture
         glGenTextures(1, &color_texture);
+        fbo_guard.color_tex = color_texture;
         glBindTexture(GL_TEXTURE_2D, color_texture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, request.viewport_size.x, request.viewport_size.y,
                      0, GL_RGB, GL_FLOAT, nullptr);
@@ -133,6 +171,7 @@ namespace gs::rendering {
 
         // Depth texture
         glGenTextures(1, &depth_texture);
+        fbo_guard.depth_tex = depth_texture;
         glBindTexture(GL_TEXTURE_2D, depth_texture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, request.viewport_size.x, request.viewport_size.y,
                      0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
@@ -142,20 +181,18 @@ namespace gs::rendering {
 
         GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
-            std::cerr << "Framebuffer not complete! Status code: 0x"
-                      << std::hex << fb_status << std::dec << std::endl;
-            glDeleteFramebuffers(1, &fbo);
-            glDeleteTextures(1, &color_texture);
-            glDeleteTextures(1, &depth_texture);
-            result.valid = false;
-            return result;
+            return std::unexpected(std::format("Framebuffer not complete: 0x{:x}", fb_status));
         }
 
         // Set viewport to match the request size
         glViewport(0, 0, request.viewport_size.x, request.viewport_size.y);
 
         // Render point cloud to framebuffer
-        point_cloud_renderer_->render(model, view, projection, request.voxel_size, request.background_color);
+        if (auto result = point_cloud_renderer_->render(model, view, projection,
+                                                        request.voxel_size, request.background_color);
+            !result) {
+            return std::unexpected(std::format("Point cloud rendering failed: {}", result.error()));
+        }
 
         // Read back the rendered image
         std::vector<float> pixels(request.viewport_size.x * request.viewport_size.y * 3);
@@ -172,43 +209,30 @@ namespace gs::rendering {
         image_cpu = torch::flip(image_cpu, {0});
 
         // Convert to CHW format and move to CUDA
+        RenderResult result;
         result.image = image_cpu.permute({2, 0, 1}).to(torch::kCUDA);
         result.valid = true;
-
-        // Restore previous OpenGL state
-        glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
-        glViewport(current_viewport[0], current_viewport[1], current_viewport[2], current_viewport[3]);
-
-        // Cleanup
-        glDeleteFramebuffers(1, &fbo);
-        glDeleteTextures(1, &color_texture);
-        glDeleteTextures(1, &depth_texture);
-
         return result;
     }
 
-    void RenderingPipeline::uploadToScreen(
+    Result<void> RenderingPipeline::uploadToScreen(
         const RenderResult& result,
         ScreenQuadRenderer& renderer,
         const glm::ivec2& viewport_size) {
 
         if (!result.valid || !result.image.defined()) {
-            return;
+            return std::unexpected("Invalid render result");
         }
 
-#ifdef CUDA_GL_INTEROP_ENABLED
-        auto interop_renderer = dynamic_cast<ScreenQuadRendererInterop*>(&renderer);
-
-        if (interop_renderer && interop_renderer->isInteropEnabled()) {
+        // Try direct CUDA upload if available
+        if (renderer.isInteropEnabled() && result.image.is_cuda()) {
             // Keep data on GPU - convert [C, H, W] to [H, W, C] format
             auto image_hwc = result.image.permute({1, 2, 0}).contiguous();
 
             if (image_hwc.size(0) == viewport_size.y && image_hwc.size(1) == viewport_size.x) {
-                interop_renderer->uploadFromCUDA(image_hwc, viewport_size.x, viewport_size.y);
-                return;
+                return renderer.uploadFromCUDA(image_hwc, viewport_size.x, viewport_size.y);
             }
         }
-#endif
 
         // Fallback to CPU copy
         auto image = (result.image * 255)
@@ -217,15 +241,17 @@ namespace gs::rendering {
                          .permute({1, 2, 0})
                          .contiguous();
 
-        if (image.size(0) == viewport_size.y &&
-            image.size(1) == viewport_size.x &&
-            image.data_ptr<unsigned char>()) {
-            renderer.uploadData(image.data_ptr<unsigned char>(),
-                                viewport_size.x, viewport_size.y);
+        if (image.size(0) != viewport_size.y ||
+            image.size(1) != viewport_size.x ||
+            !image.data_ptr<unsigned char>()) {
+            return std::unexpected("Image dimensions mismatch or invalid data");
         }
+
+        return renderer.uploadData(image.data_ptr<unsigned char>(),
+                                   viewport_size.x, viewport_size.y);
     }
 
-    Camera RenderingPipeline::createCamera(const RenderRequest& request) {
+    Result<Camera> RenderingPipeline::createCamera(const RenderRequest& request) {
         // Convert view matrix to camera matrix
         torch::Tensor R_tensor = torch::tensor({request.view_rotation[0][0], request.view_rotation[1][0], request.view_rotation[2][0],
                                                 request.view_rotation[0][1], request.view_rotation[1][1], request.view_rotation[2][1],
@@ -248,21 +274,25 @@ namespace gs::rendering {
                                    request.viewport_size.x,
                                    request.viewport_size.y);
 
-        return Camera(
-            R_tensor,
-            t_tensor,
-            fov2focal(fov.x, request.viewport_size.x),
-            fov2focal(fov.y, request.viewport_size.y),
-            request.viewport_size.x / 2.0f,
-            request.viewport_size.y / 2.0f,
-            torch::empty({0}, torch::kFloat32),
-            torch::empty({0}, torch::kFloat32),
-            gsplat::CameraModelType::PINHOLE,
-            "render_camera",
-            "none",
-            request.viewport_size.x,
-            request.viewport_size.y,
-            -1);
+        try {
+            return Camera(
+                R_tensor,
+                t_tensor,
+                fov2focal(fov.x, request.viewport_size.x),
+                fov2focal(fov.y, request.viewport_size.y),
+                request.viewport_size.x / 2.0f,
+                request.viewport_size.y / 2.0f,
+                torch::empty({0}, torch::kFloat32),
+                torch::empty({0}, torch::kFloat32),
+                gsplat::CameraModelType::PINHOLE,
+                "render_camera",
+                "none",
+                request.viewport_size.x,
+                request.viewport_size.y,
+                -1);
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Failed to create camera: {}", e.what()));
+        }
     }
 
     glm::vec2 RenderingPipeline::computeFov(float fov_degrees, int width, int height) {

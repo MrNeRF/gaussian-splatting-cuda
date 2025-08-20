@@ -1,5 +1,7 @@
 #include "axes_renderer.hpp"
+#include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
+#include <format>
 #include <iostream>
 
 namespace gs::rendering {
@@ -9,9 +11,7 @@ namespace gs::rendering {
     const glm::vec3 RenderCoordinateAxes::Y_AXIS_COLOR = glm::vec3(0.0f, 1.0f, 0.0f); // Green
     const glm::vec3 RenderCoordinateAxes::Z_AXIS_COLOR = glm::vec3(0.0f, 0.0f, 1.0f); // Blue
 
-    RenderCoordinateAxes::RenderCoordinateAxes() : VAO_(0),
-                                                   VBO_(0),
-                                                   size_(2.0f),
+    RenderCoordinateAxes::RenderCoordinateAxes() : size_(2.0f),
                                                    line_width_(3.0f),
                                                    initialized_(false) {
         // All axes visible by default
@@ -21,10 +21,6 @@ namespace gs::rendering {
 
         // Reserve space for 6 vertices (2 per axis: origin + endpoint)
         vertices_.reserve(6);
-    }
-
-    RenderCoordinateAxes::~RenderCoordinateAxes() {
-        cleanup();
     }
 
     void RenderCoordinateAxes::setSize(float size) {
@@ -54,45 +50,62 @@ namespace gs::rendering {
         return false;
     }
 
-    void RenderCoordinateAxes::init() {
+    Result<void> RenderCoordinateAxes::init() {
         if (isInitialized())
-            return;
+            return {};
 
-        try {
-            // Create shader for coordinate axes rendering
-            shader_ = std::make_unique<Shader>(
-                (getShaderPath("coordinate_axes.vert")).string().c_str(),
-                (getShaderPath("coordinate_axes.frag")).string().c_str(),
-                false); // Don't use shader's buffer management
-
-            // Generate OpenGL objects
-            glGenVertexArrays(1, &VAO_);
-            glGenBuffers(1, &VBO_);
-
-            initialized_ = true;
-
-            // Initialize axes geometry
-            createAxesGeometry();
-            setupVertexData();
-
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to initialize CoordinateAxes: " << e.what() << std::endl;
-            cleanup();
+        // Create shader for coordinate axes rendering
+        auto result = load_shader("coordinate_axes", "coordinate_axes.vert", "coordinate_axes.frag", false);
+        if (!result) {
+            return std::unexpected(result.error().what());
         }
-    }
+        shader_ = std::move(*result);
 
-    void RenderCoordinateAxes::cleanup() {
-        if (VAO_ != 0) {
-            glDeleteVertexArrays(1, &VAO_);
-            VAO_ = 0;
-        }
-        if (VBO_ != 0) {
-            glDeleteBuffers(1, &VBO_);
-            VBO_ = 0;
+        // Create OpenGL objects using RAII
+        auto vao_result = create_vao();
+        if (!vao_result) {
+            return std::unexpected(vao_result.error());
         }
 
-        shader_.reset();
-        initialized_ = false;
+        auto vbo_result = create_vbo();
+        if (!vbo_result) {
+            return std::unexpected(vbo_result.error());
+        }
+        vbo_ = std::move(*vbo_result);
+
+        // Build VAO using VAOBuilder
+        VAOBuilder builder(std::move(*vao_result));
+
+        // Setup vertex attributes (data will be filled in setupVertexData)
+        builder.attachVBO(vbo_) // Attach without data initially
+            .setAttribute({.index = 0,
+                           .size = 3,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = sizeof(AxisVertex),
+                           .offset = (void*)offsetof(AxisVertex, position),
+                           .divisor = 0})
+            .setAttribute({.index = 1,
+                           .size = 3,
+                           .type = GL_FLOAT,
+                           .normalized = GL_FALSE,
+                           .stride = sizeof(AxisVertex),
+                           .offset = (void*)offsetof(AxisVertex, color),
+                           .divisor = 0});
+
+        vao_ = builder.build();
+
+        initialized_ = true;
+
+        // Initialize axes geometry
+        createAxesGeometry();
+
+        if (auto setup_result = setupVertexData(); !setup_result) {
+            initialized_ = false;
+            return setup_result;
+        }
+
+        return {};
     }
 
     void RenderCoordinateAxes::createAxesGeometry() {
@@ -117,67 +130,53 @@ namespace gs::rendering {
         }
     }
 
-    void RenderCoordinateAxes::setupVertexData() {
-        if (!initialized_ || VAO_ == 0 || vertices_.empty())
-            return;
+    Result<void> RenderCoordinateAxes::setupVertexData() {
+        if (!initialized_ || !vao_ || vertices_.empty())
+            return {}; // Nothing to setup if no visible axes
 
-        glBindVertexArray(VAO_);
+        // Upload vertex data
+        BufferBinder<GL_ARRAY_BUFFER> vbo_bind(vbo_);
+        upload_buffer(GL_ARRAY_BUFFER, std::span(vertices_), GL_DYNAMIC_DRAW);
 
-        // Bind and upload vertex data
-        glBindBuffer(GL_ARRAY_BUFFER, VBO_);
-        glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(AxisVertex),
-                     vertices_.data(), GL_DYNAMIC_DRAW);
-
-        // Position attribute (location 0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(AxisVertex),
-                              (void*)offsetof(AxisVertex, position));
-        glEnableVertexAttribArray(0);
-
-        // Color attribute (location 1)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(AxisVertex),
-                              (void*)offsetof(AxisVertex, color));
-        glEnableVertexAttribArray(1);
-
-        glBindVertexArray(0);
+        return {};
     }
 
-    void RenderCoordinateAxes::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!initialized_ || !shader_ || VAO_ == 0 || vertices_.empty())
-            return;
+    Result<void> RenderCoordinateAxes::render(const glm::mat4& view, const glm::mat4& projection) {
+        if (!initialized_ || !shader_.valid() || !vao_ || vertices_.empty())
+            return {}; // Nothing to render if not initialized or no visible axes
 
-        // Save current OpenGL state
-        GLfloat current_line_width;
-        glGetFloatv(GL_LINE_WIDTH, &current_line_width);
-        GLboolean line_smooth_enabled = glIsEnabled(GL_LINE_SMOOTH);
+        // Save depth test state
+        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
 
-        // Enable line rendering
-        glEnable(GL_LINE_SMOOTH);
-        glLineWidth(line_width_);
+        // Axes should be always visible on top of everything
+        glDisable(GL_DEPTH_TEST);
+
+        // Use GLLineGuard for line width management
+        GLLineGuard line_guard(line_width_);
 
         // Bind shader and setup uniforms
-        shader_->bind();
+        ShaderScope s(shader_);
 
-        try {
-            // Set uniforms (axes are in world space, so no model transform needed)
-            glm::mat4 mvp = projection * view;
-            shader_->set_uniform("u_mvp", mvp);
-
-            // Bind VAO and draw
-            glBindVertexArray(VAO_);
-            glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices_.size()));
-            glBindVertexArray(0);
-
-        } catch (const std::exception& e) {
-            std::cerr << "Error rendering coordinate axes: " << e.what() << std::endl;
+        // Set uniforms (axes are in world space, so no model transform needed)
+        glm::mat4 mvp = projection * view;
+        if (auto result = s->set("u_mvp", mvp); !result) {
+            // Restore state before returning
+            if (depth_test_enabled) {
+                glEnable(GL_DEPTH_TEST);
+            }
+            return result;
         }
 
-        shader_->unbind();
+        // Bind VAO and draw
+        VAOBinder vao_bind(vao_);
+        glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices_.size()));
 
-        // Restore OpenGL state
-        glLineWidth(current_line_width);
-        if (!line_smooth_enabled) {
-            glDisable(GL_LINE_SMOOTH);
+        // Restore depth test state
+        if (depth_test_enabled) {
+            glEnable(GL_DEPTH_TEST);
         }
+
+        return {};
     }
 
 } // namespace gs::rendering

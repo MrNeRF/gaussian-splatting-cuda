@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
+#include <iostream>
 
 namespace gs::visualizer {
 
@@ -29,7 +30,13 @@ namespace gs::visualizer {
 
         try {
             // Create coordinate axes through the rendering engine
-            coordinate_axes_ = engine->createCoordinateAxes();
+            auto axes_result = engine->createCoordinateAxes();
+            if (!axes_result) {
+                std::cerr << "Failed to create coordinate axes: " << axes_result.error() << std::endl;
+                return false;
+            }
+
+            coordinate_axes_ = *axes_result;
             if (coordinate_axes_) {
                 coordinate_axes_->setSize(axes_size_);
                 // All axes visible by default
@@ -38,7 +45,7 @@ namespace gs::visualizer {
                 coordinate_axes_->setAxisVisible(2, true);
             }
         } catch (const std::exception& e) {
-            std::cerr << "Failed to create coordinate axes: " << e.what() << std::endl;
+            std::cerr << "Exception while creating coordinate axes: " << e.what() << std::endl;
             return false;
         }
 

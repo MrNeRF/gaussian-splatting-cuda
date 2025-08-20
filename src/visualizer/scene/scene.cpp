@@ -1,147 +1,73 @@
-#include "scene.hpp"
-#include "core/model_providers.hpp"
+// scene.cpp
+#include "scene/scene.hpp"
 #include <algorithm>
 #include <print>
+#include <torch/torch.h>
 
 namespace gs {
 
-    Scene::Scene() {
-        setupEventHandlers();
-    }
-
-    void Scene::setupEventHandlers() {
-        // Subscribe to query events
-        events::query::GetModelInfo::when([this](const auto&) {
-            handleModelInfoQuery();
-        });
-
-        // Handle PLY commands
-        events::cmd::AddPLY::when([this]([[maybe_unused]] const auto& cmd) {
-            // This will be handled by SceneManager which has access to loading
-        });
-
-        events::cmd::RemovePLY::when([this](const auto& cmd) {
-            removePLY(cmd.name);
-        });
-
-        events::cmd::SetPLYVisibility::when([this](const auto& cmd) {
-            setPLYVisibility(cmd.name, cmd.visible);
-        });
-    }
-
-    void Scene::addPLY(const std::string& name, std::unique_ptr<SplatData> model) {
-        // If we're not in viewing mode, switch to it
-        if (mode_ != Mode::Viewing) {
-            auto old_mode = mode_;
-            mode_ = Mode::Viewing;
-            // Clear any training model
-            model_provider_.reset();
-            publishModeChange(old_mode, mode_);
-        }
-
-        // Calculate gaussian count before moving the model
+    void Scene::addNode(const std::string& name, std::unique_ptr<SplatData> model) {
+        // Calculate gaussian count before moving
         size_t gaussian_count = static_cast<size_t>(model->size());
 
         // Check if name already exists
-        auto it = std::find_if(scene_graph_.begin(), scene_graph_.end(),
-                               [&name](const SceneNode& node) { return node.name == name; });
+        auto it = std::find_if(nodes_.begin(), nodes_.end(),
+                               [&name](const Node& node) { return node.name == name; });
 
-        if (it != scene_graph_.end()) {
+        if (it != nodes_.end()) {
             // Replace existing
             it->model = std::move(model);
             it->gaussian_count = gaussian_count;
         } else {
             // Add new node
-            SceneNode node{
+            Node node{
                 .name = name,
                 .model = std::move(model),
                 .transform = glm::mat4(1.0f),
                 .visible = true,
                 .gaussian_count = gaussian_count};
-            scene_graph_.push_back(std::move(node));
+            nodes_.push_back(std::move(node));
         }
 
-        // Invalidate cache
-        cache_valid_ = false;
-
-        // Initialize pipeline if needed
-        if (!rendering_engine_) {
-            rendering_engine_ = gs::rendering::RenderingEngine::create();
-            rendering_engine_->initialize();
-        }
-
-        // Emit event with the correct total gaussian count
-        events::state::PLYAdded{
-            .name = name,
-            .total_gaussians = gaussian_count}
-            .emit();
-
-        std::println("Added PLY '{}' with {} gaussians to scene graph", name, gaussian_count);
-
-        // Force a scene change event to trigger immediate rendering
-        events::state::SceneChanged{}.emit();
+        invalidateCache();
+        std::println("Scene: Added node '{}' with {} gaussians", name, gaussian_count);
     }
 
-    void Scene::removePLY(const std::string& name) {
-        auto it = std::find_if(scene_graph_.begin(), scene_graph_.end(),
-                               [&name](const SceneNode& node) { return node.name == name; });
+    void Scene::removeNode(const std::string& name) {
+        auto it = std::find_if(nodes_.begin(), nodes_.end(),
+                               [&name](const Node& node) { return node.name == name; });
 
-        if (it != scene_graph_.end()) {
-            scene_graph_.erase(it);
-
-            // Invalidate cache
-            cache_valid_ = false;
-
-            // Emit event
-            events::state::PLYRemoved{.name = name}.emit();
-
-            // If scene graph is empty, switch to empty mode
-            if (scene_graph_.empty()) {
-                auto old_mode = mode_;
-                mode_ = Mode::Empty;
-                publishModeChange(old_mode, mode_);
-            }
+        if (it != nodes_.end()) {
+            nodes_.erase(it);
+            invalidateCache();
+            std::println("Scene: Removed node '{}'", name);
         }
     }
 
-    void Scene::clearPLYs() {
-        if (!scene_graph_.empty()) {
-            scene_graph_.clear();
-            cache_valid_ = false;
-            cached_combined_model_.reset();
+    void Scene::setNodeVisibility(const std::string& name, bool visible) {
+        auto it = std::find_if(nodes_.begin(), nodes_.end(),
+                               [&name](const Node& node) { return node.name == name; });
 
-            auto old_mode = mode_;
-            mode_ = Mode::Empty;
-            publishModeChange(old_mode, mode_);
-        }
-    }
-
-    void Scene::setPLYVisibility(const std::string& name, bool visible) {
-        auto it = std::find_if(scene_graph_.begin(), scene_graph_.end(),
-                               [&name](const SceneNode& node) { return node.name == name; });
-
-        if (it != scene_graph_.end() && it->visible != visible) {
+        if (it != nodes_.end() && it->visible != visible) {
             it->visible = visible;
-            // Invalidate cache when visibility changes
-            cache_valid_ = false;
-
-            // Emit scene changed event to trigger re-render immediately
-            events::state::SceneChanged{}.emit();
+            invalidateCache();
         }
     }
 
-    std::vector<const Scene::SceneNode*> Scene::getSceneNodes() const {
-        std::vector<const SceneNode*> nodes;
-        nodes.reserve(scene_graph_.size());
-        for (const auto& node : scene_graph_) {
-            nodes.push_back(&node);
-        }
-        return nodes;
+    void Scene::clear() {
+        nodes_.clear();
+        cached_combined_.reset();
+        cache_valid_ = false;
+    }
+
+    const SplatData* Scene::getCombinedModel() const {
+        rebuildCacheIfNeeded();
+        return cached_combined_.get();
     }
 
     size_t Scene::getTotalGaussianCount() const {
         size_t total = 0;
-        for (const auto& node : scene_graph_) {
+        for (const auto& node : nodes_) {
             if (node.visible) {
                 total += node.gaussian_count;
             }
@@ -149,86 +75,32 @@ namespace gs {
         return total;
     }
 
-    void Scene::setModelProvider(std::shared_ptr<IModelProvider> provider) {
-        model_provider_ = provider;
-        cache_valid_ = false;
-        cached_combined_model_.reset();
-
-        if (!rendering_engine_) {
-            rendering_engine_ = gs::rendering::RenderingEngine::create();
-            rendering_engine_->initialize();
+    std::vector<const Scene::Node*> Scene::getNodes() const {
+        std::vector<const Node*> result;
+        result.reserve(nodes_.size());
+        for (const auto& node : nodes_) {
+            result.push_back(&node);
         }
-
-        // Update mode based on provider type
-        Mode old_mode = mode_;
-        if (!provider) {
-            mode_ = Mode::Empty;
-        } else if (dynamic_cast<TrainerModelProvider*>(provider.get())) {
-            mode_ = Mode::Training;
-            // Clear PLY scene graph when switching to training
-            scene_graph_.clear();
-        } else {
-            mode_ = Mode::Viewing;
-            // For backwards compatibility, we can't copy SplatData since copy constructor is deleted
-            // So we'll just clear the scene graph and let the user reload if needed
-            scene_graph_.clear();
-            std::println("Note: Cannot convert single model to scene graph (SplatData copy not allowed)");
-        }
-
-        // Publish mode change event if it changed
-        if (old_mode != mode_) {
-            publishModeChange(old_mode, mode_);
-        }
+        return result;
     }
 
-    void Scene::clearModel() {
-        auto old_mode = mode_;
-        model_provider_.reset();
-        scene_graph_.clear();
-        cache_valid_ = false;
-        cached_combined_model_.reset();
-        mode_ = Mode::Empty;
-
-        if (old_mode != mode_) {
-            publishModeChange(old_mode, mode_);
-        }
+    const Scene::Node* Scene::getNode(const std::string& name) const {
+        auto it = std::find_if(nodes_.begin(), nodes_.end(),
+                               [&name](const Node& node) { return node.name == name; });
+        return (it != nodes_.end()) ? &(*it) : nullptr;
     }
 
-    bool Scene::hasModel() const {
-        if (mode_ == Mode::Viewing) {
-            // Return true if we have any models, regardless of visibility
-            // The combined model will be empty if all are invisible
-            return !scene_graph_.empty();
-        } else if (mode_ == Mode::Training) {
-            return model_provider_ && model_provider_->hasModel();
-        }
-        return false;
-    }
-
-    const SplatData* Scene::getModel() const {
-        if (mode_ == Mode::Viewing) {
-            // Return cached combined model
-            rebuildCombinedModelIfNeeded();
-            return cached_combined_model_.get();
-        } else if (model_provider_) {
-            return model_provider_->getModel();
+    Scene::Node* Scene::getMutableNode(const std::string& name) {
+        auto it = std::find_if(nodes_.begin(), nodes_.end(),
+                               [&name](const Node& node) { return node.name == name; });
+        if (it != nodes_.end()) {
+            invalidateCache();
+            return &(*it);
         }
         return nullptr;
     }
 
-    SplatData* Scene::getMutableModel() {
-        if (mode_ == Mode::Viewing) {
-            // For mutable access, we need to invalidate cache
-            cache_valid_ = false;
-            rebuildCombinedModelIfNeeded();
-            return cached_combined_model_.get();
-        } else if (model_provider_) {
-            return model_provider_->getMutableModel();
-        }
-        return nullptr;
-    }
-
-    void Scene::rebuildCombinedModelIfNeeded() const {
+    void Scene::rebuildCacheIfNeeded() const {
         if (cache_valid_) {
             return;
         }
@@ -237,7 +109,7 @@ namespace gs {
         std::vector<const SplatData*> visible_models;
         size_t total_gaussians = 0;
 
-        for (const auto& node : scene_graph_) {
+        for (const auto& node : nodes_) {
             if (node.visible && node.model) {
                 visible_models.push_back(node.model.get());
                 total_gaussians += node.gaussian_count;
@@ -245,34 +117,34 @@ namespace gs {
         }
 
         if (visible_models.empty()) {
-            // No visible models - clear cache
-            cached_combined_model_.reset();
+            cached_combined_.reset();
             cache_valid_ = true;
             return;
         }
 
-        std::println("Rebuilding combined model with {} visible models, {} total gaussians",
+        std::println("Scene: Rebuilding combined model with {} visible models, {} total gaussians",
                      visible_models.size(), total_gaussians);
 
         // Get device and dtype from first model
         auto device = visible_models[0]->means().device();
         auto dtype = visible_models[0]->means().dtype();
 
-        // Pre-allocate tensors for all visible gaussians
-        auto combined_means = torch::empty({static_cast<int64_t>(total_gaussians), 3}, dtype).to(device);
+        // Create tensor options with both device and dtype
+        auto opts = torch::TensorOptions().dtype(dtype).device(device);
+
+        // Pre-allocate tensors on the target device
+        auto combined_means = torch::empty({static_cast<int64_t>(total_gaussians), 3}, opts);
         auto combined_sh0 = torch::empty({static_cast<int64_t>(total_gaussians),
                                           visible_models[0]->sh0().size(1),
                                           visible_models[0]->sh0().size(2)},
-                                         dtype)
-                                .to(device);
+                                         opts);
         auto combined_shN = torch::empty({static_cast<int64_t>(total_gaussians),
                                           visible_models[0]->shN().size(1),
                                           visible_models[0]->shN().size(2)},
-                                         dtype)
-                                .to(device);
-        auto combined_opacity = torch::empty({static_cast<int64_t>(total_gaussians), 1}, dtype).to(device);
-        auto combined_scaling = torch::empty({static_cast<int64_t>(total_gaussians), 3}, dtype).to(device);
-        auto combined_rotation = torch::empty({static_cast<int64_t>(total_gaussians), 4}, dtype).to(device);
+                                         opts);
+        auto combined_opacity = torch::empty({static_cast<int64_t>(total_gaussians), 1}, opts);
+        auto combined_scaling = torch::empty({static_cast<int64_t>(total_gaussians), 3}, opts);
+        auto combined_rotation = torch::empty({static_cast<int64_t>(total_gaussians), 4}, opts);
 
         // Concatenate all visible models
         size_t current_idx = 0;
@@ -282,37 +154,22 @@ namespace gs {
         for (const auto* model : visible_models) {
             int64_t model_size = model->size();
 
-            // Copy means
+            // Copy data
             combined_means.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->means();
-
-            // Copy SH coefficients
             combined_sh0.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->sh0();
             combined_shN.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->shN();
-
-            // Copy other attributes
             combined_opacity.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->opacity_raw();
             combined_scaling.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->scaling_raw();
             combined_rotation.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->rotation_raw();
 
-            // Track max SH degree and average scene scale
             max_sh_degree = std::max(max_sh_degree, model->get_active_sh_degree());
             avg_scene_scale += model->get_scene_scale();
-
             current_idx += model_size;
         }
 
         avg_scene_scale /= visible_models.size();
 
-        // Create combined SplatData
-        // Set requires_grad to match the original models
-        combined_means = combined_means.set_requires_grad(true);
-        combined_sh0 = combined_sh0.set_requires_grad(true);
-        combined_shN = combined_shN.set_requires_grad(true);
-        combined_opacity = combined_opacity.set_requires_grad(true);
-        combined_scaling = combined_scaling.set_requires_grad(true);
-        combined_rotation = combined_rotation.set_requires_grad(true);
-
-        cached_combined_model_ = std::make_unique<SplatData>(
+        cached_combined_ = std::make_unique<SplatData>(
             max_sh_degree,
             combined_means,
             combined_sh0,
@@ -323,107 +180,6 @@ namespace gs {
             avg_scene_scale);
 
         cache_valid_ = true;
-        std::println("Combined model created with {} gaussians", cached_combined_model_->size());
-    }
-
-    void Scene::setStandaloneModel(std::unique_ptr<SplatData> model) {
-        // Convert to PLY node for new multi-model support
-        clearModel();
-        addPLY("Model", std::move(model));
-    }
-
-    void Scene::linkToTrainer(Trainer* trainer) {
-        if (trainer) {
-            auto provider = std::make_shared<TrainerModelProvider>(trainer);
-            setModelProvider(provider);
-        } else {
-            clearModel();
-        }
-    }
-
-    void Scene::unlinkFromTrainer() {
-        if (mode_ == Mode::Training) {
-            clearModel();
-        }
-    }
-
-    gs::rendering::RenderingPipelineResult Scene::render(const gs::rendering::RenderingPipelineRequest& request) {
-        if (!hasModel() || !rendering_engine_) {
-            return gs::rendering::RenderingPipelineResult(false);
-        }
-
-        const SplatData* model = getModel();
-        if (!model) {
-            return gs::rendering::RenderingPipelineResult(false);
-        }
-
-        return rendering_engine_->renderWithPipeline(*model, request);
-    }
-
-    void Scene::handleModelInfoQuery() {
-        events::query::ModelInfo response;
-
-        if (hasModel()) {
-            if (mode_ == Mode::Viewing) {
-                response.has_model = true;
-                response.num_gaussians = getTotalGaussianCount();
-
-                // Get combined model to access its properties
-                const SplatData* combined = getModel();
-                if (combined) {
-                    response.sh_degree = combined->get_active_sh_degree();
-                    response.scene_scale = combined->get_scene_scale();
-                } else {
-                    response.sh_degree = 0;
-                    response.scene_scale = 0.0f;
-                }
-
-                // Count visible models
-                int visible_count = 0;
-                for (const auto& node : scene_graph_) {
-                    if (node.visible)
-                        visible_count++;
-                }
-
-                response.source = std::format("PLY Scene ({} models, {} visible)",
-                                              scene_graph_.size(), visible_count);
-            } else if (model_provider_) {
-                const SplatData* model = model_provider_->getModel();
-                response.has_model = true;
-                response.num_gaussians = static_cast<size_t>(model->size());
-                response.sh_degree = model->get_active_sh_degree();
-                response.scene_scale = model->get_scene_scale();
-                response.source = model_provider_->getModelSource();
-            }
-        } else {
-            response.has_model = false;
-            response.num_gaussians = 0;
-            response.sh_degree = 0;
-            response.scene_scale = 0.0f;
-            response.source = "None";
-        }
-
-        response.emit();
-    }
-
-    void Scene::publishModeChange(Mode old_mode, Mode new_mode) {
-        if (old_mode == new_mode)
-            return;
-
-        // Convert internal mode to string for the event
-        auto modeToString = [](Mode m) -> std::string {
-            switch (m) {
-            case Mode::Empty: return "Empty";
-            case Mode::Viewing: return "Viewing";
-            case Mode::Training: return "Training";
-            default: return "Unknown";
-            }
-        };
-
-        events::ui::RenderModeChanged{
-            .old_mode = modeToString(old_mode),
-            .new_mode = modeToString(new_mode)}
-            .emit();
     }
 
 } // namespace gs
