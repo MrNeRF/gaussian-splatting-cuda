@@ -22,12 +22,14 @@ jobs:
       - name: Install GCC 14 and dependencies
         run: |
           apt-get update
-          apt-get install -y git curl zip unzip tar pkg-config python3 cmake gcc-14 g++-14
+          apt-get install -y git curl unzip cmake gcc-14 g++-14
           update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 \
                               --slave /usr/bin/g++ g++ /usr/bin/g++-14
 
       - name: Setup vcpkg
         run: |
+          apt-get update
+          apt-get install -y zip tar pkg-config python3 xinerama xcursor xorg libglu1-mesa
           cd ..
           git clone https://github.com/microsoft/vcpkg.git
           ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
