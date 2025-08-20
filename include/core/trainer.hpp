@@ -46,12 +46,12 @@ namespace gs {
         void request_pause() { pause_requested_ = true; }
         void request_resume() { pause_requested_ = false; }
         void request_save() { save_requested_ = true; }
-        void request_stop() { stop_requested_ = true; } // This will fully stop training
+        void request_stop() { stop_requested_ = true; }
 
         bool is_paused() const { return is_paused_.load(); }
         bool is_running() const { return is_running_.load(); }
         bool is_training_complete() const { return training_complete_.load(); }
-        bool has_stopped() const { return stop_requested_.load(); } // Check if stop was requested
+        bool has_stopped() const { return stop_requested_.load(); }
 
         // Get current training state
         int get_current_iteration() const { return current_iteration_.load(); }
@@ -66,14 +66,25 @@ namespace gs {
         const param::TrainingParameters& getParams() const { return params_; }
 
         std::shared_ptr<const Camera> getCamById(int camId) const;
-
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
         void setProject(std::shared_ptr<gs::management::Project> project) { lf_project_ = project; }
 
     private:
-        // this is for unsubscribing in the DTOR
-        gs::event::HandlerId train_started_handle_ = 0;
+        // Helper for deferred event emission to prevent deadlocks
+        struct DeferredEvents {
+            std::vector<std::function<void()>> events;
+
+            template <typename Event>
+            void add(Event&& e) {
+                events.push_back([e = std::move(e)]() { e.emit(); });
+            }
+
+            ~DeferredEvents() {
+                for (auto& e : events)
+                    e();
+            }
+        };
 
         // Training step result
         enum class StepResult {
@@ -83,15 +94,14 @@ namespace gs {
         };
 
         // Protected method for processing a single training step
-        // Returns result indicating whether training should continue
         std::expected<StepResult, std::string> train_step(
             int iter,
-            Camera* cam, // Use global Camera, not gs::Camera
+            Camera* cam,
             torch::Tensor gt_image,
             RenderMode render_mode,
             std::stop_token stop_token = {});
 
-        // Protected methods for computing loss - now return expected values
+        // Protected methods for computing loss
         std::expected<torch::Tensor, std::string> compute_photometric_loss(
             const RenderOutput& render_output,
             const torch::Tensor& gt_image,
@@ -131,7 +141,7 @@ namespace gs {
         std::unique_ptr<gs::BilateralGrid> bilateral_grid_;
         std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
 
-        // Metrics evaluator - handles all evaluation logic
+        // Metrics evaluator
         std::unique_ptr<metrics::MetricsEvaluator> evaluator_;
 
         // Single mutex that protects the model during training
@@ -144,6 +154,7 @@ namespace gs {
         std::atomic<bool> is_paused_{false};
         std::atomic<bool> is_running_{false};
         std::atomic<bool> training_complete_{false};
+        std::atomic<bool> ready_to_start_{false};
 
         // Current training state
         std::atomic<int> current_iteration_{0};
@@ -154,8 +165,10 @@ namespace gs {
         std::atomic<bool> callback_busy_{false};
         at::cuda::CUDAStream callback_stream_ = at::cuda::getStreamFromPool(false);
         at::cuda::CUDAEvent callback_launch_event_;
+
         // camera id to cam
         std::map<int, std::shared_ptr<const Camera>> m_cam_id_to_cam;
+
         // LichtFeld project
         std::shared_ptr<gs::management::Project> lf_project_ = nullptr;
     };

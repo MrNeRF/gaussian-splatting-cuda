@@ -1,14 +1,11 @@
 #include "core/data_loading_service.hpp"
-#include "core/viewer_state_manager.hpp"
 #include "scene/scene_manager.hpp"
 #include <print>
 
 namespace gs::visualizer {
 
-    DataLoadingService::DataLoadingService(SceneManager* scene_manager,
-                                           ViewerStateManager* state_manager)
-        : scene_manager_(scene_manager),
-          state_manager_(state_manager) {
+    DataLoadingService::DataLoadingService(SceneManager* scene_manager)
+        : scene_manager_(scene_manager) {
         setupEventHandlers();
     }
 
@@ -27,14 +24,13 @@ namespace gs::visualizer {
         if (cmd.is_dataset) {
             loadDataset(cmd.path);
         } else {
-            // Check current mode to decide whether to add or replace
-            auto state = scene_manager_->getCurrentState();
-            if (state.type == SceneManager::SceneType::PLY) {
-                // In PLY mode, add to existing scene
-                addPLYToScene(cmd.path);
+            // Check if we should add or replace
+            if (scene_manager_->hasPLYFiles()) { // FIXED: Changed from isViewing()
+                // In PLY viewing mode, add to existing
+                scene_manager_->addPLY(cmd.path);
             } else {
-                // Not in PLY mode or first PLY - load normally
-                loadPLY(cmd.path);
+                // Not in viewing mode - load as new scene
+                scene_manager_->loadPLY(cmd.path);
             }
         }
     }
@@ -45,9 +41,6 @@ namespace gs::visualizer {
 
             // Load through scene manager
             scene_manager_->loadPLY(path);
-
-            // Update state
-            state_manager_->setPLYPath(path);
 
             // Emit success event
             events::notify::Log{
@@ -76,11 +69,8 @@ namespace gs::visualizer {
             // Extract name from path
             std::string name = path.stem().string();
 
-            // Emit add PLY command
-            events::cmd::AddPLY{
-                .path = path,
-                .name = name}
-                .emit();
+            // Add through scene manager
+            scene_manager_->addPLY(path, name);
 
             // Log success
             events::notify::Log{
@@ -111,9 +101,6 @@ namespace gs::visualizer {
             // Load through scene manager
             scene_manager_->loadDataset(path, params_);
 
-            // Update state
-            state_manager_->setDatasetPath(path);
-
             // Emit success event
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
@@ -136,8 +123,7 @@ namespace gs::visualizer {
 
     void DataLoadingService::clearScene() {
         try {
-            scene_manager_->clearScene();
-            state_manager_->reset();
+            scene_manager_->clear();
 
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,

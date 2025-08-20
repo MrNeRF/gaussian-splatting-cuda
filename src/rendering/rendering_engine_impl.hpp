@@ -3,10 +3,10 @@
 #include "axes_renderer.hpp"
 #include "bbox_renderer.hpp"
 #include "grid_renderer.hpp"
-#include "point_cloud_renderer.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering_pipeline.hpp"
 #include "screen_renderer.hpp"
+#include "shader_manager.hpp"
 #include "viewport_gizmo.hpp"
 
 namespace gs::rendering {
@@ -16,36 +16,36 @@ namespace gs::rendering {
         RenderingEngineImpl();
         ~RenderingEngineImpl() override;
 
-        void initialize() override;
+        Result<void> initialize() override;
         void shutdown() override;
-        bool isInitialized() const override { return initialized_; }
+        bool isInitialized() const override;
 
-        RenderResult renderGaussians(
+        Result<RenderResult> renderGaussians(
             const SplatData& splat_data,
             const RenderRequest& request) override;
 
-        void presentToScreen(
+        Result<void> presentToScreen(
             const RenderResult& result,
             const glm::ivec2& viewport_pos,
             const glm::ivec2& viewport_size) override;
 
-        void renderGrid(
+        Result<void> renderGrid(
             const ViewportData& viewport,
             GridPlane plane,
             float opacity) override;
 
-        void renderBoundingBox(
+        Result<void> renderBoundingBox(
             const BoundingBox& box,
             const ViewportData& viewport,
             const glm::vec3& color,
             float line_width) override;
 
-        void renderCoordinateAxes(
+        Result<void> renderCoordinateAxes(
             const ViewportData& viewport,
             float size,
             const std::array<bool, 3>& visible) override;
 
-        void renderViewportGizmo(
+        Result<void> renderViewportGizmo(
             const glm::mat3& camera_rotation,
             const glm::vec2& viewport_pos,
             const glm::vec2& viewport_size) override;
@@ -56,29 +56,27 @@ namespace gs::rendering {
             const RenderingPipelineRequest& request) override;
 
         // Factory methods
-        std::shared_ptr<IBoundingBox> createBoundingBox() override;
-        std::shared_ptr<ICoordinateAxes> createCoordinateAxes() override;
+        Result<std::shared_ptr<IBoundingBox>> createBoundingBox() override;
+        Result<std::shared_ptr<ICoordinateAxes>> createCoordinateAxes() override;
 
     private:
-        void initializeShaders();
+        Result<void> initializeShaders();
         glm::mat4 createProjectionMatrix(const ViewportData& viewport) const;
         glm::mat4 createViewMatrix(const ViewportData& viewport) const;
 
         // Core components
-        std::unique_ptr<RenderingPipeline> pipeline_;
-        std::unique_ptr<PointCloudRenderer> point_cloud_renderer_;
+        RenderingPipeline pipeline_;
+        // REMOVED: PointCloudRenderer point_cloud_renderer_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
 
         // Overlay renderers
-        std::unique_ptr<RenderInfiniteGrid> grid_renderer_;
-        std::unique_ptr<RenderBoundingBox> bbox_renderer_;
-        std::unique_ptr<RenderCoordinateAxes> axes_renderer_;
-        std::unique_ptr<ViewportGizmo> viewport_gizmo_;
+        RenderInfiniteGrid grid_renderer_;
+        RenderBoundingBox bbox_renderer_;
+        RenderCoordinateAxes axes_renderer_;
+        ViewportGizmo viewport_gizmo_;
 
         // Shaders
-        std::shared_ptr<Shader> quad_shader_;
-
-        bool initialized_ = false;
+        ManagedShader quad_shader_;
     };
 
 } // namespace gs::rendering

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "input/input_handler.hpp"
+#include "input/input_controller.hpp"
 #include "rendering/rendering_manager.hpp"
 #include <string>
 #include <string_view>

@@ -180,8 +180,6 @@ namespace gs {
         if (callback_busy_.load()) {
             callback_stream_.synchronize();
         }
-        // unsubscribe - because when the event emits while class destroyed we get crash
-        gs::event::bus().remove<gs::events::internal::TrainingReadyToStart>(train_started_handle_);
     }
 
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
@@ -276,7 +274,7 @@ namespace gs {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
             }
 
-            // Compute losses using the factored-out functions
+            // Compute losses
             auto loss_result = compute_photometric_loss(r_output,
                                                         gt_image,
                                                         strategy_->get_model(),
@@ -339,7 +337,8 @@ namespace gs {
             {
                 torch::NoGradGuard no_grad;
 
-                // Lock for writing during parameter updates
+                DeferredEvents deferred;
+
                 {
                     std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
@@ -352,12 +351,13 @@ namespace gs {
                         bilateral_grid_optimizer_->zero_grad(true);
                     }
 
-                    // Emit model updated event
-                    events::state::ModelUpdated{
+                    // Queue event for emission after lock release
+                    deferred.add(events::state::ModelUpdated{
                         .iteration = iter,
-                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())}
-                        .emit();
-                }
+                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())});
+                } // Lock released here
+
+                // Events automatically emitted here when deferred destructs
 
                 // Clean evaluation - let the evaluator handle everything
                 if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
@@ -401,21 +401,20 @@ namespace gs {
     std::expected<void, std::string> Trainer::train(std::stop_token stop_token) {
         is_running_ = false;
         training_complete_ = false;
+        ready_to_start_ = false; // Reset the flag
 
         // Event-based ready signaling
         if (!params_.optimization.headless) {
-            std::atomic<bool> ready{false};
-
-            // Subscribe temporarily to start signal
-            train_started_handle_ = events::internal::TrainingReadyToStart::when([&ready](const auto&) {
-                ready = true;
+            // Subscribe to start signal (no need to store handle)
+            events::internal::TrainingReadyToStart::when([this](const auto&) {
+                ready_to_start_ = true;
             });
 
             // Signal we're ready
             events::internal::TrainerReady{}.emit();
 
             // Wait for start signal
-            while (!ready.load() && !stop_token.stop_requested()) {
+            while (!ready_to_start_.load() && !stop_token.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
         }
