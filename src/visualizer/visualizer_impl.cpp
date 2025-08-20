@@ -1,4 +1,3 @@
-// visualizer_impl.cpp
 #include "visualizer_impl.hpp"
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"

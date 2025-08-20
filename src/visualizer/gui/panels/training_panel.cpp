@@ -12,19 +12,19 @@ namespace gs::gui::panels {
 
         auto& state = TrainingPanelState::getInstance();
 
-        // FIX: Direct call instead of query event!
+        // Direct call to TrainerManager - no state duplication
         auto* trainer_manager = ctx.viewer->getTrainerManager();
         if (!trainer_manager || !trainer_manager->hasTrainer()) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
             return;
         }
 
-        // Get state directly - no events needed!
+        // Get state directly from the single source of truth
         auto trainer_state = trainer_manager->getState();
         int current_iteration = trainer_manager->getCurrentIteration();
         float current_loss = trainer_manager->getCurrentLoss();
 
-        // Render controls based on state
+        // Render controls based on trainer state
         switch (trainer_state) {
         case TrainerManager::State::Idle:
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");

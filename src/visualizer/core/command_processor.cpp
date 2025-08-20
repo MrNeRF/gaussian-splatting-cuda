@@ -64,53 +64,63 @@ namespace gs {
     std::string CommandProcessor::handleStatus() {
         std::ostringstream result;
 
-        // FIX: Direct call instead of query event
         if (scene_manager_) {
-            auto* trainer_manager = scene_manager_->getTrainerManager();
-            if (trainer_manager && trainer_manager->hasTrainer()) {
-                auto state = trainer_manager->getState();
+            // Check content type first
+            auto content_type = scene_manager_->getContentType();
 
-                result << "Training Status:\n";
-                result << "  State: ";
+            if (content_type == SceneManager::ContentType::Dataset) {
+                // Only check training state if we have a dataset loaded
+                auto* trainer_manager = scene_manager_->getTrainerManager();
+                if (trainer_manager && trainer_manager->hasTrainer()) {
+                    auto state = trainer_manager->getState();
 
-                // Convert state to string
-                switch (state) {
-                case TrainerManager::State::Idle:
-                    result << "Idle";
-                    break;
-                case TrainerManager::State::Ready:
-                    result << "Ready";
-                    break;
-                case TrainerManager::State::Running:
-                    result << "Running";
-                    break;
-                case TrainerManager::State::Paused:
-                    result << "Paused";
-                    break;
-                case TrainerManager::State::Stopping:
-                    result << "Stopping";
-                    break;
-                case TrainerManager::State::Completed:
-                    result << "Completed";
-                    break;
-                case TrainerManager::State::Error:
-                    result << "Error";
-                    break;
-                default:
-                    result << "Unknown";
-                    break;
+                    result << "Training Status:\n";
+                    result << "  State: ";
+
+                    // Convert state to string
+                    switch (state) {
+                    case TrainerManager::State::Idle:
+                        result << "Idle";
+                        break;
+                    case TrainerManager::State::Ready:
+                        result << "Ready";
+                        break;
+                    case TrainerManager::State::Running:
+                        result << "Running";
+                        break;
+                    case TrainerManager::State::Paused:
+                        result << "Paused";
+                        break;
+                    case TrainerManager::State::Stopping:
+                        result << "Stopping";
+                        break;
+                    case TrainerManager::State::Completed:
+                        result << "Completed";
+                        break;
+                    case TrainerManager::State::Error:
+                        result << "Error";
+                        break;
+                    default:
+                        result << "Unknown";
+                        break;
+                    }
+
+                    result << "\n";
+                    result << "  Current Iteration: " << trainer_manager->getCurrentIteration() << "\n";
+                    result << "  Current Loss: " << std::fixed << std::setprecision(6)
+                           << trainer_manager->getCurrentLoss();
+
+                    auto error_msg = trainer_manager->getLastError();
+                    if (!error_msg.empty()) {
+                        result << "\n  Error: " << error_msg;
+                    }
+                } else {
+                    result << "Dataset loaded but no trainer available";
                 }
-
-                result << "\n";
-                result << "  Current Iteration: " << trainer_manager->getCurrentIteration() << "\n";
-                result << "  Current Loss: " << std::fixed << std::setprecision(6) << trainer_manager->getCurrentLoss();
-
-                auto error_msg = trainer_manager->getLastError();
-                if (!error_msg.empty()) {
-                    result << "\n  Error: " << error_msg;
-                }
+            } else if (content_type == SceneManager::ContentType::PLYFiles) {
+                result << "PLY Viewer mode (no training)";
             } else {
-                result << "No trainer available (viewer mode)";
+                result << "No content loaded";
             }
         } else {
             result << "No scene manager available";
@@ -135,8 +145,12 @@ namespace gs {
                     result << "  Number of Nodes: " << info.num_nodes << "\n";
                 }
 
-                if (scene_manager_->isTraining()) {
-                    result << "  Training Mode: Active\n";
+                // Only mention training if we have a dataset loaded
+                if (scene_manager_->getContentType() == SceneManager::ContentType::Dataset) {
+                    auto* trainer_manager = scene_manager_->getTrainerManager();
+                    if (trainer_manager && trainer_manager->isRunning()) {
+                        result << "  Training Mode: Active\n";
+                    }
                 }
             } else {
                 result << "No scene loaded";

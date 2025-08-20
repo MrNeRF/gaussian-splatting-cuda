@@ -31,40 +31,6 @@ namespace gs {
         cmd::ClearScene::when([this](const auto&) {
             clear();
         });
-<<<<<<< Updated upstream
-
-        // Training state updates
-        state::TrainingStarted::when([this](const auto&) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (auto* training = std::get_if<TrainingState>(&state_)) {
-                training->is_running = true;
-                training->current_iteration = 0;
-            }
-        });
-
-        state::TrainingProgress::when([this](const auto& e) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (auto* training = std::get_if<TrainingState>(&state_)) {
-                training->current_iteration = e.iteration;
-            }
-        });
-
-        state::TrainingCompleted::when([this](const auto& e) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (auto* training = std::get_if<TrainingState>(&state_)) {
-                training->is_running = false;
-                training->current_iteration = e.iteration;
-            }
-        });
-
-        state::TrainingStopped::when([this](const auto&) {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (auto* training = std::get_if<TrainingState>(&state_)) {
-                training->is_running = false;
-            }
-        });
-=======
->>>>>>> Stashed changes
     }
 
     void SceneManager::loadPLY(const std::filesystem::path& path) {
@@ -95,14 +61,17 @@ namespace gs {
             std::string name = path.stem().string();
             scene_.addNode(name, std::make_unique<SplatData>(std::move(**splat_data)));
 
-            // Transition to viewing state
-            ViewingState new_state;
-            new_state.ply_paths.push_back(path);
-            transitionTo(new_state);
+            // Update content state
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                content_type_ = ContentType::PLYFiles;
+                ply_paths_.clear();
+                ply_paths_.push_back(path);
+            }
 
             // Emit events
             events::state::SceneLoaded{
-                .scene = nullptr, // Not used anymore
+                .scene = nullptr,
                 .path = path,
                 .type = events::state::SceneLoaded::Type::PLY,
                 .num_gaussians = scene_.getTotalGaussianCount()}
@@ -125,8 +94,8 @@ namespace gs {
 
     void SceneManager::addPLY(const std::filesystem::path& path, const std::string& name_hint) {
         try {
-            // If not in viewing state, switch to it
-            if (!isViewing()) {
+            // If not in PLY mode, switch to it
+            if (content_type_ != ContentType::PLYFiles) {
                 loadPLY(path);
                 return;
             }
@@ -161,12 +130,10 @@ namespace gs {
 
             scene_.addNode(name, std::make_unique<SplatData>(std::move(**splat_data)));
 
-            // Update state
+            // Update paths
             {
                 std::lock_guard<std::mutex> lock(state_mutex_);
-                if (auto* viewing = std::get_if<ViewingState>(&state_)) {
-                    viewing->ply_paths.push_back(path);
-                }
+                ply_paths_.push_back(path);
             }
 
             events::state::PLYAdded{
@@ -189,7 +156,9 @@ namespace gs {
 
         // If no nodes left, transition to empty
         if (scene_.getNodeCount() == 0) {
-            transitionTo(EmptyState{});
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            content_type_ = ContentType::Empty;
+            ply_paths_.clear();
         }
 
         events::state::PLYRemoved{.name = name}.emit();
@@ -231,17 +200,18 @@ namespace gs {
                 throw std::runtime_error("No trainer manager available");
             }
 
-            // Transition to training state - only store the dataset path
-            TrainingState new_state;
-            new_state.dataset_path = path;
-            transitionTo(new_state);
+            // Update content state
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                content_type_ = ContentType::Dataset;
+                dataset_path_ = path;
+            }
 
             // Emit events
-            size_t num_images = setup_result->dataset->size().value();
-            size_t num_gaussians = trainer_manager_->getTrainer()
-                                       ->get_strategy()
-                                       .get_model()
-                                       .size();
+            const size_t num_gaussians = trainer_manager_->getTrainer()
+                                             ->get_strategy()
+                                             .get_model()
+                                             .size();
 
             events::state::SceneLoaded{
                 .scene = nullptr,
@@ -254,7 +224,7 @@ namespace gs {
                 .path = path,
                 .success = true,
                 .error = std::nullopt,
-                .num_images = num_images,
+                .num_images = setup_result->dataset->size().value(),
                 .num_points = num_gaussians}
                 .emit();
 
@@ -270,13 +240,19 @@ namespace gs {
 
     void SceneManager::clear() {
         // Stop training if active
-        if (trainer_manager_ && isTraining()) {
+        if (trainer_manager_ && content_type_ == ContentType::Dataset) {
             events::cmd::StopTraining{}.emit();
             trainer_manager_->clearTrainer();
         }
 
         scene_.clear();
-        transitionTo(EmptyState{});
+
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            content_type_ = ContentType::Empty;
+            ply_paths_.clear();
+            dataset_path_.clear();
+        }
 
         events::state::SceneCleared{}.emit();
         emitSceneChanged();
@@ -285,12 +261,10 @@ namespace gs {
     const SplatData* SceneManager::getModelForRendering() const {
         std::lock_guard<std::mutex> lock(state_mutex_);
 
-        if (std::holds_alternative<ViewingState>(state_)) {
+        if (content_type_ == ContentType::PLYFiles) {
             return scene_.getCombinedModel();
-        } else if (std::holds_alternative<TrainingState>(state_)) {
+        } else if (content_type_ == ContentType::Dataset) {
             if (trainer_manager_ && trainer_manager_->getTrainer()) {
-                // For training, we need to be careful about thread safety
-                // Return the model directly from trainer
                 return &trainer_manager_->getTrainer()->get_strategy().get_model();
             }
         }
@@ -303,18 +277,22 @@ namespace gs {
 
         SceneInfo info;
 
-        if (std::holds_alternative<EmptyState>(state_)) {
+        switch (content_type_) {
+        case ContentType::Empty:
             info.source_type = "Empty";
-        } else if (auto* viewing = std::get_if<ViewingState>(&state_)) {
+            break;
+
+        case ContentType::PLYFiles:
             info.has_model = scene_.hasNodes();
             info.num_gaussians = scene_.getTotalGaussianCount();
             info.num_nodes = scene_.getNodeCount();
             info.source_type = "PLY";
-            if (!viewing->ply_paths.empty()) {
-                info.source_path = viewing->ply_paths.back();
+            if (!ply_paths_.empty()) {
+                info.source_path = ply_paths_.back();
             }
-        } else if (auto* training = std::get_if<TrainingState>(&state_)) {
-            // Query trainer manager for current state
+            break;
+
+        case ContentType::Dataset:
             info.has_model = trainer_manager_ && trainer_manager_->getTrainer();
             if (info.has_model) {
                 info.num_gaussians = trainer_manager_->getTrainer()
@@ -324,41 +302,11 @@ namespace gs {
             }
             info.num_nodes = 1;
             info.source_type = "Dataset";
-            info.source_path = training->dataset_path;
+            info.source_path = dataset_path_;
+            break;
         }
 
         return info;
-    }
-
-    void SceneManager::transitionTo(State new_state) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-
-        // Get old mode for event
-        std::string old_mode = "Unknown";
-        if (std::holds_alternative<EmptyState>(state_))
-            old_mode = "Empty";
-        else if (std::holds_alternative<ViewingState>(state_))
-            old_mode = "Viewing";
-        else if (std::holds_alternative<TrainingState>(state_))
-            old_mode = "Training";
-
-        state_ = std::move(new_state);
-
-        // Get new mode for event
-        std::string new_mode = "Unknown";
-        if (std::holds_alternative<EmptyState>(state_))
-            new_mode = "Empty";
-        else if (std::holds_alternative<ViewingState>(state_))
-            new_mode = "Viewing";
-        else if (std::holds_alternative<TrainingState>(state_))
-            new_mode = "Training";
-
-        if (old_mode != new_mode) {
-            events::ui::RenderModeChanged{
-                .old_mode = old_mode,
-                .new_mode = new_mode}
-                .emit();
-        }
     }
 
     void SceneManager::emitSceneChanged() {

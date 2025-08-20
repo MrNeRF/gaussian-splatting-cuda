@@ -126,7 +126,7 @@ namespace gs::visualizer {
         if (settings_.adaptive_frame_rate && !settings_.use_crop_box && scene_manager) {
             // Check if actively training (not just in training mode)
             bool is_training = false;
-            if (scene_manager->isTraining()) {
+            if (scene_manager->hasDataset()) {
                 // Query the TrainerManager directly for running state
                 const auto* trainer_manager = scene_manager->getTrainerManager();
                 if (trainer_manager) {

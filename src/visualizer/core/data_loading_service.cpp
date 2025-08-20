@@ -25,7 +25,7 @@ namespace gs::visualizer {
             loadDataset(cmd.path);
         } else {
             // Check if we should add or replace
-            if (scene_manager_->isViewing()) {
+            if (scene_manager_->hasPLYFiles()) { // FIXED: Changed from isViewing()
                 // In PLY viewing mode, add to existing
                 scene_manager_->addPLY(cmd.path);
             } else {

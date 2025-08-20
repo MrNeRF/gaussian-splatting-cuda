@@ -9,7 +9,6 @@
 #include "internal/viewport.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering/rendering_manager.hpp"
-#include "scene/scene.hpp"
 #include "scene/scene_manager.hpp"
 #include "tools/tool_manager.hpp"
 #include "training/training_manager.hpp"
@@ -40,12 +39,7 @@ namespace gs::visualizer {
         std::expected<void, std::string> loadDataset(const std::filesystem::path& path) override;
         void clearScene() override;
 
-        auto getCurrentMode() const { return scene_manager_->getCurrentMode(); }
         Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
-
-        // Get paths from SceneManager
-        std::filesystem::path getCurrentPLYPath() const { return scene_manager_->getCurrentPLYPath(); }
-        std::filesystem::path getCurrentDatasetPath() const { return scene_manager_->getCurrentDatasetPath(); }
 
         // Component access
         TrainerManager* getTrainerManager() { return trainer_manager_.get(); }

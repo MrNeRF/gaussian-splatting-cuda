@@ -5,7 +5,6 @@
 #include "scene/scene.hpp"
 #include <filesystem>
 #include <mutex>
-#include <variant>
 
 namespace gs {
 
@@ -16,25 +15,12 @@ namespace gs {
 
     class SceneManager {
     public:
-        // ViewerMode is part of SceneManager's interface
-        enum class ViewerMode {
+        // Content type - what's loaded, not execution state
+        enum class ContentType {
             Empty,
-            PLYViewer,
-            Training
+            PLYFiles,
+            Dataset
         };
-
-        // Clear state representation
-        struct EmptyState {};
-
-        struct ViewingState {
-            std::vector<std::filesystem::path> ply_paths;
-        };
-
-        struct TrainingState {
-            std::filesystem::path dataset_path;
-        };
-
-        using State = std::variant<EmptyState, ViewingState, TrainingState>;
 
         SceneManager();
         ~SceneManager();
@@ -43,56 +29,36 @@ namespace gs {
         SceneManager(const SceneManager&) = delete;
         SceneManager& operator=(const SceneManager&) = delete;
 
-        // State queries - direct, no events
-        const State& getState() const {
+        // Content queries - direct, no events
+        ContentType getContentType() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            return state_;
+            return content_type_;
         }
 
         bool isEmpty() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            return std::holds_alternative<EmptyState>(state_);
+            return content_type_ == ContentType::Empty;
         }
 
-        bool isViewing() const {
+        bool hasPLYFiles() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            return std::holds_alternative<ViewingState>(state_);
+            return content_type_ == ContentType::PLYFiles;
         }
 
-        bool isTraining() const {
+        bool hasDataset() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            return std::holds_alternative<TrainingState>(state_);
-        }
-
-        // Get current mode as enum
-        ViewerMode getCurrentMode() const {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            if (std::holds_alternative<EmptyState>(state_))
-                return ViewerMode::Empty;
-            if (std::holds_alternative<ViewingState>(state_))
-                return ViewerMode::PLYViewer;
-            if (std::holds_alternative<TrainingState>(state_))
-                return ViewerMode::Training;
-            return ViewerMode::Empty;
+            return content_type_ == ContentType::Dataset;
         }
 
         // Path accessors
-        std::filesystem::path getCurrentPLYPath() const {
+        std::vector<std::filesystem::path> getPLYPaths() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            if (auto* viewing = std::get_if<ViewingState>(&state_)) {
-                if (!viewing->ply_paths.empty()) {
-                    return viewing->ply_paths.back();
-                }
-            }
-            return {};
+            return ply_paths_;
         }
 
-        std::filesystem::path getCurrentDatasetPath() const {
+        std::filesystem::path getDatasetPath() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            if (auto* training = std::get_if<TrainingState>(&state_)) {
-                return training->dataset_path;
-            }
-            return {};
+            return dataset_path_;
         }
 
         // Scene access
@@ -129,13 +95,15 @@ namespace gs {
         SceneInfo getSceneInfo() const;
 
     private:
-        void transitionTo(State new_state);
         void setupEventHandlers();
         void emitSceneChanged();
 
         Scene scene_;
         mutable std::mutex state_mutex_;
-        State state_ = EmptyState{};
+
+        ContentType content_type_ = ContentType::Empty;
+        std::vector<std::filesystem::path> ply_paths_;
+        std::filesystem::path dataset_path_;
 
         // Training support
         TrainerManager* trainer_manager_ = nullptr;

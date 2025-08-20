@@ -88,46 +88,66 @@ namespace gs::gui::widgets {
         const char* mode_str = "Unknown";
         ImVec4 mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
 
-<<<<<<< Updated upstream
-        SceneManager::ViewerMode mode = scene_manager->getCurrentMode(); // Use SceneManager:: namespace
-=======
-        SceneManager::ViewerMode mode = scene_manager->getCurrentMode();
->>>>>>> Stashed changes
-        switch (mode) {
-        case SceneManager::ViewerMode::Empty:
+        // Content determines base mode
+        SceneManager::ContentType content = scene_manager->getContentType();
+
+        switch (content) {
+        case SceneManager::ContentType::Empty:
             mode_str = "Empty";
             mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
             break;
-        case SceneManager::ViewerMode::PLYViewer:
+
+        case SceneManager::ContentType::PLYFiles:
             mode_str = "PLY Viewer";
             mode_color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);
             break;
-        case SceneManager::ViewerMode::Training: {
-<<<<<<< Updated upstream
-            auto state = scene_manager->getState();
-            if (auto* training = std::get_if<SceneManager::TrainingState>(&state)) {
-                if (training->is_running) {
-=======
-            // Query TrainerManager directly for training state
+
+        case SceneManager::ContentType::Dataset: {
+            // For dataset, check training state from TrainerManager
             auto* trainer_manager = scene_manager->getTrainerManager();
-            if (trainer_manager && trainer_manager->hasTrainer()) {
-                if (trainer_manager->isRunning()) {
->>>>>>> Stashed changes
-                    mode_str = "Training";
-                    mode_color = ImVec4(1.0f, 0.6f, 0.2f, 1.0f);
-                } else {
-                    mode_str = "Dataset (Ready)";
-                    mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
-                }
-            } else {
+            if (!trainer_manager || !trainer_manager->hasTrainer()) {
                 mode_str = "Dataset (No Trainer)";
                 mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+            } else {
+                // Use trainer state for specific mode
+                auto state = trainer_manager->getState();
+                switch (state) {
+                case TrainerManager::State::Ready:
+                    mode_str = "Dataset (Ready)";
+                    mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+                    break;
+                case TrainerManager::State::Running:
+                    mode_str = "Training";
+                    mode_color = ImVec4(1.0f, 0.6f, 0.2f, 1.0f);
+                    break;
+                case TrainerManager::State::Paused:
+                    mode_str = "Training (Paused)";
+                    mode_color = ImVec4(0.7f, 0.7f, 0.2f, 1.0f);
+                    break;
+                case TrainerManager::State::Completed:
+                    mode_str = "Training Complete";
+                    mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+                    break;
+                case TrainerManager::State::Error:
+                    mode_str = "Training Error";
+                    mode_color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+                    break;
+                case TrainerManager::State::Stopping:
+                    mode_str = "Stopping...";
+                    mode_color = ImVec4(0.7f, 0.5f, 0.5f, 1.0f);
+                    break;
+                default:
+                    mode_str = "Dataset";
+                    mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                }
             }
-        } break;
+            break;
+        }
         }
 
         ImGui::TextColored(mode_color, "Mode: %s", mode_str);
 
+        // Display scene info
         auto info = scene_manager->getSceneInfo();
         if (info.num_gaussians > 0) {
             ImGui::Text("Gaussians: %zu", info.num_gaussians);
@@ -137,8 +157,8 @@ namespace gs::gui::widgets {
             ImGui::Text("PLY Models: %zu", info.num_nodes);
         }
 
-        // Query training iteration directly from TrainerManager
-        if (scene_manager->isTraining()) {
+        // Display training iteration if actively training
+        if (content == SceneManager::ContentType::Dataset) {
             auto* trainer_manager = scene_manager->getTrainerManager();
             if (trainer_manager && trainer_manager->isRunning()) {
                 int iteration = trainer_manager->getCurrentIteration();
@@ -148,8 +168,5 @@ namespace gs::gui::widgets {
             }
         }
     }
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
 } // namespace gs::gui::widgets
