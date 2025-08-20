@@ -3,7 +3,6 @@
 #include "training/training_manager.hpp"
 #include "visualizer_impl.hpp"
 #include <cstdarg>
-#include <format>
 #include <imgui.h>
 
 namespace gs::gui::widgets {
@@ -89,13 +88,17 @@ namespace gs::gui::widgets {
         const char* mode_str = "Unknown";
         ImVec4 mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
 
-        if (scene_manager->isEmpty()) {
+        SceneManager::ViewerMode mode = scene_manager->getCurrentMode(); // Use SceneManager:: namespace
+        switch (mode) {
+        case SceneManager::ViewerMode::Empty:
             mode_str = "Empty";
             mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
-        } else if (scene_manager->isViewing()) {
+            break;
+        case SceneManager::ViewerMode::PLYViewer:
             mode_str = "PLY Viewer";
             mode_color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);
-        } else if (scene_manager->isTraining()) {
+            break;
+        case SceneManager::ViewerMode::Training: {
             auto state = scene_manager->getState();
             if (auto* training = std::get_if<SceneManager::TrainingState>(&state)) {
                 if (training->is_running) {
@@ -106,6 +109,7 @@ namespace gs::gui::widgets {
                     mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
                 }
             }
+        } break;
         }
 
         ImGui::TextColored(mode_color, "Mode: %s", mode_str);
@@ -127,25 +131,5 @@ namespace gs::gui::widgets {
                 }
             }
         }
-    }
-
-    const char* GetTrainerStateString(int state) {
-        // Helper function for trainer state to string conversion
-        switch (static_cast<TrainerManager::State>(state)) {
-        case TrainerManager::State::Idle: return "Idle";
-        case TrainerManager::State::Ready: return "Ready";
-        case TrainerManager::State::Running: return "Running";
-        case TrainerManager::State::Paused: return "Paused";
-        case TrainerManager::State::Stopping: return "Stopping";
-        case TrainerManager::State::Completed: return "Completed";
-        case TrainerManager::State::Error: return "Error";
-        default: return "Unknown";
-        }
-    }
-
-    std::string executeConsoleCommand([[maybe_unused]] const std::string& command,
-                                      [[maybe_unused]] visualizer::VisualizerImpl* viewer) {
-        // This is now handled in visualizer_impl.cpp
-        return "Command execution moved to visualizer";
     }
 } // namespace gs::gui::widgets

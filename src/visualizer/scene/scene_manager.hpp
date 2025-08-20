@@ -1,11 +1,9 @@
-// scene_manager.hpp
 #pragma once
 
 #include "core/events.hpp"
 #include "core/parameters.hpp"
 #include "scene/scene.hpp"
 #include <filesystem>
-#include <memory>
 #include <mutex>
 #include <variant>
 
@@ -18,6 +16,13 @@ namespace gs {
 
     class SceneManager {
     public:
+        // ViewerMode is part of SceneManager's interface
+        enum class ViewerMode {
+            Empty,
+            PLYViewer,
+            Training
+        };
+
         // Clear state representation
         struct EmptyState {};
 
@@ -61,6 +66,37 @@ namespace gs {
             return std::holds_alternative<TrainingState>(state_);
         }
 
+        // Get current mode as enum
+        ViewerMode getCurrentMode() const {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            if (std::holds_alternative<EmptyState>(state_))
+                return ViewerMode::Empty;
+            if (std::holds_alternative<ViewingState>(state_))
+                return ViewerMode::PLYViewer;
+            if (std::holds_alternative<TrainingState>(state_))
+                return ViewerMode::Training;
+            return ViewerMode::Empty;
+        }
+
+        // Path accessors
+        std::filesystem::path getCurrentPLYPath() const {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            if (auto* viewing = std::get_if<ViewingState>(&state_)) {
+                if (!viewing->ply_paths.empty()) {
+                    return viewing->ply_paths.back();
+                }
+            }
+            return {};
+        }
+
+        std::filesystem::path getCurrentDatasetPath() const {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            if (auto* training = std::get_if<TrainingState>(&state_)) {
+                return training->dataset_path;
+            }
+            return {};
+        }
+
         // Scene access
         Scene& getScene() { return scene_; }
         const Scene& getScene() const { return scene_; }
@@ -96,7 +132,6 @@ namespace gs {
     private:
         void transitionTo(State new_state);
         void setupEventHandlers();
-        void updateTrainingModel();
         void emitSceneChanged();
 
         Scene scene_;
@@ -105,8 +140,6 @@ namespace gs {
 
         // Training support
         TrainerManager* trainer_manager_ = nullptr;
-        mutable std::unique_ptr<SplatData> training_model_snapshot_;
-        mutable bool training_snapshot_valid_ = false;
 
         // Cache for parameters
         std::optional<param::TrainingParameters> cached_params_;

@@ -1,15 +1,11 @@
-// data_loading_service.cpp
 #include "core/data_loading_service.hpp"
-#include "core/viewer_state_manager.hpp"
 #include "scene/scene_manager.hpp"
 #include <print>
 
 namespace gs::visualizer {
 
-    DataLoadingService::DataLoadingService(SceneManager* scene_manager,
-                                           ViewerStateManager* state_manager)
-        : scene_manager_(scene_manager),
-          state_manager_(state_manager) {
+    DataLoadingService::DataLoadingService(SceneManager* scene_manager)
+        : scene_manager_(scene_manager) {
         setupEventHandlers();
     }
 
@@ -45,9 +41,6 @@ namespace gs::visualizer {
 
             // Load through scene manager
             scene_manager_->loadPLY(path);
-
-            // Update state
-            state_manager_->setPLYPath(path);
 
             // Emit success event
             events::notify::Log{
@@ -108,9 +101,6 @@ namespace gs::visualizer {
             // Load through scene manager
             scene_manager_->loadDataset(path, params_);
 
-            // Update state
-            state_manager_->setDatasetPath(path);
-
             // Emit success event
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
@@ -133,8 +123,7 @@ namespace gs::visualizer {
 
     void DataLoadingService::clearScene() {
         try {
-            scene_manager_->clear(); // Changed from clearScene() to clear()
-            state_manager_->reset();
+            scene_manager_->clear();
 
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,

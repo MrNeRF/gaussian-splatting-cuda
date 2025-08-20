@@ -1,4 +1,3 @@
-// scene_manager.cpp
 #include "scene/scene_manager.hpp"
 #include "core/training_setup.hpp"
 #include "loader/loader.hpp"
@@ -46,7 +45,6 @@ namespace gs {
             std::lock_guard<std::mutex> lock(state_mutex_);
             if (auto* training = std::get_if<TrainingState>(&state_)) {
                 training->current_iteration = e.iteration;
-                training_snapshot_valid_ = false; // Invalidate snapshot
             }
         });
 
@@ -277,9 +275,6 @@ namespace gs {
         }
 
         scene_.clear();
-        training_snapshot_valid_ = false;
-        training_model_snapshot_.reset();
-
         transitionTo(EmptyState{});
 
         events::state::SceneCleared{}.emit();

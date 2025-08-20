@@ -3,7 +3,7 @@
 #include "core/events.hpp"
 #include "core/trainer.hpp"
 #include <atomic>
-#include <filesystem>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <stop_token>
@@ -16,15 +16,6 @@ namespace gs {
         class VisualizerImpl;
     }
 
-    /**
-     * @brief Manages training lifecycle and thread coordination
-     *
-     * This class encapsulates all training-related functionality including:
-     * - Training thread management
-     * - State control (start/pause/resume/stop)
-     * - Progress tracking and reporting
-     * - Communication between trainer and viewer
-     */
     class TrainerManager {
     public:
         enum class State {
@@ -76,10 +67,15 @@ namespace gs {
         bool canResume() const { return state_ == State::Paused; }
         bool canStop() const { return isTrainingActive(); }
 
-        // Progress information
+        // Progress information - directly query trainer
         int getCurrentIteration() const;
         float getCurrentLoss() const;
         int getTotalIterations() const;
+        int getNumSplats() const;
+
+        // Loss buffer management (this needs to be stored)
+        std::deque<float> getLossBuffer() const;
+        void updateLoss(float loss);
 
         // Access to trainer (for rendering, etc.)
         Trainer* getTrainer() { return trainer_.get(); }
@@ -91,9 +87,8 @@ namespace gs {
         // Get last error message
         const std::string& getLastError() const { return last_error_; }
 
-        // call the trainer getCamById
+        // Camera access
         std::shared_ptr<const Camera> getCamById(int camId) const;
-
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
     private:
@@ -103,6 +98,7 @@ namespace gs {
         // State management
         void setState(State new_state);
         void handleTrainingComplete(bool success, const std::string& error = "");
+        void setupEventHandlers();
 
         // Member variables
         std::unique_ptr<Trainer> trainer_;
@@ -118,6 +114,11 @@ namespace gs {
         std::condition_variable completion_cv_;
         std::mutex completion_mutex_;
         bool training_complete_ = false;
+
+        // Loss buffer (the only metric we need to store)
+        int max_loss_points_ = 200;
+        std::deque<float> loss_buffer_;
+        mutable std::mutex loss_buffer_mutex_;
     };
 
 } // namespace gs

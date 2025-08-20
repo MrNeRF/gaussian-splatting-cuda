@@ -5,7 +5,6 @@ add_library(gs_visualizer STATIC
         core/main_loop.cpp
         core/data_loading_service.cpp
         core/command_processor.cpp
-        core/viewer_state_manager.cpp
 
         # Tools
         tools/crop_box_tool.cpp

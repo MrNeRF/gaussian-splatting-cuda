@@ -75,11 +75,7 @@ namespace gs::gui {
 
         applyDefaultStyle();
 
-        // Configure components
-        setScriptExecutor([this](const std::string& cmd) {
-            return widgets::executeConsoleCommand(cmd, viewer_);
-        });
-
+        // Configure file browser callback
         setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
             window_states_["file_browser"] = false;

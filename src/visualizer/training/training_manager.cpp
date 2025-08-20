@@ -4,6 +4,7 @@
 namespace gs {
 
     TrainerManager::TrainerManager() {
+        setupEventHandlers();
     }
 
     TrainerManager::~TrainerManager() {
@@ -67,6 +68,9 @@ namespace gs {
         trainer_.reset();
         last_error_.clear();
         setState(State::Idle);
+
+        // Reset loss buffer
+        loss_buffer_.clear();
     }
 
     bool TrainerManager::startTraining() {
@@ -199,6 +203,25 @@ namespace gs {
         return trainer_->getParams().optimization.iterations;
     }
 
+    int TrainerManager::getNumSplats() const {
+        if (!trainer_)
+            return 0;
+        return static_cast<int>(trainer_->get_strategy().get_model().size());
+    }
+
+    void TrainerManager::updateLoss(float loss) {
+        std::lock_guard<std::mutex> lock(loss_buffer_mutex_);
+        loss_buffer_.push_back(loss);
+        while (loss_buffer_.size() > static_cast<size_t>(max_loss_points_)) {
+            loss_buffer_.pop_front();
+        }
+    }
+
+    std::deque<float> TrainerManager::getLossBuffer() const {
+        std::lock_guard<std::mutex> lock(loss_buffer_mutex_);
+        return loss_buffer_;
+    }
+
     void TrainerManager::trainingThreadFunc(std::stop_token stop_token) {
         std::println("TrainerManager: Training thread started");
 
@@ -245,6 +268,15 @@ namespace gs {
             training_complete_ = true;
         }
         completion_cv_.notify_all();
+    }
+
+    void TrainerManager::setupEventHandlers() {
+        using namespace events;
+
+        // Listen for training progress events - only update loss buffer
+        state::TrainingProgress::when([this](const auto& event) {
+            updateLoss(event.loss);
+        });
     }
 
     std::shared_ptr<const Camera> TrainerManager::getCamById(int camId) const {

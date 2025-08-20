@@ -48,6 +48,7 @@ namespace gs::visualizer {
 
         // Subscribe to GridSettingsChanged events
         grid_settings_handler_id_ = events::ui::GridSettingsChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
             settings_.show_grid = event.enabled;
             settings_.grid_plane = event.plane;
             settings_.grid_opacity = event.opacity;
@@ -64,6 +65,50 @@ namespace gs::visualizer {
                 prev_result_ = gs::rendering::RenderResult{}; // Clear cached result when crop box changes
             }
         });
+
+        // Listen for render settings changes
+        events::ui::RenderSettingsChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
+            if (event.fov) {
+                settings_.fov = *event.fov;
+            }
+            if (event.scaling_modifier) {
+                settings_.scaling_modifier = *event.scaling_modifier;
+            }
+            if (event.antialiasing) {
+                settings_.antialiasing = *event.antialiasing;
+            }
+        });
+    }
+
+    void RenderingManager::updateSettings(const RenderSettings& new_settings) {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        settings_ = new_settings;
+    }
+
+    RenderSettings RenderingManager::getSettings() const {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        return settings_;
+    }
+
+    float RenderingManager::getFovDegrees() const {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        return settings_.fov;
+    }
+
+    float RenderingManager::getScalingModifier() const {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        return settings_.scaling_modifier;
+    }
+
+    void RenderingManager::setFov(float f) {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        settings_.fov = f;
+    }
+
+    void RenderingManager::setScalingModifier(float s) {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        settings_.scaling_modifier = s;
     }
 
     void RenderingManager::renderFrame(const RenderContext& context, SceneManager* scene_manager) {
@@ -216,6 +261,7 @@ namespace gs::visualizer {
         // End framerate tracking
         framerate_controller_.endFrame();
     }
+
     void RenderingManager::drawOverlays(const RenderContext& context) {
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {

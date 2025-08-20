@@ -14,15 +14,6 @@ namespace gs::visualizer {
           viewport_(options.width, options.height),
           window_manager_(std::make_unique<WindowManager>(options.title, options.width, options.height)) {
 
-        // Create state manager first
-        state_manager_ = std::make_unique<ViewerStateManager>();
-
-        // Set up compatibility pointers
-        info_ = state_manager_->getTrainingInfo();
-        config_ = state_manager_->getRenderingConfig();
-        anti_aliasing_ = options.antialiasing;
-        state_manager_->setAntiAliasing(options.antialiasing);
-
         // Create scene manager - it creates its own Scene internally
         scene_manager_ = std::make_unique<SceneManager>();
 
@@ -34,7 +25,7 @@ namespace gs::visualizer {
         // Create tool manager
         tool_manager_ = std::make_unique<ToolManager>(this);
         tool_manager_->registerBuiltinTools();
-        tool_manager_->addTool("Crop Box"); // Add crop box by default
+        tool_manager_->addTool("Crop Box");
         tool_manager_->addTool("World Transform");
         tool_manager_->addTool("Background");
 
@@ -44,14 +35,19 @@ namespace gs::visualizer {
         memory_monitor_ = std::make_unique<MemoryMonitor>();
         memory_monitor_->start();
 
-        // Create rendering manager
+        // Create rendering manager with initial antialiasing setting
         rendering_manager_ = std::make_unique<RenderingManager>();
+
+        // Set initial antialiasing
+        RenderSettings initial_settings = rendering_manager_->getSettings();
+        initial_settings.antialiasing = options.antialiasing;
+        rendering_manager_->updateSettings(initial_settings);
 
         // Create command processor
         command_processor_ = std::make_unique<CommandProcessor>(scene_manager_.get());
 
-        // Create data loading service
-        data_loader_ = std::make_unique<DataLoadingService>(scene_manager_.get(), state_manager_.get());
+        // Create data loading service - no longer needs state_manager
+        data_loader_ = std::make_unique<DataLoadingService>(scene_manager_.get());
 
         // Create main loop
         main_loop_ = std::make_unique<MainLoop>();
@@ -121,20 +117,13 @@ namespace gs::visualizer {
             }
         });
 
-        // Render settings changes are handled by ViewerStateManager
-        // but we need to sync with rendering manager
-        ui::RenderSettingsChanged::when([this](const auto&) {
-            auto settings = rendering_manager_->getSettings();
-
-            // Get current values from state manager
-            settings.fov = state_manager_->getRenderingConfig()->getFovDegrees();
-            settings.scaling_modifier = state_manager_->getRenderingConfig()->getScalingModifier();
-            settings.antialiasing = state_manager_->isAntiAliasingEnabled();
-
-            // Update compatibility flag
-            anti_aliasing_ = settings.antialiasing;
-
-            rendering_manager_->updateSettings(settings);
+        // Render settings changes - update antialiasing directly in RenderingManager
+        ui::RenderSettingsChanged::when([this](const auto& event) {
+            if (event.antialiasing && rendering_manager_) {
+                RenderSettings settings = rendering_manager_->getSettings();
+                settings.antialiasing = *event.antialiasing;
+                rendering_manager_->updateSettings(settings);
+            }
         });
 
         // UI events
@@ -190,7 +179,7 @@ namespace gs::visualizer {
         // Create simplified input controller AFTER ImGui is initialized
         input_controller_ = std::make_unique<InputController>(
             window_manager_->getWindow(), viewport_);
-        input_controller_->initialize(); // Must be AFTER gui_manager_->init()
+        input_controller_->initialize();
         input_controller_->setTrainingManager(trainer_manager_);
 
         // CRITICAL: Initialize rendering BEFORE tools
@@ -228,7 +217,7 @@ namespace gs::visualizer {
             input_controller_->setPointCloudMode(settings.point_cloud_mode);
         }
 
-        // Update rendering settings from state manager
+        // Update rendering settings
         RenderSettings settings = rendering_manager_->getSettings();
 
         // Get crop box state from tool
@@ -246,9 +235,8 @@ namespace gs::visualizer {
             settings.show_coord_axes = false;
         }
 
-        settings.antialiasing = state_manager_->isAntiAliasingEnabled();
-        settings.fov = state_manager_->getRenderingConfig()->getFovDegrees();
-        settings.scaling_modifier = state_manager_->getRenderingConfig()->getScalingModifier();
+        // Antialiasing is already in RenderingManager settings
+
         rendering_manager_->updateSettings(settings);
 
         // Get crop box for rendering
@@ -264,8 +252,6 @@ namespace gs::visualizer {
             ImVec2 pos = gui_manager_->getViewportPos();
             ImVec2 size = gui_manager_->getViewportSize();
 
-            // The pos and size are already relative to the window!
-            // We just need to pass them directly to the rendering
             viewport_region.x = pos.x;
             viewport_region.y = pos.y;
             viewport_region.width = size.x;
@@ -317,12 +303,6 @@ namespace gs::visualizer {
 
     void VisualizerImpl::run() {
         main_loop_->run();
-    }
-
-    void VisualizerImpl::forceRender() {
-        // Force an immediate render cycle
-        update();
-        render();
     }
 
     void VisualizerImpl::setParameters(const param::TrainingParameters& params) {

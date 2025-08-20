@@ -5,6 +5,7 @@
 #include "internal/viewport.hpp"
 #include "rendering/rendering.hpp"
 #include <memory>
+#include <mutex>
 
 namespace gs {
     namespace rendering {
@@ -23,6 +24,7 @@ namespace gs::visualizer {
     class BackgroundTool;
 
     struct RenderSettings {
+        // Core rendering settings
         float fov = 60.0f;
         float scaling_modifier = 1.0f;
         bool antialiasing = false;
@@ -35,6 +37,13 @@ namespace gs::visualizer {
         bool adaptive_frame_rate = true;
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
+
+        // Helper methods for FoV calculation
+        glm::vec2 getFov(size_t reso_x, size_t reso_y) const {
+            return glm::vec2(
+                atan(tan(glm::radians(fov) / 2.0f) * reso_x / reso_y) * 2.0f,
+                glm::radians(fov));
+        }
     };
 
     struct ViewportRegion {
@@ -63,9 +72,15 @@ namespace gs::visualizer {
         // Main render function
         void renderFrame(const RenderContext& context, SceneManager* scene_manager);
 
-        // Settings
-        void updateSettings(const RenderSettings& settings) { settings_ = settings; }
-        const RenderSettings& getSettings() const { return settings_; }
+        // Settings management with thread safety
+        void updateSettings(const RenderSettings& settings);
+        RenderSettings getSettings() const;
+
+        // Direct accessors with thread safety
+        float getFovDegrees() const;
+        float getScalingModifier() const;
+        void setFov(float f);
+        void setScalingModifier(float s);
 
         // Framerate control
         void updateFramerateSettings(const FramerateSettings& settings) { framerate_controller_.updateSettings(settings); }
@@ -82,7 +97,10 @@ namespace gs::visualizer {
         bool hasSceneChanged(const RenderContext& context);
         void setupEventHandlers();
 
+        // Settings with thread safety
         RenderSettings settings_;
+        mutable std::mutex settings_mutex_;
+
         std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         bool initialized_ = false;
 
