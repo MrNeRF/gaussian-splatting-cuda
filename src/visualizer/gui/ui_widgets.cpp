@@ -1,45 +1,37 @@
 #include "gui/ui_widgets.hpp"
-#include "core/events.hpp"
+#include "scene/scene_manager.hpp"
+#include "training/training_manager.hpp"
 #include "visualizer_impl.hpp"
+#include <cstdarg>
 #include <format>
 #include <imgui.h>
 
 namespace gs::gui::widgets {
 
     bool SliderWithReset(const char* label, float* v, float min, float max, float reset_value) {
-        bool changed = false;
-
-        ImGui::PushItemWidth(200);
-        std::string slider_label = std::format("##{}_slider", label);
-        std::string display = std::format("{}={:.2f}", label, *v);
-        changed |= ImGui::SliderFloat(slider_label.c_str(), v, min, max, display.c_str());
-        ImGui::PopItemWidth();
+        bool changed = ImGui::SliderFloat(label, v, min, max);
 
         ImGui::SameLine();
-        std::string reset_label = std::format("Reset##{}", label);
-        if (ImGui::Button(reset_label.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+        ImGui::PushID(label);
+        if (ImGui::Button("Reset")) {
             *v = reset_value;
             changed = true;
         }
+        ImGui::PopID();
 
         return changed;
     }
 
     bool DragFloat3WithReset(const char* label, float* v, float speed, float reset_value) {
-        bool changed = false;
-
-        ImGui::Text("%s:", label);
-        ImGui::SameLine();
-
-        std::string drag_label = std::format("##{}_drag", label);
-        changed |= ImGui::DragFloat3(drag_label.c_str(), v, speed);
+        bool changed = ImGui::DragFloat3(label, v, speed);
 
         ImGui::SameLine();
-        std::string reset_label = std::format("Reset##{}", label);
-        if (ImGui::Button(reset_label.c_str())) {
+        ImGui::PushID(label);
+        if (ImGui::Button("Reset")) {
             v[0] = v[1] = v[2] = reset_value;
             changed = true;
         }
+        ImGui::PopID();
 
         return changed;
     }
@@ -68,63 +60,83 @@ namespace gs::gui::widgets {
     }
 
     void DrawProgressBar(float fraction, const char* overlay_text) {
-        ImGui::ProgressBar(fraction, ImVec2(-1, 20), overlay_text);
+        ImGui::ProgressBar(fraction, ImVec2(-1, 0), overlay_text);
     }
 
     void DrawLossPlot(const float* values, int count, float min_val, float max_val, const char* label) {
-        ImGui::PlotLines("##Loss", values, count, 0, label, min_val, max_val, ImVec2(-1, 50));
+        if (count <= 0)
+            return;
+
+        // Simple line plot using ImGui
+        ImGui::PlotLines(
+            label,
+            values,
+            count,
+            0,
+            nullptr,
+            min_val,
+            max_val,
+            ImVec2(0, 80));
     }
 
     void DrawModeStatus(const UIContext& ctx) {
-        // Query scene info using the new event system
-        events::query::SceneInfo response;
-        bool has_response = false;
-
-        // Set up a one-time handler for the response
-        [[maybe_unused]] auto handler = events::query::SceneInfo::when([&response, &has_response](const auto& r) {
-            response = r;
-            has_response = true;
-        });
-
-        // Send the query
-        events::query::GetSceneInfo{}.emit();
-
-        if (!has_response || response.type == events::query::SceneInfo::Type::None) {
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No data loaded");
-            ImGui::Text("Use File Browser to load:");
-            ImGui::BulletText("PLY file for viewing");
-            ImGui::BulletText("Dataset for training");
+        // FIX: Direct call instead of query event
+        auto* scene_manager = ctx.viewer->getSceneManager();
+        if (!scene_manager) {
+            ImGui::Text("Mode: Unknown");
             return;
         }
 
-        switch (response.type) {
-        case events::query::SceneInfo::Type::PLY:
-            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "PLY Viewer Mode");
-            if (ctx.viewer->getCurrentPLYPath().has_filename()) {
-                ImGui::Text("File: %s", ctx.viewer->getCurrentPLYPath().filename().string().c_str());
+        auto state = scene_manager->getCurrentState();
+
+        const char* mode_str = "Unknown";
+        ImVec4 mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+
+        switch (state.type) {
+        case SceneManager::SceneType::None:
+            mode_str = "Empty";
+            mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+            break;
+        case SceneManager::SceneType::PLY:
+            mode_str = "PLY Viewer";
+            mode_color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);
+            break;
+        case SceneManager::SceneType::Dataset:
+            if (state.is_training) {
+                mode_str = "Training";
+                mode_color = ImVec4(1.0f, 0.6f, 0.2f, 1.0f);
+            } else {
+                mode_str = "Dataset (Ready)";
+                mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
             }
             break;
+        }
 
-        case events::query::SceneInfo::Type::Dataset:
-            ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "Training Mode");
-            if (ctx.viewer->getCurrentDatasetPath().has_filename()) {
-                ImGui::Text("Dataset: %s", ctx.viewer->getCurrentDatasetPath().filename().string().c_str());
-            }
-            break;
+        ImGui::TextColored(mode_color, "Mode: %s", mode_str);
 
-        default:
-            break;
+        if (state.num_gaussians > 0) {
+            ImGui::Text("Gaussians: %zu", state.num_gaussians);
+        }
+
+        if (state.type == SceneManager::SceneType::PLY && state.num_plys > 0) {
+            ImGui::Text("PLY Models: %zu", state.num_plys);
+        }
+
+        if (state.training_iteration.has_value()) {
+            ImGui::Text("Iteration: %d", *state.training_iteration);
         }
     }
 
     const char* GetTrainerStateString(int state) {
-        switch (state) {
-        case 0: return "Idle";
-        case 1: return "Ready";
-        case 2: return "Running";
-        case 3: return "Paused";
-        case 4: return "Completed";
-        case 5: return "Error";
+        // Helper function for trainer state to string conversion
+        switch (static_cast<TrainerManager::State>(state)) {
+        case TrainerManager::State::Idle: return "Idle";
+        case TrainerManager::State::Ready: return "Ready";
+        case TrainerManager::State::Running: return "Running";
+        case TrainerManager::State::Paused: return "Paused";
+        case TrainerManager::State::Stopping: return "Stopping";
+        case TrainerManager::State::Completed: return "Completed";
+        case TrainerManager::State::Error: return "Error";
         default: return "Unknown";
         }
     }

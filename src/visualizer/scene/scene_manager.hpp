@@ -40,6 +40,14 @@ namespace gs {
             size_t num_plys = 0; // For PLY mode
         };
 
+        struct SceneInfo {
+            SceneType type = SceneType::None;
+            std::filesystem::path source_path;
+            size_t num_gaussians = 0;
+            bool is_training = false;
+            bool has_model = false;
+        };
+
         SceneManager();
         ~SceneManager();
 
@@ -59,14 +67,18 @@ namespace gs {
 
         // High-level operations
         void loadPLY(const std::filesystem::path& path);
-        void addPLY(const std::filesystem::path& path); // New method
+        void addPLY(const std::filesystem::path& path);
         void loadDataset(const std::filesystem::path& path,
                          const param::TrainingParameters& params);
         void clearScene();
 
-        // State queries
+        // State queries - DIRECT METHODS, NO EVENTS!
         SceneState getCurrentState() const;
         bool hasScene() const { return scene_ != nullptr && scene_->hasModel(); }
+
+        // Direct query methods (replace query events)
+        SceneInfo getSceneInfo() const;
+        std::vector<std::string> getRenderModes() const;
 
         TrainerManager* getTrainerManager() { return trainer_manager_; }
         const TrainerManager* getTrainerManager() const { return trainer_manager_; }

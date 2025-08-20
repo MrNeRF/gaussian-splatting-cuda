@@ -1,6 +1,5 @@
 #pragma once
 
-#include "core/events.hpp"
 #include "core/imodel_provider.hpp"
 #include "core/trainer.hpp"
 #include "rendering/rendering.hpp"
@@ -26,6 +25,15 @@ namespace gs {
             glm::mat4 transform{1.0f};
             bool visible = true;
             size_t gaussian_count = 0;
+        };
+
+        // Direct query struct
+        struct ModelInfo {
+            bool has_model = false;
+            size_t num_gaussians = 0;
+            int sh_degree = 0;
+            float scene_scale = 0.0f;
+            std::string source;
         };
 
         Scene();
@@ -69,6 +77,9 @@ namespace gs {
             return model_provider_;
         }
 
+        // Direct query method (replaces query event)
+        ModelInfo getModelInfo() const;
+
     private:
         Mode mode_ = Mode::Empty;
 
@@ -86,7 +97,6 @@ namespace gs {
         mutable bool pipeline_needs_reset_ = false;
 
         // Event handlers
-        void handleModelInfoQuery();
         void publishModeChange(Mode old_mode, Mode new_mode);
         void setupEventHandlers();
 

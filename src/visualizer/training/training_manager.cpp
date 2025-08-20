@@ -4,7 +4,6 @@
 namespace gs {
 
     TrainerManager::TrainerManager() {
-        setupEventHandlers();
     }
 
     TrainerManager::~TrainerManager() {
@@ -14,49 +13,6 @@ namespace gs {
             stopTraining();
             waitForCompletion();
         }
-    }
-
-    void TrainerManager::setupEventHandlers() {
-        using namespace events::query;
-
-        // Handle trainer state queries
-        GetTrainerState::when([this](const auto&) {
-            TrainerState response;
-
-            // Map internal state to response state
-            switch (state_.load()) {
-            case State::Idle:
-                response.state = TrainerState::State::Idle;
-                break;
-            case State::Ready:
-                response.state = TrainerState::State::Ready;
-                break;
-            case State::Running:
-                response.state = TrainerState::State::Running;
-                break;
-            case State::Paused:
-                response.state = TrainerState::State::Paused;
-                break;
-            case State::Completed:
-                response.state = TrainerState::State::Completed;
-                break;
-            case State::Error:
-                response.state = TrainerState::State::Error;
-                break;
-            default:
-                response.state = TrainerState::State::Idle;
-            }
-
-            response.current_iteration = getCurrentIteration();
-            response.current_loss = getCurrentLoss();
-            response.total_iterations = getTotalIterations();
-
-            if (!last_error_.empty()) {
-                response.error_message = last_error_;
-            }
-
-            response.emit();
-        });
     }
 
     void TrainerManager::setTrainer(std::unique_ptr<Trainer> trainer) {
@@ -240,8 +196,6 @@ namespace gs {
     int TrainerManager::getTotalIterations() const {
         if (!trainer_)
             return 0;
-
-        // This is a bit of a hack - we'd need to expose this from Trainer
         return trainer_->getParams().optimization.iterations;
     }
 
@@ -292,6 +246,7 @@ namespace gs {
         }
         completion_cv_.notify_all();
     }
+
     std::shared_ptr<const Camera> TrainerManager::getCamById(int camId) const {
         if (trainer_) {
             return trainer_->getCamById(camId);
@@ -307,4 +262,5 @@ namespace gs {
         std::cerr << " getCamList trainer is not initialized " << std::endl;
         return {};
     }
+
 } // namespace gs

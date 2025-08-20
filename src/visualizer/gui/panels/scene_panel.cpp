@@ -108,9 +108,6 @@ namespace gs::gui {
     }
 
     void ScenePanel::updatePLYNodes() {
-        // Query scene for current nodes
-        events::query::GetSceneInfo{}.emit();
-
         // For now, we'll rebuild the node list when we get events
         // In a more sophisticated implementation, we'd query the scene directly
     }

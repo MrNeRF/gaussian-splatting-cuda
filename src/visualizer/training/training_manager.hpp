@@ -104,9 +104,6 @@ namespace gs {
         void setState(State new_state);
         void handleTrainingComplete(bool success, const std::string& error = "");
 
-        // Event handlers
-        void setupEventHandlers();
-
         // Member variables
         std::unique_ptr<Trainer> trainer_;
         std::unique_ptr<std::jthread> training_thread_;

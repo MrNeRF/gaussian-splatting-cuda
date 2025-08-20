@@ -19,55 +19,20 @@ namespace gs {
     void SceneManager::setupEventHandlers() {
         using namespace events;
 
+        // Command handlers - these are fine
         cmd::ClearScene::when([this](const auto&) {
             clearScene();
         });
 
-        // Handle add PLY command
         cmd::AddPLY::when([this](const auto& cmd) {
             addPLYInternal(cmd.path);
         });
 
-        // Query handlers
-        query::GetSceneInfo::when([this](const auto&) {
-            auto state = getCurrentState();
+        // REMOVED: Query handlers - no longer needed!
+        // We don't handle GetSceneInfo or GetRenderCapabilities anymore
+        // Those should be direct method calls
 
-            query::SceneInfo response;
-
-            // Map internal state to response
-            switch (state.type) {
-            case SceneType::None:
-                response.type = query::SceneInfo::Type::None;
-                break;
-            case SceneType::PLY:
-                response.type = query::SceneInfo::Type::PLY;
-                break;
-            case SceneType::Dataset:
-                response.type = query::SceneInfo::Type::Dataset;
-                break;
-            }
-
-            response.source_path = state.source_path;
-            response.num_gaussians = state.num_gaussians;
-            response.is_training = state.is_training;
-            response.has_model = hasScene();
-
-            response.emit();
-        });
-
-        query::GetRenderCapabilities::when([this](const auto&) {
-            query::RenderCapabilities response;
-
-            response.modes = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
-            response.supports_antialiasing = true;
-            response.supports_depth = true;
-            response.max_width = 4096;
-            response.max_height = 4096;
-
-            response.emit();
-        });
-
-        // Training event handlers
+        // Training event handlers - these are broadcasts, so they're fine
         state::TrainingStarted::when([this](const auto&) {
             std::lock_guard<std::mutex> lock(state_mutex_);
             if (current_state_.type == SceneType::Dataset) {
@@ -108,6 +73,23 @@ namespace gs {
                 current_state_.num_plys = scene_->getSceneNodes().size();
             }
         });
+    }
+
+    SceneManager::SceneInfo SceneManager::getSceneInfo() const {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+
+        SceneInfo info;
+        info.type = current_state_.type;
+        info.source_path = current_state_.source_path;
+        info.num_gaussians = current_state_.num_gaussians;
+        info.is_training = current_state_.is_training;
+        info.has_model = hasScene();
+
+        return info;
+    }
+
+    std::vector<std::string> SceneManager::getRenderModes() const {
+        return {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
     }
 
     void SceneManager::setScene(std::unique_ptr<Scene> scene) {

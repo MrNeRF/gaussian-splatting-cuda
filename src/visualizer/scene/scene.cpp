@@ -10,15 +10,6 @@ namespace gs {
     }
 
     void Scene::setupEventHandlers() {
-        // Subscribe to query events
-        events::query::GetModelInfo::when([this](const auto&) {
-            handleModelInfoQuery();
-        });
-
-        // Handle PLY commands
-        events::cmd::AddPLY::when([this]([[maybe_unused]] const auto& cmd) {
-            // This will be handled by SceneManager which has access to loading
-        });
 
         events::cmd::RemovePLY::when([this](const auto& cmd) {
             removePLY(cmd.name);
@@ -336,22 +327,22 @@ namespace gs {
         }
     }
 
-    void Scene::handleModelInfoQuery() {
-        events::query::ModelInfo response;
+    Scene::ModelInfo Scene::getModelInfo() const {
+        ModelInfo info;
 
         if (hasModel()) {
             if (mode_ == Mode::Viewing) {
-                response.has_model = true;
-                response.num_gaussians = getTotalGaussianCount();
+                info.has_model = true;
+                info.num_gaussians = getTotalGaussianCount();
 
                 // Get combined model to access its properties
                 const SplatData* combined = getModel();
                 if (combined) {
-                    response.sh_degree = combined->get_active_sh_degree();
-                    response.scene_scale = combined->get_scene_scale();
+                    info.sh_degree = combined->get_active_sh_degree();
+                    info.scene_scale = combined->get_scene_scale();
                 } else {
-                    response.sh_degree = 0;
-                    response.scene_scale = 0.0f;
+                    info.sh_degree = 0;
+                    info.scene_scale = 0.0f;
                 }
 
                 // Count visible models
@@ -361,25 +352,25 @@ namespace gs {
                         visible_count++;
                 }
 
-                response.source = std::format("PLY Scene ({} models, {} visible)",
-                                              scene_graph_.size(), visible_count);
+                info.source = std::format("PLY Scene ({} models, {} visible)",
+                                          scene_graph_.size(), visible_count);
             } else if (model_provider_) {
                 const SplatData* model = model_provider_->getModel();
-                response.has_model = true;
-                response.num_gaussians = static_cast<size_t>(model->size());
-                response.sh_degree = model->get_active_sh_degree();
-                response.scene_scale = model->get_scene_scale();
-                response.source = model_provider_->getModelSource();
+                info.has_model = true;
+                info.num_gaussians = static_cast<size_t>(model->size());
+                info.sh_degree = model->get_active_sh_degree();
+                info.scene_scale = model->get_scene_scale();
+                info.source = model_provider_->getModelSource();
             }
         } else {
-            response.has_model = false;
-            response.num_gaussians = 0;
-            response.sh_degree = 0;
-            response.scene_scale = 0.0f;
-            response.source = "None";
+            info.has_model = false;
+            info.num_gaussians = 0;
+            info.sh_degree = 0;
+            info.scene_scale = 0.0f;
+            info.source = "None";
         }
 
-        response.emit();
+        return info;
     }
 
     void Scene::publishModeChange(Mode old_mode, Mode new_mode) {

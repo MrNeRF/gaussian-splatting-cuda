@@ -1,7 +1,7 @@
 #include "core/command_processor.hpp"
 #include "core/splat_data.hpp"
 #include "scene/scene_manager.hpp"
-#include <cuda_runtime.h>
+#include "training/training_manager.hpp"
 #include <iomanip>
 #include <sstream>
 #include <torch/torch.h>
@@ -64,29 +64,56 @@ namespace gs {
     std::string CommandProcessor::handleStatus() {
         std::ostringstream result;
 
-        try {
-            auto response = Query<events::query::GetTrainerState, events::query::TrainerState>()
-                                .send(events::query::GetTrainerState{});
+        // FIX: Direct call instead of query event
+        if (scene_manager_) {
+            auto* trainer_manager = scene_manager_->getTrainerManager();
+            if (trainer_manager && trainer_manager->hasTrainer()) {
+                auto state = trainer_manager->getState();
 
-            result << "Training Status:\n";
-            result << "  State: " << [](const events::query::TrainerState::State& state) -> const char* {
+                result << "Training Status:\n";
+                result << "  State: ";
+
+                // Convert state to string
                 switch (state) {
-                case events::query::TrainerState::State::Idle: return "Idle";
-                case events::query::TrainerState::State::Ready: return "Ready";
-                case events::query::TrainerState::State::Running: return "Running";
-                case events::query::TrainerState::State::Paused: return "Paused";
-                case events::query::TrainerState::State::Completed: return "Completed";
-                case events::query::TrainerState::State::Error: return "Error";
-                default: return "Unknown";
+                case TrainerManager::State::Idle:
+                    result << "Idle";
+                    break;
+                case TrainerManager::State::Ready:
+                    result << "Ready";
+                    break;
+                case TrainerManager::State::Running:
+                    result << "Running";
+                    break;
+                case TrainerManager::State::Paused:
+                    result << "Paused";
+                    break;
+                case TrainerManager::State::Stopping:
+                    result << "Stopping";
+                    break;
+                case TrainerManager::State::Completed:
+                    result << "Completed";
+                    break;
+                case TrainerManager::State::Error:
+                    result << "Error";
+                    break;
+                default:
+                    result << "Unknown";
+                    break;
                 }
-            }(response.state) << "\n";
-            result << "  Current Iteration: " << response.current_iteration << "\n";
-            result << "  Current Loss: " << std::fixed << std::setprecision(6) << response.current_loss;
-            if (response.error_message) {
-                result << "\n  Error: " << *response.error_message;
+
+                result << "\n";
+                result << "  Current Iteration: " << trainer_manager->getCurrentIteration() << "\n";
+                result << "  Current Loss: " << std::fixed << std::setprecision(6) << trainer_manager->getCurrentLoss();
+
+                auto error_msg = trainer_manager->getLastError();
+                if (!error_msg.empty()) {
+                    result << "\n  Error: " << error_msg;
+                }
+            } else {
+                result << "No trainer available (viewer mode)";
             }
-        } catch (...) {
-            result << "No trainer available (viewer mode)";
+        } else {
+            result << "No scene manager available";
         }
 
         return result.str();
@@ -95,38 +122,50 @@ namespace gs {
     std::string CommandProcessor::handleModelInfo() {
         std::ostringstream result;
 
-        try {
-            auto stateResponse = Query<events::query::GetSceneInfo, events::query::SceneInfo>()
-                                     .send(events::query::GetSceneInfo{});
+        // FIX: Direct calls instead of query events
+        if (scene_manager_) {
+            auto sceneInfo = scene_manager_->getSceneInfo();
 
-            if (stateResponse.has_model) {
+            if (sceneInfo.has_model) {
                 result << "Scene Information:\n";
-                result << "  Type: " << [&]() {
-                    switch (stateResponse.type) {
-                    case events::query::SceneInfo::Type::None: return "None";
-                    case events::query::SceneInfo::Type::PLY: return "PLY";
-                    case events::query::SceneInfo::Type::Dataset: return "Dataset";
-                    default: return "Unknown";
-                    }
-                }() << "\n";
-                result << "  Source: " << stateResponse.source_path.filename().string() << "\n";
-                result << "  Number of Gaussians: " << stateResponse.num_gaussians << "\n";
+                result << "  Type: ";
 
-                if (stateResponse.is_training) {
+                switch (sceneInfo.type) {
+                case SceneManager::SceneType::None:
+                    result << "None";
+                    break;
+                case SceneManager::SceneType::PLY:
+                    result << "PLY";
+                    break;
+                case SceneManager::SceneType::Dataset:
+                    result << "Dataset";
+                    break;
+                default:
+                    result << "Unknown";
+                    break;
+                }
+
+                result << "\n";
+                result << "  Source: " << sceneInfo.source_path.filename().string() << "\n";
+                result << "  Number of Gaussians: " << sceneInfo.num_gaussians << "\n";
+
+                if (sceneInfo.is_training) {
                     result << "  Training Mode: Active\n";
                 }
 
-                auto modelResponse = Query<events::query::GetModelInfo, events::query::ModelInfo>()
-                                         .send(events::query::GetModelInfo{});
+                // Get more detailed model info from the scene
+                if (scene_manager_->getScene()) {
+                    auto modelInfo = scene_manager_->getScene()->getModelInfo();
 
-                if (modelResponse.has_model) {
-                    result << "  SH Degree: " << modelResponse.sh_degree << "\n";
-                    result << "  Scene Scale: " << modelResponse.scene_scale << "\n";
+                    if (modelInfo.has_model) {
+                        result << "  SH Degree: " << modelInfo.sh_degree << "\n";
+                        result << "  Scene Scale: " << modelInfo.scene_scale << "\n";
+                    }
                 }
             } else {
                 result << "No scene loaded";
             }
-        } catch (...) {
+        } else {
             result << "Failed to query scene information";
         }
 
