@@ -77,7 +77,6 @@ namespace gs::visualizer {
         gs::rendering::RenderingEngine* getRenderingEngine() { return engine_.get(); }
 
     private:
-        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render);
         void drawOverlays(const RenderContext& context);
         bool hasCamChanged(const class Viewport& current_viewport);
         bool hasSceneChanged(const RenderContext& context);
