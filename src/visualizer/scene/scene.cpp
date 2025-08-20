@@ -129,21 +129,22 @@ namespace gs {
         auto device = visible_models[0]->means().device();
         auto dtype = visible_models[0]->means().dtype();
 
-        // Pre-allocate tensors
-        auto combined_means = torch::empty({static_cast<int64_t>(total_gaussians), 3}, dtype).to(device);
+        // Create tensor options with both device and dtype
+        auto opts = torch::TensorOptions().dtype(dtype).device(device);
+
+        // Pre-allocate tensors on the target device
+        auto combined_means = torch::empty({static_cast<int64_t>(total_gaussians), 3}, opts);
         auto combined_sh0 = torch::empty({static_cast<int64_t>(total_gaussians),
                                           visible_models[0]->sh0().size(1),
                                           visible_models[0]->sh0().size(2)},
-                                         dtype)
-                                .to(device);
+                                         opts);
         auto combined_shN = torch::empty({static_cast<int64_t>(total_gaussians),
                                           visible_models[0]->shN().size(1),
                                           visible_models[0]->shN().size(2)},
-                                         dtype)
-                                .to(device);
-        auto combined_opacity = torch::empty({static_cast<int64_t>(total_gaussians), 1}, dtype).to(device);
-        auto combined_scaling = torch::empty({static_cast<int64_t>(total_gaussians), 3}, dtype).to(device);
-        auto combined_rotation = torch::empty({static_cast<int64_t>(total_gaussians), 4}, dtype).to(device);
+                                         opts);
+        auto combined_opacity = torch::empty({static_cast<int64_t>(total_gaussians), 1}, opts);
+        auto combined_scaling = torch::empty({static_cast<int64_t>(total_gaussians), 3}, opts);
+        auto combined_rotation = torch::empty({static_cast<int64_t>(total_gaussians), 4}, opts);
 
         // Concatenate all visible models
         size_t current_idx = 0;
@@ -167,14 +168,6 @@ namespace gs {
         }
 
         avg_scene_scale /= visible_models.size();
-
-        // Set requires_grad
-        combined_means = combined_means.set_requires_grad(true);
-        combined_sh0 = combined_sh0.set_requires_grad(true);
-        combined_shN = combined_shN.set_requires_grad(true);
-        combined_opacity = combined_opacity.set_requires_grad(true);
-        combined_scaling = combined_scaling.set_requires_grad(true);
-        combined_rotation = combined_rotation.set_requires_grad(true);
 
         cached_combined_ = std::make_unique<SplatData>(
             max_sh_degree,
