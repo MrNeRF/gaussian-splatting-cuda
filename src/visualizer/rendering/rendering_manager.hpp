@@ -1,20 +1,14 @@
 #pragma once
 
-#include "core/events.hpp"
 #include "framerate_controller.hpp"
 #include "internal/viewport.hpp"
 #include "rendering/rendering.hpp"
+#include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 
 namespace gs {
-    namespace rendering {
-        class RenderBoundingBox;
-        class RenderCoordinateAxes;
-    } // namespace rendering
-    namespace geometry {
-        class EuclideanTransform;
-    }
     class SceneManager;
 } // namespace gs
 
@@ -34,16 +28,8 @@ namespace gs::visualizer {
         bool show_grid = true;
         int grid_plane = 1; // Default to XZ plane
         float grid_opacity = 0.5f;
-        bool adaptive_frame_rate = true;
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
-
-        // Helper methods for FoV calculation
-        glm::vec2 getFov(size_t reso_x, size_t reso_y) const {
-            return glm::vec2(
-                atan(tan(glm::radians(fov) / 2.0f) * reso_x / reso_y) * 2.0f,
-                glm::radians(fov));
-        }
     };
 
     struct ViewportRegion {
@@ -72,55 +58,46 @@ namespace gs::visualizer {
         // Main render function
         void renderFrame(const RenderContext& context, SceneManager* scene_manager);
 
-        // Settings management with thread safety
+        // Mark that rendering is needed
+        void markDirty();
+
+        // Settings management
         void updateSettings(const RenderSettings& settings);
         RenderSettings getSettings() const;
 
-        // Direct accessors with thread safety
+        // Direct accessors
         float getFovDegrees() const;
         float getScalingModifier() const;
         void setFov(float f);
         void setScalingModifier(float s);
 
-        // Framerate control
-        void updateFramerateSettings(const FramerateSettings& settings) { framerate_controller_.updateSettings(settings); }
-        const FramerateSettings& getFramerateSettings() const { return framerate_controller_.getSettings(); }
+        // FPS monitoring
         float getCurrentFPS() const { return framerate_controller_.getCurrentFPS(); }
         float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
-        bool isPerformanceCritical() const { return framerate_controller_.isPerformanceCritical(); }
-        void resetFramerateController() { framerate_controller_.reset(); }
-        gs::rendering::RenderingEngine* getRenderingEngine() { return engine_.get(); }
+
+        // Access to rendering engine (for initialization only)
+        gs::rendering::RenderingEngine* getRenderingEngine();
 
     private:
-        void drawOverlays(const RenderContext& context);
-        bool hasCamChanged(const class Viewport& current_viewport);
-        bool hasSceneChanged(const RenderContext& context);
+        void doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model);
+        void renderOverlays(const RenderContext& context);
         void setupEventHandlers();
 
-        // Settings with thread safety
+        // Core components
+        std::unique_ptr<gs::rendering::RenderingEngine> engine_;
+        FramerateController framerate_controller_;
+
+        // Minimal state
+        std::atomic<bool> needs_render_{true};
+        gs::rendering::RenderResult cached_result_;
+        size_t last_model_ptr_ = 0;
+        std::chrono::steady_clock::time_point last_training_render_;
+
+        // Settings
         RenderSettings settings_;
         mutable std::mutex settings_mutex_;
 
-        std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         bool initialized_ = false;
-
-        // Framerate control
-        FramerateController framerate_controller_;
-        std::unique_ptr<Viewport> prev_viewport_state_;
-        float prev_fov_ = 0;
-        std::unique_ptr<geometry::EuclideanTransform> prev_world_to_usr_inv_;
-        glm::vec3 prev_background_color_;
-        glm::ivec2 prev_render_size_;
-        gs::rendering::RenderResult prev_result_;
-
-        bool prev_point_cloud_mode_ = false;
-        float prev_voxel_size_ = 0.01f;
-
-        // Scene loading tracking - for frame control
-        bool scene_just_loaded_ = false;
-        event::HandlerId scene_loaded_handler_id_ = 0;
-        event::HandlerId grid_settings_handler_id_ = 0;
-        event::HandlerId scene_changed_handler_id_ = 0;
     };
 
 } // namespace gs::visualizer

@@ -64,8 +64,6 @@ namespace gs::gui::panels {
         ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
     }
 
-    // In main_panel.cpp, update DrawRenderingSettings function:
-
     void DrawRenderingSettings(const UIContext& ctx) {
         auto render_manager = ctx.viewer->getRenderingManager();
         if (!render_manager)
@@ -80,37 +78,30 @@ namespace gs::gui::panels {
 
         // Point Cloud Mode checkbox
         if (ImGui::Checkbox("Point Cloud Mode", &settings.point_cloud_mode)) {
-            // Don't set settings_changed here to avoid double update
-            // Just emit the event and update settings directly
+            settings_changed = true;
+
             events::ui::PointCloudModeChanged{
                 .enabled = settings.point_cloud_mode,
                 .voxel_size = settings.voxel_size}
                 .emit();
-
-            // Update settings immediately for point cloud mode
-            render_manager->updateSettings(settings);
-
-            // Emit scene changed to trigger re-render
-            events::state::SceneChanged{}.emit();
         }
 
         // Show voxel size slider only when in point cloud mode
         if (settings.point_cloud_mode) {
             if (widgets::SliderWithReset("Voxel Size", &settings.voxel_size, 0.001f, 0.1f, 0.01f)) {
-                // Same here - don't use settings_changed flag
+                settings_changed = true;
+
                 events::ui::PointCloudModeChanged{
                     .enabled = settings.point_cloud_mode,
                     .voxel_size = settings.voxel_size}
                     .emit();
-
-                render_manager->updateSettings(settings);
-                events::state::SceneChanged{}.emit();
             }
         }
 
         // Grid checkbox and settings
         if (ImGui::Checkbox("Show Grid", &settings.show_grid)) {
             settings_changed = true;
+
             // Emit grid settings changed event
             events::ui::GridSettingsChanged{
                 .enabled = settings.show_grid,
@@ -129,6 +120,7 @@ namespace gs::gui::panels {
             if (ImGui::Combo("Plane", &current_plane, planes, IM_ARRAYSIZE(planes))) {
                 settings.grid_plane = current_plane;
                 settings_changed = true;
+
                 events::ui::GridSettingsChanged{
                     .enabled = settings.show_grid,
                     .plane = current_plane,
@@ -139,6 +131,7 @@ namespace gs::gui::panels {
             // Grid opacity
             if (ImGui::SliderFloat("Grid Opacity", &settings.grid_opacity, 0.0f, 1.0f)) {
                 settings_changed = true;
+
                 events::ui::GridSettingsChanged{
                     .enabled = settings.show_grid,
                     .plane = static_cast<int>(settings.grid_plane),
@@ -149,12 +142,9 @@ namespace gs::gui::panels {
             ImGui::Unindent();
         }
 
-        // Apply settings changes if any (but not for point cloud mode which was already handled)
+        // Apply settings changes if any
         if (settings_changed) {
             render_manager->updateSettings(settings);
-
-            // Emit generic scene changed event
-            events::state::SceneChanged{}.emit();
         }
 
         ImGui::Separator();
@@ -163,6 +153,7 @@ namespace gs::gui::panels {
         float scaling_modifier = settings.scaling_modifier;
         if (widgets::SliderWithReset("Scale", &scaling_modifier, 0.01f, 3.0f, 1.0f)) {
             render_manager->setScalingModifier(scaling_modifier);
+
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
                 .scaling_modifier = scaling_modifier,
@@ -174,6 +165,7 @@ namespace gs::gui::panels {
         float fov = settings.fov;
         if (widgets::SliderWithReset("FoV", &fov, 45.0f, 120.0f, 75.0f)) {
             render_manager->setFov(fov);
+
             events::ui::RenderSettingsChanged{
                 .fov = fov,
                 .scaling_modifier = std::nullopt,

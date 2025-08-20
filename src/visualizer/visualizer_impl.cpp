@@ -116,20 +116,42 @@ namespace gs::visualizer {
             }
         });
 
-        // Render settings changes - update antialiasing directly in RenderingManager
+        // Render settings changes
         ui::RenderSettingsChanged::when([this](const auto& event) {
-            if (event.antialiasing && rendering_manager_) {
+            if (rendering_manager_) {
+                // The rendering manager handles this internally now
+                // Just need to mark dirty which happens in its event handler
+            }
+        });
+
+        // Camera moves - mark dirty
+        ui::CameraMove::when([this](const auto&) {
+            if (rendering_manager_) {
+                rendering_manager_->markDirty();
+            }
+        });
+
+        // Tool settings changes - mark dirty
+        tools::CropBoxSettingsChanged::when([this](const auto& event) {
+            if (rendering_manager_) {
                 RenderSettings settings = rendering_manager_->getSettings();
-                settings.antialiasing = *event.antialiasing;
+                settings.show_crop_box = event.show_box;
+                settings.use_crop_box = event.use_box;
                 rendering_manager_->updateSettings(settings);
             }
         });
 
-        // UI events
-        ui::CameraMove::when([this](const auto&) {
-            // Could be used for auto-save camera positions
+        // Scene changes - mark dirty
+        state::SceneChanged::when([this](const auto&) {
+            if (window_manager_) {
+                window_manager_->requestRedraw();
+            }
+            if (rendering_manager_) {
+                rendering_manager_->markDirty();
+            }
         });
 
+        // Evaluation completed
         state::EvaluationCompleted::when([this](const auto& event) {
             if (gui_manager_) {
                 gui_manager_->addConsoleLog(
@@ -154,15 +176,14 @@ namespace gs::visualizer {
             }
         });
 
-        // Scene change event - request redraw
-        state::SceneChanged::when([this](const auto&) {
-            if (window_manager_) {
-                window_manager_->requestRedraw();
-            }
-        });
-
         internal::TrainerReady::when([this](const auto&) {
             internal::TrainingReadyToStart{}.emit();
+        });
+
+        // Training progress - don't mark dirty, let throttling handle it
+        state::TrainingProgress::when([this](const auto& event) {
+            // Just update loss buffer, don't force render
+            // The 1 FPS throttle will handle rendering
         });
     }
 
@@ -233,8 +254,6 @@ namespace gs::visualizer {
         } else {
             settings.show_coord_axes = false;
         }
-
-        // Antialiasing is already in RenderingManager settings
 
         rendering_manager_->updateSettings(settings);
 
