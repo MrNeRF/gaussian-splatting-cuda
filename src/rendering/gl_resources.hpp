@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/logger.hpp"
 #include <expected>
 #include <filesystem>
 #include <glad/glad.h>
@@ -25,6 +26,7 @@ namespace gs::rendering {
             if (id_) {
                 Deleter deleter;
                 deleter(1, &id_);
+                LOG_TRACE("Deleted GL resource: {}", id_);
             }
         }
 
@@ -35,6 +37,7 @@ namespace gs::rendering {
                 if (id_) {
                     Deleter deleter;
                     deleter(1, &id_);
+                    LOG_TRACE("Deleted GL resource during move: {}", id_);
                 }
                 id_ = std::exchange(other.id_, 0);
             }
@@ -87,8 +90,10 @@ namespace gs::rendering {
         GLuint id;
         glGenVertexArrays(1, &id);
         if (glGetError() != GL_NO_ERROR || id == 0) {
+            LOG_ERROR("Failed to create VAO");
             return std::unexpected("Failed to create VAO");
         }
+        LOG_TRACE("Created VAO: {}", id);
         return VAO(id);
     }
 
@@ -96,8 +101,10 @@ namespace gs::rendering {
         GLuint id;
         glGenBuffers(1, &id);
         if (glGetError() != GL_NO_ERROR || id == 0) {
+            LOG_ERROR("Failed to create VBO");
             return std::unexpected("Failed to create VBO");
         }
+        LOG_TRACE("Created VBO: {}", id);
         return VBO(id);
     }
 
@@ -132,8 +139,12 @@ namespace gs::rendering {
         explicit BufferBinder(GLuint vbo) {
             glGetIntegerv(query, &prev_);
             glBindBuffer(Target, vbo);
+            LOG_TRACE("Bound buffer {} to target 0x{:x}", vbo, Target);
         }
-        ~BufferBinder() { glBindBuffer(Target, prev_); }
+        ~BufferBinder() {
+            glBindBuffer(Target, prev_);
+            LOG_TRACE("Restored buffer {} to target 0x{:x}", prev_, Target);
+        }
     };
 
     class VAOBinder {
@@ -143,8 +154,12 @@ namespace gs::rendering {
         explicit VAOBinder(GLuint vao) {
             glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prev_);
             glBindVertexArray(vao);
+            LOG_TRACE("Bound VAO: {}", vao);
         }
-        ~VAOBinder() { glBindVertexArray(prev_); }
+        ~VAOBinder() {
+            glBindVertexArray(prev_);
+            LOG_TRACE("Restored VAO: {}", prev_);
+        }
     };
 
     // Helper for vertex attribute setup
@@ -162,6 +177,8 @@ namespace gs::rendering {
             glVertexAttribPointer(index, size, type, normalized, stride, offset);
             if (divisor > 0)
                 glVertexAttribDivisor(index, divisor);
+            LOG_TRACE("Applied vertex attribute: index={}, size={}, stride={}, divisor={}",
+                      index, size, stride, divisor);
         }
     };
 
@@ -169,12 +186,16 @@ namespace gs::rendering {
     template <typename T>
     void upload_buffer(GLenum target, const T* data, std::size_t count, GLenum usage = GL_STATIC_DRAW) {
         glBufferData(target, count * sizeof(T), data, usage);
+        LOG_TRACE("Uploaded {} bytes to buffer (target=0x{:x}, usage=0x{:x})",
+                  count * sizeof(T), target, usage);
     }
 
     // Overload for dynamic spans
     template <typename T>
     void upload_buffer(GLenum target, std::span<T> data, GLenum usage = GL_STATIC_DRAW) {
         glBufferData(target, data.size_bytes(), data.data(), usage);
+        LOG_TRACE("Uploaded {} bytes to buffer (target=0x{:x}, usage=0x{:x})",
+                  data.size_bytes(), target, usage);
     }
 
     // VAO Builder for proper EBO handling
@@ -186,6 +207,7 @@ namespace gs::rendering {
     public:
         explicit VAOBuilder(VAO&& vao) : vao_(std::move(vao)) {
             glBindVertexArray(vao_);
+            LOG_TRACE("VAOBuilder: Started building VAO {}", vao_.get());
         }
 
         ~VAOBuilder() {
@@ -193,6 +215,7 @@ namespace gs::rendering {
                 // If not built, unbind and clean up
                 glBindVertexArray(0);
                 glBindBuffer(GL_ARRAY_BUFFER, 0);
+                LOG_WARN("VAOBuilder: Destroyed without building");
             }
         }
 
@@ -213,6 +236,7 @@ namespace gs::rendering {
             current_vbo_ = vbo.get();
             glBindBuffer(GL_ARRAY_BUFFER, current_vbo_);
             glBufferData(GL_ARRAY_BUFFER, data.size_bytes(), data.data(), usage);
+            LOG_TRACE("VAOBuilder: Attached VBO {} with {} bytes", current_vbo_, data.size_bytes());
             return *this;
         }
 
@@ -220,6 +244,7 @@ namespace gs::rendering {
         VAOBuilder& attachVBO(const VBO& vbo) {
             current_vbo_ = vbo.get();
             glBindBuffer(GL_ARRAY_BUFFER, current_vbo_);
+            LOG_TRACE("VAOBuilder: Attached VBO {} without data", current_vbo_);
             return *this;
         }
 
@@ -234,6 +259,7 @@ namespace gs::rendering {
             glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
             attr.apply();
             current_vbo_ = vbo.get();
+            LOG_TRACE("VAOBuilder: Set attribute for VBO {}", vbo.get());
             return *this;
         }
 
@@ -242,12 +268,14 @@ namespace gs::rendering {
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo.get());
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size_bytes(), indices.data(), usage);
             // EBO binding is now part of VAO state - no unbind!
+            LOG_TRACE("VAOBuilder: Attached EBO {} with {} indices", ebo.get(), indices.size());
             return *this;
         }
 
         // Attach EBO without data
         VAOBuilder& attachEBO(const EBO& ebo) {
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo.get());
+            LOG_TRACE("VAOBuilder: Attached EBO {} without data", ebo.get());
             return *this;
         }
 
@@ -257,6 +285,7 @@ namespace gs::rendering {
             glBindVertexArray(0);
             glBindBuffer(GL_ARRAY_BUFFER, 0);
             // Note: We do NOT unbind GL_ELEMENT_ARRAY_BUFFER here - it's part of VAO state
+            LOG_DEBUG("VAOBuilder: Built VAO {}", vao_.get());
             return std::move(vao_);
         }
 

@@ -1,11 +1,11 @@
 #include "viewport_gizmo.hpp"
+#include "core/logger.hpp"
 #include "gl_state_guard.hpp"
 #include "shader_paths.hpp"
 #include "text_renderer.hpp"
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <format>
-#include <iostream>
 #include <numbers>
 #include <ranges>
 #include <vector>
@@ -14,12 +14,14 @@ namespace gs::rendering {
 
     constexpr glm::vec3 ViewportGizmo::colors_[];
 
-    ViewportGizmo::ViewportGizmo() = default;  // Define constructor here
-    ViewportGizmo::~ViewportGizmo() = default; // Define destructor here
+    ViewportGizmo::ViewportGizmo() = default;
+    ViewportGizmo::~ViewportGizmo() = default;
 
     Result<void> ViewportGizmo::initialize() {
         if (initialized_)
             return {};
+
+        LOG_TIMER("ViewportGizmo::initialize");
 
         if (auto result = createShaders(); !result) {
             return result;
@@ -41,15 +43,17 @@ namespace gs::rendering {
         std::string font_path = std::string(PROJECT_ROOT_PATH) +
                                 "/src/rendering/resources/assets/JetBrainsMono-Regular.ttf";
         if (auto result = text_renderer_->LoadFont(font_path, 48); !result) {
-            std::cerr << "ViewportGizmo: Failed to load font: " << result.error() << std::endl;
+            LOG_WARN("ViewportGizmo: Failed to load font: {}", result.error());
             text_renderer_.reset();
         }
 
         initialized_ = true;
+        LOG_INFO("ViewportGizmo initialized successfully");
         return {};
     }
 
     void ViewportGizmo::shutdown() {
+        LOG_DEBUG("Shutting down ViewportGizmo");
         vao_ = VAO();
         vbo_ = VBO();
         shader_ = ManagedShader();
@@ -58,24 +62,31 @@ namespace gs::rendering {
     }
 
     Result<void> ViewportGizmo::createShaders() {
+        LOG_TIMER_TRACE("ViewportGizmo::createShaders");
+
         auto result = load_shader("viewport_gizmo", "viewport_gizmo.vert", "viewport_gizmo.frag", false);
         if (!result) {
+            LOG_ERROR("Failed to load viewport gizmo shader: {}", result.error().what());
             return std::unexpected(result.error().what());
         }
         shader_ = std::move(*result);
-        std::cout << "[ViewportGizmo] Shaders created successfully" << std::endl;
+        LOG_DEBUG("ViewportGizmo shaders created successfully");
         return {};
     }
 
     Result<void> ViewportGizmo::generateGeometry() {
+        LOG_TIMER_TRACE("ViewportGizmo::generateGeometry");
+
         auto vao_result = create_vao();
         if (!vao_result) {
+            LOG_ERROR("Failed to create VAO: {}", vao_result.error());
             return std::unexpected(vao_result.error());
         }
         vao_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
+            LOG_ERROR("Failed to create VBO: {}", vbo_result.error());
             return std::unexpected(vbo_result.error());
         }
         vbo_ = std::move(*vbo_result);
@@ -170,14 +181,20 @@ namespace gs::rendering {
             .offset = (void*)(3 * sizeof(float))};
         normal_attr.apply();
 
+        LOG_DEBUG("Generated {} cylinder vertices and {} sphere vertices",
+                  cylinder_vertex_count_, sphere_vertex_count_);
         return {};
     }
 
     Result<void> ViewportGizmo::render(const glm::mat3& camera_rotation,
                                        const glm::vec2& viewport_pos,
                                        const glm::vec2& viewport_size) {
-        if (!initialized_)
+        if (!initialized_) {
+            LOG_ERROR("Viewport gizmo not initialized");
             return std::unexpected("Viewport gizmo not initialized");
+        }
+
+        LOG_TIMER_TRACE("ViewportGizmo::render");
 
         // Use RAII for OpenGL state management
         GLStateGuard state_guard;
@@ -396,7 +413,7 @@ namespace gs::rendering {
                             glm::vec3(1.0f, 1.0f, 1.0f));
                         !result) {
                         // Continue rendering even if text fails
-                        std::cerr << "Failed to render text: " << result.error() << std::endl;
+                        LOG_WARN("Failed to render text: {}", result.error());
                     }
 
                     glEnable(GL_DEPTH_TEST);

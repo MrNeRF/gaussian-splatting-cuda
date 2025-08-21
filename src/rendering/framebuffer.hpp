@@ -5,6 +5,7 @@
 #include <glad/glad.h>
 // clang-format on
 
+#include "core/logger.hpp"
 #include <expected>
 #include <stdexcept>
 #include <string>
@@ -28,19 +29,25 @@ namespace gs::rendering {
 
     public:
         FrameBuffer() {
+            LOG_DEBUG("Creating FrameBuffer");
             auto result = init(width, height);
             if (!result) {
+                LOG_ERROR("Failed to initialize FrameBuffer: {}", result.error());
                 throw std::runtime_error(result.error());
             }
         }
 
         virtual ~FrameBuffer() { // Made virtual for proper inheritance
+            LOG_TRACE("Destroying FrameBuffer");
             glDeleteFramebuffers(1, &fbo);
             glDeleteTextures(1, &texture);
             glDeleteTextures(1, &depthTexture);
         }
 
         Result<void> init(int w, int h) {
+            LOG_TIMER_TRACE("FrameBuffer::init");
+            LOG_DEBUG("Initializing FrameBuffer with size {}x{}", w, h);
+
             width = w;
             height = h;
 
@@ -71,14 +78,19 @@ namespace gs::rendering {
                                    GL_TEXTURE_2D, depthTexture, 0);
 
             if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                LOG_ERROR("Framebuffer is not complete");
                 return std::unexpected("Framebuffer is not complete");
             }
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+            LOG_DEBUG("FrameBuffer initialized successfully");
             return {};
         }
 
         virtual void resize(int newWidth, int newHeight) { // Made virtual
+            LOG_TRACE("Resizing FrameBuffer from {}x{} to {}x{}", width, height, newWidth, newHeight);
+
             width = newWidth;
             height = newHeight;
 
@@ -101,6 +113,9 @@ namespace gs::rendering {
                 resize(width_, height_);
             }
 
+            LOG_TIMER_TRACE("FrameBuffer::uploadImage");
+            LOG_TRACE("Uploading image data: {}x{}", width_, height_);
+
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
             glBindTexture(GL_TEXTURE_2D, texture);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
@@ -111,6 +126,9 @@ namespace gs::rendering {
             if (width != width_ || height != height_) {
                 resize(width_, height_);
             }
+
+            LOG_TIMER_TRACE("FrameBuffer::uploadDepth");
+            LOG_TRACE("Uploading depth data: {}x{}", width_, height_);
 
             glBindTexture(GL_TEXTURE_2D, depthTexture);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
@@ -124,6 +142,10 @@ namespace gs::rendering {
             if (width != new_width || height != new_height) {
                 resize(new_width, new_height);
             }
+
+            LOG_TIMER_TRACE("FrameBuffer::uploadImageAndDepth");
+            LOG_TRACE("Uploading image and depth data: {}x{}", new_width, new_height);
+
             glBindTexture(GL_TEXTURE_2D, texture);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
                             GL_RGB, GL_UNSIGNED_BYTE, rgb_data);
