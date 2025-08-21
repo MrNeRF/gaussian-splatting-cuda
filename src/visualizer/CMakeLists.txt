@@ -1,11 +1,10 @@
-add_library(gs_visualizer OBJECT
+add_library(gs_visualizer STATIC
         # Core
         visualizer.cpp
         visualizer_impl.cpp
         core/main_loop.cpp
         core/data_loading_service.cpp
         core/command_processor.cpp
-        core/viewer_state_manager.cpp
 
         # Tools
         tools/crop_box_tool.cpp
@@ -18,17 +17,11 @@ add_library(gs_visualizer OBJECT
 
         # Rendering
         rendering/rendering_manager.cpp
-        rendering/rendering_pipeline.cpp
-        rendering/render_bounding_box.cpp
-        rendering/render_infinite_grid.cpp
-        rendering/point_cloud_renderer.cpp
+        rendering/framerate_controller.cpp
 
         # GUI system
         gui/gui_manager.cpp
         gui/ui_widgets.cpp
-	    gui/viewport_gizmo.cpp
-        gui/viewport_gizmo.cpp
-        gui/text_renderer.cpp
         gui/panels/main_panel.cpp
         gui/panels/training_panel.cpp
         gui/panels/crop_box_panel.cpp
@@ -44,23 +37,11 @@ add_library(gs_visualizer OBJECT
         scene/scene_manager.cpp
 
         # Input handling
-        input/input_handler.cpp
-        input/input_manager.cpp
-        input/camera_controller.cpp
+        input/input_controller.cpp
 
         # Training integration
         training/training_manager.cpp
-        rendering/render_coordinate_axes.cpp
-        rendering/framerate_controller.cpp
 )
-
-
-# CUDA-OpenGL interop support
-if (CUDA_GL_INTEROP_ENABLED)
-    target_sources(gs_visualizer PRIVATE
-            rendering/cuda_gl_interop.cpp
-    )
-endif ()
 
 # Set include directories
 target_include_directories(gs_visualizer
@@ -72,7 +53,7 @@ target_include_directories(gs_visualizer
         # Internal paths for implementation only
         ${CMAKE_CURRENT_SOURCE_DIR}                      # For internal includes
         ${CMAKE_SOURCE_DIR}/include                       # For core headers
-        ${CMAKE_SOURCE_DIR}/src                          # For "loader/loader.hpp"
+        # REMOVE THIS LINE: ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/gsplat                       # For gsplat headers
         ${CUDAToolkit_INCLUDE_DIRS}                      # CUDA headers
         ${OPENGL_INCLUDE_DIRS}                           # OpenGL headers
@@ -92,11 +73,11 @@ target_link_libraries(gs_visualizer
         nlohmann_json::nlohmann_json
         Python3::Python
         CUDA::cudart
-        Freetype::Freetype
         ${OPENGL_LIBRARIES}
-        gs_loader           # Use the loader module
-        gaussian_host       # For access to core functionality
-        gaussian_kernels    # For CUDA kernels if needed
+        gs_loader
+        gs_rendering       # This is already here, good!
+        gaussian_host      # For access to core functionality
+        gaussian_kernels   # For CUDA kernels if needed
 )
 
 # Set C++ standard
@@ -110,7 +91,7 @@ target_compile_options(gs_visualizer PRIVATE
         $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O3>
 )
 
-# Handle resources (shaders and assets)
+## Handle resources (shaders and assets)
 set(VISUALIZER_BUILD_RESOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources")
 set(VISUALIZER_SOURCE_RESOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources")
 
@@ -125,11 +106,18 @@ foreach (SHADER_FILE ${SHADER_FILES})
     configure_file(${SHADER_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/shaders/${SHADER_NAME}" COPYONLY)
 endforeach ()
 
-# Copy assets to build directory
+# Copy assets from resources/assets if they exist
 file(GLOB ASSET_FILES "${VISUALIZER_SOURCE_RESOURCE_DIR}/assets/*")
 foreach (ASSET_FILE ${ASSET_FILES})
     get_filename_component(ASSET_NAME ${ASSET_FILE} NAME)
     configure_file(${ASSET_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/assets/${ASSET_NAME}" COPYONLY)
+endforeach ()
+
+# ALSO copy assets from gui/assets (where your font actually is!)
+file(GLOB GUI_ASSET_FILES "${CMAKE_CURRENT_SOURCE_DIR}/gui/assets/*")
+foreach (GUI_ASSET_FILE ${GUI_ASSET_FILES})
+    get_filename_component(ASSET_NAME ${GUI_ASSET_FILE} NAME)
+    configure_file(${GUI_ASSET_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/assets/${ASSET_NAME}" COPYONLY)
 endforeach ()
 
 # Compile definitions

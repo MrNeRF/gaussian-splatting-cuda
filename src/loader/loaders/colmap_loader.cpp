@@ -47,11 +47,38 @@ namespace gs::loader {
         bool has_images = std::filesystem::exists(sparse_path / "images.bin");
         bool has_points = std::filesystem::exists(sparse_path / "points3D.bin");
 
-        if (!has_cameras || !has_images) {
+        // Check for COLMAP text files
+        bool has_cameras_text = std::filesystem::exists(sparse_path / "cameras.txt");
+        bool has_images_text = std::filesystem::exists(sparse_path / "images.txt");
+        bool has_points_text = std::filesystem::exists(sparse_path / "points3D.txt");
+
+        if (std::min(has_cameras || has_images || has_points,
+                     has_cameras_text || has_images_text || has_points_text) != 0) {
+            return std::unexpected(
+                "Found mixed COLMAP binary and text files. "
+                "Please use either binary or text format consistently.");
+        }
+
+        bool trying_text = has_cameras_text || has_images_text;
+        std::cout << "Trying to load COLMAP in "
+                  << (trying_text ? "text" : "binary") << " format\n";
+
+        // If you don't have binary cameras or images AND you are not trying text: error
+        if ((!has_cameras || !has_images) &&
+            !trying_text) {
             return std::unexpected(std::format(
                 "Missing required COLMAP files. cameras.bin: {}, images.bin: {}",
                 has_cameras ? "found" : "missing",
                 has_images ? "found" : "missing"));
+        }
+
+        // If you don't have text cameras or images AND you trying text: error
+        if ((!has_cameras_text || !has_images_text) &&
+            trying_text) {
+            return std::unexpected(std::format(
+                "Missing required COLMAP text files. cameras.txt: {}, images.txt: {}",
+                has_cameras_text ? "found" : "missing",
+                has_images_text ? "found" : "missing"));
         }
 
         // Check for image directory
@@ -75,7 +102,7 @@ namespace gs::loader {
                 .scene_center = torch::zeros({3}),
                 .loader_used = name(),
                 .load_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time),
-                .warnings = has_points ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found (points3D.bin) - will use random initialization"}};
+                .warnings = (has_points || has_points_text) ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found (points3D.bin|txt) - will use random initialization"}};
         }
 
         // Load cameras and images
@@ -84,9 +111,17 @@ namespace gs::loader {
         }
 
         try {
-            // Read COLMAP data
-            auto [camera_infos, scene_center] = read_colmap_cameras_and_images(
-                path, options.images_folder);
+            std::vector<CameraData> camera_infos;
+            torch::Tensor scene_center;
+            if (has_cameras && has_images) {
+                // Read binary COLMAP data
+                std::tie(camera_infos, scene_center) = read_colmap_cameras_and_images(path, options.images_folder);
+            } else if (has_cameras_text && has_images_text) {
+                // Read text-based COLMAP data
+                std::tie(camera_infos, scene_center) = read_colmap_cameras_and_images_text(path, options.images_folder);
+            } else {
+                return std::unexpected("No valid COLMAP camera and image data found");
+            }
 
             if (options.progress) {
                 options.progress(40.0f, std::format("Creating {} cameras...", camera_infos.size()));
@@ -138,6 +173,10 @@ namespace gs::loader {
                 auto loaded_pc = read_colmap_point_cloud(path);
                 point_cloud = std::make_shared<PointCloud>(std::move(loaded_pc));
                 std::println("Loaded {} points from COLMAP", point_cloud->size());
+            } else if (has_points_text) {
+                auto loaded_pc = read_colmap_point_cloud_text(path);
+                point_cloud = std::make_shared<PointCloud>(std::move(loaded_pc));
+                std::println("Loaded {} points from COLMAP text file", point_cloud->size());
             } else {
                 point_cloud = std::make_shared<PointCloud>();
                 std::println("No point cloud found - will use random initialization");
@@ -159,7 +198,7 @@ namespace gs::loader {
                 .scene_center = scene_center,
                 .loader_used = name(),
                 .load_time = load_time,
-                .warnings = has_points ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found - using random initialization"}};
+                .warnings = (has_points || has_points_text) ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found - using random initialization"}};
 
             std::println("COLMAP dataset loaded successfully in {}ms", load_time.count());
             std::println("  - {} cameras", camera_infos.size());
@@ -225,9 +264,15 @@ namespace gs::loader {
             if (std::filesystem::exists(sparse0) && caseInsensitiveExists(sparse0, "cameras.bin")) {
                 return true;
             }
+            if (std::filesystem::exists(sparse0) && caseInsensitiveExists(sparse0, "cameras.txt")) {
+                return true;
+            }
 
             // Check directly in sparse/
             if (caseInsensitiveExists(sparseDir, "cameras.bin")) {
+                return true;
+            }
+            if (caseInsensitiveExists(sparseDir, "cameras.txt")) {
                 return true;
             }
         }

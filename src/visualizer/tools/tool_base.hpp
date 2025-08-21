@@ -1,6 +1,7 @@
 #pragma once
 
-#include "input/input_handler.hpp"
+#include "input/input_controller.hpp"
+#include "rendering/rendering_manager.hpp"
 #include <string>
 #include <string_view>
 
@@ -46,9 +47,9 @@ namespace gs::visualizer {
     public:
         virtual ~ToolContext() = default;
 
-        // Access to visualizer components
-        virtual RenderingManager* getRenderingManager() = 0;
-        virtual gs::SceneManager* getSceneManager() = 0;
+        // Access to visualizer components - make these const
+        virtual RenderingManager* getRenderingManager() const = 0;
+        virtual gs::SceneManager* getSceneManager() const = 0;
         virtual const ::Viewport& getViewport() const = 0;
         virtual ::GLFWwindow* getWindow() const = 0;
 

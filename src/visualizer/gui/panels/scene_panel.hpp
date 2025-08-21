@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "training/training_manager.hpp"
@@ -24,14 +25,31 @@ namespace gs {
             // Panel state
             float m_panelWidth = 300.0f;
 
-            // Image list data
+            // Image list data for dataset mode
             std::vector<std::filesystem::path> m_imagePaths;
             typedef int CamId;
             // cam path to cam id
             std::map<std::filesystem::path, CamId> m_PathToCamId;
-
             int m_selectedImageIndex = -1;
             std::filesystem::path m_currentDatasetPath;
+
+            // PLY scene graph data for PLY mode
+            struct PLYNode {
+                std::string name;
+                bool visible = true;
+                bool selected = false;
+                size_t gaussian_count = 0;
+            };
+            std::vector<PLYNode> m_plyNodes;
+            int m_selectedPLYIndex = -1;
+
+            // Current mode
+            enum class DisplayMode {
+                Empty,
+                PLYSceneGraph,
+                DatasetImages
+            };
+            DisplayMode m_currentMode = DisplayMode::Empty;
 
             // Callbacks
             std::function<void(const std::filesystem::path&)> m_onDatasetLoad;
@@ -47,9 +65,16 @@ namespace gs {
             void setupEventHandlers();
             void handleSceneLoaded(const events::state::SceneLoaded& event);
             void handleSceneCleared();
+            void handlePLYAdded(const events::state::PLYAdded& event);
+            void handlePLYRemoved(const events::state::PLYRemoved& event);
             void loadImageCams(const std::filesystem::path& path);
             void onImageSelected(const std::filesystem::path& imagePath);
             void onImageDoubleClicked(size_t imageIndex);
+
+            // PLY scene graph rendering
+            void renderPLYSceneGraph();
+            void renderImageList();
+            void updatePLYNodes();
         };
 
     } // namespace gui

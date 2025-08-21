@@ -1,7 +1,7 @@
 #include "core/command_processor.hpp"
 #include "core/splat_data.hpp"
 #include "scene/scene_manager.hpp"
-#include <cuda_runtime.h>
+#include "training/training_manager.hpp"
 #include <iomanip>
 #include <sstream>
 #include <torch/torch.h>
@@ -64,29 +64,66 @@ namespace gs {
     std::string CommandProcessor::handleStatus() {
         std::ostringstream result;
 
-        try {
-            auto response = Query<events::query::GetTrainerState, events::query::TrainerState>()
-                                .send(events::query::GetTrainerState{});
+        if (scene_manager_) {
+            // Check content type first
+            auto content_type = scene_manager_->getContentType();
 
-            result << "Training Status:\n";
-            result << "  State: " << [](const events::query::TrainerState::State& state) -> const char* {
-                switch (state) {
-                case events::query::TrainerState::State::Idle: return "Idle";
-                case events::query::TrainerState::State::Ready: return "Ready";
-                case events::query::TrainerState::State::Running: return "Running";
-                case events::query::TrainerState::State::Paused: return "Paused";
-                case events::query::TrainerState::State::Completed: return "Completed";
-                case events::query::TrainerState::State::Error: return "Error";
-                default: return "Unknown";
+            if (content_type == SceneManager::ContentType::Dataset) {
+                // Only check training state if we have a dataset loaded
+                auto* trainer_manager = scene_manager_->getTrainerManager();
+                if (trainer_manager && trainer_manager->hasTrainer()) {
+                    auto state = trainer_manager->getState();
+
+                    result << "Training Status:\n";
+                    result << "  State: ";
+
+                    // Convert state to string
+                    switch (state) {
+                    case TrainerManager::State::Idle:
+                        result << "Idle";
+                        break;
+                    case TrainerManager::State::Ready:
+                        result << "Ready";
+                        break;
+                    case TrainerManager::State::Running:
+                        result << "Running";
+                        break;
+                    case TrainerManager::State::Paused:
+                        result << "Paused";
+                        break;
+                    case TrainerManager::State::Stopping:
+                        result << "Stopping";
+                        break;
+                    case TrainerManager::State::Completed:
+                        result << "Completed";
+                        break;
+                    case TrainerManager::State::Error:
+                        result << "Error";
+                        break;
+                    default:
+                        result << "Unknown";
+                        break;
+                    }
+
+                    result << "\n";
+                    result << "  Current Iteration: " << trainer_manager->getCurrentIteration() << "\n";
+                    result << "  Current Loss: " << std::fixed << std::setprecision(6)
+                           << trainer_manager->getCurrentLoss();
+
+                    auto error_msg = trainer_manager->getLastError();
+                    if (!error_msg.empty()) {
+                        result << "\n  Error: " << error_msg;
+                    }
+                } else {
+                    result << "Dataset loaded but no trainer available";
                 }
-            }(response.state) << "\n";
-            result << "  Current Iteration: " << response.current_iteration << "\n";
-            result << "  Current Loss: " << std::fixed << std::setprecision(6) << response.current_loss;
-            if (response.error_message) {
-                result << "\n  Error: " << *response.error_message;
+            } else if (content_type == SceneManager::ContentType::PLYFiles) {
+                result << "PLY Viewer mode (no training)";
+            } else {
+                result << "No content loaded";
             }
-        } catch (...) {
-            result << "No trainer available (viewer mode)";
+        } else {
+            result << "No scene manager available";
         }
 
         return result.str();
@@ -95,39 +132,31 @@ namespace gs {
     std::string CommandProcessor::handleModelInfo() {
         std::ostringstream result;
 
-        try {
-            auto stateResponse = Query<events::query::GetSceneInfo, events::query::SceneInfo>()
-                                     .send(events::query::GetSceneInfo{});
+        if (scene_manager_) {
+            auto info = scene_manager_->getSceneInfo();
 
-            if (stateResponse.has_model) {
+            if (info.has_model) {
                 result << "Scene Information:\n";
-                result << "  Type: " << [&]() {
-                    switch (stateResponse.type) {
-                    case events::query::SceneInfo::Type::None: return "None";
-                    case events::query::SceneInfo::Type::PLY: return "PLY";
-                    case events::query::SceneInfo::Type::Dataset: return "Dataset";
-                    default: return "Unknown";
-                    }
-                }() << "\n";
-                result << "  Source: " << stateResponse.source_path.filename().string() << "\n";
-                result << "  Number of Gaussians: " << stateResponse.num_gaussians << "\n";
+                result << "  Type: " << info.source_type << "\n";
+                result << "  Source: " << info.source_path.filename().string() << "\n";
+                result << "  Number of Gaussians: " << info.num_gaussians << "\n";
 
-                if (stateResponse.is_training) {
-                    result << "  Training Mode: Active\n";
+                if (info.source_type == "PLY") {
+                    result << "  Number of Nodes: " << info.num_nodes << "\n";
                 }
 
-                auto modelResponse = Query<events::query::GetModelInfo, events::query::ModelInfo>()
-                                         .send(events::query::GetModelInfo{});
-
-                if (modelResponse.has_model) {
-                    result << "  SH Degree: " << modelResponse.sh_degree << "\n";
-                    result << "  Scene Scale: " << modelResponse.scene_scale << "\n";
+                // Only mention training if we have a dataset loaded
+                if (scene_manager_->getContentType() == SceneManager::ContentType::Dataset) {
+                    auto* trainer_manager = scene_manager_->getTrainerManager();
+                    if (trainer_manager && trainer_manager->isRunning()) {
+                        result << "  Training Mode: Active\n";
+                    }
                 }
             } else {
                 result << "No scene loaded";
             }
-        } catch (...) {
-            result << "Failed to query scene information";
+        } else {
+            result << "No scene manager available";
         }
 
         return result.str();
@@ -154,17 +183,17 @@ namespace gs {
     }
 
     std::string CommandProcessor::handleTensorInfo(const std::string& tensor_name) {
-        if (!scene_manager_ || !scene_manager_->hasScene()) {
-            return "No model available";
+        if (!scene_manager_) {
+            return "No scene manager available";
         }
 
         if (tensor_name.empty()) {
             return "Usage: tensor_info <tensor_name>\nAvailable: means, scaling, rotation, shs, opacity";
         }
 
-        SplatData* model = scene_manager_->getScene()->getMutableModel();
+        const SplatData* model = scene_manager_->getModelForRendering();
         if (!model) {
-            return "Model not available";
+            return "No model available";
         }
 
         torch::Tensor tensor;

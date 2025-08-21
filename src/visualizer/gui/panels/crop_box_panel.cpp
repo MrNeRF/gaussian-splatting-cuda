@@ -1,6 +1,6 @@
 #include "gui/panels/crop_box_panel.hpp"
 #include "gui/ui_widgets.hpp"
-#include "rendering/render_bounding_box.hpp"
+#include "rendering/rendering.hpp"
 #include "visualizer_impl.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
@@ -8,7 +8,7 @@
 namespace gs::gui::panels {
 
     // Apply rotation to crop box
-    static void updateRotationMatrix(RenderBoundingBox* crop_box,
+    static void updateRotationMatrix(gs::rendering::IBoundingBox* crop_box,
                                      float delta_rot_x, float delta_rot_y, float delta_rot_z) {
         if (!crop_box)
             return;

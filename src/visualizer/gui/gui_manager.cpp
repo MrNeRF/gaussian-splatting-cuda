@@ -7,6 +7,7 @@
 #include "gui/windows/camera_controls.hpp"
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/scripting_console.hpp"
+#include "internal/resource_paths.hpp"
 #include "tools/crop_box_tool.hpp"
 #include "visualizer_impl.hpp"
 
@@ -27,7 +28,6 @@ namespace gs::gui {
         console_ = std::make_unique<ScriptingConsole>();
         file_browser_ = std::make_unique<FileBrowser>();
         scene_panel_ = std::make_unique<ScenePanel>(viewer->trainer_manager_);
-        viewport_gizmo_ = std::make_unique<ViewportGizmo>();
 
         // Initialize window states
         window_states_["console"] = false;
@@ -63,18 +63,19 @@ namespace gs::gui {
         ImGui_ImplGlfw_InitForOpenGL(viewer_->getWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 430");
 
-        // Load fonts
-        std::string font_path = std::string(PROJECT_ROOT_PATH) +
-                                "/src/visualizer/resources/assets/JetBrainsMono-Regular.ttf";
-        io.Fonts->AddFontFromFileTTF(font_path.c_str(), 14.0f);
+        // Load fonts - use the resource path helper
+        try {
+            auto font_path = gs::visualizer::getAssetPath("JetBrainsMono-Regular.ttf");
+            io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 14.0f);
+        } catch (const std::exception& e) {
+            // If font loading fails, just use the default font
+            std::cerr << "Warning: Could not load custom font: " << e.what() << std::endl;
+            std::cerr << "Using default ImGui font" << std::endl;
+        }
 
         applyDefaultStyle();
 
-        // Configure components
-        setScriptExecutor([this](const std::string& cmd) {
-            return widgets::executeConsoleCommand(cmd, viewer_);
-        });
-
+        // Configure file browser callback
         setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
             window_states_["file_browser"] = false;
@@ -87,15 +88,9 @@ namespace gs::gui {
                 events::cmd::LoadFile{.path = path, .is_dataset = true}.emit();
             }
         });
-
-        // Initialize viewport gizmo
-        viewport_gizmo_->initialize();
     }
 
     void GuiManager::shutdown() {
-        if (viewport_gizmo_) {
-            viewport_gizmo_->shutdown();
-        }
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
@@ -119,6 +114,17 @@ namespace gs::gui {
             if (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
                 ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
                 ImGui::GetIO().WantCaptureMouse = false;
+            }
+        }
+
+        // CRITICAL FIX: In point cloud mode, always disable ImGui mouse capture in viewport
+        auto* rendering_manager = viewer_->getRenderingManager();
+        if (rendering_manager) {
+            const auto& settings = rendering_manager->getSettings();
+            if (settings.point_cloud_mode && mouse_in_viewport &&
+                !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+                ImGui::GetIO().WantCaptureMouse = false;
+                ImGui::GetIO().WantCaptureKeyboard = false;
             }
         }
 
@@ -230,20 +236,32 @@ namespace gs::gui {
 
         // Render viewport gizmo BEFORE focus indicator - always render regardless of focus
         if (show_viewport_gizmo_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
-            // Get camera rotation from viewport
-            const auto& viewport = viewer_->getViewport();
-            glm::mat3 camera_rotation = viewport.getRotationMatrix();
+            auto* rendering_manager = viewer_->getRenderingManager();
+            if (rendering_manager) {
+                auto* engine = rendering_manager->getRenderingEngine();
+                if (engine) {
+                    const auto& viewport = viewer_->getViewport();
+                    glm::mat3 camera_rotation = viewport.getRotationMatrix();
 
-            // Convert ImVec2 to glm::vec2
-            glm::vec2 viewport_pos_glm(viewport_pos_.x, viewport_pos_.y);
-            glm::vec2 viewport_size_glm(viewport_size_.x, viewport_size_.y);
-
-            // Render gizmo
-            viewport_gizmo_->render(camera_rotation, viewport_pos_glm, viewport_size_glm);
+                    engine->renderViewportGizmo(
+                        camera_rotation,
+                        glm::vec2(viewport_pos_.x, viewport_pos_.y),
+                        glm::vec2(viewport_size_.x, viewport_size_.y));
+                }
+            }
         }
 
         // Draw viewport focus indicator AFTER gizmo
-        if (viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
+        // DISABLE in point cloud mode
+        bool draw_focus = viewport_has_focus_ && viewport_size_.x > 0 && viewport_size_.y > 0;
+        if (rendering_manager) {
+            const auto& settings = rendering_manager->getSettings();
+            if (settings.point_cloud_mode) {
+                draw_focus = false;
+            }
+        }
+
+        if (draw_focus) {
             ImDrawList* draw_list = ImGui::GetForegroundDrawList();
 
             // The viewport_pos_ is already relative to the window, so we just need to add the window position

@@ -1,10 +1,9 @@
 #include "visualizer_impl.hpp"
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
-#include "core/model_providers.hpp"
+#include "scene/scene_manager.hpp"
 #include "tools/background_tool.hpp"
 #include "tools/crop_box_tool.hpp"
-
 #include <tools/world_transform_tool.hpp>
 
 namespace gs::visualizer {
@@ -14,19 +13,13 @@ namespace gs::visualizer {
           viewport_(options.width, options.height),
           window_manager_(std::make_unique<WindowManager>(options.title, options.width, options.height)) {
 
-        // Create state manager first
-        state_manager_ = std::make_unique<ViewerStateManager>();
+        // Initialize window manager first
+        if (!window_manager_->init()) {
+            throw std::runtime_error("Failed to initialize window manager");
+        }
 
-        // Set up compatibility pointers
-        info_ = state_manager_->getTrainingInfo();
-        config_ = state_manager_->getRenderingConfig();
-        anti_aliasing_ = options.antialiasing;
-        state_manager_->setAntiAliasing(options.antialiasing);
-
-        // Create scene manager
+        // Create scene manager - it creates its own Scene internally
         scene_manager_ = std::make_unique<SceneManager>();
-        auto scene = std::make_unique<Scene>();
-        scene_manager_->setScene(std::move(scene));
 
         // Create trainer manager
         trainer_manager_ = std::make_shared<TrainerManager>();
@@ -36,7 +29,7 @@ namespace gs::visualizer {
         // Create tool manager
         tool_manager_ = std::make_unique<ToolManager>(this);
         tool_manager_->registerBuiltinTools();
-        tool_manager_->addTool("Crop Box"); // Add crop box by default
+        tool_manager_->addTool("Crop Box");
         tool_manager_->addTool("World Transform");
         tool_manager_->addTool("Background");
 
@@ -46,14 +39,20 @@ namespace gs::visualizer {
         memory_monitor_ = std::make_unique<MemoryMonitor>();
         memory_monitor_->start();
 
-        // Create rendering manager
+        // Create and initialize rendering manager early to avoid crashes
         rendering_manager_ = std::make_unique<RenderingManager>();
+        rendering_manager_->initialize();
+
+        // Set initial antialiasing
+        RenderSettings initial_settings = rendering_manager_->getSettings();
+        initial_settings.antialiasing = options.antialiasing;
+        rendering_manager_->updateSettings(initial_settings);
 
         // Create command processor
         command_processor_ = std::make_unique<CommandProcessor>(scene_manager_.get());
 
-        // Create data loading service
-        data_loader_ = std::make_unique<DataLoadingService>(scene_manager_.get(), state_manager_.get());
+        // Create data loading service - no longer needs state_manager
+        data_loader_ = std::make_unique<DataLoadingService>(scene_manager_.get());
 
         // Create main loop
         main_loop_ = std::make_unique<MainLoop>();
@@ -80,15 +79,13 @@ namespace gs::visualizer {
         main_loop_->setShouldCloseCallback([this]() { return window_manager_->shouldClose(); });
 
         // Set up GUI connections
-        gui_manager_->setScriptExecutor([this](const std::string& command) -> std::string {
-            return command_processor_->processCommand(command);
+        gui_manager_->setScriptExecutor([this](const std::string& cmd) {
+            return command_processor_->processCommand(cmd);
         });
 
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
         });
-
-        // Remove input manager setup from here - it's not created yet!
     }
 
     void VisualizerImpl::setupEventHandlers() {
@@ -125,27 +122,42 @@ namespace gs::visualizer {
             }
         });
 
-        // Render settings changes are handled by ViewerStateManager
-        // but we need to sync with rendering manager
-        ui::RenderSettingsChanged::when([this](const auto&) {
-            auto settings = rendering_manager_->getSettings();
-
-            // Get current values from state manager
-            settings.fov = state_manager_->getRenderingConfig()->getFovDegrees();
-            settings.scaling_modifier = state_manager_->getRenderingConfig()->getScalingModifier();
-            settings.antialiasing = state_manager_->isAntiAliasingEnabled();
-
-            // Update compatibility flag
-            anti_aliasing_ = settings.antialiasing;
-
-            rendering_manager_->updateSettings(settings);
+        // Render settings changes
+        ui::RenderSettingsChanged::when([this](const auto& event) {
+            if (rendering_manager_) {
+                // The rendering manager handles this internally now
+                // Just need to mark dirty which happens in its event handler
+            }
         });
 
-        // UI events
+        // Camera moves - mark dirty
         ui::CameraMove::when([this](const auto&) {
-            // Could be used for auto-save camera positions
+            if (rendering_manager_) {
+                rendering_manager_->markDirty();
+            }
         });
 
+        // Tool settings changes - mark dirty
+        tools::CropBoxSettingsChanged::when([this](const auto& event) {
+            if (rendering_manager_) {
+                RenderSettings settings = rendering_manager_->getSettings();
+                settings.show_crop_box = event.show_box;
+                settings.use_crop_box = event.use_box;
+                rendering_manager_->updateSettings(settings);
+            }
+        });
+
+        // Scene changes - mark dirty
+        state::SceneChanged::when([this](const auto&) {
+            if (window_manager_) {
+                window_manager_->requestRedraw();
+            }
+            if (rendering_manager_) {
+                rendering_manager_->markDirty();
+            }
+        });
+
+        // Evaluation completed
         state::EvaluationCompleted::when([this](const auto& event) {
             if (gui_manager_) {
                 gui_manager_->addConsoleLog(
@@ -169,48 +181,39 @@ namespace gs::visualizer {
                 }
             }
         });
+
         internal::TrainerReady::when([this](const auto&) {
             internal::TrainingReadyToStart{}.emit();
+        });
+
+        // Training progress - don't mark dirty, let throttling handle it
+        state::TrainingProgress::when([this](const auto& event) {
+            // Just update loss buffer, don't force render
+            // The 1 FPS throttle will handle rendering
         });
     }
 
     bool VisualizerImpl::initialize() {
-        if (!window_manager_->init()) {
-            return false;
-        }
+        // Window manager already initialized in constructor
 
-        // Create input manager
-        input_manager_ = std::make_unique<InputManager>(window_manager_->getWindow(), viewport_);
-        input_manager_->initialize();
-        input_manager_->setTrainingManager(trainer_manager_);
-
-        // Set viewport focus check
-        input_manager_->setViewportFocusCheck([this]() {
-            return gui_manager_ && gui_manager_->isViewportFocused();
-        });
-
-        // Set position check for mouse events
-        input_manager_->setPositionCheck([this](double x, double y) {
-            return gui_manager_ && gui_manager_->isPositionInViewport(x, y);
-        });
-
-        // Set up input callbacks after input_manager_ is created
-        input_manager_->setupCallbacks(
-            [this]() { return gui_manager_ && gui_manager_->isAnyWindowActive(); },
-            [this](const std::filesystem::path& path, bool is_dataset) {
-                // The actual loading is now handled by DataLoadingService via events
-                events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
-                return true;
-            });
-
-        rendering_manager_->initialize();
-
-        // Initialize tools
-        tool_manager_->initialize();
-
-        // Initialize GUI
+        // Initialize GUI first (sets up ImGui callbacks)
         gui_manager_->init();
         gui_initialized_ = true;
+
+        // Create simplified input controller AFTER ImGui is initialized
+        input_controller_ = std::make_unique<InputController>(
+            window_manager_->getWindow(), viewport_);
+        input_controller_->initialize();
+        input_controller_->setTrainingManager(trainer_manager_);
+
+        // Rendering manager already initialized in constructor
+        // Just check if it's ready
+        if (!rendering_manager_->isInitialized()) {
+            rendering_manager_->initialize();
+        }
+
+        // Initialize tools AFTER rendering is ready
+        tool_manager_->initialize();
 
         return true;
     }
@@ -227,11 +230,21 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::render() {
-        // Update input routing based on current focus
-        if (input_manager_) {
-            input_manager_->updateInputRouting();
+        // Update input controller with viewport bounds
+        if (gui_manager_) {
+            auto pos = gui_manager_->getViewportPos();
+            auto size = gui_manager_->getViewportSize();
+            input_controller_->updateViewportBounds(pos.x, pos.y, size.x, size.y);
         }
-        // Update rendering settings from state manager
+
+        // Update point cloud mode in input controller
+        auto* rendering_manager = getRenderingManager();
+        if (rendering_manager) {
+            const auto& settings = rendering_manager->getSettings();
+            input_controller_->setPointCloudMode(settings.point_cloud_mode);
+        }
+
+        // Update rendering settings
         RenderSettings settings = rendering_manager_->getSettings();
 
         // Get crop box state from tool
@@ -249,13 +262,10 @@ namespace gs::visualizer {
             settings.show_coord_axes = false;
         }
 
-        settings.antialiasing = state_manager_->isAntiAliasingEnabled();
-        settings.fov = state_manager_->getRenderingConfig()->getFovDegrees();
-        settings.scaling_modifier = state_manager_->getRenderingConfig()->getScalingModifier();
         rendering_manager_->updateSettings(settings);
 
         // Get crop box for rendering
-        RenderBoundingBox* crop_box_ptr = nullptr;
+        const gs::rendering::IBoundingBox* crop_box_ptr = nullptr;
         if (auto crop_box = getCropBox()) {
             crop_box_ptr = crop_box.get();
         }
@@ -267,8 +277,6 @@ namespace gs::visualizer {
             ImVec2 pos = gui_manager_->getViewportPos();
             ImVec2 size = gui_manager_->getViewportSize();
 
-            // The pos and size are already relative to the window!
-            // We just need to pass them directly to the rendering
             viewport_region.x = pos.x;
             viewport_region.y = pos.y;
             viewport_region.width = size.x;
@@ -276,8 +284,9 @@ namespace gs::visualizer {
 
             has_viewport_region = true;
         }
+
         // Get coord axes and world 2 user for rendering
-        const RenderCoordinateAxes* coord_axes_ptr = nullptr;
+        const gs::rendering::ICoordinateAxes* coord_axes_ptr = nullptr;
         if (auto coord_axes = getAxes()) {
             coord_axes_ptr = coord_axes.get();
         }
@@ -337,14 +346,14 @@ namespace gs::visualizer {
         data_loader_->clearScene();
     }
 
-    std::shared_ptr<RenderBoundingBox> VisualizerImpl::getCropBox() const {
+    std::shared_ptr<gs::rendering::IBoundingBox> VisualizerImpl::getCropBox() const {
         if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
             return crop_tool->getBoundingBox();
         }
         return nullptr;
     }
 
-    std::shared_ptr<const RenderCoordinateAxes> VisualizerImpl::getAxes() const {
+    std::shared_ptr<const gs::rendering::ICoordinateAxes> VisualizerImpl::getAxes() const {
         if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
             return world_transform->getAxes();
         }

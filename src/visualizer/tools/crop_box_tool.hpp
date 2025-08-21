@@ -1,9 +1,13 @@
 #pragma once
 
-#include "rendering/render_bounding_box.hpp"
+#include "rendering/rendering.hpp"
 #include "tools/tool_base.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+
+namespace gs::rendering {
+    class RenderBoundingBox;
+}
 
 namespace gs::visualizer {
 
@@ -24,7 +28,7 @@ namespace gs::visualizer {
         void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) override;
 
         // Crop box specific methods
-        std::shared_ptr<gs::RenderBoundingBox> getBoundingBox() { return bounding_box_; }
+        std::shared_ptr<gs::rendering::IBoundingBox> getBoundingBox();
         bool shouldShowBox() const { return show_crop_box_; }
         bool shouldUseBox() const { return use_crop_box_; }
 
@@ -36,13 +40,7 @@ namespace gs::visualizer {
         void drawControls(const gs::gui::UIContext& ui_ctx);
         void updateRotationMatrix(float delta_x, float delta_y, float delta_z);
 
-        // Input handling helpers
-        bool isMouseOverHandle(const glm::dvec2& mouse_pos) const;
-        void startDragging(const glm::dvec2& mouse_pos);
-        void updateDragging(const glm::dvec2& mouse_pos);
-        void stopDragging();
-
-        std::shared_ptr<gs::RenderBoundingBox> bounding_box_;
+        std::shared_ptr<gs::rendering::IBoundingBox> bounding_box_;
 
         // UI state
         bool show_crop_box_ = false;
@@ -54,22 +52,6 @@ namespace gs::visualizer {
         float rotate_timer_x_ = 0.0f;
         float rotate_timer_y_ = 0.0f;
         float rotate_timer_z_ = 0.0f;
-
-        // Interaction state
-        bool is_dragging_ = false;
-        glm::dvec2 drag_start_pos_;
-        glm::vec3 drag_start_box_min_;
-        glm::vec3 drag_start_box_max_;
-        enum class DragHandle {
-            None,
-            MinX,
-            MinY,
-            MinZ,
-            MaxX,
-            MaxY,
-            MaxZ,
-            Center
-        } current_handle_ = DragHandle::None;
     };
 
 } // namespace gs::visualizer
