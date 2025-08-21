@@ -69,11 +69,6 @@ namespace gs {
                 std::println(stderr, "can open new data_path and project from commandline");
                 return -1;
             }
-
-            auto project = viewer->getProject();
-
-            // slicing intended
-            params->dataset = static_cast<const param::DatasetConfig&>(project->getProjectData().data_set_info);
         }
 
         // Set parameters

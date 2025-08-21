@@ -333,6 +333,20 @@ namespace gs::visualizer {
                 .source = "InputController"}
                 .emit();
         }
+
+        if (paths.size() == 1) {
+            auto project_path = std::filesystem::path(paths[0]);
+            if (project_path.extension() == gs::management::Project::EXTENSION) {
+                events::cmd::LoadProject{.path = project_path}.emit();
+
+                events::notify::Log{
+                    .level = events::notify::Log::Level::Info,
+                    .message = std::format("Loading LS Project via drag-and-drop: {}",
+                                           project_path.filename().string()),
+                    .source = "InputController"}
+                    .emit();
+            }
+        }
     }
 
     void InputController::handleGoToCamView(const events::cmd::GoToCamView& event) {

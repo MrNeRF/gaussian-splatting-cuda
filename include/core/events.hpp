@@ -40,6 +40,7 @@ namespace gs {
             EVENT(StopTraining, );
             EVENT(SaveCheckpoint, std::optional<int> iteration;);
             EVENT(LoadFile, std::filesystem::path path; bool is_dataset;);
+            EVENT(LoadProject, std::filesystem::path path;);
             EVENT(ClearScene, );
             EVENT(ResetCamera, );
             EVENT(ShowWindow, std::string window_name; bool show;);

@@ -42,10 +42,10 @@ namespace gs::visualizer {
 
         // open project file and attach it to viewer
         bool openProject(const std::filesystem::path& path) override;
-        bool closeProject(const std::filesystem::path& path) override;
+        bool closeProject(const std::filesystem::path& path = {}) override;
         std::shared_ptr<gs::management::Project> getProject() override;
         // load project content to viewer
-        void LoadProject();
+        bool LoadProject();
 
         // Getters for GUI (delegating to state manager)
         Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
@@ -105,6 +105,7 @@ namespace gs::visualizer {
         // Event system
         void setupEventHandlers();
         void setupComponentConnections();
+        void handleLoadProjectCommand(const events::cmd::LoadProject& cmd);
 
         // Options
         ViewerOptions options_;
