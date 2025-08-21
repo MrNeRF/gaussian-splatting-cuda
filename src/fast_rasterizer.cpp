@@ -1,6 +1,5 @@
 #include "core/fast_rasterizer.hpp"
 #include "core/fast_rasterizer_autograd.hpp"
-#include "visualizer/core/command_processor.hpp"
 
 namespace gs {
 
