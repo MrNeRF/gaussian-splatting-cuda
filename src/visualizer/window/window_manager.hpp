@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <filesystem>
 #include <glm/glm.hpp>
 #include <string>
@@ -28,6 +29,8 @@ namespace gs {
         bool shouldClose() const;
         void setVSync(bool enabled);
         [[nodiscard]] bool getVSync() const { return vsync_enabled_; }
+        void requestRedraw();
+        bool needsRedraw() const;
 
         // Getters
         GLFWwindow* getWindow() const { return window_; }
@@ -45,7 +48,8 @@ namespace gs {
 
         // Static callback handler pointer
         static void* callback_handler_;
-        bool vsync_enabled_ = true; // Track VSync state
+        bool vsync_enabled_ = true;                     // Track VSync state
+        mutable std::atomic<bool> needs_redraw_{false}; // Redraw flag
 
         // Static GLFW callbacks
         static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);

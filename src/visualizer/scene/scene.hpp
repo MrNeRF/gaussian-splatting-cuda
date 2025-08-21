@@ -1,23 +1,25 @@
+// scene.hpp
 #pragma once
 
-#include "core/events.hpp"
-#include "core/imodel_provider.hpp"
-#include "core/trainer.hpp"
-#include "rendering/rendering_pipeline.hpp"
+#include "core/splat_data.hpp"
+#include <glm/glm.hpp>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace gs {
 
     class Scene {
     public:
-        // Scene can be empty, contain a model for viewing, or be linked to training
-        enum class Mode {
-            Empty,
-            Viewing, // Static model viewing
-            Training // Live training visualization
+        struct Node {
+            std::string name;
+            std::unique_ptr<SplatData> model;
+            glm::mat4 transform{1.0f};
+            bool visible = true;
+            size_t gaussian_count = 0;
         };
 
-        Scene();
+        Scene() = default;
         ~Scene() = default;
 
         // Delete copy operations
@@ -28,51 +30,32 @@ namespace gs {
         Scene(Scene&&) = default;
         Scene& operator=(Scene&&) = default;
 
-        // Mode management
-        Mode getMode() const { return mode_; }
+        // Node management
+        void addNode(const std::string& name, std::unique_ptr<SplatData> model);
+        void removeNode(const std::string& name);
+        void setNodeVisibility(const std::string& name, bool visible);
+        void clear();
 
-        // Model management via providers
-        void setModelProvider(std::shared_ptr<IModelProvider> provider);
-        void clearModel();
-        bool hasModel() const;
+        // Get combined model for rendering
+        const SplatData* getCombinedModel() const;
 
-        // Get model for rendering
-        const SplatData* getModel() const {
-            if (model_provider_) {
-                return model_provider_->getModel();
-            }
-            return nullptr;
-        }
-
-        // Get mutable model (no lock needed - caller handles locking)
-        SplatData* getMutableModel() {
-            if (model_provider_) {
-                return model_provider_->getMutableModel();
-            }
-            return nullptr;
-        }
-
-        // Convenience methods for setting specific types
-        void setStandaloneModel(std::unique_ptr<SplatData> model);
-        void linkToTrainer(Trainer* trainer);
-        void unlinkFromTrainer();
-
-        // Get model provider for type checking
-        std::shared_ptr<IModelProvider> getModelProvider() const {
-            return model_provider_;
-        }
-
-        // Rendering
-        RenderingPipeline::RenderResult render(const RenderingPipeline::RenderRequest& request);
+        // Direct queries
+        size_t getNodeCount() const { return nodes_.size(); }
+        size_t getTotalGaussianCount() const;
+        std::vector<const Node*> getNodes() const;
+        const Node* getNode(const std::string& name) const;
+        Node* getMutableNode(const std::string& name);
+        bool hasNodes() const { return !nodes_.empty(); }
 
     private:
-        Mode mode_ = Mode::Empty;
-        std::shared_ptr<IModelProvider> model_provider_;
-        std::unique_ptr<RenderingPipeline> pipeline_;
+        std::vector<Node> nodes_;
 
-        // Event handlers
-        void handleModelInfoQuery();
-        void publishModeChange(Mode old_mode, Mode new_mode);
+        // Caching for combined model
+        mutable std::unique_ptr<SplatData> cached_combined_;
+        mutable bool cache_valid_ = false;
+
+        void invalidateCache() { cache_valid_ = false; }
+        void rebuildCacheIfNeeded() const;
     };
 
 } // namespace gs

@@ -10,7 +10,9 @@
 
 namespace gs {
 
-    static void window_focus_callback(GLFWwindow* window, int focused) {
+    void* WindowManager::callback_handler_ = nullptr;
+
+    static void window_focus_callback(GLFWwindow*, int focused) {
         if (!focused) {
             events::internal::WindowFocusLost{}.emit();
             std::println("[WindowManager] Window lost focus");
@@ -109,6 +111,21 @@ namespace gs {
     void WindowManager::setVSync(bool enabled) {
         glfwSwapInterval(enabled ? 1 : 0);
         vsync_enabled_ = enabled;
+    }
+
+    void WindowManager::requestRedraw() {
+        // Set a flag that we need a redraw
+        needs_redraw_ = true;
+        // Post an empty event to wake up the event loop
+        glfwPostEmptyEvent();
+    }
+
+    bool WindowManager::needsRedraw() const {
+        bool result = needs_redraw_;
+        if (result) {
+            needs_redraw_ = false; // Reset the flag
+        }
+        return result;
     }
 
 } // namespace gs

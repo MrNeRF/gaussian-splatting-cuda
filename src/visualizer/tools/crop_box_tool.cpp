@@ -1,42 +1,66 @@
 #include "tools/crop_box_tool.hpp"
 #include "core/events.hpp"
-
-// clang-format off
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-// clang-format on
-
+#include "rendering/rendering.hpp"
 #include <cmath>
 #include <imgui.h>
+#include <iostream>
 
 namespace gs::visualizer {
 
     CropBoxTool::CropBoxTool() {
-        bounding_box_ = std::make_shared<RenderBoundingBox>();
         setupEventHandlers();
     }
 
     CropBoxTool::~CropBoxTool() = default;
 
-    bool CropBoxTool::initialize([[maybe_unused]] const ToolContext& ctx) {
-        // Bounding box OpenGL resources are initialized lazily on first render
-        return true;
+    bool CropBoxTool::initialize(const ToolContext& ctx) {
+        // Create the bounding box through the rendering engine
+        auto* rendering_manager = ctx.getRenderingManager();
+        if (!rendering_manager)
+            return false;
+
+        // Get rendering engine (it should be initialized by now)
+        auto* engine = rendering_manager->getRenderingEngine();
+        if (!engine)
+            return false;
+
+        // Create the bounding box
+        auto bbox_result = engine->createBoundingBox();
+        if (!bbox_result) {
+            std::cerr << "Failed to create bounding box: " << bbox_result.error() << std::endl;
+            return false;
+        }
+
+        bounding_box_ = *bbox_result;
+
+        // Initialize with default bounds
+        if (bounding_box_) {
+            bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
+            bounding_box_->setColor(glm::vec3(bbox_color_[0], bbox_color_[1], bbox_color_[2]));
+            bounding_box_->setLineWidth(line_width_);
+        }
+
+        return bounding_box_ != nullptr;
     }
 
     void CropBoxTool::shutdown() {
-        // Cleanup handled by destructors
+        // Cleanup handled by smart pointer
+        bounding_box_.reset();
     }
 
-    void CropBoxTool::update([[maybe_unused]] const ToolContext& ctx) {
+    void CropBoxTool::update(const ToolContext& ctx) {
         // Nothing to update per frame for crop box
+        (void)ctx;
     }
 
-    void CropBoxTool::render([[maybe_unused]] const ToolContext& ctx) {
+    void CropBoxTool::render(const ToolContext& ctx) {
         // Rendering is handled by the rendering manager based on our state
         // This method could be used for tool-specific overlays if needed
+        (void)ctx;
     }
 
-    void CropBoxTool::renderUI([[maybe_unused]] const gs::gui::UIContext& ui_ctx, [[maybe_unused]] bool* p_open) {
+    void CropBoxTool::renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) {
+        (void)p_open;
         if (!isEnabled()) {
             return;
         }
@@ -49,7 +73,6 @@ namespace gs::visualizer {
             // Optionally disable crop box when tool is disabled
             show_crop_box_ = false;
             use_crop_box_ = false;
-            is_dragging_ = false;
 
             events::tools::CropBoxSettingsChanged{
                 .show_box = false,
@@ -68,58 +91,9 @@ namespace gs::visualizer {
         });
     }
 
-    bool CropBoxTool::isMouseOverHandle([[maybe_unused]] const glm::dvec2& mouse_pos) const {
-        // For now, just return false
-        return false;
-    }
+    void CropBoxTool::drawControls(const gs::gui::UIContext& ui_ctx) {
+        (void)ui_ctx;
 
-    void CropBoxTool::startDragging(const glm::dvec2& mouse_pos) {
-        is_dragging_ = true;
-        drag_start_pos_ = mouse_pos;
-        drag_start_box_min_ = bounding_box_->getMinBounds();
-        drag_start_box_max_ = bounding_box_->getMaxBounds();
-
-        // Determine which handle is being dragged
-        // This would involve projecting handles to screen space
-        current_handle_ = DragHandle::Center; // Simplified
-    }
-
-    void CropBoxTool::updateDragging(const glm::dvec2& mouse_pos) {
-        if (!is_dragging_)
-            return;
-
-        glm::dvec2 delta = mouse_pos - drag_start_pos_;
-
-        // Convert screen delta to world space delta
-        // This is simplified - real implementation would use proper unprojection
-        float scale = 0.01f;
-        glm::vec3 world_delta(delta.x * scale, -delta.y * scale, 0.0f);
-
-        // Update bounds based on which handle is being dragged
-        switch (current_handle_) {
-        case DragHandle::Center:
-            bounding_box_->setBounds(
-                drag_start_box_min_ + world_delta,
-                drag_start_box_max_ + world_delta);
-            break;
-        // Add cases for other handles...
-        default:
-            break;
-        }
-
-        events::ui::CropBoxChanged{
-            .min_bounds = bounding_box_->getMinBounds(),
-            .max_bounds = bounding_box_->getMaxBounds(),
-            .enabled = use_crop_box_}
-            .emit();
-    }
-
-    void CropBoxTool::stopDragging() {
-        is_dragging_ = false;
-        current_handle_ = DragHandle::None;
-    }
-
-    void CropBoxTool::drawControls([[maybe_unused]] const gs::gui::UIContext& ui_ctx) {
         if (!ImGui::CollapsingHeader("Crop Box")) {
             return;
         }
@@ -141,10 +115,18 @@ namespace gs::visualizer {
                 .emit();
         }
 
-        if (show_crop_box_ && bounding_box_->isInitialized()) {
+        // Check if bounding box is initialized before showing controls
+        if (!bounding_box_ || !bounding_box_->isInitialized()) {
+            ImGui::TextDisabled("Crop box not initialized");
+            return;
+        }
+
+        if (show_crop_box_) {
             // Appearance controls
             if (ImGui::ColorEdit3("Box Color", bbox_color_)) {
                 bounding_box_->setColor(glm::vec3(bbox_color_[0], bbox_color_[1], bbox_color_[2]));
+                // Mark dirty for immediate update
+                events::state::SceneChanged{}.emit();
             }
 
             float available_width = ImGui::GetContentRegionAvail().x;
@@ -154,11 +136,15 @@ namespace gs::visualizer {
             ImGui::SetNextItemWidth(slider_width);
             if (ImGui::SliderFloat("Line Width", &line_width_, 0.5f, 10.0f)) {
                 bounding_box_->setLineWidth(line_width_);
+                // Mark dirty for immediate update
+                events::state::SceneChanged{}.emit();
             }
 
             if (ImGui::Button("Reset to Default")) {
                 bounding_box_->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
                 bounding_box_->setworld2BBox(geometry::EuclideanTransform());
+                // Mark dirty for immediate update
+                events::state::SceneChanged{}.emit();
             }
 
             // Rotation controls
@@ -266,6 +252,8 @@ namespace gs::visualizer {
 
                 if (diff_x != 0 || diff_y != 0 || diff_z != 0) {
                     updateRotationMatrix(diff_x, diff_y, diff_z);
+                    // Mark dirty for immediate update
+                    events::state::SceneChanged{}.emit();
                 }
 
                 ImGui::TreePop();
@@ -380,4 +368,9 @@ namespace gs::visualizer {
 
         bounding_box_->setworld2BBox(rotation_transform);
     }
+
+    std::shared_ptr<gs::rendering::IBoundingBox> CropBoxTool::getBoundingBox() {
+        return bounding_box_;
+    }
+
 } // namespace gs::visualizer

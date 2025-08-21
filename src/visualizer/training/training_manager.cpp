@@ -16,49 +16,6 @@ namespace gs {
         }
     }
 
-    void TrainerManager::setupEventHandlers() {
-        using namespace events::query;
-
-        // Handle trainer state queries
-        GetTrainerState::when([this](const auto&) {
-            TrainerState response;
-
-            // Map internal state to response state
-            switch (state_.load()) {
-            case State::Idle:
-                response.state = TrainerState::State::Idle;
-                break;
-            case State::Ready:
-                response.state = TrainerState::State::Ready;
-                break;
-            case State::Running:
-                response.state = TrainerState::State::Running;
-                break;
-            case State::Paused:
-                response.state = TrainerState::State::Paused;
-                break;
-            case State::Completed:
-                response.state = TrainerState::State::Completed;
-                break;
-            case State::Error:
-                response.state = TrainerState::State::Error;
-                break;
-            default:
-                response.state = TrainerState::State::Idle;
-            }
-
-            response.current_iteration = getCurrentIteration();
-            response.current_loss = getCurrentLoss();
-            response.total_iterations = getTotalIterations();
-
-            if (!last_error_.empty()) {
-                response.error_message = last_error_;
-            }
-
-            response.emit();
-        });
-    }
-
     void TrainerManager::setTrainer(std::unique_ptr<Trainer> trainer) {
         // Clear any existing trainer first
         clearTrainer();
@@ -111,6 +68,9 @@ namespace gs {
         trainer_.reset();
         last_error_.clear();
         setState(State::Idle);
+
+        // Reset loss buffer
+        loss_buffer_.clear();
     }
 
     bool TrainerManager::startTraining() {
@@ -240,9 +200,26 @@ namespace gs {
     int TrainerManager::getTotalIterations() const {
         if (!trainer_)
             return 0;
-
-        // This is a bit of a hack - we'd need to expose this from Trainer
         return trainer_->getParams().optimization.iterations;
+    }
+
+    int TrainerManager::getNumSplats() const {
+        if (!trainer_)
+            return 0;
+        return static_cast<int>(trainer_->get_strategy().get_model().size());
+    }
+
+    void TrainerManager::updateLoss(float loss) {
+        std::lock_guard<std::mutex> lock(loss_buffer_mutex_);
+        loss_buffer_.push_back(loss);
+        while (loss_buffer_.size() > static_cast<size_t>(max_loss_points_)) {
+            loss_buffer_.pop_front();
+        }
+    }
+
+    std::deque<float> TrainerManager::getLossBuffer() const {
+        std::lock_guard<std::mutex> lock(loss_buffer_mutex_);
+        return loss_buffer_;
     }
 
     void TrainerManager::trainingThreadFunc(std::stop_token stop_token) {
@@ -292,6 +269,16 @@ namespace gs {
         }
         completion_cv_.notify_all();
     }
+
+    void TrainerManager::setupEventHandlers() {
+        using namespace events;
+
+        // Listen for training progress events - only update loss buffer
+        state::TrainingProgress::when([this](const auto& event) {
+            updateLoss(event.loss);
+        });
+    }
+
     std::shared_ptr<const Camera> TrainerManager::getCamById(int camId) const {
         if (trainer_) {
             return trainer_->getCamById(camId);
@@ -307,4 +294,5 @@ namespace gs {
         std::cerr << " getCamList trainer is not initialized " << std::endl;
         return {};
     }
+
 } // namespace gs

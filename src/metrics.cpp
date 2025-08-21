@@ -1,4 +1,5 @@
 #include "core/metrics.hpp"
+#include "core/fast_rasterizer.hpp"
 #include "core/image_io.hpp"
 #include "core/splat_data.hpp"
 #include <chrono>
@@ -417,15 +418,9 @@ namespace gs {
                 torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA);
                 torch::Tensor attention_mask = std::move(camera_with_image.attentionMask);
 
-                // Render with configured mode
-                auto r_output = gs::rasterize(
-                    *cam,
-                    splatData,
-                    background,
-                    1.0f,
-                    false,
-                    false,
-                    stringToRenderMode(_params.optimization.render_mode));
+                // TODO: const_cast is certainly not the correct solution here!
+                auto& splatData_mutable = const_cast<SplatData&>(splatData);
+                RenderOutput r_output = fast_rasterize(*cam, splatData_mutable, background);
 
                 // Only compute metrics if we have RGB output
                 if (has_rgb()) {

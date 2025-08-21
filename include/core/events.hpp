@@ -1,7 +1,5 @@
 #pragma once
 #include "core/event_bus.hpp"
-#include <chrono>
-#include <condition_variable>
 #include <filesystem>
 #include <glm/glm.hpp>
 #include <optional>
@@ -47,23 +45,23 @@ namespace gs {
             EVENT(ShowWindow, std::string window_name; bool show;);
             EVENT(ExecuteConsole, std::string command;);
             EVENT(GoToCamView, int cam_id;);
+            EVENT(AddPLY, std::filesystem::path path; std::string name;);
+            EVENT(RemovePLY, std::string name;);
+            EVENT(SetPLYVisibility, std::string name; bool visible;);
         } // namespace cmd
 
         // ============================================================================
-        // Tools - Notifications about what has happened
+        // Tools - Tool system events
         // ============================================================================
-
         namespace tools {
             EVENT(ToolEnabled, std::string tool_name;);
             EVENT(ToolDisabled, std::string tool_name;);
-            EVENT(CropBoxSettingsChanged,
-                  bool show_box;
-                  bool use_box;);
-            EVENT(AxesSettingsChanged,
-                  bool show_axes;);
+            EVENT(CropBoxSettingsChanged, bool show_box; bool use_box;);
+            EVENT(AxesSettingsChanged, bool show_axes;);
         } // namespace tools
+
         // ============================================================================
-        // State - Notifications about what has happened
+        // State - Notifications about what has happened (broadcasts)
         // ============================================================================
         namespace state {
             // Training state
@@ -83,6 +81,8 @@ namespace gs {
             EVENT(SceneCleared, );
             EVENT(ModelUpdated, int iteration; size_t num_gaussians;);
             EVENT(SceneChanged, );
+            EVENT(PLYAdded, std::string name; size_t total_gaussians;);
+            EVENT(PLYRemoved, std::string name;);
 
             // Data loading
             EVENT(DatasetLoadStarted, std::filesystem::path path;);
@@ -168,98 +168,14 @@ namespace gs {
         } // namespace ui
 
         // ============================================================================
-        // Queries - Synchronous request/response for information
-        // ============================================================================
-        namespace query {
-            // Trainer queries
-            EVENT(GetTrainerState, );
-            EVENT(TrainerState,
-                  enum class State{Idle, Ready, Running, Paused, Completed, Error} state;
-                  int current_iteration;
-                  float current_loss;
-                  int total_iterations;
-                  std::optional<std::string> error_message;);
-
-            // Scene queries
-            EVENT(GetSceneInfo, );
-            EVENT(SceneInfo,
-                  enum class Type{None, PLY, Dataset} type;
-                  std::filesystem::path source_path;
-                  size_t num_gaussians;
-                  bool is_training;
-                  bool has_model;);
-
-            // Model queries
-            EVENT(GetModelInfo, );
-            EVENT(ModelInfo,
-                  bool has_model;
-                  size_t num_gaussians;
-                  int sh_degree;
-                  float scene_scale;
-                  std::string source;);
-
-            // Render queries
-            EVENT(GetRenderCapabilities, );
-            EVENT(RenderCapabilities,
-                  std::vector<std::string> modes;
-                  bool supports_antialiasing;
-                  bool supports_depth;
-                  int max_width;
-                  int max_height;);
-        } // namespace query
-
-        // ============================================================================
-        // Internal - System coordination events (not for external use)
+        // Internal - System coordination events (minimal)
         // ============================================================================
         namespace internal {
             EVENT(TrainerReady, );
             EVENT(TrainingReadyToStart, );
             EVENT(WindowFocusLost, );
-            EVENT(RenderRequest,
-                  glm::mat3 view_rotation;
-                  glm::vec3 view_translation;
-                  glm::ivec2 viewport_size;
-                  float fov;
-                  float scaling_modifier;
-                  bool antialiasing;
-                  int render_mode;
-                  void* crop_box;
-                  size_t request_id;);
-            EVENT(RenderComplete, size_t request_id; bool success; float render_ms;);
         } // namespace internal
-
-    } // namespace events
-
-    // ============================================================================
-    // Helper for Query/Response pattern
-    // ============================================================================
-    template <typename Request, typename Response>
-    class Query {
-        std::optional<Response> response_;
-        std::condition_variable cv_;
-        std::mutex mutex_;
-
-    public:
-        Response send(const Request& req, std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
-            // Subscribe to response
-            [[maybe_unused]] auto handler = Response::when([this](const Response& r) {
-                std::lock_guard lock(mutex_);
-                response_ = r;
-                cv_.notify_one();
-            });
-
-            // Send request
-            req.emit();
-
-            // Wait for response
-            std::unique_lock lock(mutex_);
-            if (!cv_.wait_for(lock, timeout, [this] { return response_.has_value(); })) {
-                throw std::runtime_error("Query timeout");
-            }
-
-            return *response_;
-        }
-    };
+    }     // namespace events
 
     // ============================================================================
     // Convenience functions

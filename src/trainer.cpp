@@ -375,8 +375,6 @@ namespace gs {
         if (callback_busy_.load()) {
             callback_stream_.synchronize();
         }
-        // unsubscribe - because when the event emits while class destroyed we get crash
-        gs::event::bus().remove<gs::events::internal::TrainingReadyToStart>(train_started_handle_);
     }
 
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
@@ -406,7 +404,8 @@ namespace gs {
         if (save_requested_.exchange(false)) {
             std::println("\nSaving checkpoint at iteration {}...", iter);
             auto checkpoint_path = params_.dataset.output_path / "checkpoints";
-            strategy_->get_model().save_ply(checkpoint_path, iter, /*join=*/true);
+            save_ply(checkpoint_path, iter, /*join=*/true);
+
             std::println("Checkpoint saved to {}", checkpoint_path.string());
 
             // Emit checkpoint saved event
@@ -420,7 +419,7 @@ namespace gs {
         if (stop_requested_.load()) {
             std::println("\nStopping training permanently at iteration {}...", iter);
             std::println("Saving final model...");
-            strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
+            save_ply(params_.dataset.output_path, iter, /*join=*/true);
             is_running_ = false;
         }
     }
@@ -565,7 +564,8 @@ namespace gs {
             {
                 torch::NoGradGuard no_grad;
 
-                // Lock for writing during parameter updates
+                DeferredEvents deferred;
+
                 {
                     std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
@@ -578,12 +578,13 @@ namespace gs {
                         bilateral_grid_optimizer_->zero_grad(true);
                     }
 
-                    // Emit model updated event
-                    events::state::ModelUpdated{
+                    // Queue event for emission after lock release
+                    deferred.add(events::state::ModelUpdated{
                         .iteration = iter,
-                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())}
-                        .emit();
-                }
+                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())});
+                } // Lock released here
+
+                // Events automatically emitted here when deferred destructs
 
                 // Clean evaluation - let the evaluator handle everything
                 if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
@@ -601,8 +602,7 @@ namespace gs {
                         if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
                             const bool join_threads = (iter == params_.optimization.save_steps.back());
                             auto save_path = params_.dataset.output_path;
-                            strategy_->get_model().save_ply(save_path, iter, /*join=*/join_threads);
-
+                            save_ply(save_path, iter, /*join=*/join_threads);
                             // Emit checkpoint saved event
                             events::state::CheckpointSaved{
                                 .iteration = iter,
@@ -628,21 +628,20 @@ namespace gs {
     std::expected<void, std::string> Trainer::train(std::stop_token stop_token) {
         is_running_ = false;
         training_complete_ = false;
+        ready_to_start_ = false; // Reset the flag
 
         // Event-based ready signaling
         if (!params_.optimization.headless) {
-            std::atomic<bool> ready{false};
-
-            // Subscribe temporarily to start signal
-            train_started_handle_ = events::internal::TrainingReadyToStart::when([&ready](const auto&) {
-                ready = true;
+            // Subscribe to start signal (no need to store handle)
+            events::internal::TrainingReadyToStart::when([this](const auto&) {
+                ready_to_start_ = true;
             });
 
             // Signal we're ready
             events::internal::TrainerReady{}.emit();
 
             // Wait for start signal
-            while (!ready.load() && !stop_token.stop_requested()) {
+            while (!ready_to_start_.load() && !stop_token.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
         }
@@ -734,8 +733,7 @@ namespace gs {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                strategy_->get_model().save_ply(final_path, iter, /*join=*/true);
-
+                save_ply(final_path, iter - 1, /*join=*/true);
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
                     .iteration = iter,
@@ -933,4 +931,13 @@ namespace gs {
                   << removed << " / " << N << " splats (thr=" << threshold
                   << ", min_vis=" << min_visibility_count << ")\n";
     }
+    
+    void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
+        strategy_->get_model().save_ply(save_path, iter_num, /*join=*/join_threads);
+        if (lf_project_) {
+            std::filesystem::path ply_path = save_path / ("splat_" + std::to_string(iter_num) + ".ply");
+            lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num));
+        }
+    }
+
 } // namespace gs

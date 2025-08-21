@@ -65,25 +65,21 @@ namespace gs::gui::panels {
     }
 
     void DrawRenderingSettings(const UIContext& ctx) {
-        auto config = ctx.viewer->getRenderingConfig();
-        if (!config)
+        auto render_manager = ctx.viewer->getRenderingManager();
+        if (!render_manager)
             return;
 
         ImGui::Text("Rendering Settings");
         ImGui::Separator();
 
         // Get current render settings
-        auto render_manager = ctx.viewer->getRenderingManager();
-        if (!render_manager)
-            return;
-
         auto settings = render_manager->getSettings();
         bool settings_changed = false;
 
         // Point Cloud Mode checkbox
         if (ImGui::Checkbox("Point Cloud Mode", &settings.point_cloud_mode)) {
             settings_changed = true;
-            // Emit point cloud mode changed event
+
             events::ui::PointCloudModeChanged{
                 .enabled = settings.point_cloud_mode,
                 .voxel_size = settings.voxel_size}
@@ -94,7 +90,7 @@ namespace gs::gui::panels {
         if (settings.point_cloud_mode) {
             if (widgets::SliderWithReset("Voxel Size", &settings.voxel_size, 0.001f, 0.1f, 0.01f)) {
                 settings_changed = true;
-                // Emit point cloud mode changed event with new voxel size
+
                 events::ui::PointCloudModeChanged{
                     .enabled = settings.point_cloud_mode,
                     .voxel_size = settings.voxel_size}
@@ -105,6 +101,7 @@ namespace gs::gui::panels {
         // Grid checkbox and settings
         if (ImGui::Checkbox("Show Grid", &settings.show_grid)) {
             settings_changed = true;
+
             // Emit grid settings changed event
             events::ui::GridSettingsChanged{
                 .enabled = settings.show_grid,
@@ -123,6 +120,7 @@ namespace gs::gui::panels {
             if (ImGui::Combo("Plane", &current_plane, planes, IM_ARRAYSIZE(planes))) {
                 settings.grid_plane = current_plane;
                 settings_changed = true;
+
                 events::ui::GridSettingsChanged{
                     .enabled = settings.show_grid,
                     .plane = current_plane,
@@ -133,6 +131,7 @@ namespace gs::gui::panels {
             // Grid opacity
             if (ImGui::SliderFloat("Grid Opacity", &settings.grid_opacity, 0.0f, 1.0f)) {
                 settings_changed = true;
+
                 events::ui::GridSettingsChanged{
                     .enabled = settings.show_grid,
                     .plane = static_cast<int>(settings.grid_plane),
@@ -146,25 +145,29 @@ namespace gs::gui::panels {
         // Apply settings changes if any
         if (settings_changed) {
             render_manager->updateSettings(settings);
-
-            // Emit generic scene changed event
-            events::state::SceneChanged{}.emit();
         }
 
         ImGui::Separator();
 
-        if (widgets::SliderWithReset("Scale", &config->scaling_modifier, 0.01f, 3.0f, 1.0f)) {
+        // Use direct accessors from RenderingManager
+        float scaling_modifier = settings.scaling_modifier;
+        if (widgets::SliderWithReset("Scale", &scaling_modifier, 0.01f, 3.0f, 1.0f)) {
+            render_manager->setScalingModifier(scaling_modifier);
+
             events::ui::RenderSettingsChanged{
                 .fov = std::nullopt,
-                .scaling_modifier = config->scaling_modifier,
+                .scaling_modifier = scaling_modifier,
                 .antialiasing = std::nullopt,
                 .background_color = std::nullopt}
                 .emit();
         }
 
-        if (widgets::SliderWithReset("FoV", &config->fov, 45.0f, 120.0f, 75.0f)) {
+        float fov = settings.fov;
+        if (widgets::SliderWithReset("FoV", &fov, 45.0f, 120.0f, 75.0f)) {
+            render_manager->setFov(fov);
+
             events::ui::RenderSettingsChanged{
-                .fov = config->fov,
+                .fov = fov,
                 .scaling_modifier = std::nullopt,
                 .antialiasing = std::nullopt,
                 .background_color = std::nullopt}
@@ -174,7 +177,7 @@ namespace gs::gui::panels {
         // Display current FPS and VSync control on the same line
         float average_fps = ctx.viewer->getAverageFPS();
         if (average_fps > 0.0f) {
-            ImGui::Text("FPS: %6.1f", average_fps); // 6 characters total, 1 decimal place
+            ImGui::Text("FPS: %6.1f", average_fps);
 
             // Add VSync checkbox on the same line
             ImGui::SameLine();
@@ -205,17 +208,19 @@ namespace gs::gui::panels {
     }
 
     void DrawProgressInfo(const UIContext& ctx) {
-        auto info = ctx.viewer->getTrainingInfo();
-
-        int current_iter = info->curr_iterations_.load();
-        int total_iter = info->total_iterations_.load();
-        int num_splats = info->num_splats_.load();
-
-        std::vector<float> loss_data;
-        {
-            std::lock_guard<std::mutex> lock(info->loss_buffer_mutex_);
-            loss_data.assign(info->loss_buffer_.begin(), info->loss_buffer_.end());
+        // Get training info from TrainerManager instead of ViewerStateManager
+        auto* trainer_manager = ctx.viewer->getTrainerManager();
+        if (!trainer_manager) {
+            return;
         }
+
+        int current_iter = trainer_manager->getCurrentIteration();
+        int total_iter = trainer_manager->getTotalIterations();
+        int num_splats = trainer_manager->getNumSplats();
+
+        // Fix: Convert deque to vector
+        std::deque<float> loss_deque = trainer_manager->getLossBuffer();
+        std::vector<float> loss_data(loss_deque.begin(), loss_deque.end());
 
         float fraction = total_iter > 0 ? float(current_iter) / float(total_iter) : 0.0f;
         char overlay_text[64];
