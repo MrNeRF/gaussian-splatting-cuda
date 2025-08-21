@@ -193,7 +193,7 @@ namespace gs::gui {
                 // Draw contents without the manual sizing/positioning
                 panels::DrawWindowControls(ctx);
                 ImGui::Separator();
-                widgets::DrawModeStatus(ctx);
+                widgets::DrawModeStatusWithContentSwitch(ctx);
                 ImGui::Separator();
                 panels::DrawRenderingSettings(ctx);
                 ImGui::Separator();

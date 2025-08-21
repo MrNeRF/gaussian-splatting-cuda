@@ -329,13 +329,16 @@ namespace gs::visualizer {
     void VisualizerImpl::run() {
         if (project_) {
             auto plys = project_->getPlys();
-            scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
+            if (!plys.empty()) {
+                scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
+            }
             // set all of the nodes to invisible except the last one
             for (auto it = plys.begin(); it != plys.end(); ++it) {
                 std::string ply_name = std::format("ply_{}", it->ply_training_iter_number);
 
                 bool is_last = (std::next(it) == plys.end());
                 scene_manager_->addPLY(it->ply_path, ply_name, is_last);
+                scene_manager_->setPLYVisibility(ply_name, is_last);
             }
         }
 

@@ -44,10 +44,12 @@ namespace gs::gui {
             m_currentMode = DisplayMode::PLYSceneGraph;
             m_plyNodes.clear();
             m_selectedPLYIndex = -1;
+            m_activeTab = TabType::PLYs; // Switch to PLY tab
         } else if (event.type == events::state::SceneLoaded::Type::Dataset) {
             m_currentMode = DisplayMode::DatasetImages;
             m_plyNodes.clear();
             m_selectedPLYIndex = -1;
+            m_activeTab = TabType::Images; // Switch to Images tab
             if (!event.path.empty()) {
                 loadImageCams(event.path);
             }
@@ -61,6 +63,7 @@ namespace gs::gui {
         m_plyNodes.clear();
         m_selectedPLYIndex = -1;
         m_currentMode = DisplayMode::Empty;
+        // Keep the active tab as is - user might want to stay on the same tab
     }
 
     void ScenePanel::handlePLYAdded(const events::state::PLYAdded& event) {
@@ -70,21 +73,19 @@ namespace gs::gui {
 
         if (it != m_plyNodes.end()) {
             // Update existing node
-            it->gaussian_count = event.total_gaussians; // This is actually the individual model's count
+            it->gaussian_count = event.total_gaussians;
         } else {
             // Add new node
             PLYNode node;
             node.name = event.name;
             node.visible = event.is_visible;
             node.selected = false;
-            node.gaussian_count = event.total_gaussians; // This is actually the individual model's count
+            node.gaussian_count = event.total_gaussians;
             m_plyNodes.push_back(node);
         }
 
-        // If we're not in PLY mode yet, switch to it
-        if (m_currentMode != DisplayMode::PLYSceneGraph) {
-            m_currentMode = DisplayMode::PLYSceneGraph;
-        }
+        // Update current mode based on active tab
+        updateModeFromTab();
     }
 
     void ScenePanel::handlePLYRemoved(const events::state::PLYRemoved& event) {
@@ -100,11 +101,42 @@ namespace gs::gui {
                 m_selectedPLYIndex = -1;
             }
         }
+
+        // Update current mode based on active tab
+        updateModeFromTab();
     }
 
     void ScenePanel::updatePLYNodes() {
         // For now, we'll rebuild the node list when we get events
         // In a more sophisticated implementation, we'd query the scene directly
+    }
+
+    void ScenePanel::updateModeFromTab() {
+        // Update display mode based on active tab and available data
+        // Prioritize PLYs if available and active tab is PLYs
+        if (m_activeTab == TabType::PLYs && !m_plyNodes.empty()) {
+            m_currentMode = DisplayMode::PLYSceneGraph;
+        } else if (m_activeTab == TabType::Images && !m_imagePaths.empty()) {
+            m_currentMode = DisplayMode::DatasetImages;
+        } else if (!m_plyNodes.empty()) {
+            // Fall back to PLYs if available (even if Images tab was selected but no images)
+            m_currentMode = DisplayMode::PLYSceneGraph;
+            m_activeTab = TabType::PLYs;
+        } else if (!m_imagePaths.empty()) {
+            // Fall back to Images if PLYs not available
+            m_currentMode = DisplayMode::DatasetImages;
+            m_activeTab = TabType::Images;
+        } else {
+            m_currentMode = DisplayMode::Empty;
+        }
+    }
+
+    bool ScenePanel::hasImages() const {
+        return !m_imagePaths.empty();
+    }
+
+    bool ScenePanel::hasPLYs() const {
+        return !m_plyNodes.empty();
     }
 
     void ScenePanel::render(bool* p_open) {
@@ -161,21 +193,44 @@ namespace gs::gui {
 
         ImGui::Separator();
 
-        // Render appropriate view based on mode
-        switch (m_currentMode) {
-        case DisplayMode::PLYSceneGraph:
-            renderPLYSceneGraph();
-            break;
-        case DisplayMode::DatasetImages:
-            renderImageList();
-            break;
-        case DisplayMode::Empty:
-        default:
+        // Render tabs if we have any data
+        if (hasImages() || hasPLYs()) {
+            if (ImGui::BeginTabBar("SceneTabs", ImGuiTabBarFlags_None)) {
+
+                // PLYs tab - show first if we have PLYs (prioritize PLYs)
+                if (hasPLYs()) {
+                    bool plys_tab_selected = ImGui::BeginTabItem("PLYs");
+                    if (plys_tab_selected) {
+                        if (m_activeTab != TabType::PLYs) {
+                            m_activeTab = TabType::PLYs;
+                            m_currentMode = DisplayMode::PLYSceneGraph;
+                        }
+                        renderPLYSceneGraph();
+                        ImGui::EndTabItem();
+                    }
+                }
+
+                // Images tab - show second
+                if (hasImages()) {
+                    bool images_tab_selected = ImGui::BeginTabItem("Images");
+                    if (images_tab_selected) {
+                        if (m_activeTab != TabType::Images) {
+                            m_activeTab = TabType::Images;
+                            m_currentMode = DisplayMode::DatasetImages;
+                        }
+                        renderImageList();
+                        ImGui::EndTabItem();
+                    }
+                }
+
+                ImGui::EndTabBar();
+            }
+        } else {
+            // No data loaded - show empty state
             ImGui::Text("No data loaded.");
             ImGui::Text("Use 'Open File Browser' to load:");
             ImGui::BulletText("PLY file(s) for viewing");
             ImGui::BulletText("Dataset for training");
-            break;
         }
 
         ImGui::End();
