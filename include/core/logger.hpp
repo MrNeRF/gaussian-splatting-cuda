@@ -166,23 +166,6 @@ namespace gs::core {
             return LogModule::Unknown;
         }
 
-        static constexpr std::array<const char*, static_cast<size_t>(LogModule::Count)> module_names = {
-            "CORE",
-            "RENDER",
-            "VIS",
-            "LOADER",
-            "SCENE",
-            "TRAIN",
-            "INPUT",
-            "GUI",
-            "WINDOW",
-            "UNKNOWN"};
-
-        static constexpr const char* module_name(LogModule m) {
-            auto idx = static_cast<size_t>(m);
-            return idx < module_names.size() ? module_names[idx] : "UNKNOWN";
-        }
-
         static constexpr spdlog::level::level_enum to_spdlog_level(LogLevel level) {
             switch (level) {
             case LogLevel::Trace: return spdlog::level::trace;
