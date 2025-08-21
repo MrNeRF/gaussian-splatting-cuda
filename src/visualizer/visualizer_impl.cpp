@@ -373,7 +373,6 @@ namespace gs::visualizer {
             std::cerr << "openProject: error creating project " << std::endl;
             return false;
         }
-
         if (!project->readFromFile(path)) {
             std::cerr << "reading  project file failed " << path.string() << std::endl;
             return false;
