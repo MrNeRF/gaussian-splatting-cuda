@@ -15,7 +15,7 @@ namespace gs::gui::widgets {
     // Progress display
     void DrawProgressBar(float fraction, const char* overlay_text);
     void DrawLossPlot(const float* values, int count, float min_val, float max_val, const char* label);
-
+    void DrawModeStatusWithContentSwitch(const UIContext& ctx);
     // Mode display helpers
     void DrawModeStatus(const UIContext& ctx);
 } // namespace gs::gui::widgets

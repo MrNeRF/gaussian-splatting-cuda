@@ -53,7 +53,7 @@ namespace gs::visualizer {
         if (gui_manager_) {
             gui_manager_->shutdown();
         }
-        std::cout << "Visualizer destroyed." << std::endl;
+        LOG_INFO("Visualizer destroyed.");
     }
 
     void VisualizerImpl::setupComponentConnections() {
@@ -167,6 +167,11 @@ namespace gs::visualizer {
             // Just update loss buffer, don't force render
             // The 1 FPS throttle will handle rendering
         });
+
+        // Listen for file load commands
+        cmd::LoadProject::when([this](const auto& cmd) {
+            handleLoadProjectCommand(cmd);
+        });
     }
 
     bool VisualizerImpl::initialize() {
@@ -257,6 +262,47 @@ namespace gs::visualizer {
         // Nothing to shutdown now that tools are gone
     }
 
+    bool VisualizerImpl::LoadProject() {
+        if (project_) {
+            try {
+                // slicing intended
+                auto dataset = static_cast<const param::DatasetConfig&>(project_->getProjectData().data_set_info);
+                if (!dataset.data_path.empty()) {
+                    auto result = loadDataset(dataset.data_path);
+                    if (!result) {
+                        LOG_ERROR("Error: {}", result.error());
+                        return false;
+                    }
+                }
+                // load plys
+                auto plys = project_->getPlys();
+                // sort according to iter numbers
+                std::sort(plys.begin(), plys.end(),
+                          [](const gs::management::PlyData& a, const gs::management::PlyData& b) {
+                              return a.ply_training_iter_number < b.ply_training_iter_number;
+                          });
+
+                if (!plys.empty()) {
+                    scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
+                }
+                // set all of the nodes to invisible except the last one
+                for (auto it = plys.begin(); it != plys.end(); ++it) {
+                    std::string ply_name = it->ply_name;
+
+                    bool is_last = (std::next(it) == plys.end());
+                    scene_manager_->addPLY(it->ply_path, ply_name, is_last);
+                    scene_manager_->setPLYVisibility(ply_name, is_last);
+                }
+            } catch (const std::exception& e) {
+                LOG_ERROR("Failed to load project: {}", e.what());
+                return false;
+            }
+
+            return true;
+        }
+        return false;
+    }
+
     void VisualizerImpl::run() {
         // Ensure basic initialization before running
         if (!window_initialized_) {
@@ -271,6 +317,7 @@ namespace gs::visualizer {
             rendering_manager_->initialize();
         }
 
+        LoadProject(); // load a project if exists
         main_loop_->run();
     }
 
@@ -317,4 +364,62 @@ namespace gs::visualizer {
         data_loader_->clearScene();
     }
 
+    bool VisualizerImpl::openProject(const std::filesystem::path& path) {
+
+        auto project = std::make_shared<gs::management::Project>();
+
+        if (!project) {
+            LOG_ERROR("openProject: error creating project");
+            return false;
+        }
+        if (!project->readFromFile(path)) {
+            LOG_ERROR("reading  project file failed {}", path.string());
+            return false;
+        }
+        if (!project->validateProjectData()) {
+            LOG_ERROR("failed to validate project");
+            return false;
+        }
+
+        project_ = project;
+
+        return true;
+    }
+
+    bool VisualizerImpl::closeProject(const std::filesystem::path& path) {
+
+        if (!project_) {
+            return false;
+        }
+        if (!path.empty()) {
+            project_->setProjectFileName(path);
+        }
+
+        return project_->writeToFile();
+    }
+
+    std::shared_ptr<gs::management::Project> VisualizerImpl::getProject() {
+        return project_;
+    }
+
+    void VisualizerImpl::handleLoadProjectCommand(const events::cmd::LoadProject& cmd) {
+
+        bool success = openProject(cmd.path);
+        if (!success) {
+            std::string error_msg = std::format("Failed opening project: {}", cmd.path.string());
+            events::notify::Error{
+                .message = error_msg,
+                .details = std::format("Path: {}", cmd.path.string())}
+                .emit();
+        }
+
+        success = LoadProject();
+        if (!success) {
+            std::string error_msg = std::format("Failed to load project: {}", cmd.path.string());
+            events::notify::Error{
+                .message = error_msg,
+                .details = std::format("Path: {}", cmd.path.string())}
+                .emit();
+        }
+    }
 } // namespace gs::visualizer
