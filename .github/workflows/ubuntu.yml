@@ -22,7 +22,7 @@ jobs:
       - name: Install GCC 14 and dependencies
         run: |
           apt-get update
-          apt-get install -y git curl unzip cmake gcc-14 g++-14
+          apt-get install -y git curl unzip cmake gcc-14 g++-14 ccache
           update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 \
                               --slave /usr/bin/g++ g++ /usr/bin/g++-14
 
@@ -48,6 +48,12 @@ jobs:
           cd ..
           curl -L https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip -o libtorch.zip
           unzip libtorch.zip -d $GITHUB_WORKSPACE/external
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}
 
       - name: Configure with CMake
         run: |
