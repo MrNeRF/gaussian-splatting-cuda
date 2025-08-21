@@ -31,8 +31,6 @@ namespace gs {
             // State queries
             bool wantsInput() const;
             bool isAnyWindowActive() const;
-            bool showCropBox() const;
-            bool useCropBox() const;
 
             // Window visibility
             void showWindow(const std::string& name, bool show = true);

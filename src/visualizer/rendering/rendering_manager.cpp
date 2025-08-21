@@ -3,8 +3,8 @@
 #include "geometry/euclidean_transform.hpp"
 #include "rendering/rendering.hpp"
 #include "scene/scene_manager.hpp"
-#include "tools/background_tool.hpp"
 #include "training/training_manager.hpp"
+#include <glad/glad.h>
 #include <print>
 
 namespace gs::visualizer {
@@ -45,7 +45,16 @@ namespace gs::visualizer {
             if (event.antialiasing) {
                 settings_.antialiasing = *event.antialiasing;
             }
+            if (event.background_color) {
+                settings_.background_color = *event.background_color;
+            }
             markDirty();
+        });
+
+        // Window resize - ADD THIS!
+        events::ui::WindowResized::when([this](const auto&) {
+            markDirty();
+            cached_result_ = {}; // Clear cache on resize since dimensions changed
         });
 
         // Grid settings
@@ -66,13 +75,34 @@ namespace gs::visualizer {
             markDirty();
         });
 
+        // PLY visibility changes
+        events::cmd::SetPLYVisibility::when([this](const auto&) {
+            markDirty();
+        });
+
+        // PLY added/removed
+        events::state::PLYAdded::when([this](const auto&) {
+            markDirty();
+        });
+
+        events::state::PLYRemoved::when([this](const auto&) {
+            markDirty();
+        });
+
         // Crop box changes
-        events::ui::CropBoxChanged::when([this](const auto&) {
+        events::ui::CropBoxChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
+            settings_.crop_min = event.min_bounds;
+            settings_.crop_max = event.max_bounds;
+            settings_.use_crop_box = event.enabled;
             markDirty();
         });
 
         // Point cloud mode changes
-        events::ui::PointCloudModeChanged::when([this](const auto&) {
+        events::ui::PointCloudModeChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
+            settings_.point_cloud_mode = event.enabled;
+            settings_.voxel_size = event.voxel_size;
             markDirty();
         });
     }
@@ -128,27 +158,42 @@ namespace gs::visualizer {
             initialize();
         }
 
+        // Calculate current render size
+        glm::ivec2 current_size = context.viewport.windowSize;
+        if (context.viewport_region) {
+            current_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
+        }
+
+        // Detect viewport size change and invalidate cache
+        if (current_size != last_render_size_) {
+            needs_render_ = true;
+            cached_result_ = {}; // Clear cache - it's the wrong resolution!
+            last_render_size_ = current_size;
+        }
+
         // Get current model
         const SplatData* model = scene_manager ? scene_manager->getModelForRendering() : nullptr;
         size_t model_ptr = reinterpret_cast<size_t>(model);
 
-        // Detect model switch (PLY -> Training, etc)
+        // Detect model switch (PLY -> Training, invisible, etc)
         if (model_ptr != last_model_ptr_) {
             needs_render_ = true;
             last_model_ptr_ = model_ptr;
-            cached_result_ = {}; // Clear cache on model switch
+            cached_result_ = {}; // Always clear cache on model change
         }
 
-        // Check if camera moved
-        bool camera_moved = context.has_focus;
-
-        // Decision: should we render?
+        // Check if we should render
         bool should_render = false;
 
-        if (needs_render_) {
+        // Always render if we don't have a cached result
+        if (!cached_result_.image) {
+            should_render = true;
+        } else if (needs_render_) {
             should_render = true;
             needs_render_ = false;
-        } else if (camera_moved) {
+        } else if (context.has_focus) {
             should_render = true;
         } else if (scene_manager && scene_manager->hasDataset()) {
             // Check if actively training
@@ -163,7 +208,7 @@ namespace gs::visualizer {
             }
         }
 
-        // ONLY viewport management stays here - this is application-level concern
+        // Clear and set viewport
         glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -177,32 +222,28 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
-        if (should_render) {
+        if (should_render || !model) {
+            // ALWAYS render when we should OR when there's no model (to clear the view)
             doFullRender(context, scene_manager, model);
         } else if (cached_result_.image) {
-            // Reuse cached model result
+            // Only use cache if we have a model and a cached result
             glm::ivec2 viewport_pos(0, 0);
-            glm::ivec2 render_size = context.viewport.windowSize;
+            glm::ivec2 render_size = current_size;
 
             if (context.viewport_region) {
                 viewport_pos = glm::ivec2(
                     static_cast<int>(context.viewport_region->x),
                     static_cast<int>(context.viewport_region->y));
-                render_size = glm::ivec2(
-                    static_cast<int>(context.viewport_region->width),
-                    static_cast<int>(context.viewport_region->height));
             }
 
             engine_->presentToScreen(cached_result_, viewport_pos, render_size);
-
-            // Always render overlays even when using cached model
             renderOverlays(context);
         }
 
         framerate_controller_.endFrame();
     }
 
-    void RenderingManager::doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model) {
+    void RenderingManager::doFullRender(const RenderContext& context, [[maybe_unused]] SceneManager* scene_manager, const SplatData* model) {
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
             render_size = glm::ivec2(
@@ -210,20 +251,30 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
-        // Render model
+        // Render model if available
         if (model && model->size() > 0) {
-            // Get background color
-            glm::vec3 bg_color = glm::vec3(0.0f, 0.0f, 0.0f);
-            if (context.background_tool) {
-                bg_color = context.background_tool->getBackgroundColor();
+            // Use background color from settings
+            glm::vec3 bg_color = settings_.background_color;
+
+            // Create viewport data
+            gs::rendering::ViewportData viewport_data{
+                .rotation = context.viewport.getRotationMatrix(),
+                .translation = context.viewport.getTranslation(),
+                .size = render_size,
+                .fov = settings_.fov};
+
+            // Apply world transform if not identity
+            if (!settings_.world_transform.isIdentity()) {
+                glm::mat3 world_rot = settings_.world_transform.getRotationMat();
+                glm::vec3 world_trans = settings_.world_transform.getTranslation();
+
+                // Transform the camera position and rotation
+                viewport_data.rotation = world_rot * viewport_data.rotation;
+                viewport_data.translation = world_rot * viewport_data.translation + world_trans;
             }
 
             gs::rendering::RenderRequest request{
-                .viewport = {
-                    .rotation = context.viewport.getRotationMatrix(),
-                    .translation = context.viewport.getTranslation(),
-                    .size = render_size,
-                    .fov = settings_.fov},
+                .viewport = viewport_data,
                 .scaling_modifier = settings_.scaling_modifier,
                 .antialiasing = settings_.antialiasing,
                 .background_color = bg_color,
@@ -232,11 +283,11 @@ namespace gs::visualizer {
                 .voxel_size = settings_.voxel_size};
 
             // Add crop box if enabled
-            if (settings_.use_crop_box && context.crop_box) {
-                auto transform = context.crop_box->getworld2BBox();
+            if (settings_.use_crop_box) {
+                auto transform = settings_.crop_transform;
                 request.crop_box = gs::rendering::BoundingBox{
-                    .min = context.crop_box->getMinBounds(),
-                    .max = context.crop_box->getMaxBounds(),
+                    .min = settings_.crop_min,
+                    .max = settings_.crop_max,
                     .transform = transform.inv().toMat4()};
             }
 
@@ -273,7 +324,7 @@ namespace gs::visualizer {
             }
         }
 
-        // Render overlays
+        // Always render overlays
         renderOverlays(context);
     }
 
@@ -308,31 +359,23 @@ namespace gs::visualizer {
         }
 
         // Crop box wireframe
-        if (settings_.show_crop_box && context.crop_box && engine_) {
-            auto transform = context.crop_box->getworld2BBox();
+        if (settings_.show_crop_box && engine_) {
+            auto transform = settings_.crop_transform;
 
             gs::rendering::BoundingBox box{
-                .min = context.crop_box->getMinBounds(),
-                .max = context.crop_box->getMaxBounds(),
+                .min = settings_.crop_min,
+                .max = settings_.crop_max,
                 .transform = transform.inv().toMat4()};
 
-            glm::vec3 color = context.crop_box->getColor();
-            float line_width = context.crop_box->getLineWidth();
-
-            auto bbox_result = engine_->renderBoundingBox(box, viewport, color, line_width);
+            auto bbox_result = engine_->renderBoundingBox(box, viewport, settings_.crop_color, settings_.crop_line_width);
             if (!bbox_result) {
                 std::println("Failed to render bounding box: {}", bbox_result.error());
             }
         }
 
         // Coordinate axes
-        if (settings_.show_coord_axes && context.coord_axes && engine_) {
-            std::array<bool, 3> visible = {
-                context.coord_axes->isAxisVisible(0),
-                context.coord_axes->isAxisVisible(1),
-                context.coord_axes->isAxisVisible(2)};
-
-            auto axes_result = engine_->renderCoordinateAxes(viewport, 2.0f, visible);
+        if (settings_.show_coord_axes && engine_) {
+            auto axes_result = engine_->renderCoordinateAxes(viewport, settings_.axes_size, settings_.axes_visibility);
             if (!axes_result) {
                 std::println("Failed to render coordinate axes: {}", axes_result.error());
             }

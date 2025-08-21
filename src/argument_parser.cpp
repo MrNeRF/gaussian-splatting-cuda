@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Janusch Patas.
 
 #include "core/argument_parser.hpp"
+#include "core/logger.hpp"
 #include "core/parameters.hpp"
 #include <args.hxx>
 #include <expected>
@@ -8,6 +9,7 @@
 #include <format>
 #include <print>
 #include <set>
+#include <unordered_map>
 
 namespace {
 
@@ -27,6 +29,25 @@ namespace {
             }
         }
         steps.assign(unique_steps.begin(), unique_steps.end());
+    }
+
+    // Parse log level from string
+    gs::core::LogLevel parse_log_level(const std::string& level_str) {
+        if (level_str == "trace")
+            return gs::core::LogLevel::Trace;
+        if (level_str == "debug")
+            return gs::core::LogLevel::Debug;
+        if (level_str == "info")
+            return gs::core::LogLevel::Info;
+        if (level_str == "warn" || level_str == "warning")
+            return gs::core::LogLevel::Warn;
+        if (level_str == "error")
+            return gs::core::LogLevel::Error;
+        if (level_str == "critical")
+            return gs::core::LogLevel::Critical;
+        if (level_str == "off")
+            return gs::core::LogLevel::Off;
+        return gs::core::LogLevel::Info; // Default
     }
 
     std::expected<std::tuple<ParseResult, std::function<void()>>, std::string> parse_arguments(
@@ -70,6 +91,10 @@ namespace {
             ::args::ValueFlag<int> init_num_pts(parser, "init_num_pts", "Number of random initialization points", {"init-num-pts"});
             ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
 
+            // Logging options
+            ::args::ValueFlag<std::string> log_level(parser, "level", "Log level: trace, debug, info, warn, error, critical, off (default: info)", {"log-level"});
+            ::args::ValueFlag<std::string> log_file(parser, "file", "Optional log file path", {"log-file"});
+
             // Optional flag arguments
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
@@ -103,6 +128,29 @@ namespace {
                 return std::make_tuple(ParseResult::Help, std::function<void()>{});
             } catch (const ::args::ParseError& e) {
                 return std::unexpected(std::format("Parse error: {}\n{}", e.what(), parser.Help()));
+            }
+
+            // Initialize logger based on command line arguments
+            {
+                auto level = gs::core::LogLevel::Info; // Default level
+                std::string log_file_path;
+
+                if (log_level) {
+                    level = parse_log_level(::args::get(log_level));
+                }
+
+                if (log_file) {
+                    log_file_path = ::args::get(log_file);
+                }
+
+                // Initialize the logger with the specified level and optional file
+                gs::core::Logger::get().init(level, log_file_path);
+
+                // Log that the logger was initialized (without gs:: prefix)
+                LOG_DEBUG("Logger initialized with level: {}", static_cast<int>(level));
+                if (!log_file_path.empty()) {
+                    LOG_DEBUG("Logging to file: {}", log_file_path);
+                }
             }
 
             // Check if explicitly displaying help
@@ -257,7 +305,7 @@ namespace {
         const float scaler = opt.steps_scaler;
 
         if (scaler > 0) {
-            std::println("Scaling training steps by factor: {}", scaler);
+            LOG_INFO("Scaling training steps by factor: {}", scaler);
 
             opt.iterations *= scaler;
             opt.start_refine *= scaler;

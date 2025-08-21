@@ -14,20 +14,38 @@ namespace gs {
 
 namespace gs::visualizer {
 
-    // Forward declaration
-    class BackgroundTool;
-
     struct RenderSettings {
         // Core rendering settings
         float fov = 60.0f;
         float scaling_modifier = 1.0f;
         bool antialiasing = false;
+
+        // Crop box
         bool show_crop_box = false;
         bool use_crop_box = false;
+        glm::vec3 crop_min = glm::vec3(-1.0f, -1.0f, -1.0f);
+        glm::vec3 crop_max = glm::vec3(1.0f, 1.0f, 1.0f);
+        glm::vec3 crop_color = glm::vec3(1.0f, 1.0f, 0.0f);
+        float crop_line_width = 2.0f;
+        geometry::EuclideanTransform crop_transform;
+
+        // Background
+        glm::vec3 background_color = glm::vec3(0.0f, 0.0f, 0.0f);
+
+        // Coordinate axes
         bool show_coord_axes = false;
+        float axes_size = 2.0f;
+        std::array<bool, 3> axes_visibility = {true, true, true};
+
+        // World transform
+        geometry::EuclideanTransform world_transform;
+
+        // Grid
         bool show_grid = true;
-        int grid_plane = 1; // Default to XZ plane
+        int grid_plane = 1;
         float grid_opacity = 0.5f;
+
+        // Point cloud
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
     };
@@ -41,12 +59,8 @@ namespace gs::visualizer {
         struct RenderContext {
             const Viewport& viewport;
             const RenderSettings& settings;
-            const gs::rendering::IBoundingBox* crop_box;
-            const gs::rendering::ICoordinateAxes* coord_axes;
-            const geometry::EuclideanTransform* world_to_user;
             const ViewportRegion* viewport_region = nullptr;
             bool has_focus = false;
-            const BackgroundTool* background_tool = nullptr;
         };
 
         RenderingManager();
@@ -54,8 +68,6 @@ namespace gs::visualizer {
 
         // Initialize rendering resources
         void initialize();
-
-        // Check if initialized
         bool isInitialized() const { return initialized_; }
 
         // Main render function
@@ -90,10 +102,11 @@ namespace gs::visualizer {
         std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         FramerateController framerate_controller_;
 
-        // Minimal state
+        // State tracking
         std::atomic<bool> needs_render_{true};
         gs::rendering::RenderResult cached_result_;
         size_t last_model_ptr_ = 0;
+        glm::ivec2 last_render_size_{0, 0};
         std::chrono::steady_clock::time_point last_training_render_;
 
         // Settings
