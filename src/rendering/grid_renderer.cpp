@@ -1,4 +1,5 @@
 #include "grid_renderer.hpp"
+#include "core/logger.hpp"
 #include "shader_paths.hpp"
 #include <format>
 #include <random>
@@ -10,9 +11,13 @@ namespace gs::rendering {
         if (initialized_)
             return {};
 
+        LOG_TIMER("RenderInfiniteGrid::init");
+        LOG_INFO("Initializing infinite grid renderer");
+
         // Create shader for infinite grid rendering
         auto result = load_shader("infinite_grid", "infinite_grid.vert", "infinite_grid.frag", false);
         if (!result) {
+            LOG_ERROR("Failed to load infinite grid shader: {}", result.error().what());
             return std::unexpected(result.error().what());
         }
         shader_ = std::move(*result);
@@ -20,11 +25,13 @@ namespace gs::rendering {
         // Create OpenGL objects using RAII
         auto vao_result = create_vao();
         if (!vao_result) {
+            LOG_ERROR("Failed to create VAO: {}", vao_result.error());
             return std::unexpected(vao_result.error());
         }
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
+            LOG_ERROR("Failed to create VBO: {}", vbo_result.error());
             return std::unexpected(vbo_result.error());
         }
         vbo_ = std::move(*vbo_result);
@@ -58,10 +65,13 @@ namespace gs::rendering {
         }
 
         initialized_ = true;
+        LOG_INFO("Infinite grid renderer initialized successfully");
         return {};
     }
 
     Result<void> RenderInfiniteGrid::createBlueNoiseTexture() {
+        LOG_TIMER_TRACE("RenderInfiniteGrid::createBlueNoiseTexture");
+
         const int size = 32;
         std::vector<float> noise_data(size * size);
 
@@ -90,9 +100,11 @@ namespace gs::rendering {
 
         GLenum err = glGetError();
         if (err != GL_NO_ERROR) {
+            LOG_ERROR("Failed to create blue noise texture: OpenGL error {}", err);
             return std::unexpected(std::format("Failed to create blue noise texture: OpenGL error {}", err));
         }
 
+        LOG_DEBUG("Blue noise texture created: {}x{}", size, size);
         return {};
     }
 
@@ -126,8 +138,12 @@ namespace gs::rendering {
     }
 
     Result<void> RenderInfiniteGrid::render(const glm::mat4& view, const glm::mat4& projection) {
-        if (!initialized_ || !shader_.valid())
+        if (!initialized_ || !shader_.valid()) {
+            LOG_ERROR("Grid renderer not initialized");
             return std::unexpected("Grid renderer not initialized");
+        }
+
+        LOG_TIMER_TRACE("RenderInfiniteGrid::render");
 
         // Calculate matrices
         glm::mat4 viewProj = projection * view;
@@ -158,6 +174,8 @@ namespace gs::rendering {
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE); // Grid writes to depth buffer
+
+        LOG_TRACE("Rendering grid with plane type: {}, opacity: {}", static_cast<int>(plane_), opacity_);
 
         // Bind shader and set uniforms
         ShaderScope s(shader_);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/logger.hpp"
 #include <expected>
 #include <format>
 #include <string>
@@ -38,7 +39,13 @@ namespace gs::rendering {
 
         RenderErrorInfo(RenderError c, std::string_view d = "")
             : code(c),
-              details(d) {}
+              details(d) {
+            if (!details.empty()) {
+                LOG_ERROR("RenderError::{} - {}", to_string(code), details);
+            } else {
+                LOG_ERROR("RenderError::{}", to_string(code));
+            }
+        }
 
         std::string message() const {
             if (details.empty()) {
