@@ -75,7 +75,7 @@ namespace gs::gui {
             // Add new node
             PLYNode node;
             node.name = event.name;
-            node.visible = true;
+            node.visible = event.is_visible;
             node.selected = false;
             node.gaussian_count = event.total_gaussians; // This is actually the individual model's count
             m_plyNodes.push_back(node);

@@ -81,7 +81,7 @@ namespace gs {
             EVENT(SceneCleared, );
             EVENT(ModelUpdated, int iteration; size_t num_gaussians;);
             EVENT(SceneChanged, );
-            EVENT(PLYAdded, std::string name; size_t total_gaussians;);
+            EVENT(PLYAdded, std::string name; size_t total_gaussians; bool is_visible;);
             EVENT(PLYRemoved, std::string name;);
 
             // Data loading
@@ -175,7 +175,7 @@ namespace gs {
             EVENT(TrainingReadyToStart, );
             EVENT(WindowFocusLost, );
         } // namespace internal
-    }     // namespace events
+    } // namespace events
 
     // ============================================================================
     // Convenience functions
