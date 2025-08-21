@@ -66,7 +66,7 @@ namespace gs {
                 return -1;
             }
             if (!params->dataset.data_path.empty()) {
-                std::println(stderr, "can open new data_path and project from commandline");
+                std::println(stderr, "cannot open new data_path and project from commandline");
                 return -1;
             }
         }
