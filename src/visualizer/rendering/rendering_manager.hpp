@@ -55,6 +55,9 @@ namespace gs::visualizer {
         // Initialize rendering resources
         void initialize();
 
+        // Check if initialized
+        bool isInitialized() const { return initialized_; }
+
         // Main render function
         void renderFrame(const RenderContext& context, SceneManager* scene_manager);
 

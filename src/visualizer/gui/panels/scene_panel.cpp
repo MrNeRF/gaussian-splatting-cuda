@@ -217,6 +217,7 @@ namespace gs::gui {
 
                 // Create unique ID
                 std::string node_id = std::format("{}##{}", node.name, i);
+                std::string popup_id = std::format("popup_{}", i); // Unique popup ID
 
                 // Node flags
                 ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf |
@@ -267,8 +268,8 @@ namespace gs::gui {
                         .emit();
                 }
 
-                // Right-click context menu
-                if (ImGui::BeginPopupContextItem()) {
+                // Right-click context menu - provide explicit popup ID
+                if (ImGui::BeginPopupContextItem(popup_id.c_str())) {
                     if (ImGui::MenuItem("Remove")) {
                         events::cmd::RemovePLY{.name = node.name}.emit();
                     }
