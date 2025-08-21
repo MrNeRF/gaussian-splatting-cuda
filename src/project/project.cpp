@@ -407,7 +407,7 @@ namespace gs::management {
         std::filesystem::path project_path = data.project_path;
         if (project_path.empty()) {
             project_path = data.output_path / "project.ls";
-            LOG_ERROR("project_path is empty - creating new project.ls file");
+            LOG_INFO("project_path is empty - creating new project.ls file");
         }
 
         if (project_path.extension() != Project::EXTENSION) {
