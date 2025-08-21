@@ -1,4 +1,3 @@
-// scene.hpp
 #pragma once
 
 #include "core/splat_data.hpp"

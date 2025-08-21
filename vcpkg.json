@@ -1,22 +1,22 @@
 {
-    "builtin-baseline": "4f8fe05871555c1798dbcb1957d0d595e94f7b57",
-    "dependencies": [
-        "args",
-        "glad",
-        "glfw3",
-        "glm",
-        "gtest",
-        {
-            "name": "imgui",
-            "features": [
-                "docking-experimental",
-                "glfw-binding",
-                "opengl3-binding"
-            ]
-        },
-        "nlohmann-json",
-        "spdlog",
-        "tbb",
-        "freetype"
-    ]
+  "builtin-baseline": "dd3097e305afa53f7b4312371f62058d2e665320",
+  "dependencies": [
+    "args",
+    "glad",
+    "glfw3",
+    "glm",
+    "gtest",
+    {
+      "name": "imgui",
+      "features": [
+        "docking-experimental",
+        "glfw-binding",
+        "opengl3-binding"
+      ]
+    },
+    "nlohmann-json",
+    "spdlog",
+    "tbb",
+    "freetype"
+  ]
 }
