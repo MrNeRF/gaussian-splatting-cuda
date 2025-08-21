@@ -36,13 +36,15 @@ namespace gs::management {
         bool is_imported = false;
         std::filesystem::path ply_path;
         int ply_training_iter_number = 0;
+        std::string ply_name;
 
         // Constructor for easy initialization
         PlyData() = default;
-        PlyData(bool imported, const std::filesystem::path& path, int iter)
+        PlyData(bool imported, const std::filesystem::path& path, int iter, const std::string& _ply_name)
             : is_imported(imported),
               ply_path(path),
-              ply_training_iter_number(iter) {}
+              ply_training_iter_number(iter),
+              ply_name(_ply_name) {}
     };
 
     struct DataSetInfo : public param::DatasetConfig {

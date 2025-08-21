@@ -281,6 +281,7 @@ namespace gs::management {
                 plyData.is_imported = plyJson["is_imported"].get<bool>();
                 plyData.ply_path = plyJson["ply_path"].get<std::string>();
                 plyData.ply_training_iter_number = plyJson["ply_training_iter_number"].get<int>();
+                plyData.ply_name = plyJson["ply_name"].get<std::string>();
                 data.outputs.plys.push_back(plyData);
             }
         }
@@ -327,6 +328,7 @@ namespace gs::management {
             plyJson["is_imported"] = ply.is_imported;
             plyJson["ply_path"] = ply.ply_path.string();
             plyJson["ply_training_iter_number"] = ply.ply_training_iter_number;
+            plyJson["ply_name"] = ply.ply_name;
             json["outputs"]["plys"].push_back(plyJson);
         }
 

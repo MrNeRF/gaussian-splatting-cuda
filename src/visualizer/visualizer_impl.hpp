@@ -4,10 +4,10 @@
 #include "core/main_loop.hpp"
 #include "core/memory_monitor.hpp"
 #include "core/parameters.hpp"
-#include "project/project.hpp"
 #include "gui/gui_manager.hpp"
 #include "input/input_controller.hpp"
 #include "internal/viewport.hpp"
+#include "project/project.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering/rendering_manager.hpp"
 #include "scene/scene_manager.hpp"
@@ -40,9 +40,12 @@ namespace gs::visualizer {
         std::expected<void, std::string> loadDataset(const std::filesystem::path& path) override;
         void clearScene() override;
 
+        // open project file and attach it to viewer
         bool openProject(const std::filesystem::path& path) override;
         bool closeProject(const std::filesystem::path& path) override;
         std::shared_ptr<gs::management::Project> getProject() override;
+        // load project content to viewer
+        void LoadProject();
 
         // Getters for GUI (delegating to state manager)
         Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
@@ -123,7 +126,7 @@ namespace gs::visualizer {
 
         // State
         bool gui_initialized_ = false;
-        //Project
+        // Project
         std::shared_ptr<gs::management::Project> project_ = nullptr;
     };
 

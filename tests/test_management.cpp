@@ -71,6 +71,7 @@ protected:
             ply.is_imported = std::uniform_int_distribution<>(0, 1)(rng_);
             ply.ply_path = generateRandomPath();
             ply.ply_training_iter_number = std::uniform_int_distribution<>(100, 10000)(rng_);
+            ply.ply_name = generateRandomString(10);
             data.outputs.plys.push_back(ply);
         }
 
@@ -158,6 +159,11 @@ protected:
 
             if (ply_a.ply_training_iter_number != ply_b.ply_training_iter_number) {
                 std::cout << "PLY[" << i << "] iter number mismatch: " << ply_a.ply_training_iter_number << " vs " << ply_b.ply_training_iter_number << std::endl;
+                return false;
+            }
+
+            if (ply_a.ply_name != ply_b.ply_name) {
+                std::cout << "PLY[" << i << "] name mismatch: '" << ply_a.ply_name << "' vs '" << ply_b.ply_name << "'" << std::endl;
                 return false;
             }
         }

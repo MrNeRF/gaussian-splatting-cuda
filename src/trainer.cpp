@@ -548,8 +548,9 @@ namespace gs {
     void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
         strategy_->get_model().save_ply(save_path, iter_num, /*join=*/join_threads);
         if (lf_project_) {
-            std::filesystem::path ply_path = save_path / ("splat_" + std::to_string(iter_num) + ".ply");
-            lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num));
+            std::string ply_name = "splat_" + std::to_string(iter_num);
+            std::filesystem::path ply_path = save_path / (ply_name + ".ply");
+            lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }
     }
 
