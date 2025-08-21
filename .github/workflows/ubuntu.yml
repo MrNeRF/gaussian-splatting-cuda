@@ -34,9 +34,17 @@ jobs:
           git clone https://github.com/microsoft/vcpkg.git
           ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
+      - name: Cache LibTorch
+        id: cache-libtorch
+        uses: actions/cache@v4
+        with:
+          path: external/libtorch
+          key: libtorch-2.7.0-cu128-${{ runner.os }}
+
       - name: Download LibTorch 2.7.0 (CUDA 12.8 build)
+        if: steps.cache-libtorch.outputs.cache-hit != 'true'
         run: |
-          mkdir $GITHUB_WORKSPACE/external
+          mkdir -p external
           cd ..
           curl -L https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip -o libtorch.zip
           unzip libtorch.zip -d $GITHUB_WORKSPACE/external
