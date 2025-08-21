@@ -416,7 +416,7 @@ namespace gs::visualizer {
 
         success = LoadProject();
         if (!success) {
-            std::string error_msg = std::format("Failed to loading project: {}", cmd.path.string());
+            std::string error_msg = std::format("Failed to load project: {}", cmd.path.string());
             events::notify::Error{
                 .message = error_msg,
                 .details = std::format("Path: {}", cmd.path.string())}
