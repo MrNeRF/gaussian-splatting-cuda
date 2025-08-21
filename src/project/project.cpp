@@ -1,12 +1,11 @@
-#include "project/project.hpp"
 #include <chrono>
 #include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 #include <stdexcept>
 
-#include <print>
+#include "core/logger.hpp"
+#include "project/project.hpp"
 
 namespace gs::management {
 
@@ -152,7 +151,7 @@ namespace gs::management {
         try {
             std::ifstream file(filepath);
             if (!file.is_open()) {
-                std::cerr << "Cannot open file for reading: " << filepath << std::endl;
+                LOG_ERROR("Cannot open file for reading: {}", filepath.string());
                 return false;
             }
 
@@ -160,7 +159,7 @@ namespace gs::management {
             file >> doc;
 
             if (!validateJsonStructure(doc)) {
-                std::cerr << "Invalid JSON structure in file: " << filepath << std::endl;
+                LOG_ERROR("Invalid JSON structure in file: {}", filepath.string());
                 return false;
             }
 
@@ -169,8 +168,7 @@ namespace gs::management {
 
             nlohmann::json processedDoc = doc;
             if (fileVersion < CURRENT_VERSION) {
-                std::cout << "Migrating from version " << fileVersion.toString()
-                          << " to " << CURRENT_VERSION.toString() << std::endl;
+                LOG_INFO("Migrating from version {} to {}", fileVersion.toString(), CURRENT_VERSION.toString());
                 processedDoc = migrator_registry_.migrateToVersion(doc, fileVersion, CURRENT_VERSION);
             }
 
@@ -178,7 +176,7 @@ namespace gs::management {
             return true;
 
         } catch (const std::exception& e) {
-            std::cerr << "Error reading project file: " << e.what() << std::endl;
+            LOG_ERROR("Error reading project file: {}", e.what());
             return false;
         }
     }
@@ -188,22 +186,22 @@ namespace gs::management {
 
         std::filesystem::path targetPath = filepath.empty() ? output_file_name_ : filepath;
         if (targetPath.empty()) {
-            std::cerr << "LichtFeldProjectFile::writeToFile - no output file was set" << std::endl;
+            LOG_ERROR("LichtFeldProjectFile::writeToFile - no output file was set");
             return false;
         }
 
         if (std::filesystem::is_directory(targetPath)) {
-            std::cerr << std::format("LichtFeldProjectFile: {} is directory and not a file", targetPath.string()) << std::endl;
+            LOG_ERROR("LichtFeldProjectFile: {} is directory and not a file", targetPath.string());
             return false;
         }
 
         if (!std::filesystem::is_directory(targetPath.parent_path())) {
-            std::cerr << std::format("LichtFeldProjectFile: {} parent directory does not exist", targetPath.string()) << std::endl;
+            LOG_ERROR("LichtFeldProjectFile: {} parent directory does not exist {}", targetPath.parent_path().string(), targetPath.string());
             return false;
         }
 
         if (targetPath.extension() != EXTENSION) {
-            std::cerr << std::format("LichtFeldProjectFile: {} expected file extension to be {}", targetPath.string(), EXTENSION) << std::endl;
+            LOG_ERROR("LichtFeldProjectFile: {} expected file extension to be {}", targetPath.string(), EXTENSION);
             return false;
         }
 
@@ -212,7 +210,7 @@ namespace gs::management {
         try {
             std::ofstream file(targetPath);
             if (!file.is_open()) {
-                std::cerr << "Cannot open file for writing: " << targetPath << std::endl;
+                LOG_ERROR("Cannot open file for writing: {}", targetPath.string());
                 return false;
             }
 
@@ -223,7 +221,7 @@ namespace gs::management {
             return true;
 
         } catch (const std::exception& e) {
-            std::cerr << "Error writing project file: " << e.what() << std::endl;
+            LOG_ERROR("Error writing project file: {}", e.what());
             return false;
         }
     }
@@ -403,22 +401,22 @@ namespace gs::management {
 
         project->setProjectName(project_name);
         if (data.output_path.empty()) {
-            std::cerr << std::format("output_path is empty") << std::endl;
+            LOG_ERROR("output_path is empty");
             return nullptr;
         }
         std::filesystem::path project_path = data.project_path;
         if (project_path.empty()) {
             project_path = data.output_path / "project.ls";
-            std::cerr << std::format("project_path is empty - creating new project.ls file") << std::endl;
+            LOG_ERROR("project_path is empty - creating new project.ls file");
         }
 
         if (project_path.extension() != Project::EXTENSION) {
-            std::cerr << std::format("project_path must be {} file: {}", Project::EXTENSION, project_path.string()) << std::endl;
+            LOG_ERROR("project_path must be {} file: {}", Project::EXTENSION, project_path.string());
             return nullptr;
         }
         try {
             if (project_path.parent_path().empty()) {
-                std::cerr << std::format("project_path must have parent directory: project_path: {} ", project_path.string()) << std::endl;
+                LOG_ERROR("project_path must have parent directory: project_path: {} ", project_path.string());
                 return nullptr;
             }
             project->setProjectFileName(project_path);
@@ -426,7 +424,7 @@ namespace gs::management {
             project->setDataInfo(data);
             project->setOptimizationParams(opt);
         } catch (const std::exception& e) {
-            std::cerr << "Error writing project file: " << e.what() << std::endl;
+            LOG_ERROR("Error writing project file: {}", e.what());
             return nullptr;
         }
 
@@ -447,7 +445,7 @@ namespace gs::management {
                 if (count == 1) {
                     foundPath = entry.path();
                 } else {
-                    std::print("Multiple .ls files found in {}\n", directory.string());
+                    LOG_ERROR("Multiple .ls files found in {}", directory.string());
                     return {};
                 }
             }

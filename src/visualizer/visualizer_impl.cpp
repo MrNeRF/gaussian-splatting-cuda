@@ -53,7 +53,7 @@ namespace gs::visualizer {
         if (gui_manager_) {
             gui_manager_->shutdown();
         }
-        std::cout << "Visualizer destroyed." << std::endl;
+        LOG_INFO("Visualizer destroyed.");
     }
 
     void VisualizerImpl::setupComponentConnections() {
@@ -270,7 +270,7 @@ namespace gs::visualizer {
                 if (!dataset.data_path.empty()) {
                     auto result = loadDataset(dataset.data_path);
                     if (!result) {
-                        std::println(stderr, "Error: {}", result.error());
+                        LOG_ERROR("Error: {}", result.error());
                         return false;
                     }
                 }
@@ -294,7 +294,7 @@ namespace gs::visualizer {
                     scene_manager_->setPLYVisibility(ply_name, is_last);
                 }
             } catch (const std::exception& e) {
-                std::println(stderr, "Failed to load project: {}", e.what());
+                LOG_ERROR("Failed to load project: {}", e.what());
                 return false;
             }
 
@@ -364,21 +364,20 @@ namespace gs::visualizer {
         data_loader_->clearScene();
     }
 
-
     bool VisualizerImpl::openProject(const std::filesystem::path& path) {
 
         auto project = std::make_shared<gs::management::Project>();
 
         if (!project) {
-            std::cerr << "openProject: error creating project " << std::endl;
+            LOG_ERROR("openProject: error creating project");
             return false;
         }
         if (!project->readFromFile(path)) {
-            std::cerr << "reading  project file failed " << path.string() << std::endl;
+            LOG_ERROR("reading  project file failed {}", path.string());
             return false;
         }
         if (!project->validateProjectData()) {
-            std::cerr << "failed to validate project" << std::endl;
+            LOG_ERROR("failed to validate project");
             return false;
         }
 
@@ -411,7 +410,7 @@ namespace gs::visualizer {
             events::notify::Error{
                 .message = error_msg,
                 .details = std::format("Path: {}", cmd.path.string())}
-            .emit();
+                .emit();
         }
 
         success = LoadProject();
@@ -420,7 +419,7 @@ namespace gs::visualizer {
             events::notify::Error{
                 .message = error_msg,
                 .details = std::format("Path: {}", cmd.path.string())}
-            .emit();
+                .emit();
         }
     }
 } // namespace gs::visualizer
