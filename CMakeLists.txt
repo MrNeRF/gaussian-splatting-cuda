@@ -12,6 +12,14 @@ get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 option(ENABLE_CUDA_GL_INTEROP "Enable CUDA-OpenGL interoperability" ON)
 option(BUILD_TESTS "Build tests" OFF)
 
+# Build fat binaries for all modern SMs (>= minimum). When OFF (default), build for the native GPU only.
+option(BUILD_CUDA_ALL_SM "Build CUDA fat binaries targeting all modern SMs (>= minimum SM)" OFF)
+
+# Minimum SM (compute capability) to include when BUILD_CUDA_ALL_SM=ON.
+# Examples: 75, 80, 86, 89, 90, 100...
+# Only has effect if BUILD_CUDA_ALL_SM is ON.
+set(BUILD_CUDA_ALL_MIN_SM "86" CACHE STRING "Minimum SM (compute capability) used when BUILD_CUDA_ALL_SM=ON Examples: 75, 80, 86, 89...")
+
 # Set Torch_DIR based on platform and build type
 if (WIN32)
     if(CMAKE_CONFIGURATION_TYPES)
@@ -60,6 +68,99 @@ else()
     set(TORCH_CUDA_ARCH_LIST 8.6)
     set(gaussian_splatting_cuda_CUDA_ARCH "86")
 endif()
+
+
+# Detect supported SMs by querying 'ptxas --help' and filter by a minimum SM.
+# We cannot use all or all-major since 5x and 6x versions are not supported
+# in the CUDA code.
+function(gs_detect_supported_sms OUT_VAR)
+  set(options)
+  set(oneValueArgs MIN_SM)
+  cmake_parse_arguments(GS "${options}" "${oneValueArgs}" "" ${ARGN})
+
+  # Use 'ptxas --help' to get the valid families
+  set(_sms_list "")
+  get_filename_component(_cuda_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+  find_program(PTXAS_EXECUTABLE NAMES ptxas
+               HINTS "${_cuda_bin}" "${_cuda_bin}/.." "${CUDAToolkit_BIN_DIR}"
+               PATHS ENV PATH)
+
+  if(PTXAS_EXECUTABLE)
+    execute_process(COMMAND "${PTXAS_EXECUTABLE}" --help
+      OUTPUT_VARIABLE _ptxas_help
+      ERROR_VARIABLE  _ptxas_err
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_STRIP_TRAILING_WHITESPACE)
+    set(_help "${_ptxas_help}\n${_ptxas_err}")
+
+    string(REGEX MATCHALL "sm_[0-9]+" _matches "${_help}")
+    if(_matches)
+      string(REPLACE "sm_" "" _nums "${_matches}")
+      string(REPLACE " "  ";" _nums "${_nums}")
+      separate_arguments(_nums)
+      list(REMOVE_DUPLICATES _nums)
+      list(SORT _nums COMPARE NATURAL)
+      foreach(n IN LISTS _nums)
+        if(GS_MIN_SM)
+          if(n GREATER_EQUAL ${GS_MIN_SM})
+            list(APPEND _sms_list ${n})
+          endif()
+        else()
+          list(APPEND _sms_list ${n})
+        endif()
+      endforeach()
+    endif()
+  endif()
+
+  # Fallback
+  if(NOT _sms_list)
+    set(_sms_list 75 80 86 87 89 90 100 101 120)
+    if(GS_MIN_SM)
+      set(_filtered "")
+      foreach(n IN LISTS _sms_list)
+        if(n GREATER_EQUAL ${GS_MIN_SM})
+          list(APPEND _filtered ${n})
+        endif()
+      endforeach()
+      set(_sms_list "${_filtered}")
+    endif()
+  endif()
+
+  set(${OUT_VAR} "${_sms_list}" PARENT_SCOPE)
+endfunction()
+
+if(DEFINED CMAKE_CUDA_ARCHITECTURES)
+    unset(CMAKE_CUDA_ARCHITECTURES CACHE)
+endif()
+
+if(BUILD_CUDA_ALL_SM)
+    # Validate BUILD_CUDA_ALL_MIN_SM
+    if(NOT BUILD_CUDA_ALL_MIN_SM MATCHES "^[0-9]+$")
+        message(FATAL_ERROR "BUILD_CUDA_ALL_MIN_SM must be an integer like 70, 75, 86, 90.")
+    endif()
+
+    # Enforce lower bound 70
+    if(BUILD_CUDA_ALL_MIN_SM LESS 70)
+        message(FATAL_ERROR "BUILD_CUDA_ALL_MIN_SM must be >= 70 when BUILD_CUDA_ALL_SM=ON.")
+    endif()
+
+    # Fat binary for all the families
+    gs_detect_supported_sms(CUDA_SMS MIN_SM ${BUILD_CUDA_ALL_MIN_SM})
+    if(CUDA_SMS)
+        # Append PTX of the highest SM for forward compatibility with future GPUs
+        list(GET CUDA_SMS -1 _max_sm)
+        set(CMAKE_CUDA_ARCHITECTURES "${CUDA_SMS};${_max_sm}-virtual" CACHE STRING "CUDA architectures" FORCE)
+        set(gaussian_splatting_cuda_CUDA_ARCH "${CMAKE_CUDA_ARCHITECTURES}")
+        message(STATUS "CUDA architectures (auto >=${BUILD_CUDA_ALL_MIN_SM}): ${gaussian_splatting_cuda_CUDA_ARCH} (forced)")
+    else()
+        message(FATAL_ERROR "Failed to detect any CUDA architecture >= ${BUILD_CUDA_ALL_MIN_SM}. Please check your CUDA toolkit installation.")
+    endif()
+else()
+    # Native NVidia family only
+    set(CMAKE_CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
+    message(STATUS "CUDA architectures: ${gaussian_splatting_cuda_CUDA_ARCH} (native/default)")
+endif()
+
 enable_language(CUDA)
 find_package(CUDAToolkit 12.8 REQUIRED)
 
@@ -151,6 +252,9 @@ configure_file(
 add_subdirectory(gsplat)
 add_subdirectory(fastgs)
 
+set_target_properties(gsplat_backend  PROPERTIES CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
+set_target_properties(fastgs_backend PROPERTIES CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
+
 # =============================================================================
 # HOST LIBRARY - Core functionality
 # =============================================================================
@@ -213,10 +317,16 @@ if(UNIX)
 endif()
 
 # Fast C++ compilation with proper debug symbols
-target_compile_options(gaussian_host PRIVATE
-        $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer -DDEBUG>
-        $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
-)
+if(MSVC)
+  target_compile_options(gaussian_host PRIVATE
+    $<$<CONFIG:Debug>:/Od /Z7>
+    $<$<CONFIG:Release>:/O2 /DNDEBUG>)
+else()
+  target_compile_options(gaussian_host PRIVATE
+    $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer -DDEBUG>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>)
+endif()
+
 
 # AVX2 support
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -262,7 +372,7 @@ endif()
 add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
 
 set_target_properties(gaussian_kernels PROPERTIES
-        CUDA_ARCHITECTURES ${gaussian_splatting_cuda_CUDA_ARCH}
+        CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -308,7 +418,7 @@ add_subdirectory(src/rendering)
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-        CUDA_ARCHITECTURES ${gaussian_splatting_cuda_CUDA_ARCH}
+        CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
@@ -418,7 +528,7 @@ if(BUILD_TESTS)
     add_executable(gaussian_tests ${TEST_SOURCES})
 
     set_target_properties(gaussian_tests PROPERTIES
-            CUDA_ARCHITECTURES ${gaussian_splatting_cuda_CUDA_ARCH}
+            CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
             CUDA_SEPARABLE_COMPILATION ON
             CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
@@ -487,6 +597,7 @@ endif()
 message(STATUS "===========================================")
 message(STATUS "Build Configuration:")
 message(STATUS "  CUDA Version: ${CUDAToolkit_VERSION}")
+message(STATUS "  CUDA Archs: ${CMAKE_CUDA_ARCHITECTURES}")
 message(STATUS "  Torch Version: ${Torch_VERSION}")
 message(STATUS "  Python Version: ${Python3_VERSION}")
 message(STATUS "  OpenGL Found: ${OPENGL_FOUND}")
