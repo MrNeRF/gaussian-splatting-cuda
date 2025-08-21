@@ -45,7 +45,26 @@ if(total_cores GREATER 1)
 endif()
 
 # CUDA setup
-set(TORCH_CUDA_ARCH_LIST 8.6)
+find_program(NVIDIA_SMI nvidia-smi)
+if(NVIDIA_SMI)
+    execute_process(
+        COMMAND ${NVIDIA_SMI} --query-gpu=compute_cap --format=csv,noheader
+        OUTPUT_VARIABLE TORCH_CUDA_ARCH_LIST
+        RESULT_VARIABLE NVIDIA_SMI_RESULT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    if(NVIDIA_SMI_RESULT EQUAL 0)
+        message(STATUS "Detected GPU compute capability: ${TORCH_CUDA_ARCH_LIST}")
+        set(gaussian_splatting_cuda_CUDA_ARCH "native")
+    else()
+        message(STATUS "nvidia-smi found but could not detect compute capability. We are likely in CI, default to 8.6.")
+        set(TORCH_CUDA_ARCH_LIST 8.6)
+        set(gaussian_splatting_cuda_CUDA_ARCH "86")
+    endif()
+else()
+    message(FATAL_ERROR "nvidia-smi not found! Did you have CUDA installed?")
+endif()
 enable_language(CUDA)
 find_package(CUDAToolkit 12.8 REQUIRED)
 
@@ -248,7 +267,7 @@ endif()
 add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
 
 set_target_properties(gaussian_kernels PROPERTIES
-        CUDA_ARCHITECTURES "86"
+        CUDA_ARCHITECTURES ${gaussian_splatting_cuda_CUDA_ARCH}
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -294,7 +313,7 @@ add_subdirectory(src/rendering)
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-        CUDA_ARCHITECTURES "86"
+        CUDA_ARCHITECTURES ${gaussian_splatting_cuda_CUDA_ARCH}
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
@@ -404,7 +423,7 @@ if(BUILD_TESTS)
     add_executable(gaussian_tests ${TEST_SOURCES})
 
     set_target_properties(gaussian_tests PROPERTIES
-            CUDA_ARCHITECTURES "86"
+            CUDA_ARCHITECTURES ${gaussian_splatting_cuda_CUDA_ARCH}
             CUDA_SEPARABLE_COMPILATION ON
             CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )

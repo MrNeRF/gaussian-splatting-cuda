@@ -22,7 +22,7 @@ set(FASTGS_SOURCES
 add_library(fastgs_backend STATIC ${FASTGS_SOURCES})
 
 set_target_properties(fastgs_backend PROPERTIES
-        CUDA_ARCHITECTURES "86"
+        CUDA_ARCHITECTURES ${gaussian_splatting_cuda_CUDA_ARCH}
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
