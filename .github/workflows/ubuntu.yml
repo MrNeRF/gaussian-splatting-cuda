@@ -1,0 +1,49 @@
+name: Ubuntu CUDA Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-24.04
+    container:
+      image: nvidia/cuda:12.8.0-devel-ubuntu24.04
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/../vcpkg
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install GCC 14 and dependencies
+        run: |
+          apt-get update
+          apt-get install -y git curl unzip cmake gcc-14 g++-14
+          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 \
+                              --slave /usr/bin/g++ g++ /usr/bin/g++-14
+
+      - name: Setup vcpkg
+        run: |
+          apt-get update
+          apt-get install -y zip tar pkg-config python3 python3-dev libxinerama-dev libxcursor-dev xorg-dev libglu1-mesa-dev
+          cd ..
+          git clone https://github.com/microsoft/vcpkg.git
+          ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Download LibTorch 2.7.0 (CUDA 12.8 build)
+        run: |
+          mkdir $GITHUB_WORKSPACE/external
+          cd ..
+          curl -L https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip -o libtorch.zip
+          unzip libtorch.zip -d $GITHUB_WORKSPACE/external
+
+      - name: Configure with CMake
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel 1
