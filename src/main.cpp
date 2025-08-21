@@ -40,3 +40,4 @@ int main(int argc, char* argv[]) {
     gs::Application app;
     return app.run(std::move(params));
 }
+// Logger is now ready to use
