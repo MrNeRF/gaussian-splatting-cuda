@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/logger.hpp"
 #include <concepts>
 #include <expected>
 #include <glad/glad.h>
@@ -52,6 +53,8 @@ namespace gs::rendering {
 
     public:
         GLStateGuard() {
+            LOG_TIMER_TRACE("GLStateGuard::save");
+
             // Save comprehensive OpenGL state
             glGetIntegerv(GL_VIEWPORT, saved_.viewport);
             saved_.depth_test = glIsEnabled(GL_DEPTH_TEST);
@@ -75,6 +78,8 @@ namespace gs::rendering {
             glGetFloatv(GL_LINE_WIDTH, &saved_.line_width);
             saved_.line_smooth = glIsEnabled(GL_LINE_SMOOTH);
             glGetIntegerv(GL_UNPACK_ALIGNMENT, &saved_.unpack_alignment);
+
+            LOG_TRACE("GLStateGuard: Saved OpenGL state");
         }
 
         ~GLStateGuard() {
@@ -97,6 +102,8 @@ namespace gs::rendering {
         void restore() {
             if (restored_)
                 return;
+
+            LOG_TIMER_TRACE("GLStateGuard::restore");
 
             glViewport(saved_.viewport[0], saved_.viewport[1],
                        saved_.viewport[2], saved_.viewport[3]);
@@ -147,6 +154,7 @@ namespace gs::rendering {
             glPixelStorei(GL_UNPACK_ALIGNMENT, saved_.unpack_alignment);
 
             restored_ = true;
+            LOG_TRACE("GLStateGuard: Restored OpenGL state");
         }
 
         // Get saved state for inspection
@@ -160,11 +168,14 @@ namespace gs::rendering {
     public:
         GLViewportGuard() {
             glGetIntegerv(GL_VIEWPORT, saved_viewport_);
+            LOG_TRACE("GLViewportGuard: Saved viewport ({}, {}, {}, {})",
+                      saved_viewport_[0], saved_viewport_[1], saved_viewport_[2], saved_viewport_[3]);
         }
 
         ~GLViewportGuard() {
             glViewport(saved_viewport_[0], saved_viewport_[1],
                        saved_viewport_[2], saved_viewport_[3]);
+            LOG_TRACE("GLViewportGuard: Restored viewport");
         }
     };
 
@@ -179,12 +190,14 @@ namespace gs::rendering {
 
             glEnable(GL_LINE_SMOOTH);
             glLineWidth(width);
+            LOG_TRACE("GLLineGuard: Set line width to {} (was {})", width, saved_width_);
         }
 
         ~GLLineGuard() {
             glLineWidth(saved_width_);
             if (!saved_smooth_)
                 glDisable(GL_LINE_SMOOTH);
+            LOG_TRACE("GLLineGuard: Restored line width to {}", saved_width_);
         }
     };
 } // namespace gs::rendering

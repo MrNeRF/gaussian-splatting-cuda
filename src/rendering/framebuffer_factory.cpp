@@ -1,6 +1,6 @@
 #include "framebuffer_factory.hpp"
+#include "core/logger.hpp"
 #include <format>
-#include <iostream>
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "cuda_gl_interop.hpp"
@@ -12,15 +12,18 @@ namespace gs::rendering {
         if (preferred == FrameBufferMode::CUDA_INTEROP && isInteropAvailable()) {
 #ifdef CUDA_GL_INTEROP_ENABLED
             try {
+                LOG_TIMER_TRACE("createFrameBuffer::CUDA_INTEROP");
                 auto interop_fb = std::make_shared<InteropFrameBuffer>(true);
-                std::cout << "CUDA-OpenGL interop framebuffer initialized successfully" << std::endl;
+                LOG_INFO("CUDA-OpenGL interop framebuffer initialized successfully");
                 return interop_fb;
             } catch (const std::exception& e) {
-                std::cerr << "Failed to initialize interop framebuffer: " << e.what() << std::endl;
-                std::cerr << "Falling back to standard framebuffer" << std::endl;
+                LOG_WARN("Failed to initialize interop framebuffer: {}", e.what());
+                LOG_INFO("Falling back to standard framebuffer");
             }
 #endif
         }
+
+        LOG_DEBUG("Creating standard CPU framebuffer");
         return std::make_shared<FrameBuffer>();
     }
 } // namespace gs::rendering

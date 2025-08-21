@@ -1,8 +1,8 @@
 #include "text_renderer.hpp"
+#include "core/logger.hpp"
 #include "gl_state_guard.hpp"
 #include <format>
 #include <ft2build.h>
-#include <iostream>
 #include FT_FREETYPE_H
 
 namespace gs::rendering {
@@ -10,18 +10,25 @@ namespace gs::rendering {
     TextRenderer::TextRenderer(unsigned int width, unsigned int height)
         : screenWidth(width),
           screenHeight(height) {
+        LOG_DEBUG("Creating TextRenderer with screen size {}x{}", width, height);
+
         if (auto result = initRenderData(); !result) {
+            LOG_ERROR("Failed to initialize TextRenderer: {}", result.error());
             throw std::runtime_error(result.error());
         }
     }
 
     TextRenderer::~TextRenderer() {
+        LOG_TRACE("Destroying TextRenderer");
         for (auto& pair : characters) {
             glDeleteTextures(1, &pair.second.textureID);
         }
     }
 
     Result<void> TextRenderer::LoadFont(const std::string& fontPath, unsigned int fontSize) {
+        LOG_TIMER("TextRenderer::LoadFont");
+        LOG_INFO("Loading font: {} at size {}", fontPath, fontSize);
+
         // Clear existing characters
         for (auto& pair : characters) {
             glDeleteTextures(1, &pair.second.textureID);
@@ -30,6 +37,7 @@ namespace gs::rendering {
 
         FT_Library ft;
         if (FT_Init_FreeType(&ft)) {
+            LOG_ERROR("Could not init FreeType Library");
             return std::unexpected("Could not init FreeType Library");
         }
 
@@ -44,6 +52,7 @@ namespace gs::rendering {
 
         FT_Face face;
         if (FT_New_Face(ft, fontPath.c_str(), 0, &face)) {
+            LOG_ERROR("Failed to load font from: {}", fontPath);
             return std::unexpected(std::format("Failed to load font from: {}", fontPath));
         }
 
@@ -60,10 +69,11 @@ namespace gs::rendering {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
         // Load only needed characters
+        int loaded_count = 0;
         for (unsigned char c : {'X', 'Y', 'Z'}) {
             if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
                 // Continue with other characters even if one fails
-                std::cerr << "Warning: Failed to load glyph for character: " << c << std::endl;
+                LOG_WARN("Failed to load glyph for character: {}", static_cast<char>(c));
                 continue;
             }
 
@@ -92,21 +102,30 @@ namespace gs::rendering {
                 glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
                 static_cast<GLuint>(face->glyph->advance.x)};
             characters.insert(std::pair<char, Character>(c, character));
+            loaded_count++;
+
+            LOG_TRACE("Loaded character '{}' with size {}x{}", static_cast<char>(c),
+                      face->glyph->bitmap.width, face->glyph->bitmap.rows);
         }
 
         glBindTexture(GL_TEXTURE_2D, 0);
 
         if (characters.empty()) {
+            LOG_ERROR("Failed to load any characters from font");
             return std::unexpected("Failed to load any characters from font");
         }
 
+        LOG_INFO("Successfully loaded {} characters from font", loaded_count);
         return {};
     }
 
     Result<void> TextRenderer::initRenderData() {
+        LOG_TIMER_TRACE("TextRenderer::initRenderData");
+
         // Load shader using shader manager
         auto result = load_shader("text_renderer", "text_renderer.vert", "text_renderer.frag", false);
         if (!result) {
+            LOG_ERROR("Failed to load text renderer shader: {}", result.error().what());
             return std::unexpected(result.error().what());
         }
         shader_ = std::move(*result);
@@ -114,12 +133,14 @@ namespace gs::rendering {
         // Create VAO and VBO
         auto vao_result = create_vao();
         if (!vao_result) {
+            LOG_ERROR("Failed to create VAO: {}", vao_result.error());
             return std::unexpected(vao_result.error());
         }
         vao_ = std::move(*vao_result);
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
+            LOG_ERROR("Failed to create VBO: {}", vbo_result.error());
             return std::unexpected(vbo_result.error());
         }
         vbo_ = std::move(*vbo_result);
@@ -138,10 +159,12 @@ namespace gs::rendering {
             .offset = nullptr};
         attr.apply();
 
+        LOG_DEBUG("Text renderer data initialized successfully");
         return {};
     }
 
     void TextRenderer::updateScreenSize(unsigned int width, unsigned int height) {
+        LOG_TRACE("Updating screen size from {}x{} to {}x{}", screenWidth, screenHeight, width, height);
         screenWidth = width;
         screenHeight = height;
     }
@@ -149,12 +172,17 @@ namespace gs::rendering {
     Result<void> TextRenderer::RenderText(const std::string& text, float x, float y, float scale,
                                           const glm::vec3& color) {
         if (!shader_.valid()) {
+            LOG_ERROR("Text renderer shader not initialized");
             return std::unexpected("Text renderer shader not initialized");
         }
 
         if (characters.empty()) {
+            LOG_ERROR("No font loaded");
             return std::unexpected("No font loaded");
         }
+
+        LOG_TIMER_TRACE("TextRenderer::RenderText");
+        LOG_TRACE("Rendering text '{}' at position ({}, {}) with scale {}", text, x, y, scale);
 
         // Use RAII for OpenGL state management
         GLStateGuard state_guard;
@@ -190,10 +218,13 @@ namespace gs::rendering {
         VAOBinder vao_bind(vao_);
 
         // Iterate through all characters
+        int rendered_chars = 0;
         for (char c : text) {
             auto it = characters.find(c);
-            if (it == characters.end())
+            if (it == characters.end()) {
+                LOG_TRACE("Character '{}' not found in font", c);
                 continue;
+            }
 
             Character ch = it->second;
 
@@ -225,7 +256,10 @@ namespace gs::rendering {
 
             // Advance cursors for next glyph (advance is in 1/64 pixels)
             x += (ch.advance >> 6) * scale;
+            rendered_chars++;
         }
+
+        LOG_TRACE("Rendered {} characters", rendered_chars);
 
         // State automatically restored by GLStateGuard destructor
         return {};

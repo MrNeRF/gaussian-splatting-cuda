@@ -1,12 +1,12 @@
 #include "rendering_engine_impl.hpp"
+#include "core/logger.hpp"
 #include "framebuffer_factory.hpp"
 #include "geometry/bounding_box.hpp"
-#include <print>
 
 namespace gs::rendering {
 
     RenderingEngineImpl::RenderingEngineImpl() {
-        std::println("Initializing RenderingEngineImpl");
+        LOG_DEBUG("Initializing RenderingEngineImpl");
     };
 
     RenderingEngineImpl::~RenderingEngineImpl() {
@@ -14,47 +14,60 @@ namespace gs::rendering {
     }
 
     Result<void> RenderingEngineImpl::initialize() {
+        LOG_TIMER("RenderingEngine::initialize");
+
         // Check if already initialized by checking if key components exist
         if (quad_shader_.valid()) {
+            LOG_TRACE("RenderingEngine already initialized, skipping");
             return {};
         }
 
-        std::println("Initializing rendering engine...");
+        LOG_INFO("Initializing rendering engine...");
 
         // Create screen renderer with preferred mode
         screen_renderer_ = std::make_shared<ScreenQuadRenderer>(getPreferredFrameBufferMode());
 
         if (auto result = grid_renderer_.init(); !result) {
+            LOG_ERROR("Failed to initialize grid renderer: {}", result.error());
             shutdown();
             return std::unexpected(result.error());
         }
+        LOG_DEBUG("Grid renderer initialized");
 
         if (auto result = bbox_renderer_.init(); !result) {
+            LOG_ERROR("Failed to initialize bounding box renderer: {}", result.error());
             shutdown();
             return std::unexpected(result.error());
         }
+        LOG_DEBUG("Bounding box renderer initialized");
 
         if (auto result = axes_renderer_.init(); !result) {
+            LOG_ERROR("Failed to initialize axes renderer: {}", result.error());
             shutdown();
             return std::unexpected(result.error());
         }
+        LOG_DEBUG("Axes renderer initialized");
 
         if (auto result = viewport_gizmo_.initialize(); !result) {
+            LOG_ERROR("Failed to initialize viewport gizmo: {}", result.error());
             shutdown();
             return std::unexpected(result.error());
         }
+        LOG_DEBUG("Viewport gizmo initialized");
 
         auto shader_result = initializeShaders();
         if (!shader_result) {
+            LOG_ERROR("Failed to initialize shaders: {}", shader_result.error());
             shutdown(); // Clean up partial initialization
             return std::unexpected(shader_result.error());
         }
 
-        std::println("Rendering engine initialized successfully");
+        LOG_INFO("Rendering engine initialized successfully");
         return {};
     }
 
     void RenderingEngineImpl::shutdown() {
+        LOG_DEBUG("Shutting down rendering engine");
         // Just reset/clean up - safe to call multiple times
         quad_shader_ = ManagedShader();
         screen_renderer_.reset();
@@ -67,11 +80,15 @@ namespace gs::rendering {
     }
 
     Result<void> RenderingEngineImpl::initializeShaders() {
+        LOG_TIMER_TRACE("RenderingEngineImpl::initializeShaders");
+
         auto result = load_shader("screen_quad", "screen_quad.vert", "screen_quad.frag", true);
         if (!result) {
+            LOG_ERROR("Failed to create screen quad shader: {}", result.error().what());
             return std::unexpected(std::string("Failed to create shaders: ") + result.error().what());
         }
         quad_shader_ = std::move(*result);
+        LOG_DEBUG("Screen quad shader loaded successfully");
         return {};
     }
 
@@ -80,14 +97,18 @@ namespace gs::rendering {
         const RenderRequest& request) {
 
         if (!isInitialized()) {
+            LOG_ERROR("Rendering engine not initialized");
             return std::unexpected("Rendering engine not initialized");
         }
 
         // Validate request
         if (request.viewport.size.x <= 0 || request.viewport.size.y <= 0 ||
             request.viewport.size.x > 16384 || request.viewport.size.y > 16384) {
+            LOG_ERROR("Invalid viewport dimensions: {}x{}", request.viewport.size.x, request.viewport.size.y);
             return std::unexpected("Invalid viewport dimensions");
         }
+
+        LOG_TRACE("Rendering gaussians with viewport {}x{}", request.viewport.size.x, request.viewport.size.y);
 
         // Convert to internal pipeline request using designated initializers
         RenderingPipeline::RenderRequest pipeline_req{
@@ -119,6 +140,7 @@ namespace gs::rendering {
         auto pipeline_result = pipeline_.render(splat_data, pipeline_req);
 
         if (!pipeline_result) {
+            LOG_ERROR("Pipeline render failed: {}", pipeline_result.error());
             return std::unexpected(pipeline_result.error());
         }
 
@@ -129,18 +151,24 @@ namespace gs::rendering {
 
         return result;
     }
+
     Result<void> RenderingEngineImpl::presentToScreen(
         const RenderResult& result,
         const glm::ivec2& viewport_pos,
         const glm::ivec2& viewport_size) {
 
         if (!isInitialized()) {
+            LOG_ERROR("Rendering engine not initialized");
             return std::unexpected("Rendering engine not initialized");
         }
 
         if (!result.image) {
+            LOG_ERROR("Invalid render result - image is null");
             return std::unexpected("Invalid render result");
         }
+
+        LOG_TRACE("Presenting to screen at position ({}, {}) with size {}x{}",
+                  viewport_pos.x, viewport_pos.y, viewport_size.x, viewport_size.y);
 
         // Convert back to internal result type
         RenderingPipeline::RenderResult internal_result;
@@ -150,6 +178,7 @@ namespace gs::rendering {
 
         if (auto upload_result = RenderingPipeline::uploadToScreen(internal_result, *screen_renderer_, viewport_size);
             !upload_result) {
+            LOG_ERROR("Failed to upload to screen: {}", upload_result.error());
             return upload_result;
         }
 
@@ -165,8 +194,10 @@ namespace gs::rendering {
         GridPlane plane,
         float opacity) {
 
-        if (!isInitialized() || !grid_renderer_.isInitialized())
+        if (!isInitialized() || !grid_renderer_.isInitialized()) {
+            LOG_ERROR("Grid renderer not initialized");
             return std::unexpected("Grid renderer not initialized");
+        }
 
         auto view = createViewMatrix(viewport);
         auto proj = createProjectionMatrix(viewport);
@@ -183,8 +214,10 @@ namespace gs::rendering {
         const glm::vec3& color,
         float line_width) {
 
-        if (!isInitialized() || !bbox_renderer_.isInitialized())
+        if (!isInitialized() || !bbox_renderer_.isInitialized()) {
+            LOG_ERROR("Bounding box renderer not initialized");
             return std::unexpected("Bounding box renderer not initialized");
+        }
 
         bbox_renderer_.setBounds(box.min, box.max);
         bbox_renderer_.setColor(color);
@@ -205,8 +238,10 @@ namespace gs::rendering {
         float size,
         const std::array<bool, 3>& visible) {
 
-        if (!isInitialized() || !axes_renderer_.isInitialized())
+        if (!isInitialized() || !axes_renderer_.isInitialized()) {
+            LOG_ERROR("Axes renderer not initialized");
             return std::unexpected("Axes renderer not initialized");
+        }
 
         axes_renderer_.setSize(size);
         for (int i = 0; i < 3; ++i) {
@@ -224,8 +259,10 @@ namespace gs::rendering {
         const glm::vec2& viewport_pos,
         const glm::vec2& viewport_size) {
 
-        if (!isInitialized())
+        if (!isInitialized()) {
+            LOG_ERROR("Viewport gizmo not initialized");
             return std::unexpected("Viewport gizmo not initialized");
+        }
 
         return viewport_gizmo_.render(camera_rotation, viewport_pos, viewport_size);
     }
@@ -233,6 +270,8 @@ namespace gs::rendering {
     RenderingPipelineResult RenderingEngineImpl::renderWithPipeline(
         const SplatData& model,
         const RenderingPipelineRequest& request) {
+
+        LOG_TRACE("Rendering with pipeline");
 
         // Convert from public types to internal types using designated initializers
         RenderingPipeline::RenderRequest internal_request{
@@ -256,7 +295,7 @@ namespace gs::rendering {
         if (!result) {
             public_result.valid = false;
             // Log error but don't expose internal error details
-            std::cerr << "Pipeline render error: " << result.error() << std::endl;
+            LOG_ERROR("Pipeline render error: {}", result.error());
         } else {
             public_result.valid = result->valid;
             if (result->valid) {
@@ -298,26 +337,32 @@ namespace gs::rendering {
     Result<std::shared_ptr<IBoundingBox>> RenderingEngineImpl::createBoundingBox() {
         // Make sure we're initialized first
         if (!isInitialized()) {
+            LOG_ERROR("RenderingEngine must be initialized before creating bounding boxes");
             return std::unexpected("RenderingEngine must be initialized before creating bounding boxes");
         }
 
         auto bbox = std::make_shared<RenderBoundingBox>();
         if (auto result = bbox->init(); !result) {
+            LOG_ERROR("Failed to initialize bounding box: {}", result.error());
             return std::unexpected(result.error());
         }
+        LOG_DEBUG("Created bounding box renderer");
         return bbox;
     }
 
     Result<std::shared_ptr<ICoordinateAxes>> RenderingEngineImpl::createCoordinateAxes() {
         // Make sure we're initialized first
         if (!isInitialized()) {
+            LOG_ERROR("RenderingEngine must be initialized before creating coordinate axes");
             return std::unexpected("RenderingEngine must be initialized before creating coordinate axes");
         }
 
         auto axes = std::make_shared<RenderCoordinateAxes>();
         if (auto result = axes->init(); !result) {
+            LOG_ERROR("Failed to initialize coordinate axes: {}", result.error());
             return std::unexpected(result.error());
         }
+        LOG_DEBUG("Created coordinate axes renderer");
         return axes;
     }
 
