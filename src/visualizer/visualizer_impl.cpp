@@ -1,6 +1,7 @@
 #include "visualizer_impl.hpp"
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
+#include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
 
 namespace gs::visualizer {
@@ -10,6 +11,7 @@ namespace gs::visualizer {
           viewport_(options.width, options.height),
           window_manager_(std::make_unique<WindowManager>(options.title, options.width, options.height)) {
 
+        LOG_DEBUG("Creating visualizer");
         // Create scene manager - it creates its own Scene internally
         scene_manager_ = std::make_unique<SceneManager>();
 
