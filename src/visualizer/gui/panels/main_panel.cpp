@@ -98,7 +98,51 @@ namespace gs::gui::panels {
             }
         }
 
+        // Background Color
+        ImGui::Separator();
+        ImGui::Text("Background");
+        float bg_color[3] = {settings.background_color.x, settings.background_color.y, settings.background_color.z};
+        if (ImGui::ColorEdit3("Color##Background", bg_color)) {
+            settings.background_color = glm::vec3(bg_color[0], bg_color[1], bg_color[2]);
+            settings_changed = true;
+        }
+
+        // Coordinate Axes
+        ImGui::Separator();
+        if (ImGui::Checkbox("Show Coordinate Axes", &settings.show_coord_axes)) {
+            settings_changed = true;
+        }
+
+        if (settings.show_coord_axes) {
+            ImGui::Indent();
+
+            if (ImGui::SliderFloat("Axes Size", &settings.axes_size, 0.5f, 10.0f)) {
+                settings_changed = true;
+            }
+
+            ImGui::Text("Visible Axes:");
+            bool axes_changed = false;
+            if (ImGui::Checkbox("X##axis", &settings.axes_visibility[0])) {
+                axes_changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Y##axis", &settings.axes_visibility[1])) {
+                axes_changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Z##axis", &settings.axes_visibility[2])) {
+                axes_changed = true;
+            }
+
+            if (axes_changed) {
+                settings_changed = true;
+            }
+
+            ImGui::Unindent();
+        }
+
         // Grid checkbox and settings
+        ImGui::Separator();
         if (ImGui::Checkbox("Show Grid", &settings.show_grid)) {
             settings_changed = true;
 
