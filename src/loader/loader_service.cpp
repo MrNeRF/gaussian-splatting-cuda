@@ -1,9 +1,9 @@
 #include "loader/loader_service.hpp"
+#include "core/logger.hpp"
 #include "loader/loaders/blender_loader.hpp"
 #include "loader/loaders/colmap_loader.hpp"
 #include "loader/loaders/ply_loader.hpp"
 #include <format>
-#include <print>
 
 namespace gs::loader {
 
@@ -15,8 +15,7 @@ namespace gs::loader {
         registry_->registerLoader(std::make_unique<ColmapLoader>());
         registry_->registerLoader(std::make_unique<BlenderLoader>());
 
-        std::println("LoaderService initialized with {} loaders",
-                     registry_->size());
+        LOG_DEBUG("LoaderService initialized with {} loaders", registry_->size());
     }
 
     std::expected<LoadResult, std::string> LoaderService::load(
@@ -54,17 +53,20 @@ namespace gs::loader {
                 }
             }
 
-            return std::unexpected(error_msg);
+            LOG_ERROR("Failed to find loader: {}", error_msg);
+            throw std::runtime_error(error_msg);
         }
 
-        std::println("Using {} loader for: {}", loader->name(), path.string());
+        LOG_INFO("Using {} loader for: {}", loader->name(), path.string());
 
         // Perform the load
         try {
             return loader->load(path, options);
         } catch (const std::exception& e) {
-            return std::unexpected(std::format(
-                "{} loader failed: {}", loader->name(), e.what()));
+            std::string error_msg = std::format(
+                "{} loader failed: {}", loader->name(), e.what());
+            LOG_ERROR("{}", error_msg);
+            throw std::runtime_error(error_msg);
         }
     }
 

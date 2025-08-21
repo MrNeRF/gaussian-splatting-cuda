@@ -1,4 +1,5 @@
 #include "ply.hpp"
+#include "core/logger.hpp"
 #include <algorithm>
 #include <charconv>
 #include <chrono>
@@ -6,7 +7,6 @@
 #include <format>
 #include <fstream>
 #include <mutex>
-#include <print>
 #include <ranges>
 #include <span>
 #include <string_view>
@@ -108,19 +108,28 @@ namespace gs::loader {
             auto wide_path = filepath.wstring();
             file_handle = CreateFileW(wide_path.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                       nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-            if (file_handle == INVALID_HANDLE_VALUE)
+            if (file_handle == INVALID_HANDLE_VALUE) {
+                LOG_ERROR("Failed to open file for mapping: {}", filepath.string());
                 return false;
+            }
 
             LARGE_INTEGER file_size_li;
-            if (!GetFileSizeEx(file_handle, &file_size_li))
+            if (!GetFileSizeEx(file_handle, &file_size_li)) {
+                LOG_ERROR("Failed to get file size: {}", filepath.string());
                 return false;
+            }
             size = static_cast<size_t>(file_size_li.QuadPart);
 
             mapping_handle = CreateFileMappingW(file_handle, nullptr, PAGE_READONLY, 0, 0, nullptr);
-            if (!mapping_handle)
+            if (!mapping_handle) {
+                LOG_ERROR("Failed to create file mapping: {}", filepath.string());
                 return false;
+            }
 
             data = MapViewOfFile(mapping_handle, FILE_MAP_READ, 0, 0, 0);
+            if (!data) {
+                LOG_ERROR("Failed to map view of file: {}", filepath.string());
+            }
             return data != nullptr;
         }
 #else
@@ -135,22 +144,28 @@ namespace gs::loader {
 
         [[nodiscard]] bool map(const std::filesystem::path& filepath) {
             fd = open(filepath.c_str(), O_RDONLY);
-            if (fd < 0)
+            if (fd < 0) {
+                LOG_ERROR("Failed to open file for mapping: {}", filepath.string());
                 return false;
+            }
 
             struct stat st {};
-            if (fstat(fd, &st) < 0)
+            if (fstat(fd, &st) < 0) {
+                LOG_ERROR("Failed to stat file: {}", filepath.string());
                 return false;
+            }
             size = st.st_size;
 
             data = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
-            if (data == MAP_FAILED)
+            if (data == MAP_FAILED) {
+                LOG_ERROR("Failed to mmap file: {}", filepath.string());
                 return false;
+            }
 
             // Prefetching based on file size
             if (size > ply_constants::FILE_SIZE_THRESHOLD_MB * 1024 * 1024) { // Only for files > 50MB
                 if (madvise(data, size, MADV_SEQUENTIAL) == 0) {
-                    std::println("Applied sequential access optimization");
+                    LOG_DEBUG("Applied sequential access optimization for large file");
                 }
             }
 
@@ -165,17 +180,20 @@ namespace gs::loader {
 
     [[nodiscard]] std::expected<std::pair<size_t, FastPropertyLayout>, std::string>
     parse_header(const char* data, size_t file_size) {
+        LOG_TIMER_TRACE("PLY header parsing");
 
         // Check for PLY magic with both Unix and Windows line endings
         if (file_size < ply_constants::PLY_MIN_SIZE) {
-            return std::unexpected("File too small to be valid PLY");
+            LOG_ERROR("File too small to be valid PLY: {} bytes", file_size);
+            throw std::runtime_error("File too small to be valid PLY");
         }
 
         bool has_crlf = false;
         if (std::strncmp(data, "ply\r\n", 5) == 0) {
             has_crlf = true;
         } else if (std::strncmp(data, "ply\n", 4) != 0) {
-            return std::unexpected("Invalid PLY file - missing PLY header");
+            LOG_ERROR("Invalid PLY file - missing PLY header");
+            throw std::runtime_error("Invalid PLY file - missing PLY header");
         }
 
         const char* ptr = data + (has_crlf ? 5 : 4);
@@ -218,7 +236,7 @@ namespace gs::loader {
 
             // Progress reporting for large headers
             if (lines_parsed % 1000 == 0) {
-                std::println("  Parsed {} header lines...", lines_parsed);
+                LOG_TRACE("Parsed {} header lines...", lines_parsed);
             }
 
             // Ultra-fast line parsing with minimal allocations
@@ -276,19 +294,23 @@ namespace gs::loader {
                 layout.vertex_stride += 4; // All properties are float32
             } else if (line_len >= 10 && std::strncmp(line_start, "end_header", 10) == 0) {
                 if (!is_binary || !found_vertex) {
-                    return std::unexpected("Only binary PLY with position supported");
+                    LOG_ERROR("Only binary PLY with position supported");
+                    throw std::runtime_error("Only binary PLY with position supported");
                 }
-                std::println("Header parsed - {} lines, stride: {} bytes, dc: {}, rest: {}",
-                             lines_parsed, layout.vertex_stride, layout.dc_count, layout.rest_count);
+                LOG_DEBUG("Header parsed - {} lines, stride: {} bytes, dc: {}, rest: {}",
+                          lines_parsed, layout.vertex_stride, layout.dc_count, layout.rest_count);
                 return std::make_pair(ptr - data, layout);
             }
         }
 
         if (lines_parsed >= MAX_HEADER_LINES) {
-            return std::unexpected(std::format("Header too large - exceeded {} lines", MAX_HEADER_LINES));
+            std::string error_msg = std::format("Header too large - exceeded {} lines", MAX_HEADER_LINES);
+            LOG_ERROR("{}", error_msg);
+            throw std::runtime_error(error_msg);
         }
 
-        return std::unexpected("No end_header found in PLY file");
+        LOG_ERROR("No end_header found in PLY file");
+        throw std::runtime_error("No end_header found in PLY file");
     }
 
     // SIMD position extraction
@@ -300,7 +322,7 @@ namespace gs::loader {
         if (!layout.has_positions())
             return;
 
-        std::println("Position extraction using TBB + SIMD for {} Gaussians", count);
+        LOG_DEBUG("Position extraction using TBB + SIMD for {} Gaussians", count);
 
 #ifdef HAS_AVX2_SUPPORT
         // Thread-safe AVX2 detection using std::once_flag
@@ -321,7 +343,7 @@ namespace gs::loader {
         });
 
         if (has_avx2) {
-            std::println("Using AVX2 SIMD acceleration");
+            LOG_TRACE("Using AVX2 SIMD acceleration");
 
             // TBB parallel SIMD processing with larger blocks to reduce overhead
             tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_LARGE),
@@ -401,7 +423,7 @@ namespace gs::loader {
         } else
 #endif
         {
-            std::println("Using optimized scalar processing");
+            LOG_TRACE("Using optimized scalar processing");
 
             // TBB parallel scalar processing
             tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_LARGE),
@@ -427,6 +449,8 @@ namespace gs::loader {
         const int B = coeff_count / channels;
 
         auto data_ptr = output.data_ptr<float>();
+
+        LOG_TRACE("Extracting {} SH coefficients for {} vertices", coeff_count, count);
 
         // Extract coefficients matching the original's stack -> reshape -> transpose pattern
         tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_SMALL),
@@ -468,16 +492,20 @@ namespace gs::loader {
     // Main function
     [[nodiscard]] std::expected<SplatData, std::string> load_ply(const std::filesystem::path& filepath) {
         try {
+            LOG_TIMER("PLY File Loading");
             auto start_time = std::chrono::high_resolution_clock::now();
 
             if (!std::filesystem::exists(filepath)) {
-                return std::unexpected(std::format("PLY file does not exist: {}", filepath.string()));
+                std::string error_msg = std::format("PLY file does not exist: {}", filepath.string());
+                LOG_ERROR("{}", error_msg);
+                throw std::runtime_error(error_msg);
             }
 
             // Memory map
             MMappedFile mapped_file;
             if (!mapped_file.map(filepath)) {
-                return std::unexpected("Failed to memory map PLY file");
+                LOG_ERROR("Failed to memory map PLY file: {}", filepath.string());
+                throw std::runtime_error("Failed to memory map PLY file");
             }
 
             const char* data = static_cast<const char*>(mapped_file.data);
@@ -486,13 +514,14 @@ namespace gs::loader {
             // Ultra-fast header parsing
             auto parse_result = parse_header(data, file_size);
             if (!parse_result) {
-                return std::unexpected(parse_result.error());
+                LOG_ERROR("Failed to parse PLY header: {}", parse_result.error());
+                throw std::runtime_error(parse_result.error());
             }
 
             auto [data_offset, layout] = parse_result.value();
             const char* vertex_data = data + data_offset;
 
-            std::println("⚡ Extracting {} Gaussians with blazing speed", layout.vertex_count);
+            LOG_INFO("Extracting {} Gaussians from PLY", layout.vertex_count);
 
             auto options = torch::TensorOptions().dtype(torch::kFloat32);
 
@@ -575,6 +604,7 @@ namespace gs::loader {
                 rotation.select(1, 0).fill_(ply_constants::IDENTITY_QUATERNION_W);
             }
 
+            LOG_DEBUG("Transferring tensors to CUDA");
             // Batch CUDA transfer for maximum speed
             means = means.to(torch::kCUDA);
             sh0 = sh0.to(torch::kCUDA);
@@ -588,8 +618,8 @@ namespace gs::loader {
             auto end_time = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-            std::println("🔥 BLAZING FAST COMPLETE: file size {} MB, {} Gaussians with SH degree {} in {}ms! 🔥",
-                         file_size / (1024 * 1024), layout.vertex_count, sh_degree, duration.count());
+            LOG_INFO("PLY loaded: {} MB, {} Gaussians with SH degree {} in {}ms",
+                     file_size / (1024 * 1024), layout.vertex_count, sh_degree, duration.count());
 
             return SplatData(
                 sh_degree,
@@ -602,7 +632,9 @@ namespace gs::loader {
                 ply_constants::SCENE_SCALE_FACTOR);
 
         } catch (const std::exception& e) {
-            return std::unexpected(std::format("Failed to load PLY file: {}", e.what()));
+            std::string error_msg = std::format("Failed to load PLY file: {}", e.what());
+            LOG_ERROR("{}", error_msg);
+            throw std::runtime_error(error_msg);
         }
     }
 

@@ -54,14 +54,14 @@ namespace gs::core {
             // Console sink with color
             auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
             console_sink->set_level(to_spdlog_level(console_level));
-            console_sink->set_pattern("[%H:%M:%S.%e] [%^%l%$] [%!] %s:%# %v");
+            console_sink->set_pattern("[%H:%M:%S.%e] [%^%l%$] %s:%# %v");
             sinks.push_back(console_sink);
 
             // Optional file sink
             if (!log_file.empty()) {
                 auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_file, true);
                 file_sink->set_level(spdlog::level::trace);
-                file_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] [%!] %s:%# %v");
+                file_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %s:%# %v");
                 sinks.push_back(file_sink);
             }
 
