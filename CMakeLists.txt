@@ -248,7 +248,7 @@ endif()
 add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
 
 set_target_properties(gaussian_kernels PROPERTIES
-        CUDA_ARCHITECTURES native
+        CUDA_ARCHITECTURES "86"
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -294,7 +294,7 @@ add_subdirectory(src/rendering)
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-        CUDA_ARCHITECTURES native
+        CUDA_ARCHITECTURES "86"
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
@@ -404,7 +404,7 @@ if(BUILD_TESTS)
     add_executable(gaussian_tests ${TEST_SOURCES})
 
     set_target_properties(gaussian_tests PROPERTIES
-            CUDA_ARCHITECTURES native
+            CUDA_ARCHITECTURES "86"
             CUDA_SEPARABLE_COMPILATION ON
             CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
