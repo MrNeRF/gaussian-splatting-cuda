@@ -45,7 +45,7 @@ if(total_cores GREATER 1)
 endif()
 
 # CUDA setup
-set(CUDA_GPU_DETECT_OUTPUT 8.6)
+set(TORCH_CUDA_ARCH_LIST 8.6)
 enable_language(CUDA)
 find_package(CUDAToolkit 12.8 REQUIRED)
 
