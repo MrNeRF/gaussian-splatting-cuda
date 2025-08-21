@@ -418,7 +418,7 @@ namespace gs::management {
         }
         try {
             if (project_path.parent_path().empty()) {
-                std::cerr << std::format("project_path must have paraent directory: project_path: {} ", project_path.string()) << std::endl;
+                std::cerr << std::format("project_path must have parent directory: project_path: {} ", project_path.string()) << std::endl;
                 return nullptr;
             }
             project->setProjectFileName(project_path);
