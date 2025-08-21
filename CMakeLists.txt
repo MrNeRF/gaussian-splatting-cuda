@@ -50,7 +50,6 @@ if(NVIDIA_SMI)
     execute_process(
         COMMAND ${NVIDIA_SMI} --query-gpu=compute_cap --format=csv,noheader
         OUTPUT_VARIABLE TORCH_CUDA_ARCH_LIST
-        RESULT_VARIABLE NVIDIA_SMI_RESULT
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 
