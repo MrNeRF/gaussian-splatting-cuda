@@ -77,7 +77,12 @@ namespace gs::gui {
 
         // Configure file browser callback
         setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
-            events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
+            if (path.extension() == gs::management::Project::EXTENSION) {
+                events::cmd::LoadProject{.path = path}.emit();
+            } else {
+                events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
+            }
+
             window_states_["file_browser"] = false;
         });
 
