@@ -320,6 +320,13 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::run() {
+        if (project_) {
+            auto plys = project_->getPlys();
+            for (const auto& ply : plys) {
+                scene_manager_->addPLY(ply.ply_path, std::format("ply_{}", ply.ply_training_iter_number));
+            }
+        }
+
         main_loop_->run();
     }
 
@@ -382,6 +389,8 @@ namespace gs::visualizer {
         }
 
         project_ = project;
+
+        return true;
     }
 
     bool VisualizerImpl::closeProject(const std::filesystem::path& path) {

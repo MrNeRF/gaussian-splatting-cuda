@@ -370,6 +370,9 @@ namespace gs::management {
             writeToFile();
         }
     }
+    std::vector<PlyData> Project::getPlys() const {
+        return project_data_.outputs.plys;
+    }
 
     void Project::removePly(size_t index) {
         if (index < project_data_.outputs.plys.size()) {

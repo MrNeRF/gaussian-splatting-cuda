@@ -134,6 +134,7 @@ namespace gs::management {
         void setDataInfo(const param::DatasetConfig& data_config);
         void addPly(const PlyData& ply);
         void removePly(size_t index);
+        [[nodiscard]] std::vector<PlyData> getPlys() const;
 
         // Version and compatibility methods
         Version getFileVersion() const { return project_data_.version; }
@@ -153,7 +154,7 @@ namespace gs::management {
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
                                               const std::string& project_name = "LichtFeldStudioProject");
 
-    // find the 
+    // find the
     std::filesystem::path FindProjectFile(const std::filesystem::path& directory);
 
 } // namespace gs::management
