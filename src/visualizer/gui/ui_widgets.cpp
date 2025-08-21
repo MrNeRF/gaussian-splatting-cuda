@@ -187,10 +187,10 @@ namespace gs::gui::widgets {
             const char* button_label = "";
             SceneManager::ContentType change_to;
             if (content_type == gs::SceneManager::ContentType::PLYFiles) {
-                button_label = "Switch to Dataset";
+                button_label = "Go to Dataset Mode";
                 change_to = SceneManager::ContentType::Dataset;
             } else if (content_type == gs::SceneManager::ContentType::Dataset) {
-                button_label = "Switch to PLY";
+                button_label = "Go to PLY Mode";
                 change_to = SceneManager::ContentType::PLYFiles;
             }
 
