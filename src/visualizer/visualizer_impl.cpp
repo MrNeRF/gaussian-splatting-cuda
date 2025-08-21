@@ -13,6 +13,11 @@ namespace gs::visualizer {
           viewport_(options.width, options.height),
           window_manager_(std::make_unique<WindowManager>(options.title, options.width, options.height)) {
 
+        // Initialize window manager first
+        if (!window_manager_->init()) {
+            throw std::runtime_error("Failed to initialize window manager");
+        }
+
         // Create scene manager - it creates its own Scene internally
         scene_manager_ = std::make_unique<SceneManager>();
 
@@ -34,8 +39,9 @@ namespace gs::visualizer {
         memory_monitor_ = std::make_unique<MemoryMonitor>();
         memory_monitor_->start();
 
-        // Create rendering manager with initial antialiasing setting
+        // Create and initialize rendering manager early to avoid crashes
         rendering_manager_ = std::make_unique<RenderingManager>();
+        rendering_manager_->initialize();
 
         // Set initial antialiasing
         RenderSettings initial_settings = rendering_manager_->getSettings();
@@ -188,9 +194,7 @@ namespace gs::visualizer {
     }
 
     bool VisualizerImpl::initialize() {
-        if (!window_manager_->init()) {
-            return false;
-        }
+        // Window manager already initialized in constructor
 
         // Initialize GUI first (sets up ImGui callbacks)
         gui_manager_->init();
@@ -202,8 +206,11 @@ namespace gs::visualizer {
         input_controller_->initialize();
         input_controller_->setTrainingManager(trainer_manager_);
 
-        // CRITICAL: Initialize rendering BEFORE tools
-        rendering_manager_->initialize();
+        // Rendering manager already initialized in constructor
+        // Just check if it's ready
+        if (!rendering_manager_->isInitialized()) {
+            rendering_manager_->initialize();
+        }
 
         // Initialize tools AFTER rendering is ready
         tool_manager_->initialize();
