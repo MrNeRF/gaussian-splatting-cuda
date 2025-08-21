@@ -1,29 +1,37 @@
 #include "rendering_pipeline.hpp"
-#include <print>
+#include "core/logger.hpp"
+#include <format>
 
 namespace gs::rendering {
 
     RenderingPipeline::RenderingPipeline()
         : background_(torch::zeros({3}, torch::kFloat32).to(torch::kCUDA)) {
         point_cloud_renderer_ = std::make_unique<PointCloudRenderer>();
+        LOG_DEBUG("RenderingPipeline initialized");
     }
 
     Result<RenderingPipeline::RenderResult> RenderingPipeline::render(
         const SplatData& model,
         const RenderRequest& request) {
 
+        LOG_TIMER_TRACE("RenderingPipeline::render");
+
         // Validate dimensions
         if (request.viewport_size.x <= 0 || request.viewport_size.y <= 0 ||
             request.viewport_size.x > 16384 || request.viewport_size.y > 16384) {
+            LOG_ERROR("Invalid viewport dimensions: {}x{}", request.viewport_size.x, request.viewport_size.y);
             return std::unexpected("Invalid viewport dimensions");
         }
 
         // Check if we should use point cloud rendering
         if (request.point_cloud_mode) {
+            LOG_TRACE("Using point cloud rendering mode");
             return renderPointCloud(model, request);
         }
 
         // Regular gaussian splatting rendering
+        LOG_TRACE("Using gaussian splatting rendering mode");
+
         // Update background tensor in-place to avoid allocation
         background_[0] = request.background_color.r;
         background_[1] = request.background_color.g;
@@ -32,6 +40,7 @@ namespace gs::rendering {
         // Create camera for this frame
         auto cam_result = createCamera(request);
         if (!cam_result) {
+            LOG_ERROR("Failed to create camera: {}", cam_result.error());
             return std::unexpected(cam_result.error());
         }
         Camera cam = std::move(*cam_result);
@@ -46,6 +55,7 @@ namespace gs::rendering {
             temp_bbox->setBounds(request.crop_box->getMinBounds(), request.crop_box->getMaxBounds());
             temp_bbox->setworld2BBox(request.crop_box->getworld2BBox());
             geom_bbox = temp_bbox.get();
+            LOG_TRACE("Using crop box for rendering");
         }
 
         try {
@@ -64,9 +74,12 @@ namespace gs::rendering {
             result.image = output.image;
             result.depth = output.depth;
             result.valid = true;
+
+            LOG_TRACE("Rasterization completed successfully");
             return result;
 
         } catch (const std::exception& e) {
+            LOG_ERROR("Rasterization failed: {}", e.what());
             return std::unexpected(std::format("Rasterization failed: {}", e.what()));
         }
     }
@@ -75,9 +88,13 @@ namespace gs::rendering {
         const SplatData& model,
         const RenderRequest& request) {
 
+        LOG_TIMER_TRACE("RenderingPipeline::renderPointCloud");
+
         // Initialize point cloud renderer if needed
         if (!point_cloud_renderer_->isInitialized()) {
+            LOG_DEBUG("Initializing point cloud renderer");
             if (auto result = point_cloud_renderer_->initialize(); !result) {
+                LOG_ERROR("Failed to initialize point cloud renderer: {}", result.error());
                 return std::unexpected(std::format("Failed to initialize point cloud renderer: {}",
                                                    result.error()));
             }
@@ -135,12 +152,14 @@ namespace gs::rendering {
         // Create framebuffer for offscreen rendering using RAII
         auto fbo_result = create_vao(); // Using create_vao as proxy for FBO creation
         if (!fbo_result) {
+            LOG_ERROR("Failed to create framebuffer");
             return std::unexpected("Failed to create framebuffer");
         }
 
         GLuint fbo, color_texture, depth_texture;
         glGenFramebuffers(1, &fbo);
         if (fbo == 0) {
+            LOG_ERROR("Failed to create framebuffer - glGenFramebuffers returned 0");
             return std::unexpected("Failed to create framebuffer");
         }
 
@@ -181,6 +200,7 @@ namespace gs::rendering {
 
         GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
+            LOG_ERROR("Framebuffer not complete: 0x{:x}", fb_status);
             return std::unexpected(std::format("Framebuffer not complete: 0x{:x}", fb_status));
         }
 
@@ -191,6 +211,7 @@ namespace gs::rendering {
         if (auto result = point_cloud_renderer_->render(model, view, projection,
                                                         request.voxel_size, request.background_color);
             !result) {
+            LOG_ERROR("Point cloud rendering failed: {}", result.error());
             return std::unexpected(std::format("Point cloud rendering failed: {}", result.error()));
         }
 
@@ -212,6 +233,8 @@ namespace gs::rendering {
         RenderResult result;
         result.image = image_cpu.permute({2, 0, 1}).to(torch::kCUDA);
         result.valid = true;
+
+        LOG_TRACE("Point cloud rendering completed");
         return result;
     }
 
@@ -221,11 +244,13 @@ namespace gs::rendering {
         const glm::ivec2& viewport_size) {
 
         if (!result.valid || !result.image.defined()) {
+            LOG_ERROR("Invalid render result for upload");
             return std::unexpected("Invalid render result");
         }
 
         // Try direct CUDA upload if available
         if (renderer.isInteropEnabled() && result.image.is_cuda()) {
+            LOG_TRACE("Using CUDA interop for screen upload");
             // Keep data on GPU - convert [C, H, W] to [H, W, C] format
             auto image_hwc = result.image.permute({1, 2, 0}).contiguous();
 
@@ -235,6 +260,7 @@ namespace gs::rendering {
         }
 
         // Fallback to CPU copy
+        LOG_TRACE("Using CPU copy for screen upload");
         auto image = (result.image * 255)
                          .to(torch::kCPU)
                          .to(torch::kU8)
@@ -244,6 +270,7 @@ namespace gs::rendering {
         if (image.size(0) != viewport_size.y ||
             image.size(1) != viewport_size.x ||
             !image.data_ptr<unsigned char>()) {
+            LOG_ERROR("Image dimensions mismatch or invalid data");
             return std::unexpected("Image dimensions mismatch or invalid data");
         }
 
@@ -252,6 +279,8 @@ namespace gs::rendering {
     }
 
     Result<Camera> RenderingPipeline::createCamera(const RenderRequest& request) {
+        LOG_TIMER_TRACE("RenderingPipeline::createCamera");
+
         // Convert view matrix to camera matrix
         torch::Tensor R_tensor = torch::tensor({request.view_rotation[0][0], request.view_rotation[1][0], request.view_rotation[2][0],
                                                 request.view_rotation[0][1], request.view_rotation[1][1], request.view_rotation[2][1],
@@ -291,6 +320,7 @@ namespace gs::rendering {
                 request.viewport_size.y,
                 -1);
         } catch (const std::exception& e) {
+            LOG_ERROR("Failed to create camera: {}", e.what());
             return std::unexpected(std::format("Failed to create camera: {}", e.what()));
         }
     }
