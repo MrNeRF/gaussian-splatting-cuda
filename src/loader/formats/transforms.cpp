@@ -1,12 +1,12 @@
 #include "transforms.hpp"
 #include "core/image_io.hpp"
+#include "core/logger.hpp"
 #include "formats/colmap.hpp"
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <numbers>
-#include <print>
 #include <torch/torch.h>
 
 namespace gs::loader {
@@ -58,12 +58,15 @@ namespace gs::loader {
         if (std::filesystem::exists(image_path_png)) {
             // blender data set has not extension, must assumes png
             image_path = image_path_png;
+            LOG_TRACE("Using PNG extension for image: {}", image_path.string());
         }
         return image_path;
     }
 
     std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
         const std::filesystem::path& transPath) {
+
+        LOG_TIMER_TRACE("Read transforms file");
 
         std::filesystem::path transformsFile = transPath;
         if (std::filesystem::is_directory(transPath)) {
@@ -72,13 +75,17 @@ namespace gs::loader {
             } else if (std::filesystem::is_regular_file(transPath / "transforms.json")) {
                 transformsFile = transPath / "transforms.json";
             } else {
+                LOG_ERROR("Could not find transforms file in: {}", transPath.string());
                 throw std::runtime_error("could not find transforms_train.json nor transforms.json in " + transPath.string());
             }
         }
 
         if (!std::filesystem::is_regular_file(transformsFile)) {
+            LOG_ERROR("Not a valid file: {}", transformsFile.string());
             throw std::runtime_error(transformsFile.string() + " is not a valid file");
         }
+
+        LOG_DEBUG("Reading transforms from: {}", transformsFile.string());
         std::ifstream trans_file{transformsFile.string()};
 
         std::filesystem::path dir_path = transformsFile.parent_path();
@@ -89,24 +96,26 @@ namespace gs::loader {
         if (!transforms.contains("w") or !transforms.contains("h")) {
 
             try {
-                std::println("Could not find w and h in trans.json file. Reading them from first image");
+                LOG_DEBUG("Width/height not in transforms.json, reading from first image");
                 auto first_frame_img_path = GetTransformImagePath(dir_path, transforms["frames"][0]);
                 auto result = load_image(first_frame_img_path);
                 w = std::get<1>(result);
                 h = std::get<2>(result);
+                LOG_DEBUG("Got image dimensions: {}x{}", w, h);
             } catch (const std::exception& e) {
                 std::string error_msg = "Error while trying to read image dimensions: " + std::string(e.what());
-                std::println("{}", error_msg);
+                LOG_ERROR("{}", error_msg);
                 throw std::runtime_error(error_msg);
             } catch (...) {
                 std::string error_msg = "Unknown error while trying to read image dimensions";
-                std::println("{}", error_msg);
+                LOG_ERROR("{}", error_msg);
                 throw std::runtime_error(error_msg);
             }
         } else {
             w = int(transforms["w"]);
             h = int(transforms["h"]);
         }
+
         float fl_x = -1, fl_y = -1;
         if (transforms.contains("fl_x")) {
             fl_x = float(transforms["fl_x"]);
@@ -120,6 +129,7 @@ namespace gs::loader {
             fl_y = fov_rad_to_focal_length(h, float(transforms["camera_angle_y"]));
         } else { // we should be  here in this scope only for blender - if w!=h then we must throw exception
             if (w != h) {
+                LOG_ERROR("No camera_angle_y but w!=h: {}!={}", w, h);
                 throw std::runtime_error("no camera_angle_y expected w!=h");
             }
             fl_y = fl_x;
@@ -137,6 +147,7 @@ namespace gs::loader {
         } else {
             cy = 0.5 * h;
         }
+
         float k1 = 0;
         float k2 = 0;
         float p1 = 0;
@@ -154,19 +165,24 @@ namespace gs::loader {
             p2 = float(transforms["p2"]);
         }
         if (k1 > 0 || k2 > 0 || p1 > 0 || p2 > 0) {
+            LOG_ERROR("Distortion parameters not supported: k1={}, k2={}, p1={}, p2={}", k1, k2, p1, p2);
             throw std::runtime_error(std::format("GS don't support distortion for now: k1={}, k2={}, p1={}, p2={}", k1, k2, p1, p2));
         }
 
         std::vector<CameraData> camerasdata;
         if (transforms.contains("frames") && transforms["frames"].is_array()) {
             uint64_t counter = 0;
+            LOG_DEBUG("Processing {} frames", transforms["frames"].size());
+
             for (size_t frameInd = 0; frameInd < transforms["frames"].size(); ++frameInd) {
                 CameraData camdata;
                 auto& frame = transforms["frames"][frameInd];
                 if (!frame.contains("transform_matrix")) {
+                    LOG_ERROR("Frame {} missing transform_matrix", frameInd);
                     throw std::runtime_error("expected all frames to contain transform_matrix");
                 }
                 if (!(frame["transform_matrix"].is_array() and frame["transform_matrix"].size() == 4)) {
+                    LOG_ERROR("Frame {} has invalid transform_matrix dimensions", frameInd);
                     throw std::runtime_error("transform_matrix has the wrong dimensions");
                 }
 
@@ -219,15 +235,20 @@ namespace gs::loader {
                 camdata._camera_ID = counter++;
 
                 camerasdata.push_back(camdata);
+                LOG_TRACE("Processed frame {}: {}", frameInd, camdata._image_name);
             }
         }
 
         auto center = torch::zeros({3}, torch::kFloat32);
 
+        LOG_INFO("Loaded {} cameras from transforms file", camerasdata.size());
+
         return {camerasdata, center};
     }
 
     PointCloud generate_random_point_cloud() {
+        LOG_DEBUG("Generating random point cloud with {} points", DEFAULT_NUM_INIT_GAUSSIAN);
+
         int numInitGaussian = DEFAULT_NUM_INIT_GAUSSIAN;
 
         uint64_t seed = DEFAULT_RANDOM_SEED;

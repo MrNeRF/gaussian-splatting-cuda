@@ -1,10 +1,8 @@
 #include "visualizer_impl.hpp"
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
+#include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
-#include "tools/background_tool.hpp"
-#include "tools/crop_box_tool.hpp"
-#include <tools/world_transform_tool.hpp>
 
 namespace gs::visualizer {
 
@@ -13,11 +11,7 @@ namespace gs::visualizer {
           viewport_(options.width, options.height),
           window_manager_(std::make_unique<WindowManager>(options.title, options.width, options.height)) {
 
-        // Initialize window manager first
-        if (!window_manager_->init()) {
-            throw std::runtime_error("Failed to initialize window manager");
-        }
-
+        LOG_DEBUG("Creating visualizer");
         // Create scene manager - it creates its own Scene internally
         scene_manager_ = std::make_unique<SceneManager>();
 
@@ -26,25 +20,17 @@ namespace gs::visualizer {
         trainer_manager_->setViewer(this);
         scene_manager_->setTrainerManager(trainer_manager_.get());
 
-        // Create tool manager
-        tool_manager_ = std::make_unique<ToolManager>(this);
-        tool_manager_->registerBuiltinTools();
-        tool_manager_->addTool("Crop Box");
-        tool_manager_->addTool("World Transform");
-        tool_manager_->addTool("Background");
-
         // Create support components
         gui_manager_ = std::make_unique<gui::GuiManager>(this);
         error_handler_ = std::make_unique<ErrorHandler>();
         memory_monitor_ = std::make_unique<MemoryMonitor>();
         memory_monitor_->start();
 
-        // Create and initialize rendering manager early to avoid crashes
+        // Create rendering manager with initial antialiasing setting
         rendering_manager_ = std::make_unique<RenderingManager>();
-        rendering_manager_->initialize();
 
         // Set initial antialiasing
-        RenderSettings initial_settings = rendering_manager_->getSettings();
+        RenderSettings initial_settings;
         initial_settings.antialiasing = options.antialiasing;
         rendering_manager_->updateSettings(initial_settings);
 
@@ -137,16 +123,6 @@ namespace gs::visualizer {
             }
         });
 
-        // Tool settings changes - mark dirty
-        tools::CropBoxSettingsChanged::when([this](const auto& event) {
-            if (rendering_manager_) {
-                RenderSettings settings = rendering_manager_->getSettings();
-                settings.show_crop_box = event.show_box;
-                settings.use_crop_box = event.use_box;
-                rendering_manager_->updateSettings(settings);
-            }
-        });
-
         // Scene changes - mark dirty
         state::SceneChanged::when([this](const auto&) {
             if (window_manager_) {
@@ -194,26 +170,32 @@ namespace gs::visualizer {
     }
 
     bool VisualizerImpl::initialize() {
-        // Window manager already initialized in constructor
+        // Initialize window first
+        if (!window_initialized_) {
+            if (!window_manager_->init()) {
+                return false;
+            }
+            window_initialized_ = true;
+        }
 
-        // Initialize GUI first (sets up ImGui callbacks)
-        gui_manager_->init();
-        gui_initialized_ = true;
+        // Initialize GUI (sets up ImGui callbacks)
+        if (!gui_initialized_) {
+            gui_manager_->init();
+            gui_initialized_ = true;
+        }
 
         // Create simplified input controller AFTER ImGui is initialized
-        input_controller_ = std::make_unique<InputController>(
-            window_manager_->getWindow(), viewport_);
-        input_controller_->initialize();
-        input_controller_->setTrainingManager(trainer_manager_);
+        if (!input_controller_) {
+            input_controller_ = std::make_unique<InputController>(
+                window_manager_->getWindow(), viewport_);
+            input_controller_->initialize();
+            input_controller_->setTrainingManager(trainer_manager_);
+        }
 
-        // Rendering manager already initialized in constructor
-        // Just check if it's ready
+        // Initialize rendering
         if (!rendering_manager_->isInitialized()) {
             rendering_manager_->initialize();
         }
-
-        // Initialize tools AFTER rendering is ready
-        tool_manager_->initialize();
 
         return true;
     }
@@ -224,9 +206,6 @@ namespace gs::visualizer {
         // Update the main viewport with window size
         viewport_.windowSize = window_manager_->getWindowSize();
         viewport_.frameBufferSize = window_manager_->getFramebufferSize();
-
-        // Update tools
-        tool_manager_->update();
     }
 
     void VisualizerImpl::render() {
@@ -244,32 +223,6 @@ namespace gs::visualizer {
             input_controller_->setPointCloudMode(settings.point_cloud_mode);
         }
 
-        // Update rendering settings
-        RenderSettings settings = rendering_manager_->getSettings();
-
-        // Get crop box state from tool
-        if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
-            settings.show_crop_box = crop_tool->shouldShowBox();
-            settings.use_crop_box = crop_tool->shouldUseBox();
-        } else {
-            settings.show_crop_box = false;
-            settings.use_crop_box = false;
-        }
-
-        if (auto* world_trans = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
-            settings.show_coord_axes = world_trans->ShouldShowAxes();
-        } else {
-            settings.show_coord_axes = false;
-        }
-
-        rendering_manager_->updateSettings(settings);
-
-        // Get crop box for rendering
-        const gs::rendering::IBoundingBox* crop_box_ptr = nullptr;
-        if (auto crop_box = getCropBox()) {
-            crop_box_ptr = crop_box.get();
-        }
-
         // Get viewport region from GUI
         ViewportRegion viewport_region;
         bool has_viewport_region = false;
@@ -285,36 +238,14 @@ namespace gs::visualizer {
             has_viewport_region = true;
         }
 
-        // Get coord axes and world 2 user for rendering
-        const gs::rendering::ICoordinateAxes* coord_axes_ptr = nullptr;
-        if (auto coord_axes = getAxes()) {
-            coord_axes_ptr = coord_axes.get();
-        }
-        const geometry::EuclideanTransform* world_to_user = nullptr;
-        if (auto coord_axes = getWorldToUser()) {
-            world_to_user = coord_axes.get();
-        }
-
-        const BackgroundTool* background_tool = nullptr;
-        if (auto* bg_tool = dynamic_cast<BackgroundTool*>(tool_manager_->getTool("Background"))) {
-            background_tool = bg_tool;
-        }
-
-        // Render
+        // Create render context
         RenderingManager::RenderContext context{
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
-            .crop_box = crop_box_ptr,
-            .coord_axes = coord_axes_ptr,
-            .world_to_user = world_to_user,
             .viewport_region = has_viewport_region ? &viewport_region : nullptr,
-            .has_focus = gui_manager_ && gui_manager_->isViewportFocused(),
-            .background_tool = background_tool};
+            .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
-
-        // Render tools
-        tool_manager_->render();
 
         gui_manager_->render();
 
@@ -323,10 +254,23 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::shutdown() {
-        tool_manager_->shutdown();
+        // Nothing to shutdown now that tools are gone
     }
 
     void VisualizerImpl::run() {
+        // Ensure basic initialization before running
+        if (!window_initialized_) {
+            if (!window_manager_->init()) {
+                throw std::runtime_error("Failed to initialize window manager");
+            }
+            window_initialized_ = true;
+        }
+
+        // Initialize rendering
+        if (!rendering_manager_->isInitialized()) {
+            rendering_manager_->initialize();
+        }
+
         main_loop_->run();
     }
 
@@ -335,39 +279,42 @@ namespace gs::visualizer {
     }
 
     std::expected<void, std::string> VisualizerImpl::loadPLY(const std::filesystem::path& path) {
+        // Ensure proper initialization order before loading PLY
+        // This handles command line PLY loading
+        if (!window_initialized_) {
+            if (!window_manager_->init()) {
+                return std::unexpected("Failed to initialize window manager");
+            }
+            window_initialized_ = true;
+        }
+
+        // Initialize rendering
+        if (!rendering_manager_->isInitialized()) {
+            rendering_manager_->initialize();
+        }
+
         return data_loader_->loadPLY(path);
     }
 
     std::expected<void, std::string> VisualizerImpl::loadDataset(const std::filesystem::path& path) {
+        // Ensure proper initialization order before loading dataset
+        if (!window_initialized_) {
+            if (!window_manager_->init()) {
+                return std::unexpected("Failed to initialize window manager");
+            }
+            window_initialized_ = true;
+        }
+
+        // Initialize rendering
+        if (!rendering_manager_->isInitialized()) {
+            rendering_manager_->initialize();
+        }
+
         return data_loader_->loadDataset(path);
     }
 
     void VisualizerImpl::clearScene() {
         data_loader_->clearScene();
-    }
-
-    std::shared_ptr<gs::rendering::IBoundingBox> VisualizerImpl::getCropBox() const {
-        if (auto* crop_tool = dynamic_cast<CropBoxTool*>(tool_manager_->getTool("Crop Box"))) {
-            return crop_tool->getBoundingBox();
-        }
-        return nullptr;
-    }
-
-    std::shared_ptr<const gs::rendering::ICoordinateAxes> VisualizerImpl::getAxes() const {
-        if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
-            return world_transform->getAxes();
-        }
-        return nullptr;
-    }
-
-    std::shared_ptr<const geometry::EuclideanTransform> VisualizerImpl::getWorldToUser() const {
-        if (auto* world_transform = dynamic_cast<WorldTransformTool*>(tool_manager_->getTool("World Transform"))) {
-            if (world_transform->IsTrivialTrans()) {
-                return nullptr;
-            }
-            return world_transform->GetTransform();
-        }
-        return nullptr;
     }
 
 } // namespace gs::visualizer

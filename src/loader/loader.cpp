@@ -1,4 +1,5 @@
 #include "loader/loader.hpp"
+#include "core/logger.hpp"
 #include "loader_service.hpp"
 #include <memory>
 
@@ -8,12 +9,15 @@ namespace gs::loader {
         // Implementation class that hides all internal details
         class LoaderImpl : public Loader {
         public:
-            LoaderImpl() : service_(std::make_unique<LoaderService>()) {}
+            LoaderImpl() : service_(std::make_unique<LoaderService>()) {
+                LOG_TRACE("LoaderImpl created");
+            }
 
             std::expected<LoadResult, std::string> load(
                 const std::filesystem::path& path,
                 const LoadOptions& options) override {
 
+                LOG_DEBUG("Loading from path: {}", path.string());
                 // Just delegate to the service
                 return service_->load(path, options);
             }
@@ -23,12 +27,15 @@ namespace gs::loader {
                 // We would need to expose this functionality from the service
                 // For now, let's check common extensions
                 if (!std::filesystem::exists(path)) {
+                    LOG_TRACE("Path does not exist: {}", path.string());
                     return false;
                 }
 
                 auto ext = path.extension().string();
                 auto extensions = service_->getSupportedExtensions();
-                return std::find(extensions.begin(), extensions.end(), ext) != extensions.end();
+                bool can_load = std::find(extensions.begin(), extensions.end(), ext) != extensions.end();
+                LOG_TRACE("Can load {}: {}", path.string(), can_load);
+                return can_load;
             }
 
             std::vector<std::string> getSupportedFormats() const override {
@@ -46,6 +53,7 @@ namespace gs::loader {
 
     // Factory method implementation
     std::unique_ptr<Loader> Loader::create() {
+        LOG_DEBUG("Creating Loader instance");
         return std::make_unique<LoaderImpl>();
     }
 

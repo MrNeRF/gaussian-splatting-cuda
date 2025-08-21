@@ -1,7 +1,7 @@
-// scene.cpp
 #include "scene/scene.hpp"
 #include <algorithm>
 #include <print>
+#include <ranges>
 #include <torch/torch.h>
 
 namespace gs {
@@ -101,20 +101,17 @@ namespace gs {
     }
 
     void Scene::rebuildCacheIfNeeded() const {
-        if (cache_valid_) {
+        if (cache_valid_)
             return;
-        }
 
-        // Collect visible models
-        std::vector<const SplatData*> visible_models;
-        size_t total_gaussians = 0;
-
-        for (const auto& node : nodes_) {
-            if (node.visible && node.model) {
-                visible_models.push_back(node.model.get());
-                total_gaussians += node.gaussian_count;
-            }
-        }
+        // Collect visible models using ranges
+        auto visible_models = nodes_ | std::views::filter([](const auto& node) {
+                                  return node.visible && node.model;
+                              }) |
+                              std::views::transform([](const auto& node) {
+                                  return node.model.get();
+                              }) |
+                              std::ranges::to<std::vector>();
 
         if (visible_models.empty()) {
             cached_combined_.reset();
@@ -122,64 +119,95 @@ namespace gs {
             return;
         }
 
-        std::println("Scene: Rebuilding combined model with {} visible models, {} total gaussians",
-                     visible_models.size(), total_gaussians);
+        // Calculate totals and find max SH degree in one pass
+        struct ModelStats {
+            size_t total_gaussians = 0;
+            int max_sh_degree = 0;
+            float total_scene_scale = 0.0f;
+            bool has_shN = false;
+        };
 
-        // Get device and dtype from first model
-        auto device = visible_models[0]->means().device();
-        auto dtype = visible_models[0]->means().dtype();
+        auto stats = std::accumulate(
+            visible_models.begin(), visible_models.end(), ModelStats{},
+            [](ModelStats acc, const SplatData* model) {
+                acc.total_gaussians += model->size();
+                acc.max_sh_degree = std::max(acc.max_sh_degree, model->get_active_sh_degree());
+                acc.total_scene_scale += model->get_scene_scale();
+                acc.has_shN = acc.has_shN || (model->shN().numel() > 0);
+                return acc;
+            });
 
-        // Create tensor options with both device and dtype
+        std::println("Scene: Combining {} models, {} gaussians, max SH degree {}",
+                     visible_models.size(), stats.total_gaussians, stats.max_sh_degree);
+
+        // Setup tensor options from first model
+        const auto [device, dtype] = [&] {
+            const auto& first = visible_models[0]->means();
+            return std::pair{first.device(), first.dtype()};
+        }();
         auto opts = torch::TensorOptions().dtype(dtype).device(device);
 
-        // Pre-allocate tensors on the target device
-        auto combined_means = torch::empty({static_cast<int64_t>(total_gaussians), 3}, opts);
-        auto combined_sh0 = torch::empty({static_cast<int64_t>(total_gaussians),
-                                          visible_models[0]->sh0().size(1),
-                                          visible_models[0]->sh0().size(2)},
-                                         opts);
-        auto combined_shN = torch::empty({static_cast<int64_t>(total_gaussians),
-                                          visible_models[0]->shN().size(1),
-                                          visible_models[0]->shN().size(2)},
-                                         opts);
-        auto combined_opacity = torch::empty({static_cast<int64_t>(total_gaussians), 1}, opts);
-        auto combined_scaling = torch::empty({static_cast<int64_t>(total_gaussians), 3}, opts);
-        auto combined_rotation = torch::empty({static_cast<int64_t>(total_gaussians), 4}, opts);
+        // Calculate SH dimensions
+        constexpr auto sh_coefficients = [](int degree) -> std::pair<int, int> {
+            int total = (degree + 1) * (degree + 1);
+            return {1, total - 1}; // sh0 always 1, shN is the rest
+        };
+        auto [sh0_coeffs, shN_coeffs] = sh_coefficients(stats.max_sh_degree);
 
-        // Concatenate all visible models
-        size_t current_idx = 0;
-        int max_sh_degree = 0;
-        float avg_scene_scale = 0.0f;
+        // Pre-allocate all tensors at once
+        struct CombinedTensors {
+            torch::Tensor means, sh0, shN, opacity, scaling, rotation;
+        } combined{
+            .means = torch::empty({static_cast<int64_t>(stats.total_gaussians), 3}, opts),
+            .sh0 = torch::empty({static_cast<int64_t>(stats.total_gaussians), sh0_coeffs, 3}, opts),
+            .shN = torch::zeros({static_cast<int64_t>(stats.total_gaussians),
+                                 stats.has_shN ? shN_coeffs : 0, 3},
+                                opts),
+            .opacity = torch::empty({static_cast<int64_t>(stats.total_gaussians), 1}, opts),
+            .scaling = torch::empty({static_cast<int64_t>(stats.total_gaussians), 3}, opts),
+            .rotation = torch::empty({static_cast<int64_t>(stats.total_gaussians), 4}, opts)};
 
+        // Helper to create a slice for current model
+        auto make_slice = [](size_t start, size_t size) {
+            return torch::indexing::Slice(start, start + size);
+        };
+
+        // Copy data from each model
+        size_t offset = 0;
         for (const auto* model : visible_models) {
-            int64_t model_size = model->size();
+            const auto size = model->size();
+            const auto slice = make_slice(offset, size);
 
-            // Copy data
-            combined_means.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->means();
-            combined_sh0.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->sh0();
-            combined_shN.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->shN();
-            combined_opacity.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->opacity_raw();
-            combined_scaling.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->scaling_raw();
-            combined_rotation.index({torch::indexing::Slice(current_idx, current_idx + model_size)}) = model->rotation_raw();
+            // Direct copy for simple tensors
+            combined.means.index({slice}) = model->means();
+            combined.opacity.index({slice}) = model->opacity_raw();
+            combined.scaling.index({slice}) = model->scaling_raw();
+            combined.rotation.index({slice}) = model->rotation_raw();
 
-            max_sh_degree = std::max(max_sh_degree, model->get_active_sh_degree());
-            avg_scene_scale += model->get_scene_scale();
-            current_idx += model_size;
+            // Copy sh0 (should always match for valid PLYs)
+            combined.sh0.index({slice}) = model->sh0();
+
+            // Copy shN if present (leave zeros for degree 0 models)
+            if (shN_coeffs > 0 && model->shN().numel() > 0) {
+                const auto copy_coeffs = std::min<int64_t>(model->shN().size(1), shN_coeffs);
+                combined.shN.index({slice, torch::indexing::Slice(0, copy_coeffs)}) =
+                    model->shN().index({torch::indexing::Slice(), torch::indexing::Slice(0, copy_coeffs)});
+            }
+
+            offset += size;
         }
 
-        avg_scene_scale /= visible_models.size();
-
+        // Create the combined model
         cached_combined_ = std::make_unique<SplatData>(
-            max_sh_degree,
-            combined_means,
-            combined_sh0,
-            combined_shN,
-            combined_scaling,
-            combined_rotation,
-            combined_opacity,
-            avg_scene_scale);
+            stats.max_sh_degree,
+            std::move(combined.means),
+            std::move(combined.sh0),
+            std::move(combined.shN),
+            std::move(combined.scaling),
+            std::move(combined.rotation),
+            std::move(combined.opacity),
+            stats.total_scene_scale / visible_models.size());
 
         cache_valid_ = true;
     }
-
 } // namespace gs

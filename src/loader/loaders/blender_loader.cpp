@@ -1,6 +1,7 @@
 #include "loader/loaders/blender_loader.hpp"
 #include "core/camera.hpp"
 #include "core/dataset.hpp"
+#include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "formats/transforms.hpp"
 #include <chrono>
@@ -8,7 +9,6 @@
 #include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <print>
 
 namespace gs::loader {
 
@@ -16,11 +16,14 @@ namespace gs::loader {
         const std::filesystem::path& path,
         const LoadOptions& options) {
 
+        LOG_TIMER("Blender/NeRF Loading");
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Validate path exists
         if (!std::filesystem::exists(path)) {
-            return std::unexpected(std::format("Path does not exist: {}", path.string()));
+            std::string error_msg = std::format("Path does not exist: {}", path.string());
+            LOG_ERROR("{}", error_msg);
+            throw std::runtime_error(error_msg);
         }
 
         // Report initial progress
@@ -35,25 +38,32 @@ namespace gs::loader {
             // Look for transforms files in directory
             if (std::filesystem::exists(path / "transforms_train.json")) {
                 transforms_file = path / "transforms_train.json";
+                LOG_DEBUG("Found transforms_train.json");
             } else if (std::filesystem::exists(path / "transforms.json")) {
                 transforms_file = path / "transforms.json";
+                LOG_DEBUG("Found transforms.json");
             } else {
-                return std::unexpected(
+                LOG_ERROR("No transforms file found in directory: {}", path.string());
+                throw std::runtime_error(
                     "No transforms file found (expected 'transforms.json' or 'transforms_train.json')");
             }
         } else if (path.extension() == ".json") {
             // Direct path to transforms file
             transforms_file = path;
+            LOG_DEBUG("Using direct transforms file: {}", transforms_file.string());
         } else {
-            return std::unexpected("Path must be a directory or a JSON file");
+            LOG_ERROR("Path must be a directory or a JSON file: {}", path.string());
+            throw std::runtime_error("Path must be a directory or a JSON file");
         }
 
         // Validation only mode
         if (options.validate_only) {
+            LOG_DEBUG("Validation only mode for Blender/NeRF: {}", transforms_file.string());
             // Check if the transforms file is valid JSON
             std::ifstream file(transforms_file);
             if (!file) {
-                return std::unexpected("Cannot open transforms file");
+                LOG_ERROR("Cannot open transforms file: {}", transforms_file.string());
+                throw std::runtime_error("Cannot open transforms file");
             }
 
             // Try to parse as JSON (basic validation)
@@ -62,15 +72,20 @@ namespace gs::loader {
                 file >> j;
 
                 if (!j.contains("frames") || !j["frames"].is_array()) {
-                    return std::unexpected("Invalid transforms file: missing 'frames' array");
+                    LOG_ERROR("Invalid transforms file: missing 'frames' array");
+                    throw std::runtime_error("Invalid transforms file: missing 'frames' array");
                 }
             } catch (const std::exception& e) {
-                return std::unexpected(std::format("Invalid JSON: {}", e.what()));
+                std::string error_msg = std::format("Invalid JSON: {}", e.what());
+                LOG_ERROR("{}", error_msg);
+                throw std::runtime_error(error_msg);
             }
 
             if (options.progress) {
                 options.progress(100.0f, "Blender/NeRF validation complete");
             }
+
+            LOG_DEBUG("Blender/NeRF validation successful");
 
             auto end_time = std::chrono::high_resolution_clock::now();
             return LoadResult{
@@ -89,12 +104,16 @@ namespace gs::loader {
         }
 
         try {
+            LOG_INFO("Loading Blender/NeRF dataset from: {}", transforms_file.string());
+
             // Read transforms and create cameras
             auto [camera_infos, scene_center] = read_transforms_cameras_and_images(transforms_file);
 
             if (options.progress) {
                 options.progress(40.0f, std::format("Creating {} cameras...", camera_infos.size()));
             }
+
+            LOG_DEBUG("Creating {} camera objects", camera_infos.size());
 
             // Create Camera objects
             std::vector<std::shared_ptr<Camera>> cameras;
@@ -137,9 +156,10 @@ namespace gs::loader {
             }
 
             // Generate random point cloud for Blender datasets
+            LOG_DEBUG("Generating random point cloud for initialization");
             auto random_pc = generate_random_point_cloud();
             auto point_cloud = std::make_shared<PointCloud>(std::move(random_pc));
-            std::println("Generated random point cloud with {} points", point_cloud->size());
+            LOG_INFO("Generated random point cloud with {} points", point_cloud->size());
 
             if (options.progress) {
                 options.progress(100.0f, "Blender/NeRF loading complete");
@@ -159,17 +179,19 @@ namespace gs::loader {
                 .load_time = load_time,
                 .warnings = {"Using random point cloud initialization"}};
 
-            std::println("Blender/NeRF dataset loaded successfully in {}ms", load_time.count());
-            std::println("  - {} cameras", camera_infos.size());
-            std::println("  - Scene center: [{:.3f}, {:.3f}, {:.3f}]",
-                         scene_center[0].item<float>(),
-                         scene_center[1].item<float>(),
-                         scene_center[2].item<float>());
+            LOG_INFO("Blender/NeRF dataset loaded successfully in {}ms", load_time.count());
+            LOG_INFO("  - {} cameras", camera_infos.size());
+            LOG_DEBUG("  - Scene center: [{:.3f}, {:.3f}, {:.3f}]",
+                      scene_center[0].item<float>(),
+                      scene_center[1].item<float>(),
+                      scene_center[2].item<float>());
 
             return result;
 
         } catch (const std::exception& e) {
-            return std::unexpected(std::format("Failed to load Blender/NeRF dataset: {}", e.what()));
+            std::string error_msg = std::format("Failed to load Blender/NeRF dataset: {}", e.what());
+            LOG_ERROR("{}", error_msg);
+            throw std::runtime_error(error_msg);
         }
     }
 
