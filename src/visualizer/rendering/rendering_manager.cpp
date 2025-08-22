@@ -225,9 +225,9 @@ namespace gs::visualizer {
         // 3. Viewport has focus (for interactivity)
         if (!cached_result_.image || needs_render_now) {
             should_render = true;
-            needs_render_ = false;  // Clear the flag after deciding to render
+            needs_render_ = false; // Clear the flag after deciding to render
             LOG_TRACE("Forcing render: no cache={}, needs_render={}",
-                     !cached_result_.image, needs_render_now);
+                      !cached_result_.image, needs_render_now);
         } else if (context.has_focus) {
             // Always render when viewport has focus for smooth interaction
             should_render = true;
@@ -348,11 +348,11 @@ namespace gs::visualizer {
 
                 if (!present_result) {
                     LOG_ERROR("Failed to present render result: {}", present_result.error());
-                    //throw std::runtime_error("Failed to present render result: " + present_result.error());
+                    // throw std::runtime_error("Failed to present render result: " + present_result.error());
                 }
             } else {
                 LOG_ERROR("Failed to render gaussians: {}", render_result.error());
-                //throw std::runtime_error("Failed to render gaussians: " + render_result.error());
+                // throw std::runtime_error("Failed to render gaussians: " + render_result.error());
             }
         }
 
