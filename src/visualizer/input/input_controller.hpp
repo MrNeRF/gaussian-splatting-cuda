@@ -11,6 +11,12 @@
 
 namespace gs::visualizer {
 
+    // Forward declarations
+    namespace tools {
+        class TranslationGizmoTool;
+    }
+    class ToolContext;
+
     class InputController {
     public:
         InputController(GLFWwindow* window, Viewport& viewport);
@@ -22,6 +28,16 @@ namespace gs::visualizer {
         // Set training manager for camera view commands
         void setTrainingManager(std::shared_ptr<const TrainerManager> tm) {
             training_manager_ = tm;
+        }
+
+        // Set translation gizmo tool
+        void setTranslationGizmoTool(std::shared_ptr<tools::TranslationGizmoTool> tool) {
+            translation_gizmo_ = tool;
+        }
+
+        // Set tool context for gizmo
+        void setToolContext(ToolContext* context) {
+            tool_context_ = context;
         }
 
         // Called every frame by GUI manager to update viewport bounds
@@ -72,6 +88,10 @@ namespace gs::visualizer {
         Viewport& viewport_;
         std::shared_ptr<const TrainerManager> training_manager_;
 
+        // Tool support
+        std::shared_ptr<tools::TranslationGizmoTool> translation_gizmo_;
+        ToolContext* tool_context_ = nullptr;
+
         // Viewport bounds for focus detection
         struct {
             float x, y, width, height;
@@ -81,7 +101,8 @@ namespace gs::visualizer {
         enum class DragMode { None,
                               Pan,
                               Rotate,
-                              Orbit };
+                              Orbit,
+                              Gizmo }; // Add Gizmo mode
         DragMode drag_mode_ = DragMode::None;
         glm::dvec2 last_mouse_pos_{0, 0};
 

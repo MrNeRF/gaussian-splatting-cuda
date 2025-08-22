@@ -1,8 +1,12 @@
-#include "input/input_controller.hpp"
 #include <algorithm>
 #include <format>
 #include <imgui.h>
 #include <print>
+
+#include "core/logger.hpp"
+#include "input/input_controller.hpp"
+#include "tools/tool_base.hpp"
+#include "tools/translation_gizmo_tool.hpp"
 
 namespace gs::visualizer {
 
@@ -128,11 +132,26 @@ namespace gs::visualizer {
             }
             events::internal::WindowFocusLost{}.emit();
             std::println("[InputController] Window lost focus");
+        } else {
+            std::println("[InputController] Window gained focus");
         }
     }
 
     // Core handlers
     void InputController::handleMouseButton(int button, int action, double x, double y) {
+        // CHECK GIZMO FIRST - before any other input handling
+        if (translation_gizmo_ && translation_gizmo_->isEnabled() && tool_context_) {
+            if (translation_gizmo_->handleMouseButton(button, action, x, y, *tool_context_)) {
+                // Gizmo consumed the event
+                if (action == GLFW_PRESS) {
+                    drag_mode_ = DragMode::Gizmo;
+                } else if (action == GLFW_RELEASE && drag_mode_ == DragMode::Gizmo) {
+                    drag_mode_ = DragMode::None;
+                }
+                return; // Don't process camera controls
+            }
+        }
+
         if (action == GLFW_PRESS) {
             // Special handling for point cloud mode
             bool imgui_wants_mouse = ImGui::GetIO().WantCaptureMouse;
@@ -182,6 +201,16 @@ namespace gs::visualizer {
     }
 
     void InputController::handleMouseMove(double x, double y) {
+        // Check gizmo first if not already in gizmo drag mode
+        if (translation_gizmo_ && translation_gizmo_->isEnabled() && tool_context_) {
+            if (drag_mode_ == DragMode::Gizmo ||
+                translation_gizmo_->handleMouseMove(x, y, *tool_context_)) {
+                // Gizmo is handling the mouse move
+                last_mouse_pos_ = {x, y};
+                return;
+            }
+        }
+
         glm::vec2 pos(x, y);
 
         // Always update last position
@@ -189,7 +218,7 @@ namespace gs::visualizer {
         last_mouse_pos_ = current_pos;
 
         // Handle camera dragging
-        if (drag_mode_ != DragMode::None) {
+        if (drag_mode_ != DragMode::None && drag_mode_ != DragMode::Gizmo) {
             switch (drag_mode_) {
             case DragMode::Pan:
                 viewport_.camera.translate(pos);
@@ -209,6 +238,11 @@ namespace gs::visualizer {
     }
 
     void InputController::handleScroll([[maybe_unused]] double xoff, double yoff) {
+        // Don't scroll if gizmo is active
+        if (drag_mode_ == DragMode::Gizmo) {
+            return;
+        }
+
         if (!shouldCameraHandleInput())
             return;
 
@@ -232,6 +266,12 @@ namespace gs::visualizer {
         }
         if (key == GLFW_KEY_R) {
             key_r_pressed_ = (action != GLFW_RELEASE);
+
+            // Reset gizmo position if R is pressed and gizmo is enabled
+            if (action == GLFW_PRESS && translation_gizmo_ && translation_gizmo_->isEnabled()) {
+                // This would need to be exposed by the gizmo tool
+                // For now, let the gizmo handle it internally
+            }
         }
 
         // Speed control works even when GUI has focus
@@ -246,8 +286,8 @@ namespace gs::visualizer {
             }
         }
 
-        // WASD only works when viewport has focus
-        if (!shouldCameraHandleInput())
+        // WASD only works when viewport has focus and gizmo isn't active
+        if (!shouldCameraHandleInput() || drag_mode_ == DragMode::Gizmo)
             return;
 
         bool pressed = (action != GLFW_RELEASE);
@@ -325,13 +365,15 @@ namespace gs::visualizer {
         // Load dataset if found
         if (dataset_path) {
             events::cmd::LoadFile{.path = *dataset_path, .is_dataset = true}.emit();
+            LOG_INFO("Loading dataset Project via drag-and-drop: {}", dataset_path->filename().string());
+        }
 
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = std::format("Loaded dataset via drag-and-drop: {}",
-                                       dataset_path->filename().string()),
-                .source = "InputController"}
-                .emit();
+        if (paths.size() == 1) {
+            auto project_path = std::filesystem::path(paths[0]);
+            if (project_path.extension() == gs::management::Project::EXTENSION) {
+                events::cmd::LoadProject{.path = project_path}.emit();
+                LOG_INFO("Loading LS Project via drag-and-drop: {}", project_path.filename().string());
+            }
         }
     }
 
@@ -403,6 +445,11 @@ namespace gs::visualizer {
     }
 
     bool InputController::shouldCameraHandleInput() const {
+        // Don't handle if gizmo is active
+        if (drag_mode_ == DragMode::Gizmo) {
+            return false;
+        }
+
         // Special handling for point cloud mode
         if (point_cloud_mode_) {
             double x, y;

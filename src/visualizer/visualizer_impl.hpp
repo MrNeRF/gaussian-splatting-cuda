@@ -7,9 +7,11 @@
 #include "gui/gui_manager.hpp"
 #include "input/input_controller.hpp"
 #include "internal/viewport.hpp"
+#include "project/project.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering/rendering_manager.hpp"
 #include "scene/scene_manager.hpp"
+#include "tools/tool_base.hpp"
 #include "training/training_manager.hpp"
 #include "visualizer/visualizer.hpp"
 #include "window/window_manager.hpp"
@@ -27,6 +29,10 @@ namespace gs {
 namespace gs::visualizer {
     class DataLoadingService;
 
+    namespace tools {
+        class TranslationGizmoTool;
+    }
+
     class VisualizerImpl : public Visualizer {
     public:
         explicit VisualizerImpl(const ViewerOptions& options);
@@ -38,6 +44,14 @@ namespace gs::visualizer {
         std::expected<void, std::string> loadDataset(const std::filesystem::path& path) override;
         void clearScene() override;
 
+        // open project file and attach it to viewer
+        bool openProject(const std::filesystem::path& path) override;
+        bool closeProject(const std::filesystem::path& path = {}) override;
+        std::shared_ptr<gs::management::Project> getProject() override;
+        // load project content to viewer
+        bool LoadProject();
+
+        // Getters for GUI (delegating to state manager)
         Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
 
         // Component access
@@ -72,11 +86,22 @@ namespace gs::visualizer {
             return rendering_manager_ ? rendering_manager_->getSettings().antialiasing : false;
         }
 
+        tools::TranslationGizmoTool* getTranslationGizmoTool() {
+            return translation_gizmo_tool_.get();
+        }
+
+        const tools::TranslationGizmoTool* getTranslationGizmoTool() const {
+            return translation_gizmo_tool_.get();
+        }
+
         std::shared_ptr<TrainerManager> trainer_manager_;
 
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
         friend class gui::GuiManager;
+
+        // Allow ToolContext to access GUI manager for logging
+        friend class ToolContext;
 
     private:
         // Main loop callbacks
@@ -88,6 +113,10 @@ namespace gs::visualizer {
         // Event system
         void setupEventHandlers();
         void setupComponentConnections();
+        void handleLoadProjectCommand(const events::cmd::LoadProject& cmd);
+
+        // Tool initialization
+        void initializeTools();
 
         // Options
         ViewerOptions options_;
@@ -102,6 +131,10 @@ namespace gs::visualizer {
         std::unique_ptr<DataLoadingService> data_loader_;
         std::unique_ptr<MainLoop> main_loop_;
 
+        // Tools
+        std::shared_ptr<tools::TranslationGizmoTool> translation_gizmo_tool_;
+        std::unique_ptr<ToolContext> tool_context_;
+
         // Support components
         std::unique_ptr<ErrorHandler> error_handler_;
         std::unique_ptr<MemoryMonitor> memory_monitor_;
@@ -109,6 +142,8 @@ namespace gs::visualizer {
         // State tracking
         bool window_initialized_ = false;
         bool gui_initialized_ = false;
+        // Project
+        std::shared_ptr<gs::management::Project> project_ = nullptr;
     };
 
 } // namespace gs::visualizer

@@ -1,5 +1,5 @@
-#include "adam_api.h"
 #include "adam.h"
+#include "adam_api.h"
 
 void fast_gs::optimizer::adam_step_wrapper(
     torch::Tensor& param,
@@ -11,8 +11,7 @@ void fast_gs::optimizer::adam_step_wrapper(
     const float beta2,
     const float eps,
     const float bias_correction1_rcp,
-    const float bias_correction2_sqrt_rcp)
-{
+    const float bias_correction2_sqrt_rcp) {
     const int n_elements = param.numel();
 
     adam_step(
@@ -26,6 +25,5 @@ void fast_gs::optimizer::adam_step_wrapper(
         beta2,
         eps,
         bias_correction1_rcp,
-        bias_correction2_sqrt_rcp
-    );
+        bias_correction2_sqrt_rcp);
 }

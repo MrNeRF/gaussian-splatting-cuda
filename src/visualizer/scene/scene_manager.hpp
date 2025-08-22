@@ -70,9 +70,11 @@ namespace gs {
         TrainerManager* getTrainerManager() { return trainer_manager_; }
         const TrainerManager* getTrainerManager() const { return trainer_manager_; }
 
+        void changeContentType(const ContentType& type);
+
         // Operations
         void loadPLY(const std::filesystem::path& path);
-        void addPLY(const std::filesystem::path& path, const std::string& name = "");
+        void addPLY(const std::filesystem::path& path, const std::string& name = "", bool is_visible = true);
         void removePLY(const std::string& name);
         void setPLYVisibility(const std::string& name, bool visible);
 

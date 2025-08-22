@@ -43,6 +43,13 @@ namespace gs {
             std::vector<PLYNode> m_plyNodes;
             int m_selectedPLYIndex = -1;
 
+            // Tab management
+            enum class TabType {
+                Images,
+                PLYs
+            };
+            TabType m_activeTab = TabType::PLYs; // Default to PLYs tab (prioritize PLYs if available)
+
             // Current mode
             enum class DisplayMode {
                 Empty,
@@ -60,6 +67,11 @@ namespace gs {
 
             // for loading training cameras in scene panel
             std::shared_ptr<const TrainerManager> m_trainer_manager;
+
+            // Helper methods for tab management
+            void updateModeFromTab();
+            bool hasImages() const;
+            bool hasPLYs() const;
 
             // Event handlers
             void setupEventHandlers();

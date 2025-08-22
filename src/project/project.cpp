@@ -1,12 +1,11 @@
-#include "project/project.hpp"
 #include <chrono>
 #include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 #include <stdexcept>
 
-#include <print>
+#include "core/logger.hpp"
+#include "project/project.hpp"
 
 namespace gs::management {
 
@@ -152,7 +151,7 @@ namespace gs::management {
         try {
             std::ifstream file(filepath);
             if (!file.is_open()) {
-                std::cerr << "Cannot open file for reading: " << filepath << std::endl;
+                LOG_ERROR("Cannot open file for reading: {}", filepath.string());
                 return false;
             }
 
@@ -160,7 +159,7 @@ namespace gs::management {
             file >> doc;
 
             if (!validateJsonStructure(doc)) {
-                std::cerr << "Invalid JSON structure in file: " << filepath << std::endl;
+                LOG_ERROR("Invalid JSON structure in file: {}", filepath.string());
                 return false;
             }
 
@@ -169,8 +168,7 @@ namespace gs::management {
 
             nlohmann::json processedDoc = doc;
             if (fileVersion < CURRENT_VERSION) {
-                std::cout << "Migrating from version " << fileVersion.toString()
-                          << " to " << CURRENT_VERSION.toString() << std::endl;
+                LOG_INFO("Migrating from version {} to {}", fileVersion.toString(), CURRENT_VERSION.toString());
                 processedDoc = migrator_registry_.migrateToVersion(doc, fileVersion, CURRENT_VERSION);
             }
 
@@ -178,7 +176,7 @@ namespace gs::management {
             return true;
 
         } catch (const std::exception& e) {
-            std::cerr << "Error reading project file: " << e.what() << std::endl;
+            LOG_ERROR("Error reading project file: {}", e.what());
             return false;
         }
     }
@@ -188,22 +186,22 @@ namespace gs::management {
 
         std::filesystem::path targetPath = filepath.empty() ? output_file_name_ : filepath;
         if (targetPath.empty()) {
-            std::cerr << "LichtFeldProjectFile::writeToFile - no output file was set" << std::endl;
+            LOG_ERROR("LichtFeldProjectFile::writeToFile - no output file was set");
             return false;
         }
 
         if (std::filesystem::is_directory(targetPath)) {
-            std::cerr << std::format("LichtFeldProjectFile: {} is directory and not a file", targetPath.string()) << std::endl;
+            LOG_ERROR("LichtFeldProjectFile: {} is directory and not a file", targetPath.string());
             return false;
         }
 
         if (!std::filesystem::is_directory(targetPath.parent_path())) {
-            std::cerr << std::format("LichtFeldProjectFile: {} parent directory does not exist", targetPath.string()) << std::endl;
+            LOG_ERROR("LichtFeldProjectFile: {} parent directory does not exist {}", targetPath.parent_path().string(), targetPath.string());
             return false;
         }
 
         if (targetPath.extension() != EXTENSION) {
-            std::cerr << std::format("LichtFeldProjectFile: {} expected file extension to be {}", targetPath.string(), EXTENSION) << std::endl;
+            LOG_ERROR("LichtFeldProjectFile: {} expected file extension to be {}", targetPath.string(), EXTENSION);
             return false;
         }
 
@@ -212,7 +210,7 @@ namespace gs::management {
         try {
             std::ofstream file(targetPath);
             if (!file.is_open()) {
-                std::cerr << "Cannot open file for writing: " << targetPath << std::endl;
+                LOG_ERROR("Cannot open file for writing: {}", targetPath.string());
                 return false;
             }
 
@@ -223,7 +221,7 @@ namespace gs::management {
             return true;
 
         } catch (const std::exception& e) {
-            std::cerr << "Error writing project file: " << e.what() << std::endl;
+            LOG_ERROR("Error writing project file: {}", e.what());
             return false;
         }
     }
@@ -281,6 +279,7 @@ namespace gs::management {
                 plyData.is_imported = plyJson["is_imported"].get<bool>();
                 plyData.ply_path = plyJson["ply_path"].get<std::string>();
                 plyData.ply_training_iter_number = plyJson["ply_training_iter_number"].get<int>();
+                plyData.ply_name = plyJson["ply_name"].get<std::string>();
                 data.outputs.plys.push_back(plyData);
             }
         }
@@ -327,6 +326,7 @@ namespace gs::management {
             plyJson["is_imported"] = ply.is_imported;
             plyJson["ply_path"] = ply.ply_path.string();
             plyJson["ply_training_iter_number"] = ply.ply_training_iter_number;
+            plyJson["ply_name"] = ply.ply_name;
             json["outputs"]["plys"].push_back(plyJson);
         }
 
@@ -370,6 +370,9 @@ namespace gs::management {
             writeToFile();
         }
     }
+    std::vector<PlyData> Project::getPlys() const {
+        return project_data_.outputs.plys;
+    }
 
     void Project::removePly(size_t index) {
         if (index < project_data_.outputs.plys.size()) {
@@ -397,25 +400,61 @@ namespace gs::management {
         auto project = std::make_shared<gs::management::Project>(true);
 
         project->setProjectName(project_name);
-        if (data.project_path.extension() != Project::EXTENSION) {
-            std::cerr << std::format("project_path must be {} file: {}", Project::EXTENSION, data.project_path.string()) << std::endl;
+        if (data.output_path.empty()) {
+            LOG_ERROR("output_path is empty");
+            return nullptr;
+        }
+        std::filesystem::path project_path = data.project_path;
+        if (project_path.empty()) {
+            project_path = data.output_path / "project.ls";
+            LOG_INFO("project_path is empty - creating new project.ls file");
+        }
+
+        if (project_path.extension() != Project::EXTENSION) {
+            LOG_ERROR("project_path must be {} file: {}", Project::EXTENSION, project_path.string());
             return nullptr;
         }
         try {
-            if (data.project_path.parent_path().empty()) {
-                project->setProjectFileName(data.output_path / data.project_path);
-            } else {
-                project->setProjectFileName(data.project_path);
+            if (project_path.parent_path().empty()) {
+                LOG_ERROR("project_path must have parent directory: project_path: {} ", project_path.string());
+                return nullptr;
             }
+            project->setProjectFileName(project_path);
             project->setProjectOutputFolder(data.output_path);
             project->setDataInfo(data);
             project->setOptimizationParams(opt);
         } catch (const std::exception& e) {
-            std::cerr << "Error writing project file: " << e.what() << std::endl;
+            LOG_ERROR("Error writing project file: {}", e.what());
             return nullptr;
         }
 
         return project;
+    }
+
+    std::filesystem::path FindProjectFile(const std::filesystem::path& directory) {
+        if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+            return {};
+        }
+
+        std::filesystem::path foundPath;
+        int count = 0;
+
+        for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".ls") {
+                ++count;
+                if (count == 1) {
+                    foundPath = entry.path();
+                } else {
+                    LOG_ERROR("Multiple .ls files found in {}", directory.string());
+                    return {};
+                }
+            }
+        }
+
+        if (count == 0) {
+            return {};
+        }
+        return foundPath;
     }
 
 } // namespace gs::management

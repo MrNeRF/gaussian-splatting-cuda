@@ -169,4 +169,39 @@ namespace gs::gui::widgets {
         }
     }
 
+    void DrawModeStatusWithContentSwitch(const UIContext& ctx) {
+
+        // Get scene manager for content type checking
+        auto scene_manager = ctx.viewer->getSceneManager();
+        if (!scene_manager) {
+            return;
+        }
+        auto content_type = scene_manager->getContentType();
+
+        // Only show button if content type is not Empty
+        if (content_type != gs::SceneManager::ContentType::Empty) {
+
+            ImGui::SameLine();
+
+            // Determine button label based on current content type
+            const char* button_label = "";
+            SceneManager::ContentType change_to;
+            if (content_type == gs::SceneManager::ContentType::PLYFiles) {
+                button_label = "Go to Dataset Mode";
+                change_to = SceneManager::ContentType::Dataset;
+            } else if (content_type == gs::SceneManager::ContentType::Dataset) {
+                button_label = "Go to PLY Mode";
+                change_to = SceneManager::ContentType::PLYFiles;
+            }
+
+            // Draw the button
+            if (ImGui::Button(button_label)) {
+                // Call the changeContentType method
+                scene_manager->changeContentType(change_to);
+            }
+        }
+
+        // draw the mode status
+        widgets::DrawModeStatus(ctx);
+    }
 } // namespace gs::gui::widgets
