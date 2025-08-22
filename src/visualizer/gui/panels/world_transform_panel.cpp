@@ -20,6 +20,7 @@ namespace gs::gui::panels {
         auto settings = render_manager->getSettings();
         bool settings_changed = false;
 
+        /* COMMENTED OUT FOR NOW - WE NEED FIRST ORIENT THE WORLD CORRECTLY BEFORE WE ENABLE IT
         // SINGLE CHECKBOX TO CONTROL GIZMO
         if (ImGui::Checkbox("Show Translation Gizmo", &settings.show_translation_gizmo)) {
             settings_changed = true;
@@ -54,6 +55,7 @@ namespace gs::gui::panels {
             ImGui::BulletText("Drag planes: Move in 2D plane");
             ImGui::BulletText("R: Reset position");
         }
+        */
 
         ImGui::Separator();
 
@@ -77,6 +79,7 @@ namespace gs::gui::panels {
             transform_initialized = true;
         }
 
+        /* COMMENTED OUT - PART OF GIZMO FUNCTIONALITY
         // If gizmo is active and being dragged, update UI values from gizmo
         auto* gizmo_tool = ctx.viewer->getTranslationGizmoTool();
         if (settings.show_translation_gizmo && gizmo_tool) {
@@ -96,6 +99,7 @@ namespace gs::gui::panels {
                 rotation_degrees[2] = glm::degrees(euler.z);
             }
         }
+        */
 
         // Transform status
         if (!settings.world_transform.isIdentity()) {
@@ -138,10 +142,13 @@ namespace gs::gui::panels {
             rotation_degrees[0] = rotation_degrees[1] = rotation_degrees[2] = 0.0f;
             translation[0] = translation[1] = translation[2] = 0.0f;
 
+            /* COMMENTED OUT - GIZMO RESET
             // Also reset gizmo position if it exists
+            auto* gizmo_tool = ctx.viewer->getTranslationGizmoTool();
             if (gizmo_tool) {
                 // Tool will handle this internally via updateWorldTransform
             }
+            */
 
             render_manager->updateSettings(settings);
         }
@@ -161,5 +168,4 @@ namespace gs::gui::panels {
             ImGui::TreePop();
         }
     }
-
 } // namespace gs::gui::panels
