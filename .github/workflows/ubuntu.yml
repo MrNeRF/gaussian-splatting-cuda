@@ -57,7 +57,7 @@ jobs:
       - name: Cache ccache
         uses: actions/cache@v4
         with:
-          path: ${{ env.HOME }}/.ccache
+          path: ${{ env.HOME }}/.cache/ccache
           key: ccache-${{ runner.os }}
 
       - name: Configure with CMake
