@@ -14,12 +14,12 @@
 
 namespace gsplat {
 
-at::Tensor null(const at::Tensor input) {
-    DEVICE_GUARD(input);
-    CHECK_INPUT(input);
-    at::Tensor output = at::empty_like(input);
-    launch_null_kernel(input, output);
-    return output;
-}
+    at::Tensor null(const at::Tensor input) {
+        DEVICE_GUARD(input);
+        CHECK_INPUT(input);
+        at::Tensor output = at::empty_like(input);
+        launch_null_kernel(input, output);
+        return output;
+    }
 
 } // namespace gsplat
