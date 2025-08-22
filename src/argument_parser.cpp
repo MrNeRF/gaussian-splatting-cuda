@@ -71,7 +71,7 @@ namespace {
 
             // LichtFeldStudio project arguments
             // LichtFeldStudio project arguments
-            ::args::ValueFlag<std::string> project_name(parser, "proj_path", "LichtFeldStudio project path. If path is relative will be saved to output_path/project_path. Path must end with .lfj", {"proj_path"});
+            ::args::ValueFlag<std::string> project_name(parser, "proj_path", "LichtFeldStudio project path. Path must end with .ls", {"proj_path"});
 
             // Training mode arguments
             ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to training data", {'d', "data-path"});

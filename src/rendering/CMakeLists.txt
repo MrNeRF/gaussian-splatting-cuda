@@ -3,6 +3,7 @@ set(RENDERING_SOURCES
         rendering_engine_impl.cpp
         rendering_pipeline.cpp
         point_cloud_renderer.cpp
+        translation_gizmo.cpp
         grid_renderer.cpp
         bbox_renderer.cpp
         axes_renderer.cpp

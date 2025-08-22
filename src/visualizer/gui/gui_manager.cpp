@@ -76,7 +76,12 @@ namespace gs::gui {
 
         // Configure file browser callback
         setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
-            events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
+            if (path.extension() == gs::management::Project::EXTENSION) {
+                events::cmd::LoadProject{.path = path}.emit();
+            } else {
+                events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
+            }
+
             window_states_["file_browser"] = false;
         });
 
@@ -90,9 +95,11 @@ namespace gs::gui {
     }
 
     void GuiManager::shutdown() {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
+        if (ImGui::GetCurrentContext()) {
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+        }
     }
 
     void GuiManager::render() {
@@ -190,7 +197,7 @@ namespace gs::gui {
                 // Draw contents without the manual sizing/positioning
                 panels::DrawWindowControls(ctx);
                 ImGui::Separator();
-                widgets::DrawModeStatus(ctx);
+                widgets::DrawModeStatusWithContentSwitch(ctx);
                 ImGui::Separator();
                 panels::DrawRenderingSettings(ctx);
                 ImGui::Separator();
