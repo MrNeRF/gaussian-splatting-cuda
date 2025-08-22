@@ -14,8 +14,7 @@ void fast_gs::optimizer::adam_step(
     const float beta2,
     const float eps,
     const float bias_correction1_rcp,
-    const float bias_correction2_sqrt_rcp)
-{
+    const float bias_correction2_sqrt_rcp) {
     kernels::adam::adam_step_cu<<<div_round_up(n_elements, config::block_size_adam_step), config::block_size_adam_step>>>(
         param,
         exp_avg,
@@ -27,8 +26,6 @@ void fast_gs::optimizer::adam_step(
         beta2,
         eps,
         bias_correction1_rcp,
-        bias_correction2_sqrt_rcp
-    );
+        bias_correction2_sqrt_rcp);
     CHECK_CUDA(config::debug, "adam step")
-
 }

@@ -1,12 +1,12 @@
 #pragma once
 
-#include "rasterization_config.h"
-#include "kernel_utils.cuh"
 #include "buffer_utils.h"
 #include "helper_math.h"
+#include "kernel_utils.cuh"
+#include "rasterization_config.h"
 #include "utils.h"
-#include <cstdint>
 #include <cooperative_groups.h>
+#include <cstdint>
 namespace cg = cooperative_groups;
 
 namespace fast_gs::rasterization::kernels::backward {
@@ -35,10 +35,10 @@ namespace fast_gs::rasterization::kernels::backward {
         const float fx,
         const float fy,
         const float cx,
-        const float cy)
-    {
+        const float cy) {
         auto primitive_idx = cg::this_grid().thread_rank();
-        if (primitive_idx >= n_primitives || primitive_n_touched_tiles[primitive_idx] == 0) return;
+        if (primitive_idx >= n_primitives || primitive_n_touched_tiles[primitive_idx] == 0)
+            return;
 
         // load 3d mean
         const float3 mean3d = means[primitive_idx];
@@ -47,8 +47,7 @@ namespace fast_gs::rasterization::kernels::backward {
         const float3 dL_dmean3d_from_color = convert_sh_to_color_backward(
             sh_coefficients_rest, grad_sh_coefficients_0, grad_sh_coefficients_rest,
             mean3d, cam_position[0],
-            primitive_idx, active_sh_bases, total_bases_sh_rest
-        );
+            primitive_idx, active_sh_bases, total_bases_sh_rest);
 
         const float4 w2c_r3 = w2c[2];
         const float depth = w2c_r3.x * mean3d.x + w2c_r3.y * mean3d.y + w2c_r3.z * mean3d.z + w2c_r3.w;
@@ -69,14 +68,12 @@ namespace fast_gs::rasterization::kernels::backward {
         const mat3x3 rotation = {
             1.0f - (qyy + qzz), qxy - qrz, qry + qxz,
             qrz + qxy, 1.0f - (qxx + qzz), qyz - qrx,
-            qxz - qry, qrx + qyz, 1.0f - (qxx + qyy)
-        };
+            qxz - qry, qrx + qyz, 1.0f - (qxx + qyy)};
         const mat3x3 rotation_scaled = {
             rotation.m11 * variance.x, rotation.m12 * variance.y, rotation.m13 * variance.z,
             rotation.m21 * variance.x, rotation.m22 * variance.y, rotation.m23 * variance.z,
-            rotation.m31 * variance.x, rotation.m32 * variance.y, rotation.m33 * variance.z
-        };
-        const mat3x3_triu cov3d {
+            rotation.m31 * variance.x, rotation.m32 * variance.y, rotation.m33 * variance.z};
+        const mat3x3_triu cov3d{
             rotation_scaled.m11 * rotation.m11 + rotation_scaled.m12 * rotation.m12 + rotation_scaled.m13 * rotation.m13,
             rotation_scaled.m11 * rotation.m21 + rotation_scaled.m12 * rotation.m22 + rotation_scaled.m13 * rotation.m23,
             rotation_scaled.m11 * rotation.m31 + rotation_scaled.m12 * rotation.m32 + rotation_scaled.m13 * rotation.m33,
@@ -99,23 +96,19 @@ namespace fast_gs::rasterization::kernels::backward {
         const float3 jw_r1 = make_float3(
             j11 * w2c_r1.x + j13 * w2c_r3.x,
             j11 * w2c_r1.y + j13 * w2c_r3.y,
-            j11 * w2c_r1.z + j13 * w2c_r3.z
-        );
+            j11 * w2c_r1.z + j13 * w2c_r3.z);
         const float3 jw_r2 = make_float3(
             j22 * w2c_r2.x + j23 * w2c_r3.x,
             j22 * w2c_r2.y + j23 * w2c_r3.y,
-            j22 * w2c_r2.z + j23 * w2c_r3.z
-        );
+            j22 * w2c_r2.z + j23 * w2c_r3.z);
         const float3 jwc_r1 = make_float3(
             jw_r1.x * cov3d.m11 + jw_r1.y * cov3d.m12 + jw_r1.z * cov3d.m13,
             jw_r1.x * cov3d.m12 + jw_r1.y * cov3d.m22 + jw_r1.z * cov3d.m23,
-            jw_r1.x * cov3d.m13 + jw_r1.y * cov3d.m23 + jw_r1.z * cov3d.m33
-        );
+            jw_r1.x * cov3d.m13 + jw_r1.y * cov3d.m23 + jw_r1.z * cov3d.m33);
         const float3 jwc_r2 = make_float3(
             jw_r2.x * cov3d.m11 + jw_r2.y * cov3d.m12 + jw_r2.z * cov3d.m13,
             jw_r2.x * cov3d.m12 + jw_r2.y * cov3d.m22 + jw_r2.z * cov3d.m23,
-            jw_r2.x * cov3d.m13 + jw_r2.y * cov3d.m23 + jw_r2.z * cov3d.m33
-        );
+            jw_r2.x * cov3d.m13 + jw_r2.y * cov3d.m23 + jw_r2.z * cov3d.m33);
 
         // 2d covariance gradient
         const float a = dot(jwc_r1, jw_r1) + config::dilation, b = dot(jwc_r1, jw_r2), c = dot(jwc_r2, jw_r2) + config::dilation;
@@ -127,13 +120,11 @@ namespace fast_gs::rasterization::kernels::backward {
         const float3 dL_dconic = make_float3(
             grad_conic[primitive_idx],
             grad_conic[n_primitives + primitive_idx],
-            grad_conic[2 * n_primitives + primitive_idx]
-        );
+            grad_conic[2 * n_primitives + primitive_idx]);
         const float3 dL_dcov2d = determinant_rcp_sq * make_float3(
-            2.0f * bc * dL_dconic.y - cc * dL_dconic.x - bb * dL_dconic.z,
-            bc * dL_dconic.x - (ac + bb) * dL_dconic.y + ab * dL_dconic.z,
-            2.0f * ab * dL_dconic.y - bb * dL_dconic.x - aa * dL_dconic.z
-        );
+                                                          2.0f * bc * dL_dconic.y - cc * dL_dconic.x - bb * dL_dconic.z,
+                                                          bc * dL_dconic.x - (ac + bb) * dL_dconic.y + ab * dL_dconic.z,
+                                                          2.0f * ab * dL_dconic.y - bb * dL_dconic.x - aa * dL_dconic.z);
 
         // 3d covariance gradient
         const mat3x3_triu dL_dcov3d = {
@@ -147,15 +138,13 @@ namespace fast_gs::rasterization::kernels::backward {
 
         // gradient of J * W
         const float3 dL_djw_r1 = 2.0f * make_float3(
-            jwc_r1.x * dL_dcov2d.x + jwc_r2.x * dL_dcov2d.y,
-            jwc_r1.y * dL_dcov2d.x + jwc_r2.y * dL_dcov2d.y,
-            jwc_r1.z * dL_dcov2d.x + jwc_r2.z * dL_dcov2d.y
-        );
+                                            jwc_r1.x * dL_dcov2d.x + jwc_r2.x * dL_dcov2d.y,
+                                            jwc_r1.y * dL_dcov2d.x + jwc_r2.y * dL_dcov2d.y,
+                                            jwc_r1.z * dL_dcov2d.x + jwc_r2.z * dL_dcov2d.y);
         const float3 dL_djw_r2 = 2.0f * make_float3(
-            jwc_r1.x * dL_dcov2d.y + jwc_r2.x * dL_dcov2d.z,
-            jwc_r1.y * dL_dcov2d.y + jwc_r2.y * dL_dcov2d.z,
-            jwc_r1.z * dL_dcov2d.y + jwc_r2.z * dL_dcov2d.z
-        );
+                                            jwc_r1.x * dL_dcov2d.y + jwc_r2.x * dL_dcov2d.z,
+                                            jwc_r1.y * dL_dcov2d.y + jwc_r2.y * dL_dcov2d.z,
+                                            jwc_r1.z * dL_dcov2d.y + jwc_r2.z * dL_dcov2d.z);
 
         // gradient of non-zero entries in J
         const float dL_dj11 = w2c_r1.x * dL_djw_r1.x + w2c_r1.y * dL_djw_r1.y + w2c_r1.z * dL_djw_r1.z;
@@ -171,15 +160,13 @@ namespace fast_gs::rasterization::kernels::backward {
         const float3 dL_dmean3d_cam = make_float3(
             j11 * (dL_dmean2d.x - dL_dj13 / depth),
             j22 * (dL_dmean2d.y - dL_dj23 / depth),
-            -j11 * (x * dL_dmean2d.x + djwr1_dz_helper / depth) - j22 * (y * dL_dmean2d.y + djwr2_dz_helper / depth)
-        );
+            -j11 * (x * dL_dmean2d.x + djwr1_dz_helper / depth) - j22 * (y * dL_dmean2d.y + djwr2_dz_helper / depth));
 
         // 3d mean gradient from splatting
         const float3 dL_dmean3d_from_splatting = make_float3(
             w2c_r1.x * dL_dmean3d_cam.x + w2c_r2.x * dL_dmean3d_cam.y + w2c_r3.x * dL_dmean3d_cam.z,
             w2c_r1.y * dL_dmean3d_cam.x + w2c_r2.y * dL_dmean3d_cam.y + w2c_r3.y * dL_dmean3d_cam.z,
-            w2c_r1.z * dL_dmean3d_cam.x + w2c_r2.z * dL_dmean3d_cam.y + w2c_r3.z * dL_dmean3d_cam.z
-        );
+            w2c_r1.z * dL_dmean3d_cam.x + w2c_r2.z * dL_dmean3d_cam.y + w2c_r3.z * dL_dmean3d_cam.z);
 
         // write total 3d mean gradient
         const float3 dL_dmean3d = dL_dmean3d_from_splatting + dL_dmean3d_from_color;
@@ -187,16 +174,15 @@ namespace fast_gs::rasterization::kernels::backward {
 
         // raw scale gradient
         const float dL_dvariance_x = rotation.m11 * rotation.m11 * dL_dcov3d.m11 + rotation.m21 * rotation.m21 * dL_dcov3d.m22 + rotation.m31 * rotation.m31 * dL_dcov3d.m33 +
-                             2.0f * (rotation.m11 * rotation.m21 * dL_dcov3d.m12 + rotation.m11 * rotation.m31 * dL_dcov3d.m13 + rotation.m21 * rotation.m31 * dL_dcov3d.m23);
+                                     2.0f * (rotation.m11 * rotation.m21 * dL_dcov3d.m12 + rotation.m11 * rotation.m31 * dL_dcov3d.m13 + rotation.m21 * rotation.m31 * dL_dcov3d.m23);
         const float dL_dvariance_y = rotation.m12 * rotation.m12 * dL_dcov3d.m11 + rotation.m22 * rotation.m22 * dL_dcov3d.m22 + rotation.m32 * rotation.m32 * dL_dcov3d.m33 +
-                             2.0f * (rotation.m12 * rotation.m22 * dL_dcov3d.m12 + rotation.m12 * rotation.m32 * dL_dcov3d.m13 + rotation.m22 * rotation.m32 * dL_dcov3d.m23);
+                                     2.0f * (rotation.m12 * rotation.m22 * dL_dcov3d.m12 + rotation.m12 * rotation.m32 * dL_dcov3d.m13 + rotation.m22 * rotation.m32 * dL_dcov3d.m23);
         const float dL_dvariance_z = rotation.m13 * rotation.m13 * dL_dcov3d.m11 + rotation.m23 * rotation.m23 * dL_dcov3d.m22 + rotation.m33 * rotation.m33 * dL_dcov3d.m33 +
-                             2.0f * (rotation.m13 * rotation.m23 * dL_dcov3d.m12 + rotation.m13 * rotation.m33 * dL_dcov3d.m13 + rotation.m23 * rotation.m33 * dL_dcov3d.m23);
+                                     2.0f * (rotation.m13 * rotation.m23 * dL_dcov3d.m12 + rotation.m13 * rotation.m33 * dL_dcov3d.m13 + rotation.m23 * rotation.m33 * dL_dcov3d.m23);
         const float3 dL_draw_scale = make_float3(
             2.0f * variance.x * dL_dvariance_x,
             2.0f * variance.y * dL_dvariance_y,
-            2.0f * variance.z * dL_dvariance_z
-        );
+            2.0f * variance.z * dL_dvariance_z);
         grad_raw_scales[primitive_idx] = dL_draw_scale;
 
         // raw rotation gradient
@@ -209,8 +195,7 @@ namespace fast_gs::rasterization::kernels::backward {
             2.0f * (rotation_scaled.m13 * dL_dcov3d.m12 + rotation_scaled.m23 * dL_dcov3d.m22 + rotation_scaled.m33 * dL_dcov3d.m23),
             2.0f * (rotation_scaled.m11 * dL_dcov3d.m13 + rotation_scaled.m21 * dL_dcov3d.m23 + rotation_scaled.m31 * dL_dcov3d.m33),
             2.0f * (rotation_scaled.m12 * dL_dcov3d.m13 + rotation_scaled.m22 * dL_dcov3d.m23 + rotation_scaled.m32 * dL_dcov3d.m33),
-            2.0f * (rotation_scaled.m13 * dL_dcov3d.m13 + rotation_scaled.m23 * dL_dcov3d.m23 + rotation_scaled.m33 * dL_dcov3d.m33)
-        };
+            2.0f * (rotation_scaled.m13 * dL_dcov3d.m13 + rotation_scaled.m23 * dL_dcov3d.m23 + rotation_scaled.m33 * dL_dcov3d.m33)};
         const float dL_dqxx = -dL_drotation.m22 - dL_drotation.m33;
         const float dL_dqyy = -dL_drotation.m11 - dL_drotation.m33;
         const float dL_dqzz = -dL_drotation.m11 - dL_drotation.m22;
@@ -221,12 +206,7 @@ namespace fast_gs::rasterization::kernels::backward {
         const float dL_dqry = dL_drotation.m13 - dL_drotation.m31;
         const float dL_dqrz = dL_drotation.m21 - dL_drotation.m12;
         const float dL_dq_norm_helper = qxx * dL_dqxx + qyy * dL_dqyy + qzz * dL_dqzz + qxy * dL_dqxy + qxz * dL_dqxz + qyz * dL_dqyz + qrx * dL_dqrx + qry * dL_dqry + qrz * dL_dqrz;
-        const float4 dL_draw_rotation = 2.0f * make_float4(
-            qx * dL_dqrx + qy * dL_dqry + qz * dL_dqrz - qr * dL_dq_norm_helper,
-            2.0f * qx * dL_dqxx + qy * dL_dqxy + qz * dL_dqxz + qr * dL_dqrx - qx * dL_dq_norm_helper,
-            2.0f * qy * dL_dqyy + qx * dL_dqxy + qz * dL_dqyz + qr * dL_dqry - qy * dL_dq_norm_helper,
-            2.0f * qz * dL_dqzz + qx * dL_dqxz + qy * dL_dqyz + qr * dL_dqrz - qz * dL_dq_norm_helper
-        ) / q_norm_sq;
+        const float4 dL_draw_rotation = 2.0f * make_float4(qx * dL_dqrx + qy * dL_dqry + qz * dL_dqrz - qr * dL_dq_norm_helper, 2.0f * qx * dL_dqxx + qy * dL_dqxy + qz * dL_dqxz + qr * dL_dqrx - qx * dL_dq_norm_helper, 2.0f * qy * dL_dqyy + qx * dL_dqxy + qz * dL_dqyz + qr * dL_dqry - qy * dL_dq_norm_helper, 2.0f * qz * dL_dqzz + qx * dL_dqxz + qy * dL_dqyz + qr * dL_dqrz - qz * dL_dq_norm_helper) / q_norm_sq;
         grad_raw_rotations[primitive_idx] = dL_draw_rotation;
 
         // TODO: only needed for adaptive density control from the original 3dgs
@@ -234,7 +214,6 @@ namespace fast_gs::rasterization::kernels::backward {
             densification_info[primitive_idx] += 1.0f;
             densification_info[n_primitives + primitive_idx] += length(dL_dmean2d * make_float2(0.5f * w, 0.5f * h));
         }
-
     }
 
     // based on https://github.com/humansensinglab/taming-3dgs/blob/fd0f7d9edfe135eb4eefd3be82ee56dada7f2a16/submodules/diff-gaussian-rasterization/cuda_rasterizer/backward.cu#L404
@@ -261,11 +240,11 @@ namespace fast_gs::rasterization::kernels::backward {
         const uint n_primitives,
         const uint width,
         const uint height,
-        const uint grid_width)
-    {
+        const uint grid_width) {
         auto block = cg::this_thread_block();
         const uint bucket_idx = block.group_index().x;
-        if (bucket_idx >= n_buckets) return;
+        if (bucket_idx >= n_buckets)
+            return;
         auto warp = cg::tiled_partition<32>(block);
         const uint lane_idx = warp.thread_rank();
 
@@ -274,7 +253,8 @@ namespace fast_gs::rasterization::kernels::backward {
         const int tile_n_primitives = tile_instance_range.y - tile_instance_range.x;
         const uint tile_first_bucket_offset = tile_idx == 0 ? 0 : tile_bucket_offsets[tile_idx - 1];
         const int tile_bucket_idx = bucket_idx - tile_first_bucket_offset;
-        if (tile_bucket_idx * 32 >= tile_max_n_contributions[tile_idx]) return;
+        if (tile_bucket_idx * 32 >= tile_max_n_contributions[tile_idx])
+            return;
 
         const int tile_primitive_idx = tile_bucket_idx * 32 + lane_idx;
         const int instance_idx = tile_instance_range.x + tile_primitive_idx;
@@ -295,11 +275,14 @@ namespace fast_gs::rasterization::kernels::backward {
             opacity = conic_opacity.w;
             const float3 color_unclamped = primitive_color[primitive_idx];
             color = fmaxf(color_unclamped, 0.0f);
-            if (color_unclamped.x >= 0.0f) color_grad_factor.x = 1.0f;
-            if (color_unclamped.y >= 0.0f) color_grad_factor.y = 1.0f;
-            if (color_unclamped.z >= 0.0f) color_grad_factor.z = 1.0f;
+            if (color_unclamped.x >= 0.0f)
+                color_grad_factor.x = 1.0f;
+            if (color_unclamped.y >= 0.0f)
+                color_grad_factor.y = 1.0f;
+            if (color_unclamped.z >= 0.0f)
+                color_grad_factor.z = 1.0f;
         }
-        
+
         // helpers
         const uint n_pixels = width * height;
 
@@ -324,8 +307,8 @@ namespace fast_gs::rasterization::kernels::backward {
         __shared__ float4 collected_color_pixel_after_transmittance[32];
         __shared__ float4 collected_grad_info_pixel[32];
 
-        // iterate over all pixels in the tile
-        #pragma unroll
+// iterate over all pixels in the tile
+#pragma unroll
         for (int i = 0; i < config::block_size_blend + 31; ++i) {
             if (i % 32 == 0) {
                 const uint local_idx = i + lane_idx;
@@ -339,24 +322,20 @@ namespace fast_gs::rasterization::kernels::backward {
                     color_pixel = make_float3(
                         image[pixel_idx],
                         image[n_pixels + pixel_idx],
-                        image[2 * n_pixels + pixel_idx]
-                    );
+                        image[2 * n_pixels + pixel_idx]);
                     grad_color_pixel = make_float3(
                         grad_image[pixel_idx],
                         grad_image[n_pixels + pixel_idx],
-                        grad_image[2 * n_pixels + pixel_idx]
-                    );
+                        grad_image[2 * n_pixels + pixel_idx]);
                     alpha_pixel = alpha_map[pixel_idx];
                     grad_alpha_pixel = grad_alpha_map[pixel_idx];
                 }
                 collected_color_pixel_after_transmittance[lane_idx] = make_float4(
                     color_pixel - make_float3(color_transmittance),
-                    color_transmittance.w
-                );
+                    color_transmittance.w);
                 collected_grad_info_pixel[lane_idx] = make_float4(
                     grad_color_pixel,
-                    grad_alpha_pixel * (1.0f - alpha_pixel)
-                );
+                    grad_alpha_pixel * (1.0f - alpha_pixel));
                 collected_last_contributor[lane_idx] = tile_n_contributions[pixel_idx];
                 __syncwarp();
             }
@@ -391,19 +370,22 @@ namespace fast_gs::rasterization::kernels::backward {
             }
 
             const bool skip = !valid_primitive || !valid_pixel || idx < 0 || idx >= config::block_size_blend || tile_primitive_idx >= last_contributor;
-            if (skip) continue;
+            if (skip)
+                continue;
 
             const float2 pixel = make_float2(__uint2float_rn(pixel_coords.x), __uint2float_rn(pixel_coords.y)) + 0.5f;
             const float2 delta = mean2d - pixel;
             const float sigma_over_2 = 0.5f * (conic.x * delta.x * delta.x + conic.z * delta.y * delta.y) + conic.y * delta.x * delta.y;
-            if (sigma_over_2 < 0.0f) continue;
+            if (sigma_over_2 < 0.0f)
+                continue;
             const float gaussian = expf(-sigma_over_2);
             const float alpha = fminf(opacity * gaussian, config::max_fragment_alpha);
-            if (alpha < config::min_alpha_threshold) continue;
+            if (alpha < config::min_alpha_threshold)
+                continue;
             const float one_minus_alpha = 1.0f - alpha;
 
             const float blending_weight = transmittance * alpha;
-            
+
             // color gradient
             const float3 dL_dcolor = blending_weight * grad_color_pixel * color_grad_factor;
             dL_dcolor_accum += dL_dcolor;
@@ -421,16 +403,11 @@ namespace fast_gs::rasterization::kernels::backward {
 
             // conic and mean2d gradient
             const float gaussian_grad_helper = -alpha * dL_dalpha;
-            const float3 dL_dconic = 0.5f * gaussian_grad_helper * make_float3(
-                delta.x * delta.x,
-                delta.x * delta.y,
-                delta.y * delta.y
-            );
+            const float3 dL_dconic = 0.5f * gaussian_grad_helper * make_float3(delta.x * delta.x, delta.x * delta.y, delta.y * delta.y);
             dL_dconic_accum += dL_dconic;
             const float2 dL_dmean2d = gaussian_grad_helper * make_float2(
-                conic.x * delta.x + conic.y * delta.y,
-                conic.y * delta.x + conic.z * delta.y
-            );
+                                                                 conic.x * delta.x + conic.y * delta.y,
+                                                                 conic.y * delta.x + conic.z * delta.y);
             dL_dmean2d_accum += dL_dmean2d;
 
             transmittance *= one_minus_alpha;
@@ -451,4 +428,4 @@ namespace fast_gs::rasterization::kernels::backward {
         }
     }
 
-}
+} // namespace fast_gs::rasterization::kernels::backward
