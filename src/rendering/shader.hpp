@@ -6,10 +6,10 @@
 #include <GLFW/glfw3.h>
 // clang-format on
 
+#include "core/logger.hpp"
 #include <fstream>
 #include <glm/glm.hpp>          // Add this include
 #include <glm/gtc/type_ptr.hpp> // For glm::value_ptr
-#include <iostream>
 #include <map>
 #include <sstream>
 #include <stdexcept>
@@ -54,6 +54,7 @@ namespace gs::rendering {
 
     template <typename E>
     inline GLenum get_type_enum() {
+        LOG_ERROR("Error getting type enum: unsupported type");
         throw std::runtime_error("Error getting type enum: unsupported type");
     }
 
@@ -95,8 +96,9 @@ namespace gs::rendering {
     class Shader {
     public:
         Shader(const char* vshader_path, const char* fshader_path, bool create_buffer = true) {
-            std::cout << "Creating shader with vertex: " << vshader_path << std::endl;
-            std::cout << "Creating shader with fragment: " << fshader_path << std::endl;
+            LOG_TIMER_TRACE("Shader::Shader");
+            LOG_DEBUG("Creating shader with vertex: {}", vshader_path);
+            LOG_DEBUG("Creating shader with fragment: {}", fshader_path);
 
             GLint status;
 
@@ -104,9 +106,11 @@ namespace gs::rendering {
             std::string fshader_source = readShaderSourceFromFile(fshader_path);
 
             if (vshader_source.empty()) {
+                LOG_ERROR("Vertex shader source is empty!");
                 throw std::runtime_error("ERROR: Vertex shader source is empty!");
             }
             if (fshader_source.empty()) {
+                LOG_ERROR("Fragment shader source is empty!");
                 throw std::runtime_error("ERROR: Fragment shader source is empty!");
             }
 
@@ -121,6 +125,7 @@ namespace gs::rendering {
                 glGetShaderInfoLog(shader, MAX_INFO_LOG_LENGTH, &info_log_length, info_log);
                 std::string error_msg = "Shader compilation error:\n";
                 error_msg += info_log;
+                LOG_ERROR("Shader compilation error: {}", info_log);
                 throw std::runtime_error(error_msg);
             };
 
@@ -129,12 +134,14 @@ namespace gs::rendering {
             glShaderSource(vshader, 1, &vshader_code, nullptr);
             glCompileShader(vshader);
             check_comp_status(vshader);
+            LOG_TRACE("Vertex shader compiled successfully");
 
             fshader = glCreateShader(GL_FRAGMENT_SHADER);
             const char* fshader_code = fshader_source.c_str();
             glShaderSource(fshader, 1, &fshader_code, nullptr);
             glCompileShader(fshader);
             check_comp_status(fshader);
+            LOG_TRACE("Fragment shader compiled successfully");
 
             program = glCreateProgram();
             glAttachShader(program, vshader);
@@ -146,16 +153,20 @@ namespace gs::rendering {
                 glGetProgramInfoLog(program, MAX_INFO_LOG_LENGTH, nullptr, info_log);
                 std::string error_msg = "Shader link error:\n";
                 error_msg += info_log;
+                LOG_ERROR("Shader link error: {}", info_log);
                 throw std::runtime_error(error_msg);
             }
+            LOG_DEBUG("Shader program linked successfully");
 
             if (create_buffer) {
                 glGenBuffers(1, &index_buffer);
                 glGenVertexArrays(1, &vertex_array);
+                LOG_TRACE("Created index buffer and vertex array");
             }
         }
 
         ~Shader() {
+            LOG_TRACE("Destroying shader program {}", program);
             for (auto [attrib, buffer] : attribute_buffers) {
                 glDeleteBuffers(1, &buffer);
             }
@@ -235,11 +246,13 @@ namespace gs::rendering {
         template <typename E, int N>
         void set_attribute(const std::string& name,
                            const std::vector<glm::vec<N, E, glm::defaultp>>& data) {
+            LOG_TIMER_TRACE("Shader::set_attribute");
             GLint attrib = attribute(name);
             if (attribute_buffers.count(attrib) == 0) {
                 GLuint buffer;
                 glGenBuffers(1, &buffer);
                 attribute_buffers[attrib] = buffer;
+                LOG_TRACE("Created attribute buffer for '{}'", name);
             }
             GLuint buffer = attribute_buffers.at(attrib);
             glBindBuffer(GL_ARRAY_BUFFER, buffer);
@@ -247,11 +260,14 @@ namespace gs::rendering {
             glEnableVertexAttribArray(attrib);
             glVertexAttribPointer(attrib, N, get_type_enum<E>(), is_type_integral<E>(), 0, nullptr);
             glBindBuffer(GL_ARRAY_BUFFER, 0);
+            LOG_TRACE("Set attribute '{}' with {} elements", name, data.size());
         }
 
         void set_indices(const std::vector<unsigned int>& indices) {
+            LOG_TIMER_TRACE("Shader::set_indices");
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * indices.size(), &indices[0], GL_DYNAMIC_DRAW);
+            LOG_TRACE("Set {} indices", indices.size());
         }
 
         void draw(GLenum mode, GLuint start, GLuint count) {
@@ -264,12 +280,18 @@ namespace gs::rendering {
 
     private:
         std::string readShaderSourceFromFile(const std::string& filePath) {
+            LOG_TIMER_TRACE("Shader::readShaderSourceFromFile");
+            LOG_TRACE("Reading shader source from: {}", filePath);
+
             std::ifstream file(filePath);
             if (!file.is_open()) {
+                LOG_ERROR("Failed to open shader file: {}", filePath);
                 throw std::runtime_error("Failed to open shader file: " + filePath);
             }
             std::stringstream buffer;
             buffer << file.rdbuf();
+
+            LOG_TRACE("Read {} bytes from shader file", buffer.str().size());
             return buffer.str();
         }
 
@@ -277,9 +299,11 @@ namespace gs::rendering {
             if (uniforms.count(name) == 0) {
                 GLint location = glGetUniformLocation(program, name.c_str());
                 if (location == -1) {
+                    LOG_ERROR("Cannot find uniform '{}'", name);
                     throw std::runtime_error("Error: cannot find uniform '" + name + "'");
                 }
                 uniforms[name] = location;
+                LOG_TRACE("Found uniform '{}' at location {}", name, location);
             }
             return uniforms.at(name);
         }
@@ -288,9 +312,11 @@ namespace gs::rendering {
             if (attributes.count(name) == 0) {
                 GLint location = glGetAttribLocation(program, name.c_str());
                 if (location == -1) {
+                    LOG_ERROR("Error getting attribute location for '{}'", name);
                     throw std::runtime_error("Error getting attribute location for '" + name + "'");
                 }
                 attributes[name] = location;
+                LOG_TRACE("Found attribute '{}' at location {}", name, location);
             }
             return attributes.at(name);
         }

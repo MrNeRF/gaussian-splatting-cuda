@@ -1,4 +1,5 @@
 #include "screen_renderer.hpp"
+#include "core/logger.hpp"
 
 #ifdef CUDA_GL_INTEROP_ENABLED
 #include "cuda_gl_interop.hpp"
@@ -7,6 +8,9 @@
 namespace gs::rendering {
 
     ScreenQuadRenderer::ScreenQuadRenderer(FrameBufferMode mode) {
+        LOG_TIMER_TRACE("ScreenQuadRenderer::ScreenQuadRenderer");
+        LOG_DEBUG("Creating ScreenQuadRenderer with mode: {}", mode == FrameBufferMode::CUDA_INTEROP ? "CUDA_INTEROP" : "CPU");
+
         framebuffer = createFrameBuffer(mode);
 
         float quadVertices[] = {
@@ -21,11 +25,13 @@ namespace gs::rendering {
 
         auto vao_result = create_vao();
         if (!vao_result) {
+            LOG_ERROR("Failed to create VAO: {}", vao_result.error());
             throw std::runtime_error(vao_result.error());
         }
 
         auto vbo_result = create_vbo();
         if (!vbo_result) {
+            LOG_ERROR("Failed to create VBO: {}", vbo_result.error());
             throw std::runtime_error(vbo_result.error());
         }
         quadVBO_ = std::move(*vbo_result);
@@ -52,12 +58,16 @@ namespace gs::rendering {
                            .divisor = 0});
 
         quadVAO_ = builder.build();
+        LOG_DEBUG("ScreenQuadRenderer initialized successfully");
     }
 
     Result<void> ScreenQuadRenderer::render(std::shared_ptr<Shader> shader) const {
         if (!shader) {
+            LOG_ERROR("Shader is null");
             return std::unexpected("Shader is null");
         }
+
+        LOG_TIMER_TRACE("ScreenQuadRenderer::render");
 
         shader->bind();
 
@@ -69,6 +79,7 @@ namespace gs::rendering {
             shader->set_uniform("screenTexture", 0);
         } catch (const std::exception& e) {
             shader->unbind();
+            LOG_ERROR("Failed to set uniform: {}", e.what());
             return std::unexpected(std::format("Failed to set uniform: {}", e.what()));
         }
 
@@ -79,6 +90,8 @@ namespace gs::rendering {
     }
 
     Result<void> ScreenQuadRenderer::render(ManagedShader& shader) const {
+        LOG_TIMER_TRACE("ScreenQuadRenderer::render");
+
         ShaderScope s(shader);
 
         VAOBinder vao_bind(quadVAO_);
@@ -95,8 +108,11 @@ namespace gs::rendering {
 
     Result<void> ScreenQuadRenderer::uploadData(const unsigned char* image, int width_, int height_) {
         if (!framebuffer) {
+            LOG_ERROR("Framebuffer not initialized");
             return std::unexpected("Framebuffer not initialized");
         }
+
+        LOG_TRACE("Uploading image data: {}x{}", width_, height_);
         framebuffer->uploadImage(image, width_, height_);
         return {};
     }
@@ -104,10 +120,12 @@ namespace gs::rendering {
     Result<void> ScreenQuadRenderer::uploadFromCUDA(const torch::Tensor& cuda_image, int width, int height) {
 #ifdef CUDA_GL_INTEROP_ENABLED
         if (auto interop_fb = std::dynamic_pointer_cast<InteropFrameBuffer>(framebuffer)) {
+            LOG_TRACE("Using CUDA interop for upload");
             return interop_fb->uploadFromCUDA(cuda_image);
         }
 #endif
         // Fallback to CPU upload
+        LOG_TRACE("Using CPU fallback for CUDA image upload");
         auto cpu_image = cuda_image;
         if (cpu_image.dtype() != torch::kUInt8) {
             cpu_image = (cpu_image.clamp(0.0f, 1.0f) * 255.0f).to(torch::kUInt8);

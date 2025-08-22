@@ -8,7 +8,6 @@
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/scripting_console.hpp"
 #include "internal/resource_paths.hpp"
-#include "tools/crop_box_tool.hpp"
 #include "visualizer_impl.hpp"
 
 #include <GLFW/glfw3.h>
@@ -77,7 +76,12 @@ namespace gs::gui {
 
         // Configure file browser callback
         setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
-            events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
+            if (path.extension() == gs::management::Project::EXTENSION) {
+                events::cmd::LoadProject{.path = path}.emit();
+            } else {
+                events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
+            }
+
             window_states_["file_browser"] = false;
         });
 
@@ -91,9 +95,11 @@ namespace gs::gui {
     }
 
     void GuiManager::shutdown() {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
+        if (ImGui::GetCurrentContext()) {
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+        }
     }
 
     void GuiManager::render() {
@@ -191,7 +197,7 @@ namespace gs::gui {
                 // Draw contents without the manual sizing/positioning
                 panels::DrawWindowControls(ctx);
                 ImGui::Separator();
-                widgets::DrawModeStatus(ctx);
+                widgets::DrawModeStatusWithContentSwitch(ctx);
                 ImGui::Separator();
                 panels::DrawRenderingSettings(ctx);
                 ImGui::Separator();
@@ -265,10 +271,10 @@ namespace gs::gui {
             ImDrawList* draw_list = ImGui::GetForegroundDrawList();
 
             // The viewport_pos_ is already relative to the window, so we just need to add the window position
-            const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+            const ImGuiViewport* main_vp = ImGui::GetMainViewport();
             ImVec2 screen_pos = ImVec2(
-                main_viewport->WorkPos.x + viewport_pos_.x,
-                main_viewport->WorkPos.y + viewport_pos_.y);
+                main_vp->WorkPos.x + viewport_pos_.x,
+                main_vp->WorkPos.y + viewport_pos_.y);
 
             // Animated glow
             float time = static_cast<float>(ImGui::GetTime());
@@ -595,26 +601,6 @@ namespace gs::gui {
                ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) ||
                ImGui::GetIO().WantCaptureMouse ||
                ImGui::GetIO().WantCaptureKeyboard;
-    }
-
-    bool GuiManager::showCropBox() const {
-        if (auto* tool_manager = viewer_->getToolManager()) {
-            if (auto* crop_tool = dynamic_cast<visualizer::CropBoxTool*>(
-                    tool_manager->getTool("Crop Box"))) {
-                return crop_tool->shouldShowBox();
-            }
-        }
-        return false;
-    }
-
-    bool GuiManager::useCropBox() const {
-        if (auto* tool_manager = viewer_->getToolManager()) {
-            if (auto* crop_tool = dynamic_cast<visualizer::CropBoxTool*>(
-                    tool_manager->getTool("Crop Box"))) {
-                return crop_tool->shouldUseBox();
-            }
-        }
-        return false;
     }
 
     void GuiManager::setScriptExecutor(std::function<std::string(const std::string&)> executor) {

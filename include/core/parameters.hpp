@@ -74,7 +74,7 @@ namespace gs {
         struct DatasetConfig {
             std::filesystem::path data_path = "";
             std::filesystem::path output_path = "output";
-            std::filesystem::path project_path = "project.ls"; // if path is relative it will be saved to output_path/project_name.ls
+            std::filesystem::path project_path = ""; // if path is relative it will be saved to output_path/project_name.ls
             std::string images = "images";
             std::string attention_masks = "masks";
             int resize_factor = -1;

@@ -1,11 +1,11 @@
 #include "ply_loader.hpp"
+#include "core/logger.hpp"
 #include "core/splat_data.hpp"
 #include "formats/ply.hpp"
 #include <chrono>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <print>
 
 namespace gs::loader {
 
@@ -13,6 +13,7 @@ namespace gs::loader {
         const std::filesystem::path& path,
         const LoadOptions& options) {
 
+        LOG_TIMER("PLY Loading");
         auto start_time = std::chrono::high_resolution_clock::now();
 
         // Report progress if callback provided
@@ -22,30 +23,38 @@ namespace gs::loader {
 
         // Validate file exists
         if (!std::filesystem::exists(path)) {
-            return std::unexpected(std::format("PLY file does not exist: {}", path.string()));
+            std::string error_msg = std::format("PLY file does not exist: {}", path.string());
+            LOG_ERROR("{}", error_msg);
+            throw std::runtime_error(error_msg);
         }
 
         if (!std::filesystem::is_regular_file(path)) {
-            return std::unexpected("Path is not a regular file");
+            LOG_ERROR("Path is not a regular file: {}", path.string());
+            throw std::runtime_error("Path is not a regular file");
         }
 
         // Validation only mode
         if (options.validate_only) {
+            LOG_DEBUG("Validation only mode for PLY: {}", path.string());
             // Basic validation - check if it's a PLY file
             std::ifstream file(path, std::ios::binary);
             if (!file) {
-                return std::unexpected("Cannot open file for reading");
+                LOG_ERROR("Cannot open file for reading: {}", path.string());
+                throw std::runtime_error("Cannot open file for reading");
             }
 
             std::string header;
             std::getline(file, header);
             if (header != "ply" && header != "ply\r") {
-                return std::unexpected("File does not start with 'ply' header");
+                LOG_ERROR("File does not start with 'ply' header: {}", path.string());
+                throw std::runtime_error("File does not start with 'ply' header");
             }
 
             if (options.progress) {
                 options.progress(100.0f, "PLY validation complete");
             }
+
+            LOG_DEBUG("PLY validation successful");
 
             // Return empty result for validation only
             LoadResult result;
@@ -64,9 +73,12 @@ namespace gs::loader {
             options.progress(50.0f, "Parsing PLY data...");
         }
 
+        LOG_INFO("Loading PLY file: {}", path.string());
         auto splat_result = load_ply(path);
         if (!splat_result) {
-            return std::unexpected(splat_result.error());
+            std::string error_msg = splat_result.error();
+            LOG_ERROR("Failed to load PLY: {}", error_msg);
+            throw std::runtime_error(error_msg);
         }
 
         if (options.progress) {
@@ -84,7 +96,7 @@ namespace gs::loader {
             .load_time = load_time,
             .warnings = {}};
 
-        std::println("PLY loaded successfully in {}ms", load_time.count());
+        LOG_INFO("PLY loaded successfully in {}ms", load_time.count());
 
         return result;
     }

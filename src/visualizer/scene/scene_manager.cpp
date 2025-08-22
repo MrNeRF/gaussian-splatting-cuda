@@ -33,6 +33,11 @@ namespace gs {
         });
     }
 
+    void SceneManager::changeContentType(const ContentType& type) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        content_type_ = type;
+    }
+
     void SceneManager::loadPLY(const std::filesystem::path& path) {
         try {
             std::println("SceneManager: Loading PLY file: {}", path.string());
@@ -79,7 +84,8 @@ namespace gs {
 
             events::state::PLYAdded{
                 .name = name,
-                .total_gaussians = scene_.getTotalGaussianCount()}
+                .total_gaussians = scene_.getTotalGaussianCount(),
+                .is_visible = true}
                 .emit();
 
             emitSceneChanged();
@@ -92,7 +98,8 @@ namespace gs {
         }
     }
 
-    void SceneManager::addPLY(const std::filesystem::path& path, const std::string& name_hint) {
+    void SceneManager::addPLY(const std::filesystem::path& path, const std::string& name_hint,
+                              bool is_visible) {
         try {
             // If not in PLY mode, switch to it
             if (content_type_ != ContentType::PLYFiles) {
@@ -138,7 +145,8 @@ namespace gs {
 
             events::state::PLYAdded{
                 .name = name,
-                .total_gaussians = scene_.getTotalGaussianCount()}
+                .total_gaussians = scene_.getTotalGaussianCount(),
+                .is_visible = is_visible}
                 .emit();
 
             emitSceneChanged();
