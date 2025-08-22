@@ -57,15 +57,15 @@ find_program(NVIDIA_SMI nvidia-smi)
 if(NVIDIA_SMI)
     execute_process(
         COMMAND ${NVIDIA_SMI} --query-gpu=compute_cap --format=csv,noheader
-        OUTPUT_VARIABLE TORCH_CUDA_ARCH_LIST
+        OUTPUT_VARIABLE DETECTED_COMPUTE_CAP
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 
-    message(STATUS "Detected GPU compute capability: ${TORCH_CUDA_ARCH_LIST}")
+    message(STATUS "Detected GPU compute capability: ${DETECTED_COMPUTE_CAP}")
     set(gaussian_splatting_cuda_CUDA_ARCH "native")
 else()
     message(WARNING "nvidia-smi not found! We are likely in CI, default to 8.6.")
-    set(TORCH_CUDA_ARCH_LIST 8.6)
+    set(DETECTED_COMPUTE_CAP 8.6)
     set(gaussian_splatting_cuda_CUDA_ARCH "86")
 endif()
 
@@ -129,8 +129,8 @@ function(gs_detect_supported_sms OUT_VAR)
   set(${OUT_VAR} "${_sms_list}" PARENT_SCOPE)
 endfunction()
 
-if(DEFINED CMAKE_CUDA_ARCHITECTURES)
-    unset(CMAKE_CUDA_ARCHITECTURES CACHE)
+if(DEFINED TORCH_CUDA_ARCH_LIST)
+    unset(TORCH_CUDA_ARCH_LIST CACHE)
 endif()
 
 if(BUILD_CUDA_ALL_SM)
@@ -147,18 +147,36 @@ if(BUILD_CUDA_ALL_SM)
     # Fat binary for all the families
     gs_detect_supported_sms(CUDA_SMS MIN_SM ${BUILD_CUDA_ALL_MIN_SM})
     if(CUDA_SMS)
-        # Append PTX of the highest SM for forward compatibility with future GPUs
+        # Build Torch list with decimals and add +PTX only to the highest SM
+        list(SORT CUDA_SMS COMPARE NATURAL)
         list(GET CUDA_SMS -1 _max_sm)
-        set(CMAKE_CUDA_ARCHITECTURES "${CUDA_SMS};${_max_sm}-virtual" CACHE STRING "CUDA architectures" FORCE)
-        set(gaussian_splatting_cuda_CUDA_ARCH "${CMAKE_CUDA_ARCHITECTURES}")
-        message(STATUS "CUDA architectures (auto >=${BUILD_CUDA_ALL_MIN_SM}): ${gaussian_splatting_cuda_CUDA_ARCH} (forced)")
+        set(_torch_list "")
+        foreach(sm IN LISTS CUDA_SMS)
+            math(EXPR _maj "${sm}/10")
+            math(EXPR _min "${sm}%10")
+            set(_ver "${_maj}.${_min}")
+            if(sm EQUAL ${_max_sm})
+                list(APPEND _torch_list "${_ver}+PTX")
+            else()
+                list(APPEND _torch_list "${_ver}")
+            endif()
+        endforeach()
+        list(JOIN _torch_list ";" TORCH_CUDA_ARCH_LIST)
+        set(TORCH_CUDA_ARCH_LIST "${TORCH_CUDA_ARCH_LIST}" CACHE STRING "Torch CUDA arch list" FORCE)
+
+        # Per target CUDA architectures for CMake to be set after find_package(Torch)
+        set(gaussian_splatting_cuda_CUDA_ARCH "${CUDA_SMS};${_max_sm}-virtual")
+        message(STATUS "CUDA architectures (auto >=${BUILD_CUDA_ALL_MIN_SM}): ${gaussian_splatting_cuda_CUDA_ARCH}")
+        message(STATUS "TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST}")     
     else()
         message(FATAL_ERROR "Failed to detect any CUDA architecture >= ${BUILD_CUDA_ALL_MIN_SM}. Please check your CUDA toolkit installation.")
     endif()
 else()
     # Native NVidia family only
-    set(CMAKE_CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
-    message(STATUS "CUDA architectures: ${gaussian_splatting_cuda_CUDA_ARCH} (native/default)")
+    message(STATUS "CUDA architectures: ${gaussian_splatting_cuda_CUDA_ARCH} (native)")
+    # Set Torch to the detected compute capability
+    set(TORCH_CUDA_ARCH_LIST "${DETECTED_COMPUTE_CAP}" CACHE STRING "Torch CUDA arch list" FORCE)
+    message(STATUS "TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST}")
 endif()
 
 enable_language(CUDA)
@@ -206,6 +224,12 @@ find_package(args REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(Freetype REQUIRED)
+
+# TORCH_CUDA_ARCH_LIST is already defined by Torch
+# use it here as the global default CUDA architecture list too
+if(gaussian_splatting_cuda_CUDA_ARCH)
+    set(CMAKE_CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}" CACHE STRING "CUDA architectures" FORCE)
+endif()
 
 if(WIN32)
     set(CMAKE_CUDA_RUNTIME_LIBRARY "Shared") # when using INTEROP in windows static and dynamic symbols are mixed
