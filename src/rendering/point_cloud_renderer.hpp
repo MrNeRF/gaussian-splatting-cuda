@@ -11,12 +11,9 @@ namespace gs::rendering {
 
     class PointCloudRenderer {
     public:
-        PointCloudRenderer() {
-            std::cout << "[PointCloudRenderer] Constructor called at " << this << std::endl;
-        }
+        PointCloudRenderer() = default;
         ~PointCloudRenderer() = default;
 
-        // Initialize OpenGL resources - now returns Result
         Result<void> initialize();
 
         // Render point cloud - now returns Result
