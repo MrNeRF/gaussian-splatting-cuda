@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <format>
 #include <imgui.h>
-#include <print>
 
 #include "core/logger.hpp"
 #include "input/input_controller.hpp"
@@ -26,6 +25,8 @@ namespace gs::visualizer {
             drag_mode_ = DragMode::None;
             std::fill(std::begin(keys_wasd_), std::end(keys_wasd_), false);
         });
+
+        LOG_DEBUG("InputController created");
     }
 
     InputController::~InputController() {
@@ -51,6 +52,8 @@ namespace gs::visualizer {
         double x, y;
         glfwGetCursorPos(window_, &x, &y);
         last_mouse_pos_ = {x, y};
+
+        LOG_DEBUG("InputController initialized - callbacks set");
     }
 
     // Static callbacks - chain to ImGui then handle ourselves
@@ -131,9 +134,9 @@ namespace gs::visualizer {
                           std::end(instance_->keys_wasd_), false);
             }
             events::internal::WindowFocusLost{}.emit();
-            std::println("[InputController] Window lost focus");
+            LOG_DEBUG("Window lost focus - input states reset");
         } else {
-            std::println("[InputController] Window gained focus");
+            LOG_DEBUG("Window gained focus");
         }
     }
 
@@ -145,8 +148,10 @@ namespace gs::visualizer {
                 // Gizmo consumed the event
                 if (action == GLFW_PRESS) {
                     drag_mode_ = DragMode::Gizmo;
+                    LOG_TRACE("Started gizmo drag");
                 } else if (action == GLFW_RELEASE && drag_mode_ == DragMode::Gizmo) {
                     drag_mode_ = DragMode::None;
+                    LOG_TRACE("Ended gizmo drag");
                 }
                 return; // Don't process camera controls
             }
@@ -158,6 +163,7 @@ namespace gs::visualizer {
             if (point_cloud_mode_ && isInViewport(x, y) &&
                 !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
                 imgui_wants_mouse = false; // Override for point cloud mode
+                LOG_TRACE("Point cloud mode - overriding ImGui mouse capture");
             }
 
             // Check if we should handle this
@@ -170,10 +176,13 @@ namespace gs::visualizer {
 
             if (button == GLFW_MOUSE_BUTTON_LEFT) {
                 drag_mode_ = DragMode::Pan;
+                LOG_TRACE("Started camera pan");
             } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
                 drag_mode_ = DragMode::Rotate;
+                LOG_TRACE("Started camera rotate");
             } else if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
                 drag_mode_ = DragMode::Orbit;
+                LOG_TRACE("Started camera orbit");
             }
         } else if (action == GLFW_RELEASE) {
             // Always handle our own releases if we were dragging
@@ -182,12 +191,15 @@ namespace gs::visualizer {
             if (button == GLFW_MOUSE_BUTTON_LEFT && drag_mode_ == DragMode::Pan) {
                 drag_mode_ = DragMode::None;
                 was_dragging = true;
+                LOG_TRACE("Ended camera pan");
             } else if (button == GLFW_MOUSE_BUTTON_RIGHT && drag_mode_ == DragMode::Rotate) {
                 drag_mode_ = DragMode::None;
                 was_dragging = true;
+                LOG_TRACE("Ended camera rotate");
             } else if (button == GLFW_MOUSE_BUTTON_MIDDLE && drag_mode_ == DragMode::Orbit) {
                 drag_mode_ = DragMode::None;
                 was_dragging = true;
+                LOG_TRACE("Ended camera orbit");
             }
 
             // Force publish on mouse release
@@ -252,8 +264,10 @@ namespace gs::visualizer {
 
         if (key_r_pressed_) {
             viewport_.camera.rotate_roll(delta);
+            LOG_TRACE("Camera roll: {}", delta);
         } else {
             viewport_.camera.zoom(delta);
+            LOG_TRACE("Camera zoom: {}", delta);
         }
 
         publishCameraMove();
@@ -269,6 +283,7 @@ namespace gs::visualizer {
 
             // Reset gizmo position if R is pressed and gizmo is enabled
             if (action == GLFW_PRESS && translation_gizmo_ && translation_gizmo_->isEnabled()) {
+                LOG_DEBUG("Reset key pressed with gizmo enabled");
                 // This would need to be exposed by the gizmo tool
                 // For now, let the gizmo handle it internally
             }
@@ -326,26 +341,33 @@ namespace gs::visualizer {
 
             if (keys_wasd_[0] || keys_wasd_[1] || keys_wasd_[2] || keys_wasd_[3]) {
                 publishCameraMove();
+                LOG_TRACE("WASD movement - W:{} A:{} S:{} D:{}",
+                          keys_wasd_[0], keys_wasd_[1], keys_wasd_[2], keys_wasd_[3]);
             }
         }
     }
 
     void InputController::handleFileDrop(const std::vector<std::string>& paths) {
+        LOG_DEBUG("Handling file drop with {} files", paths.size());
+
         std::vector<std::filesystem::path> ply_files;
         std::optional<std::filesystem::path> dataset_path;
 
         for (const auto& path_str : paths) {
             std::filesystem::path filepath(path_str);
+            LOG_TRACE("Processing dropped file: {}", filepath.string());
 
             if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
                 ply_files.push_back(filepath);
             } else if (!dataset_path && std::filesystem::is_directory(filepath)) {
                 // Check for dataset markers
+                LOG_TRACE("Checking directory for dataset markers: {}", filepath.string());
                 if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
                     std::filesystem::exists(filepath / "sparse" / "cameras.bin") ||
                     std::filesystem::exists(filepath / "transforms.json") ||
                     std::filesystem::exists(filepath / "transforms_train.json")) {
                     dataset_path = filepath;
+                    LOG_DEBUG("Dataset detected in dropped directory");
                 }
             }
         }
@@ -353,19 +375,13 @@ namespace gs::visualizer {
         // Load PLY files
         for (const auto& ply : ply_files) {
             events::cmd::LoadFile{.path = ply, .is_dataset = false}.emit();
-
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = std::format("Loaded PLY via drag-and-drop: {}",
-                                       ply.filename().string()),
-                .source = "InputController"}
-                .emit();
+            LOG_INFO("Loading PLY via drag-and-drop: {}", ply.filename().string());
         }
 
         // Load dataset if found
         if (dataset_path) {
             events::cmd::LoadFile{.path = *dataset_path, .is_dataset = true}.emit();
-            LOG_INFO("Loading dataset Project via drag-and-drop: {}", dataset_path->filename().string());
+            LOG_INFO("Loading dataset via drag-and-drop: {}", dataset_path->filename().string());
         }
 
         if (paths.size() == 1) {
@@ -378,16 +394,20 @@ namespace gs::visualizer {
     }
 
     void InputController::handleGoToCamView(const events::cmd::GoToCamView& event) {
+        LOG_TIMER_TRACE("HandleGoToCamView");
+
         if (!training_manager_) {
-            std::cerr << "handleGoToCamView: trainer_manager_ not initialized\n";
+            LOG_ERROR("GoToCamView: trainer_manager_ not initialized");
             return;
         }
 
         auto cam_data = training_manager_->getCamById(event.cam_id);
         if (!cam_data) {
-            std::cerr << "Camera ID " << event.cam_id << " not found\n";
+            LOG_ERROR("Camera ID {} not found", event.cam_id);
             return;
         }
+
+        LOG_DEBUG("Moving camera to view ID: {}", event.cam_id);
 
         // Transform from WorldToCam to CamToWorld
         glm::mat3 world_to_cam_R;
@@ -414,6 +434,8 @@ namespace gs::visualizer {
             float fov_rad = 2.0f * std::atan(width / (2.0f * focal_x));
             float fov_deg = glm::degrees(fov_rad);
 
+            LOG_TRACE("Setting FOV to {:.2f} degrees", fov_deg);
+
             events::ui::RenderSettingsChanged{
                 .fov = fov_deg,
                 .scaling_modifier = std::nullopt,
@@ -428,12 +450,8 @@ namespace gs::visualizer {
             .translation = viewport_.getTranslation()}
             .emit();
 
-        events::notify::Log{
-            .level = events::notify::Log::Level::Info,
-            .message = std::format("Camera moved to view: {} (ID: {})",
-                                   cam_data->image_name(), cam_data->uid()),
-            .source = "CameraController"}
-            .emit();
+        LOG_INFO("Camera moved to view: {} (ID: {})",
+                 cam_data->image_name(), cam_data->uid());
     }
 
     // Helpers
@@ -470,9 +488,14 @@ namespace gs::visualizer {
             viewport_.camera.decreaseWasdSpeed();
         }
 
+        const float new_speed = viewport_.camera.getWasdSpeed();
+        const float max_speed = viewport_.camera.getMaxWasdSpeed();
+
+        LOG_DEBUG("Camera speed changed to: {:.3f} (max: {:.3f})", new_speed, max_speed);
+
         events::ui::SpeedChanged{
-            .current_speed = viewport_.camera.getWasdSpeed(),
-            .max_speed = viewport_.camera.getMaxWasdSpeed()}
+            .current_speed = new_speed,
+            .max_speed = max_speed}
             .emit();
     }
 

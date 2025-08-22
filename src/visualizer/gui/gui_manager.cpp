@@ -1,4 +1,5 @@
 #include "gui/gui_manager.hpp"
+#include "core/logger.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
 #include "gui/panels/tools_panel.hpp"
@@ -68,8 +69,8 @@ namespace gs::gui {
             io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 14.0f);
         } catch (const std::exception& e) {
             // If font loading fails, just use the default font
-            std::cerr << "Warning: Could not load custom font: " << e.what() << std::endl;
-            std::cerr << "Using default ImGui font" << std::endl;
+            LOG_WARN("Could not load custom font: {}", e.what());
+            LOG_DEBUG("Using default ImGui font");
         }
 
         applyDefaultStyle();
@@ -517,47 +518,12 @@ namespace gs::gui {
             showSpeedOverlay(e.current_speed, e.max_speed);
         });
 
-        // Handle log messages
-        notify::Log::when([this](const auto& e) {
-            const char* level = "";
-            switch (e.level) {
-            case notify::Log::Level::Info: level = "Info"; break;
-            case notify::Log::Level::Warning: level = "Warning"; break;
-            case notify::Log::Level::Error: level = "Error"; break;
-            case notify::Log::Level::Debug: level = "Debug"; break;
-            }
-
-            if (!e.source.empty()) {
-                console_->addLog("%s [%s]: %s", level, e.source.c_str(), e.message.c_str());
-            } else {
-                console_->addLog("%s: %s", level, e.message.c_str());
-            }
-        });
-
         // Handle console results
         ui::ConsoleResult::when([this](const auto& e) {
             console_->addLog("> %s", e.command.c_str());
             if (!e.result.empty()) {
                 console_->addLog("%s", e.result.c_str());
             }
-        });
-
-        // Handle errors
-        notify::Error::when([this](const auto& e) {
-            addConsoleLog("ERROR: %s", e.message.c_str());
-            if (!e.details.empty()) {
-                addConsoleLog("Details: %s", e.details.c_str());
-            }
-        });
-
-        // Handle success messages
-        notify::Success::when([this](const auto& e) {
-            addConsoleLog("SUCCESS: %s", e.message.c_str());
-        });
-
-        // Handle warnings
-        notify::Warning::when([this](const auto& e) {
-            addConsoleLog("WARNING: %s", e.message.c_str());
         });
     }
 

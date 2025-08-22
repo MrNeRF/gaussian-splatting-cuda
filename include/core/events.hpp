@@ -119,26 +119,6 @@ namespace gs {
         } // namespace state
 
         // ============================================================================
-        // Notifications - Important messages for the user
-        // ============================================================================
-        namespace notify {
-            EVENT(Info, std::string message; int duration_ms = 3000;);
-            EVENT(Success, std::string message; int duration_ms = 3000;);
-            EVENT(Warning, std::string message; int duration_ms = 5000;);
-            EVENT(Error, std::string message; std::string details = ""; int duration_ms = 0;);
-
-            EVENT(MemoryWarning,
-                  enum class Type{GPU, RAM} type;
-                  float usage_percent;
-                  std::string message;);
-
-            EVENT(Log,
-                  enum class Level{Debug, Info, Warning, Error} level;
-                  std::string message;
-                  std::string source = "";);
-        } // namespace notify
-
-        // ============================================================================
         // UI - User interface updates
         // ============================================================================
         namespace ui {

@@ -1,11 +1,12 @@
 #include "rendering_manager.hpp"
+#include "core/logger.hpp"
 #include "core/splat_data.hpp"
 #include "geometry/euclidean_transform.hpp"
 #include "rendering/rendering.hpp"
 #include "scene/scene_manager.hpp"
 #include "training/training_manager.hpp"
 #include <glad/glad.h>
-#include <print>
+#include <stdexcept>
 
 namespace gs::visualizer {
 
@@ -19,17 +20,17 @@ namespace gs::visualizer {
         if (initialized_)
             return;
 
+        LOG_TIMER("RenderingEngine initialization");
+
         engine_ = gs::rendering::RenderingEngine::create();
         auto init_result = engine_->initialize();
         if (!init_result) {
-            events::notify::Error{
-                .message = "Failed to initialize rendering engine",
-                .details = init_result.error()}
-                .emit();
+            LOG_ERROR("Failed to initialize rendering engine: {}", init_result.error());
             throw std::runtime_error("Failed to initialize rendering engine: " + init_result.error());
         }
 
         initialized_ = true;
+        LOG_INFO("Rendering engine initialized successfully");
     }
 
     void RenderingManager::setupEventHandlers() {
@@ -38,21 +39,26 @@ namespace gs::visualizer {
             std::lock_guard<std::mutex> lock(settings_mutex_);
             if (event.fov) {
                 settings_.fov = *event.fov;
+                LOG_TRACE("FOV changed to: {}", settings_.fov);
             }
             if (event.scaling_modifier) {
                 settings_.scaling_modifier = *event.scaling_modifier;
+                LOG_TRACE("Scaling modifier changed to: {}", settings_.scaling_modifier);
             }
             if (event.antialiasing) {
                 settings_.antialiasing = *event.antialiasing;
+                LOG_TRACE("Antialiasing: {}", settings_.antialiasing ? "enabled" : "disabled");
             }
             if (event.background_color) {
                 settings_.background_color = *event.background_color;
+                LOG_TRACE("Background color changed");
             }
             markDirty();
         });
 
         // Window resize
         events::ui::WindowResized::when([this](const auto&) {
+            LOG_DEBUG("Window resized, clearing render cache");
             markDirty();
             cached_result_ = {}; // Clear cache on resize since dimensions changed
         });
@@ -63,11 +69,14 @@ namespace gs::visualizer {
             settings_.show_grid = event.enabled;
             settings_.grid_plane = event.plane;
             settings_.grid_opacity = event.opacity;
+            LOG_TRACE("Grid settings updated - enabled: {}, plane: {}, opacity: {}",
+                      event.enabled, event.plane, event.opacity);
             markDirty();
         });
 
         // Scene changes
         events::state::SceneLoaded::when([this](const auto&) {
+            LOG_DEBUG("Scene loaded, marking render dirty");
             markDirty();
         });
 
@@ -82,10 +91,12 @@ namespace gs::visualizer {
 
         // PLY added/removed
         events::state::PLYAdded::when([this](const auto&) {
+            LOG_DEBUG("PLY added, marking render dirty");
             markDirty();
         });
 
         events::state::PLYRemoved::when([this](const auto&) {
+            LOG_DEBUG("PLY removed, marking render dirty");
             markDirty();
         });
 
@@ -95,6 +106,7 @@ namespace gs::visualizer {
             settings_.crop_min = event.min_bounds;
             settings_.crop_max = event.max_bounds;
             settings_.use_crop_box = event.enabled;
+            LOG_TRACE("Crop box updated - enabled: {}", event.enabled);
             markDirty();
         });
 
@@ -103,6 +115,8 @@ namespace gs::visualizer {
             std::lock_guard<std::mutex> lock(settings_mutex_);
             settings_.point_cloud_mode = event.enabled;
             settings_.voxel_size = event.voxel_size;
+            LOG_DEBUG("Point cloud mode: {}, voxel size: {}",
+                      event.enabled ? "enabled" : "disabled", event.voxel_size);
             markDirty();
         });
     }
@@ -168,6 +182,9 @@ namespace gs::visualizer {
 
         // Detect viewport size change and invalidate cache
         if (current_size != last_render_size_) {
+            LOG_TRACE("Viewport size changed from {}x{} to {}x{}",
+                      last_render_size_.x, last_render_size_.y,
+                      current_size.x, current_size.y);
             needs_render_ = true;
             cached_result_ = {}; // Clear cache - it's the wrong resolution!
             last_render_size_ = current_size;
@@ -179,6 +196,7 @@ namespace gs::visualizer {
 
         // Detect model switch (PLY -> Training, invisible, etc)
         if (model_ptr != last_model_ptr_) {
+            LOG_TRACE("Model pointer changed, clearing cache");
             needs_render_ = true;
             last_model_ptr_ = model_ptr;
             cached_result_ = {}; // Always clear cache on model change
@@ -244,6 +262,8 @@ namespace gs::visualizer {
     }
 
     void RenderingManager::doFullRender(const RenderContext& context, [[maybe_unused]] SceneManager* scene_manager, const SplatData* model) {
+        LOG_TIMER_TRACE("Full render pass");
+
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
             render_size = glm::ivec2(
@@ -310,16 +330,12 @@ namespace gs::visualizer {
                     render_size);
 
                 if (!present_result) {
-                    events::notify::Error{
-                        .message = "Failed to present render result",
-                        .details = present_result.error()}
-                        .emit();
+                    LOG_ERROR("Failed to present render result: {}", present_result.error());
+                    //throw std::runtime_error("Failed to present render result: " + present_result.error());
                 }
             } else {
-                events::notify::Error{
-                    .message = "Failed to render gaussians",
-                    .details = render_result.error()}
-                    .emit();
+                LOG_ERROR("Failed to render gaussians: {}", render_result.error());
+                //throw std::runtime_error("Failed to render gaussians: " + render_result.error());
             }
         }
 
@@ -353,7 +369,7 @@ namespace gs::visualizer {
                 settings_.grid_opacity);
 
             if (!grid_result) {
-                std::println("Failed to render grid: {}", grid_result.error());
+                LOG_WARN("Failed to render grid: {}", grid_result.error());
             }
         }
 
@@ -368,7 +384,7 @@ namespace gs::visualizer {
 
             auto bbox_result = engine_->renderBoundingBox(box, viewport, settings_.crop_color, settings_.crop_line_width);
             if (!bbox_result) {
-                std::println("Failed to render bounding box: {}", bbox_result.error());
+                LOG_WARN("Failed to render bounding box: {}", bbox_result.error());
             }
         }
 
@@ -376,7 +392,7 @@ namespace gs::visualizer {
         if (settings_.show_coord_axes && engine_) {
             auto axes_result = engine_->renderCoordinateAxes(viewport, settings_.axes_size, settings_.axes_visibility);
             if (!axes_result) {
-                std::println("Failed to render coordinate axes: {}", axes_result.error());
+                LOG_WARN("Failed to render coordinate axes: {}", axes_result.error());
             }
         }
 
@@ -385,7 +401,7 @@ namespace gs::visualizer {
             glm::vec3 gizmo_pos = settings_.world_transform.getTranslation();
             auto gizmo_result = engine_->renderTranslationGizmo(gizmo_pos, viewport, settings_.gizmo_scale);
             if (!gizmo_result) {
-                std::println("Failed to render translation gizmo: {}", gizmo_result.error());
+                LOG_WARN("Failed to render translation gizmo: {}", gizmo_result.error());
             }
         }
     }
