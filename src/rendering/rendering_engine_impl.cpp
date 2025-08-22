@@ -136,7 +136,8 @@ namespace gs::rendering {
             .crop_box = nullptr,
             .background_color = request.background_color,
             .point_cloud_mode = request.point_cloud_mode,
-            .voxel_size = request.voxel_size};
+            .voxel_size = request.voxel_size,
+            .model_transform = request.model_transform};
 
         // Convert crop box if present
         std::unique_ptr<gs::geometry::BoundingBox> temp_crop_box;
