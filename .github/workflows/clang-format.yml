@@ -41,7 +41,14 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add .
             git commit -m "Apply clang-format"
-            git push
+
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+              branch="${GITHUB_HEAD_REF}"
+            else
+              branch="${GITHUB_REF_NAME}"
+            fi
+
+            git push origin HEAD:$branch
           else
             echo "No formatting changes needed."
           fi
