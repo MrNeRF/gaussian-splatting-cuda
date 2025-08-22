@@ -1,0 +1,57 @@
+name: Windows CUDA Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\..\vcpkg
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Visual Studio Build Tools & VS components
+        uses: microsoft/setup-msbuild@v1
+        with:
+          vs-version: latest
+
+      - name: Download and install CUDA 12.8
+        run: |
+          cd ..
+          Invoke-WebRequest https://developer.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_windows.exe -OutFile cuda.exe
+          Start-Process cuda.exe -ArgumentList "--silent --toolkit" -Wait
+
+      - name: Setup vcpkg
+        run: |
+          cd ..
+          git clone https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Cache LibTorch
+        id: cache-libtorch
+        uses: actions/cache@v4
+        with:
+          path: external/release/libtorch
+          key: libtorch-2.7.0-cu128-${{ runner.os }}
+
+      - name: Download LibTorch 2.7.0 (CUDA 12.8 build)
+        if: steps.cache-libtorch.outputs.cache-hit != 'true'
+        run: |
+          mkdir external\release
+          cd ..
+          Invoke-WebRequest -Uri https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-2.7.0%2Bcu128.zip -OutFile libtorch.zip
+          Expand-Archive libtorch.zip -DestinationPath $env:GITHUB_WORKSPACE\external\release
+
+      - name: Configure with CMake
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 1
