@@ -63,6 +63,39 @@ namespace gs::rendering {
         RGB_ED = 4
     };
 
+    // Translation Gizmo types
+    enum class GizmoElement {
+        None,
+        XAxis,
+        YAxis,
+        ZAxis,
+        XYPlane,
+        XZPlane,
+        YZPlane
+    };
+
+    // Abstract interface for gizmo interaction
+    class GizmoInteraction {
+    public:
+        virtual ~GizmoInteraction() = default;
+
+        virtual GizmoElement pick(const glm::vec2& mouse_pos, const glm::mat4& view,
+                                  const glm::mat4& projection, const glm::vec3& position) = 0;
+
+        virtual glm::vec3 startDrag(GizmoElement element, const glm::vec2& mouse_pos,
+                                    const glm::mat4& view, const glm::mat4& projection,
+                                    const glm::vec3& position) = 0;
+
+        virtual glm::vec3 updateDrag(const glm::vec2& mouse_pos, const glm::mat4& view,
+                                     const glm::mat4& projection) = 0;
+
+        virtual void endDrag() = 0;
+        virtual bool isDragging() const = 0;
+
+        virtual void setHovered(GizmoElement element) = 0;
+        virtual GizmoElement getHovered() const = 0;
+    };
+
     // Rendering pipeline types (for compatibility)
     struct RenderingPipelineRequest {
         glm::mat3 view_rotation;
@@ -103,7 +136,6 @@ namespace gs::rendering {
         virtual void setworld2BBox(const geometry::EuclideanTransform& transform) = 0;
         virtual geometry::EuclideanTransform getworld2BBox() const = 0;
 
-        // Add missing methods
         virtual glm::vec3 getColor() const = 0;
         virtual float getLineWidth() const = 0;
     };
@@ -163,6 +195,15 @@ namespace gs::rendering {
             const glm::mat3& camera_rotation,
             const glm::vec2& viewport_pos,
             const glm::vec2& viewport_size) = 0;
+
+        // Translation gizmo rendering
+        virtual Result<void> renderTranslationGizmo(
+            const glm::vec3& position,
+            const ViewportData& viewport,
+            float scale = 1.0f) = 0;
+
+        // Get gizmo interaction interface
+        virtual std::shared_ptr<GizmoInteraction> getGizmoInteraction() = 0;
 
         // Pipeline rendering (for visualizer compatibility)
         virtual RenderingPipelineResult renderWithPipeline(
