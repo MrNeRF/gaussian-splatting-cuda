@@ -75,43 +75,6 @@ namespace gs::visualizer::tools {
         }
     }
 
-    void TranslationGizmoTool::render(const ToolContext& ctx) {
-        if (!isEnabled() || !show_in_viewport_) {
-            return;
-        }
-
-        auto* render_manager = ctx.getRenderingManager();
-        if (!render_manager) {
-            return;
-        }
-
-        auto* engine = render_manager->getRenderingEngine();
-        if (!engine) {
-            return;
-        }
-
-        // Get viewport data
-        const auto& viewport = ctx.getViewport();
-        gs::rendering::ViewportData viewport_data{
-            .rotation = viewport.getRotationMatrix(),
-            .translation = viewport.getTranslation(),
-            .size = glm::ivec2(viewport.windowSize),
-            .fov = render_manager->getSettings().fov};
-
-        // Get gizmo position from current transform
-        glm::vec3 gizmo_position = current_transform_.getTranslation();
-
-        // Render the gizmo
-        auto result = engine->renderTranslationGizmo(
-            gizmo_position,
-            viewport_data,
-            gizmo_scale_);
-
-        if (!result) {
-            std::println("Failed to render translation gizmo: {}", result.error());
-        }
-    }
-
     bool TranslationGizmoTool::handleMouseButton(int button, int action, double x, double y,
                                                  const ToolContext& ctx) {
         if (!isEnabled() || !gizmo_interaction_) {

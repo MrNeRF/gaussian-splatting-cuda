@@ -105,23 +105,6 @@ namespace gs::visualizer {
             settings_.voxel_size = event.voxel_size;
             markDirty();
         });
-
-        // Translation gizmo tool events
-        events::tools::ToolEnabled::when([this](const auto& event) {
-            if (event.tool_name == "Translation Gizmo") {
-                std::lock_guard<std::mutex> lock(settings_mutex_);
-                settings_.show_translation_gizmo = true;
-                markDirty();
-            }
-        });
-
-        events::tools::ToolDisabled::when([this](const auto& event) {
-            if (event.tool_name == "Translation Gizmo") {
-                std::lock_guard<std::mutex> lock(settings_mutex_);
-                settings_.show_translation_gizmo = false;
-                markDirty();
-            }
-        });
     }
 
     void RenderingManager::markDirty() {

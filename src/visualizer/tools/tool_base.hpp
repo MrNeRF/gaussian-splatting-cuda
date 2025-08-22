@@ -38,7 +38,6 @@ namespace gs::visualizer {
         { t.initialize(ctx) } -> std::same_as<bool>;
         { t.shutdown() } -> std::same_as<void>;
         { t.update(ctx) } -> std::same_as<void>;
-        { t.render(ctx) } -> std::same_as<void>;
         { t.renderUI(ui_ctx, p_open) } -> std::same_as<void>;
     };
 
@@ -92,7 +91,6 @@ namespace gs::visualizer {
         virtual bool initialize([[maybe_unused]] const ToolContext& ctx) { return true; }
         virtual void shutdown() {}
         virtual void update([[maybe_unused]] const ToolContext& ctx) {}
-        virtual void render([[maybe_unused]] const ToolContext& ctx) {}
         virtual void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) = 0;
 
     protected:

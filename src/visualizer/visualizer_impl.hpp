@@ -86,6 +86,14 @@ namespace gs::visualizer {
             return rendering_manager_ ? rendering_manager_->getSettings().antialiasing : false;
         }
 
+        tools::TranslationGizmoTool* getTranslationGizmoTool() {
+            return translation_gizmo_tool_.get();
+        }
+
+        const tools::TranslationGizmoTool* getTranslationGizmoTool() const {
+            return translation_gizmo_tool_.get();
+        }
+
         std::shared_ptr<TrainerManager> trainer_manager_;
 
         // GUI manager

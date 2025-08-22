@@ -20,7 +20,6 @@ namespace gs::visualizer::tools {
         bool initialize(const ToolContext& ctx) override;
         void shutdown() override;
         void update(const ToolContext& ctx) override;
-        void render(const ToolContext& ctx) override;
         void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) override;
 
         // Gizmo-specific methods

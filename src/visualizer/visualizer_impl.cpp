@@ -136,32 +136,6 @@ namespace gs::visualizer {
             }
         });
 
-        events::tools::ToolEnabled::when([this](const auto& event) {
-            if (event.tool_name == "Translation Gizmo" && translation_gizmo_tool_) {
-                translation_gizmo_tool_->setEnabled(true);
-
-                // Update rendering settings to show the gizmo
-                if (rendering_manager_) {
-                    auto settings = rendering_manager_->getSettings();
-                    settings.show_translation_gizmo = true;
-                    rendering_manager_->updateSettings(settings);
-                }
-            }
-        });
-
-        events::tools::ToolDisabled::when([this](const auto& event) {
-            if (event.tool_name == "Translation Gizmo" && translation_gizmo_tool_) {
-                translation_gizmo_tool_->setEnabled(false);
-
-                // Update rendering settings to hide the gizmo
-                if (rendering_manager_) {
-                    auto settings = rendering_manager_->getSettings();
-                    settings.show_translation_gizmo = false;
-                    rendering_manager_->updateSettings(settings);
-                }
-            }
-        });
-
         // Render settings changes
         ui::RenderSettingsChanged::when([this](const auto& event) {
             if (rendering_manager_) {
@@ -313,11 +287,6 @@ namespace gs::visualizer {
             .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
-
-        // Render gizmo tool overlays if active
-        if (translation_gizmo_tool_ && translation_gizmo_tool_->isEnabled() && tool_context_) {
-            translation_gizmo_tool_->render(*tool_context_);
-        }
 
         gui_manager_->render();
 
