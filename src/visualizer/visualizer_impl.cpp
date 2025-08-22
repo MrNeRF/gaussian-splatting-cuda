@@ -37,7 +37,7 @@ namespace gs::visualizer {
         // Create command processor
         command_processor_ = std::make_unique<CommandProcessor>(scene_manager_.get());
 
-        // Create data loading service - no longer needs state_manager
+        // Create data loading service
         data_loader_ = std::make_unique<DataLoadingService>(scene_manager_.get());
 
         // Create main loop
@@ -59,6 +59,11 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::initializeTools() {
+        if (tools_initialized_) {
+            LOG_TRACE("Tools already initialized, skipping");
+            return;
+        }
+
         // Create the tool context
         tool_context_ = std::make_unique<ToolContext>(
             rendering_manager_.get(),
@@ -81,6 +86,8 @@ namespace gs::visualizer {
             }
             LOG_DEBUG("Translation gizmo tool initialized successfully");
         }
+
+        tools_initialized_ = true;
     }
 
     void VisualizerImpl::setupComponentConnections() {
@@ -186,12 +193,38 @@ namespace gs::visualizer {
     }
 
     bool VisualizerImpl::initialize() {
-        // Initialize window first
+        // Track if we're fully initialized
+        static bool fully_initialized = false;
+        if (fully_initialized) {
+            LOG_TRACE("Already fully initialized");
+            return true;
+        }
+
+        // Initialize window first and ensure it has proper size
         if (!window_initialized_) {
             if (!window_manager_->init()) {
                 return false;
             }
             window_initialized_ = true;
+
+            // CRITICAL: Poll events once to get actual window dimensions from the OS
+            window_manager_->pollEvents();
+            window_manager_->updateWindowSize();
+
+            // Update viewport with actual window size
+            viewport_.windowSize = window_manager_->getWindowSize();
+            viewport_.frameBufferSize = window_manager_->getFramebufferSize();
+
+            // Validate we got reasonable dimensions
+            if (viewport_.windowSize.x <= 0 || viewport_.windowSize.y <= 0) {
+                LOG_WARN("Window manager returned invalid size, using options fallback: {}x{}",
+                         options_.width, options_.height);
+                viewport_.windowSize = glm::ivec2(options_.width, options_.height);
+                viewport_.frameBufferSize = glm::ivec2(options_.width, options_.height);
+            }
+
+            LOG_DEBUG("Window initialized with actual size: {}x{}",
+                      viewport_.windowSize.x, viewport_.windowSize.y);
         }
 
         // Initialize GUI (sets up ImGui callbacks)
@@ -208,14 +241,19 @@ namespace gs::visualizer {
             input_controller_->setTrainingManager(trainer_manager_);
         }
 
-        // Initialize rendering
+        // Initialize rendering with proper viewport dimensions
         if (!rendering_manager_->isInitialized()) {
+            // Pass viewport dimensions to rendering manager
+            rendering_manager_->setInitialViewportSize(viewport_.windowSize);
             rendering_manager_->initialize();
         }
 
-        // Initialize tools AFTER rendering is initialized
-        initializeTools();
+        // Initialize tools AFTER rendering is initialized (only once!)
+        if (!tools_initialized_) {
+            initializeTools();
+        }
 
+        fully_initialized = true;
         return true;
     }
 
@@ -286,6 +324,8 @@ namespace gs::visualizer {
 
         // Clean up tool context
         tool_context_.reset();
+
+        tools_initialized_ = false;
     }
 
     bool VisualizerImpl::LoadProject() {
@@ -340,20 +380,8 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::run() {
-        // Ensure basic initialization before running
-        if (!window_initialized_) {
-            if (!window_manager_->init()) {
-                throw std::runtime_error("Failed to initialize window manager");
-            }
-            window_initialized_ = true;
-        }
-
-        // Initialize rendering
-        if (!rendering_manager_->isInitialized()) {
-            rendering_manager_->initialize();
-        }
-
-        LoadProject(); // load a project if exists
+        // The main loop will call initialize() as its init callback
+        // Don't duplicate initialization here
         main_loop_->run();
     }
 
@@ -364,18 +392,10 @@ namespace gs::visualizer {
     std::expected<void, std::string> VisualizerImpl::loadPLY(const std::filesystem::path& path) {
         LOG_TIMER("LoadPLY");
 
-        // Ensure proper initialization order before loading PLY
-        // This handles command line PLY loading
-        if (!window_initialized_) {
-            if (!window_manager_->init()) {
-                return std::unexpected("Failed to initialize window manager");
-            }
-            window_initialized_ = true;
-        }
-
-        // Initialize rendering
-        if (!rendering_manager_->isInitialized()) {
-            rendering_manager_->initialize();
+        // Ensure full initialization before loading PLY
+        // This will only initialize once due to the guard in initialize()
+        if (!initialize()) {
+            return std::unexpected("Failed to initialize visualizer");
         }
 
         LOG_INFO("Loading PLY file: {}", path.string());
@@ -385,17 +405,10 @@ namespace gs::visualizer {
     std::expected<void, std::string> VisualizerImpl::loadDataset(const std::filesystem::path& path) {
         LOG_TIMER("LoadDataset");
 
-        // Ensure proper initialization order before loading dataset
-        if (!window_initialized_) {
-            if (!window_manager_->init()) {
-                return std::unexpected("Failed to initialize window manager");
-            }
-            window_initialized_ = true;
-        }
-
-        // Initialize rendering
-        if (!rendering_manager_->isInitialized()) {
-            rendering_manager_->initialize();
+        // Ensure full initialization before loading dataset
+        // This will only initialize once due to the guard in initialize()
+        if (!initialize()) {
+            return std::unexpected("Failed to initialize visualizer");
         }
 
         LOG_INFO("Loading dataset: {}", path.string());

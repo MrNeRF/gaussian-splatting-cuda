@@ -1,40 +1,40 @@
-#include "core/main_loop.hpp"
-#include <glad/glad.h>
-#include <iostream>
-#include <thread>
+#include "main_loop.hpp"
+#include "core/logger.hpp"
 
 namespace gs::visualizer {
 
-    MainLoop::MainLoop() = default;
-
     void MainLoop::run() {
-        // Initialize
-        if (init_callback_ && !init_callback_()) {
-            std::cerr << "Application initialization failed!" << std::endl;
-            return;
+        LOG_INFO("Main loop starting");
+
+        if (init_callback_) {
+            if (!init_callback_()) {
+                LOG_ERROR("Initialization failed");
+                return;
+            }
         }
 
-        // Main loop
-        while (should_close_callback_ ? !should_close_callback_() : true) {
-            // Clear
-            glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        LOG_DEBUG("Entering main render loop");
 
-            // Update
+        // Continue running while:
+        // - Either we don't have a should_close callback (run forever)
+        // - OR we have one and it returns false (not time to close)
+        while (!should_close_callback_ || !should_close_callback_()) {
             if (update_callback_) {
                 update_callback_();
             }
 
-            // Render
             if (render_callback_) {
                 render_callback_();
             }
         }
 
-        // Shutdown
+        LOG_DEBUG("Exiting main render loop");
+
         if (shutdown_callback_) {
             shutdown_callback_();
         }
+
+        LOG_INFO("Main loop ended");
     }
 
 } // namespace gs::visualizer

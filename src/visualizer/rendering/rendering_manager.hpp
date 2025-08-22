@@ -74,6 +74,11 @@ namespace gs::visualizer {
         void initialize();
         bool isInitialized() const { return initialized_; }
 
+        // Set initial viewport size (must be called before initialize())
+        void setInitialViewportSize(const glm::ivec2& size) {
+            initial_viewport_size_ = size;
+        }
+
         // Main render function
         void renderFrame(const RenderContext& context, SceneManager* scene_manager);
 
@@ -118,6 +123,7 @@ namespace gs::visualizer {
         mutable std::mutex settings_mutex_;
 
         bool initialized_ = false;
+        glm::ivec2 initial_viewport_size_{1280, 720}; // Default fallback
     };
 
 } // namespace gs::visualizer

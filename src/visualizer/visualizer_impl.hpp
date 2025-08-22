@@ -136,6 +136,8 @@ namespace gs::visualizer {
         // State tracking
         bool window_initialized_ = false;
         bool gui_initialized_ = false;
+        bool tools_initialized_ = false; // Added this member!
+
         // Project
         std::shared_ptr<gs::management::Project> project_ = nullptr;
     };

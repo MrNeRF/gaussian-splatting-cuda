@@ -22,7 +22,15 @@ namespace gs::visualizer {
 
         LOG_TIMER("RenderingEngine initialization");
 
+        // Pass initial viewport size to engine
         engine_ = gs::rendering::RenderingEngine::create();
+
+        // Set initial viewport for proper framebuffer initialization
+        if (initial_viewport_size_.x > 0 && initial_viewport_size_.y > 0) {
+            glViewport(0, 0, initial_viewport_size_.x, initial_viewport_size_.y);
+            LOG_DEBUG("Set initial viewport to {}x{}", initial_viewport_size_.x, initial_viewport_size_.y);
+        }
+
         auto init_result = engine_->initialize();
         if (!init_result) {
             LOG_ERROR("Failed to initialize rendering engine: {}", init_result.error());
@@ -30,7 +38,8 @@ namespace gs::visualizer {
         }
 
         initialized_ = true;
-        LOG_INFO("Rendering engine initialized successfully");
+        LOG_INFO("Rendering engine initialized successfully with viewport {}x{}",
+                 initial_viewport_size_.x, initial_viewport_size_.y);
     }
 
     void RenderingManager::setupEventHandlers() {
@@ -180,6 +189,18 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
+        // Early exit if viewport is invalid (common during startup)
+        if (current_size.x <= 0 || current_size.y <= 0) {
+            LOG_TRACE("Skipping render - invalid viewport size: {}x{}", current_size.x, current_size.y);
+
+            // Still clear the screen to avoid garbage
+            glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            framerate_controller_.endFrame();
+            return;
+        }
+
         // Detect viewport size change and invalidate cache
         if (current_size != last_render_size_) {
             LOG_TRACE("Viewport size changed from {}x{} to {}x{}",
@@ -226,13 +247,17 @@ namespace gs::visualizer {
             }
         }
 
-        // Clear and set viewport
-        glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
+        // Clear and set viewport (only if dimensions are valid)
+        if (context.viewport.frameBufferSize.x > 0 && context.viewport.frameBufferSize.y > 0) {
+            glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
+        }
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Set viewport region for rendering
-        if (context.viewport_region) {
+        // Set viewport region for rendering (only if valid)
+        if (context.viewport_region &&
+            context.viewport_region->width > 0 &&
+            context.viewport_region->height > 0) {
             glViewport(
                 static_cast<GLint>(context.viewport_region->x),
                 static_cast<GLint>(context.viewport_region->y),
@@ -263,6 +288,14 @@ namespace gs::visualizer {
 
     void RenderingManager::doFullRender(const RenderContext& context, [[maybe_unused]] SceneManager* scene_manager, const SplatData* model) {
         LOG_TIMER_TRACE("Full render pass");
+
+        static size_t frame_count = 0;
+        if (++frame_count % 60 == 0) { // Log every 60 frames
+            LOG_DEBUG("Rendering frame {} (viewport: {}x{})",
+                      frame_count,
+                      context.viewport.windowSize.x,
+                      context.viewport.windowSize.y);
+        }
 
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
@@ -331,11 +364,11 @@ namespace gs::visualizer {
 
                 if (!present_result) {
                     LOG_ERROR("Failed to present render result: {}", present_result.error());
-                    //throw std::runtime_error("Failed to present render result: " + present_result.error());
+                    // throw std::runtime_error("Failed to present render result: " + present_result.error());
                 }
             } else {
                 LOG_ERROR("Failed to render gaussians: {}", render_result.error());
-                //throw std::runtime_error("Failed to render gaussians: " + render_result.error());
+                // throw std::runtime_error("Failed to render gaussians: " + render_result.error());
             }
         }
 
