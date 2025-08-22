@@ -52,7 +52,7 @@ jobs:
       - name: Cache ccache
         uses: actions/cache@v4
         with:
-          path: ~/.ccache
+          path: /github/home/.cache/ccache
           key: ccache-${{ runner.os }}
 
       - name: Configure with CMake
@@ -61,3 +61,10 @@ jobs:
 
       - name: Build
         run: cmake --build build --parallel 1
+
+      - name: Save updated ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: /github/home/.cache/ccache
+          key: ccache-${{ runner.os }}
