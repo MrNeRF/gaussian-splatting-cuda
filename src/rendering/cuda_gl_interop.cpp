@@ -292,20 +292,42 @@ namespace gs::rendering {
         : FrameBuffer(),
           use_interop_(use_interop) {
         LOG_DEBUG("Creating InteropFrameBuffer with interop: {}", use_interop);
-
-        if (use_interop_) {
-            interop_texture_.emplace();
-            if (auto result = interop_texture_->init(width, height); !result) {
-                LOG_WARN("Failed to initialize CUDA-GL interop: {}", result.error());
-                LOG_INFO("Falling back to CPU copy mode");
-                interop_texture_.reset();
-                use_interop_ = false;
-            }
-        }
     }
 
     Result<void> InteropFrameBuffer::uploadFromCUDA(const torch::Tensor& cuda_image) {
         LOG_TIMER_TRACE("InteropFrameBuffer::uploadFromCUDA");
+
+        // Lazy initialization on first use with actual image dimensions
+        if (use_interop_ && !interop_texture_) {
+            // Determine dimensions from the tensor
+            int img_width, img_height;
+
+            if (cuda_image.dim() == 3) {
+                if (cuda_image.size(2) == 3 || cuda_image.size(2) == 4) {
+                    // [H, W, C] format
+                    img_height = cuda_image.size(0);
+                    img_width = cuda_image.size(1);
+                } else {
+                    // [C, H, W] format
+                    img_height = cuda_image.size(1);
+                    img_width = cuda_image.size(2);
+                }
+            } else {
+                LOG_ERROR("Unexpected tensor dimensions: {}", cuda_image.dim());
+                use_interop_ = false;
+            }
+
+            if (use_interop_ && img_width > 0 && img_height > 0) {
+                LOG_DEBUG("Lazy-initializing CUDA-GL interop with size {}x{}", img_width, img_height);
+                interop_texture_.emplace();
+                if (auto result = interop_texture_->init(img_width, img_height); !result) {
+                    LOG_WARN("Failed to initialize CUDA-GL interop: {}", result.error());
+                    LOG_INFO("Falling back to CPU copy mode");
+                    interop_texture_.reset();
+                    use_interop_ = false;
+                }
+            }
+        }
 
         if (!use_interop_ || !interop_texture_) {
             // Fallback to CPU copy
