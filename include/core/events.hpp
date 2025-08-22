@@ -176,7 +176,7 @@ namespace gs {
             EVENT(TrainingReadyToStart, );
             EVENT(WindowFocusLost, );
         } // namespace internal
-    } // namespace events
+    }     // namespace events
 
     // ============================================================================
     // Convenience functions
