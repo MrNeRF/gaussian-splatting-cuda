@@ -49,7 +49,7 @@ target_link_libraries(fastgs_backend
         ${TORCH_LIBRARIES}
 )
 
-target_compile_options(gsplat_backend PRIVATE
+target_compile_options(fastgs_backend PRIVATE
   # CUDA
   $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-O0 -g -G -lineinfo>
   $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-O3 --use_fast_math --expt-relaxed-constexpr --diag-suppress=20012,186,221>
