@@ -49,6 +49,11 @@ jobs:
           curl -L https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip -o libtorch.zip
           unzip libtorch.zip -d $GITHUB_WORKSPACE/external
 
+      - name: debug ccache
+        run: |
+          ccache --show-config
+          ccache --show-stats
+
       - name: Cache ccache
         uses: actions/cache@v4
         with:
