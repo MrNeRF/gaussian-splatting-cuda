@@ -25,7 +25,7 @@ jobs:
       - name: Download and install CUDA 12.8
         run: |
           cd ..
-          Invoke-WebRequest https://developer.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_windows.exe -OutFile cuda.exe
+          Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile cuda.exe
           Start-Process cuda.exe -ArgumentList "--silent --toolkit" -Wait
 
       - name: Setup vcpkg
