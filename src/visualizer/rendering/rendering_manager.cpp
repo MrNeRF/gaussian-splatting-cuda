@@ -24,13 +24,6 @@ namespace gs::visualizer {
 
         // Pass initial viewport size to engine
         engine_ = gs::rendering::RenderingEngine::create();
-
-        // Set initial viewport for proper framebuffer initialization
-        if (initial_viewport_size_.x > 0 && initial_viewport_size_.y > 0) {
-            glViewport(0, 0, initial_viewport_size_.x, initial_viewport_size_.y);
-            LOG_DEBUG("Set initial viewport to {}x{}", initial_viewport_size_.x, initial_viewport_size_.y);
-        }
-
         auto init_result = engine_->initialize();
         if (!init_result) {
             LOG_ERROR("Failed to initialize rendering engine: {}", init_result.error());
@@ -38,8 +31,7 @@ namespace gs::visualizer {
         }
 
         initialized_ = true;
-        LOG_INFO("Rendering engine initialized successfully with viewport {}x{}",
-                 initial_viewport_size_.x, initial_viewport_size_.y);
+        LOG_INFO("Rendering engine initialized successfully");
     }
 
     void RenderingManager::setupEventHandlers() {
@@ -85,7 +77,8 @@ namespace gs::visualizer {
 
         // Scene changes
         events::state::SceneLoaded::when([this](const auto&) {
-            LOG_DEBUG("Scene loaded, marking render dirty");
+            LOG_DEBUG("Scene loaded, marking render dirty and clearing cache");
+            cached_result_ = {}; // Clear cache to force immediate render
             markDirty();
         });
 
@@ -100,7 +93,8 @@ namespace gs::visualizer {
 
         // PLY added/removed
         events::state::PLYAdded::when([this](const auto&) {
-            LOG_DEBUG("PLY added, marking render dirty");
+            LOG_DEBUG("PLY added, marking render dirty and clearing cache");
+            cached_result_ = {}; // Clear cache to force immediate render
             markDirty();
         });
 
@@ -189,14 +183,10 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
-        // Early exit if viewport is invalid (common during startup)
+        // SAFETY CHECK: Don't render with invalid viewport dimensions
         if (current_size.x <= 0 || current_size.y <= 0) {
             LOG_TRACE("Skipping render - invalid viewport size: {}x{}", current_size.x, current_size.y);
-
-            // Still clear the screen to avoid garbage
-            glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+            // Keep needs_render flag set so we render on next valid frame
             framerate_controller_.endFrame();
             return;
         }
@@ -223,22 +213,28 @@ namespace gs::visualizer {
             cached_result_ = {}; // Always clear cache on model change
         }
 
-        // Check if we should render
+        // Simplified render decision logic for immediate rendering
         bool should_render = false;
 
-        // Always render if we don't have a cached result
-        if (!cached_result_.image) {
+        // Store needs_render value before clearing it
+        bool needs_render_now = needs_render_.load();
+
+        // ALWAYS render if:
+        // 1. We don't have a cached result (first render or cache cleared)
+        // 2. We need to render (scene changed, settings changed, etc.)
+        // 3. Viewport has focus (for interactivity)
+        if (!cached_result_.image || needs_render_now) {
             should_render = true;
-        } else if (needs_render_) {
-            should_render = true;
-            needs_render_ = false;
+            needs_render_ = false;  // Clear the flag after deciding to render
+            LOG_TRACE("Forcing render: no cache={}, needs_render={}",
+                     !cached_result_.image, needs_render_now);
         } else if (context.has_focus) {
+            // Always render when viewport has focus for smooth interaction
             should_render = true;
         } else if (scene_manager && scene_manager->hasDataset()) {
-            // Check if actively training
+            // Throttle training renders only when we have a cache and don't need immediate render
             const auto* trainer_manager = scene_manager->getTrainerManager();
             if (trainer_manager && trainer_manager->isRunning()) {
-                // Throttle training renders to 1 FPS
                 auto now = std::chrono::steady_clock::now();
                 if (now - last_training_render_ > std::chrono::seconds(1)) {
                     should_render = true;
@@ -247,17 +243,13 @@ namespace gs::visualizer {
             }
         }
 
-        // Clear and set viewport (only if dimensions are valid)
-        if (context.viewport.frameBufferSize.x > 0 && context.viewport.frameBufferSize.y > 0) {
-            glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
-        }
+        // Clear and set viewport
+        glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Set viewport region for rendering (only if valid)
-        if (context.viewport_region &&
-            context.viewport_region->width > 0 &&
-            context.viewport_region->height > 0) {
+        // Set viewport region for rendering
+        if (context.viewport_region) {
             glViewport(
                 static_cast<GLint>(context.viewport_region->x),
                 static_cast<GLint>(context.viewport_region->y),
@@ -288,14 +280,6 @@ namespace gs::visualizer {
 
     void RenderingManager::doFullRender(const RenderContext& context, [[maybe_unused]] SceneManager* scene_manager, const SplatData* model) {
         LOG_TIMER_TRACE("Full render pass");
-
-        static size_t frame_count = 0;
-        if (++frame_count % 60 == 0) { // Log every 60 frames
-            LOG_DEBUG("Rendering frame {} (viewport: {}x{})",
-                      frame_count,
-                      context.viewport.windowSize.x,
-                      context.viewport.windowSize.y);
-        }
 
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
@@ -364,11 +348,11 @@ namespace gs::visualizer {
 
                 if (!present_result) {
                     LOG_ERROR("Failed to present render result: {}", present_result.error());
-                    // throw std::runtime_error("Failed to present render result: " + present_result.error());
+                    //throw std::runtime_error("Failed to present render result: " + present_result.error());
                 }
             } else {
                 LOG_ERROR("Failed to render gaussians: {}", render_result.error());
-                // throw std::runtime_error("Failed to render gaussians: " + render_result.error());
+                //throw std::runtime_error("Failed to render gaussians: " + render_result.error());
             }
         }
 
