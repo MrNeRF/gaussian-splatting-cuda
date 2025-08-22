@@ -233,6 +233,15 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::render() {
+        // Calculate delta time for input updates
+        static auto last_frame_time = std::chrono::high_resolution_clock::now();
+        auto now = std::chrono::high_resolution_clock::now();
+        float delta_time = std::chrono::duration<float>(now - last_frame_time).count();
+        last_frame_time = now;
+
+        // Clamp delta time to prevent huge jumps (min 30 FPS)
+        delta_time = std::min(delta_time, 1.0f / 30.0f);
+
         // Update input controller with viewport bounds
         if (gui_manager_) {
             auto pos = gui_manager_->getViewportPos();
@@ -245,6 +254,10 @@ namespace gs::visualizer {
         if (rendering_manager) {
             const auto& settings = rendering_manager->getSettings();
             input_controller_->setPointCloudMode(settings.point_cloud_mode);
+        }
+
+        if (input_controller_) {
+            input_controller_->update(delta_time);
         }
 
         // Get viewport region from GUI

@@ -3,11 +3,11 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/euler_angles.hpp>
-#include <glm/gtx/transform.hpp>
-#include <glm/gtx/norm.hpp>
-#include <iostream>
 #include <cmath>
+#include <glm/gtx/euler_angles.hpp>
+#include <glm/gtx/norm.hpp>
+#include <glm/gtx/transform.hpp>
+#include <iostream>
 
 class Viewport {
     class CameraMotion {
@@ -18,20 +18,20 @@ class Viewport {
         float rotateCenterSpeed = 0.002f;
         float rotateRollSpeed = 0.01f;
         float translateSpeed = 0.001f;
-        float wasdSpeed = 0.06f;
-        float maxWasdSpeed = 1.0f; // Maximum WASD speed
-        float wasdSpeedChangePercentage = 1.0f; // 1% change per key press
+        float wasdSpeed = 10.0f;                 // FIXED: Was 0.06f - now 10.0f for reasonable speed
+        float maxWasdSpeed = 1000.0f;            // FIXED: Was 1.0f - now 1000.0f for proper range
+        float wasdSpeedChangePercentage = 10.0f; // FIXED: Was 1.0f - now 10% change per key press
         glm::vec2 orbitVelocity = glm::vec2(0.0f);
         float preTime = 0.0f;
         bool isOrbiting = false;
         float orbitFriction = 3.0f;
 
         void increaseWasdSpeed() {
-            wasdSpeed = std::min(wasdSpeed + maxWasdSpeed * wasdSpeedChangePercentage / 100, maxWasdSpeed);
+            wasdSpeed = std::min(wasdSpeed * 1.5f, maxWasdSpeed); // FIXED: Multiply by 1.5x instead of tiny increment
         }
 
         void decreaseWasdSpeed() {
-            wasdSpeed = std::max(wasdSpeed - maxWasdSpeed * wasdSpeedChangePercentage / 100, 0.001f); // Minimum speed to avoid zero
+            wasdSpeed = std::max(wasdSpeed / 1.5f, 0.1f); // FIXED: Divide by 1.5x, minimum 0.1
         }
 
         void setMaxWasdSpeed(float maxSpeed) {
@@ -121,10 +121,12 @@ class Viewport {
         }
 
         void updateRotateAroundCenter(const glm::vec2& pos, float time) {
-            if (!isOrbiting) return;
+            if (!isOrbiting)
+                return;
 
             float dt = time - preTime;
-            if (dt <= 0.0f) return;
+            if (dt <= 0.0f)
+                return;
 
             glm::vec2 delta = pos - prePos;
             float yaw = +delta.x * rotateCenterSpeed;
@@ -142,8 +144,10 @@ class Viewport {
         }
 
         void updateInertia(float deltaTime) {
-            if (isOrbiting) return;
-            if (glm::length2(orbitVelocity) < 0.0001f) return;
+            if (isOrbiting)
+                return;
+            if (glm::length2(orbitVelocity) < 0.0001f)
+                return;
 
             float yaw = orbitVelocity.x * deltaTime;
             float pitch = orbitVelocity.y * deltaTime;
@@ -213,7 +217,7 @@ public:
             0, 0, -1);
 
         glm::mat3 R_inv = glm::transpose(camera.R); // Inverse of rotation matrix
-        glm::vec3 t_inv = -R_inv * camera.t; // Inverse translation
+        glm::vec3 t_inv = -R_inv * camera.t;        // Inverse translation
 
         R_inv = flip_yz * R_inv;
         t_inv = flip_yz * t_inv;

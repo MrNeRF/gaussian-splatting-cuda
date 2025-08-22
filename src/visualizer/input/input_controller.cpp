@@ -1,11 +1,11 @@
-#include <algorithm>
-#include <format>
-#include <imgui.h>
-#include "core/logger.hpp"
 #include "input/input_controller.hpp"
+#include "core/logger.hpp"
 #include "tools/tool_base.hpp"
 #include "tools/translation_gizmo_tool.hpp"
 #include <GLFW/glfw3.h>
+#include <algorithm>
+#include <format>
+#include <imgui.h>
 
 namespace gs::visualizer {
     InputController* InputController::instance_ = nullptr;
@@ -47,6 +47,9 @@ namespace gs::visualizer {
         double x, y;
         glfwGetCursorPos(window_, &x, &y);
         last_mouse_pos_ = {x, y};
+
+        // Initialize frame timer
+        last_frame_time_ = std::chrono::high_resolution_clock::now();
 
         LOG_DEBUG("InputController initialized - callbacks set");
     }
@@ -330,7 +333,67 @@ namespace gs::visualizer {
         }
     }
 
+    void InputController::processWASDMovement() {
+        // Calculate frame delta time
+        auto now = std::chrono::high_resolution_clock::now();
+        float delta_time = std::chrono::duration<float>(now - last_frame_time_).count();
+        last_frame_time_ = now;
+
+        // Clamp delta time to prevent huge jumps (60 FPS min)
+        delta_time = std::min(delta_time, 1.0f / 60.0f);
+
+        // Only process WASD if we should handle input and not dragging anything
+        if (!shouldCameraHandleInput() || drag_mode_ != DragMode::None) {
+            return;
+        }
+
+        bool any_movement = false;
+
+        // Process each WASD key with frame-time based movement
+        if (keys_wasd_[0]) { // W
+            viewport_.camera.advance_forward(delta_time);
+            any_movement = true;
+        }
+        if (keys_wasd_[1]) { // A
+            viewport_.camera.advance_left(delta_time);
+            any_movement = true;
+        }
+        if (keys_wasd_[2]) { // S
+            viewport_.camera.advance_backward(delta_time);
+            any_movement = true;
+        }
+        if (keys_wasd_[3]) { // D
+            viewport_.camera.advance_right(delta_time);
+            any_movement = true;
+        }
+
+        // Publish camera move if we moved
+        if (any_movement) {
+            publishCameraMove();
+        }
+    }
+
     void InputController::update(float delta_time) {
+        // This catches cases where mouse release events are missed (e.g., outside window)
+        if (drag_mode_ == DragMode::Orbit &&
+            glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_MIDDLE) != GLFW_PRESS) {
+            viewport_.camera.endRotateAroundCenter();
+            drag_mode_ = DragMode::None;
+            LOG_TRACE("Orbit stopped - button released outside window");
+        }
+
+        if (drag_mode_ == DragMode::Rotate &&
+            glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS) {
+            drag_mode_ = DragMode::None;
+            LOG_TRACE("Rotate stopped - button released outside window");
+        }
+
+        if (drag_mode_ == DragMode::Pan &&
+            glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) {
+            drag_mode_ = DragMode::None;
+            LOG_TRACE("Pan stopped - button released outside window");
+        }
+
         // Handle inertia for orbiting
         viewport_.camera.updateInertia(delta_time);
 

@@ -80,6 +80,9 @@ namespace gs::visualizer {
         void handleFileDrop(const std::vector<std::string>& paths);
         void handleGoToCamView(const events::cmd::GoToCamView& event);
 
+        // WASD processing with proper frame timing
+        void processWASDMovement();
+
         // Helpers
         bool isInViewport(double x, double y) const;
         bool shouldCameraHandleInput() const;
@@ -122,6 +125,9 @@ namespace gs::visualizer {
         // Throttling for camera events
         std::chrono::steady_clock::time_point last_camera_publish_;
         static constexpr auto camera_publish_interval_ = std::chrono::milliseconds(100);
+
+        // Frame timing for WASD movement
+        std::chrono::high_resolution_clock::time_point last_frame_time_;
 
         // Static instance for callbacks
         static InputController* instance_;
