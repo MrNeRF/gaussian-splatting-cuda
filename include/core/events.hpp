@@ -5,7 +5,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace gs {
 
@@ -59,6 +58,7 @@ namespace gs {
             EVENT(ToolDisabled, std::string tool_name;);
             EVENT(CropBoxSettingsChanged, bool show_box; bool use_box;);
             EVENT(AxesSettingsChanged, bool show_axes;);
+            EVENT(TranslationGizmoSettingsChanged, bool enabled; float scale;);
         } // namespace tools
 
         // ============================================================================

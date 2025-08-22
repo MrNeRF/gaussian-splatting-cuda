@@ -51,7 +51,7 @@ namespace gs::visualizer {
             markDirty();
         });
 
-        // Window resize - ADD THIS!
+        // Window resize
         events::ui::WindowResized::when([this](const auto&) {
             markDirty();
             cached_result_ = {}; // Clear cache on resize since dimensions changed
@@ -104,6 +104,23 @@ namespace gs::visualizer {
             settings_.point_cloud_mode = event.enabled;
             settings_.voxel_size = event.voxel_size;
             markDirty();
+        });
+
+        // Translation gizmo tool events
+        events::tools::ToolEnabled::when([this](const auto& event) {
+            if (event.tool_name == "Translation Gizmo") {
+                std::lock_guard<std::mutex> lock(settings_mutex_);
+                settings_.show_translation_gizmo = true;
+                markDirty();
+            }
+        });
+
+        events::tools::ToolDisabled::when([this](const auto& event) {
+            if (event.tool_name == "Translation Gizmo") {
+                std::lock_guard<std::mutex> lock(settings_mutex_);
+                settings_.show_translation_gizmo = false;
+                markDirty();
+            }
         });
     }
 
@@ -263,16 +280,6 @@ namespace gs::visualizer {
                 .size = render_size,
                 .fov = settings_.fov};
 
-            // Apply world transform if not identity
-            if (!settings_.world_transform.isIdentity()) {
-                glm::mat3 world_rot = settings_.world_transform.getRotationMat();
-                glm::vec3 world_trans = settings_.world_transform.getTranslation();
-
-                // Transform the camera position and rotation
-                viewport_data.rotation = world_rot * viewport_data.rotation;
-                viewport_data.translation = world_rot * viewport_data.translation + world_trans;
-            }
-
             gs::rendering::RenderRequest request{
                 .viewport = viewport_data,
                 .scaling_modifier = settings_.scaling_modifier,
@@ -280,7 +287,16 @@ namespace gs::visualizer {
                 .background_color = bg_color,
                 .crop_box = std::nullopt,
                 .point_cloud_mode = settings_.point_cloud_mode,
-                .voxel_size = settings_.voxel_size};
+                .voxel_size = settings_.voxel_size,
+                .model_transform = std::nullopt // Initialize this field
+            };
+
+            // IMPORTANT: Apply world transform to MODEL, not view!
+            if (!settings_.world_transform.isIdentity()) {
+                // Apply transform to the model instead of the camera
+                request.model_transform = settings_.world_transform.toMat4();
+                // DON'T transform the viewport data anymore!
+            }
 
             // Add crop box if enabled
             if (settings_.use_crop_box) {
@@ -378,6 +394,15 @@ namespace gs::visualizer {
             auto axes_result = engine_->renderCoordinateAxes(viewport, settings_.axes_size, settings_.axes_visibility);
             if (!axes_result) {
                 std::println("Failed to render coordinate axes: {}", axes_result.error());
+            }
+        }
+
+        // Translation gizmo (render last so it's on top)
+        if (settings_.show_translation_gizmo && engine_) {
+            glm::vec3 gizmo_pos = settings_.world_transform.getTranslation();
+            auto gizmo_result = engine_->renderTranslationGizmo(gizmo_pos, viewport, settings_.gizmo_scale);
+            if (!gizmo_result) {
+                std::println("Failed to render translation gizmo: {}", gizmo_result.error());
             }
         }
     }
