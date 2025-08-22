@@ -331,11 +331,11 @@ namespace gs::visualizer {
 
                 if (!present_result) {
                     LOG_ERROR("Failed to present render result: {}", present_result.error());
-                    //throw std::runtime_error("Failed to present render result: " + present_result.error());
+                    // throw std::runtime_error("Failed to present render result: " + present_result.error());
                 }
             } else {
                 LOG_ERROR("Failed to render gaussians: {}", render_result.error());
-                //throw std::runtime_error("Failed to render gaussians: " + render_result.error());
+                // throw std::runtime_error("Failed to render gaussians: " + render_result.error());
             }
         }
 
