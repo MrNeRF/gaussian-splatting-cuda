@@ -356,8 +356,15 @@ namespace gs::visualizer {
         if (!rendering_manager_->isInitialized()) {
             rendering_manager_->initialize();
         }
+        auto result = data_loader_->loadDataset(path);
 
-        return data_loader_->loadDataset(path);
+        if (result && project_) {
+            auto data_config = project_->getProjectData().data_set_info;
+            data_config.data_path = path;
+            project_->setDataInfo(data_config);
+        }
+
+        return result;
     }
 
     void VisualizerImpl::clearScene() {
@@ -400,6 +407,9 @@ namespace gs::visualizer {
 
     std::shared_ptr<gs::management::Project> VisualizerImpl::getProject() {
         return project_;
+    }
+    void VisualizerImpl::attachProject(std::shared_ptr<gs::management::Project> _project) {
+        project_ = _project;
     }
 
     void VisualizerImpl::handleLoadProjectCommand(const events::cmd::LoadProject& cmd) {

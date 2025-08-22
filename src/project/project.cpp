@@ -108,7 +108,11 @@ namespace gs::management {
     }
 
     DataSetInfo::DataSetInfo(const param::DatasetConfig& data_config) : DatasetConfig(data_config) {
-        data_type = IsColmapData(data_path) ? "Colmap" : "Blender";
+        if (data_path.empty()) {
+            data_type = "";
+        } else {
+            data_type = IsColmapData(data_path) ? "Colmap" : "Blender";
+        }
     }
 
     // LichtFeldProject implementation
@@ -406,19 +410,20 @@ namespace gs::management {
         }
         std::filesystem::path project_path = data.project_path;
         if (project_path.empty()) {
-            project_path = data.output_path / "project.ls";
-            LOG_INFO("project_path is empty - creating new project.ls file");
+            project_path = data.output_path / ("project" + Project::EXTENSION);
+            LOG_INFO("project_path is empty - creating new project{} file", Project::EXTENSION);
         }
 
         if (project_path.extension() != Project::EXTENSION) {
             LOG_ERROR("project_path must be {} file: {}", Project::EXTENSION, project_path.string());
             return nullptr;
         }
+        if (project_path.parent_path().empty()) {
+            LOG_ERROR("project_path must have parent directory: project_path: {} ", project_path.string());
+            return nullptr;
+        }
+
         try {
-            if (project_path.parent_path().empty()) {
-                LOG_ERROR("project_path must have parent directory: project_path: {} ", project_path.string());
-                return nullptr;
-            }
             project->setProjectFileName(project_path);
             project->setProjectOutputFolder(data.output_path);
             project->setDataInfo(data);
@@ -455,6 +460,41 @@ namespace gs::management {
             return {};
         }
         return foundPath;
+    }
+
+    void clear_directory(const std::filesystem::path& path) {
+        namespace fs = std::filesystem;
+        for (const auto& entry : fs::directory_iterator(path)) {
+            fs::remove_all(entry);
+        }
+    }
+
+    std::shared_ptr<Project> CreateTempNewProject(const gs::param::DatasetConfig& data,
+                                                  const param::OptimizationParameters& opt,
+                                                  const std::string& project_name) {
+        namespace fs = std::filesystem;
+        gs::param::DatasetConfig data_with_temp_output = data;
+
+        auto temp_path = fs::temp_directory_path() / "LichtFeldStudio";
+        if (fs::exists(temp_path)) {
+            clear_directory(temp_path);
+            LOG_INFO("Project temoprary directory exists removing its contenet {}", temp_path.string());
+        } else {
+            try {
+                bool success = fs::create_directories(temp_path);
+                if (!success) {
+                    LOG_ERROR("failed to create temporary directory {}", temp_path.string());
+                    return nullptr;
+                }
+                LOG_INFO("Project created temoprary directory successfuly: {}", temp_path.string());
+
+            } catch (const fs::filesystem_error& e) {
+                LOG_ERROR("failed to create temporary directory {}. reason: {}", temp_path.string(), e.what());
+                return nullptr;
+            }
+        }
+        data_with_temp_output.output_path = temp_path;
+        return CreateNewProject(data_with_temp_output, opt, project_name);
     }
 
 } // namespace gs::management

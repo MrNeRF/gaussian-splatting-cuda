@@ -156,6 +156,10 @@ namespace gs::management {
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
                                               const std::string& project_name = "LichtFeldStudioProject");
 
+    std::shared_ptr<Project> CreateTempNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
+                                          const std::string& project_name = "LichtFeldStudioProject");
+
+
     // find the
     std::filesystem::path FindProjectFile(const std::filesystem::path& directory);
 

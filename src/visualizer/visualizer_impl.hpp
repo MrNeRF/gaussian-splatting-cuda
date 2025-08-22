@@ -43,6 +43,7 @@ namespace gs::visualizer {
         bool openProject(const std::filesystem::path& path) override;
         bool closeProject(const std::filesystem::path& path = {}) override;
         std::shared_ptr<gs::management::Project> getProject() override;
+        void attachProject(std::shared_ptr<gs::management::Project> _project) override;
         // load project content to viewer
         bool LoadProject();
 
