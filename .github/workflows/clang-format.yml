@@ -19,6 +19,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang-format
 
+      - name: Print clang-format version
+        run: |
+          clang-format --version
+
       - name: Run clang-format
         run: |
           find . -regex '.*\.\(cpp\|hpp\|cc\|c\|h\|cu\|cuh\)' \
