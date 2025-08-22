@@ -38,24 +38,38 @@ namespace gs::visualizer {
         { t.initialize(ctx) } -> std::same_as<bool>;
         { t.shutdown() } -> std::same_as<void>;
         { t.update(ctx) } -> std::same_as<void>;
-        { t.render(ctx) } -> std::same_as<void>;
         { t.renderUI(ui_ctx, p_open) } -> std::same_as<void>;
     };
 
-    // Context passed to tools for accessing visualizer resources
+    // Concrete context passed to tools for accessing visualizer resources
     class ToolContext {
     public:
-        virtual ~ToolContext() = default;
+        ToolContext(RenderingManager* rm, gs::SceneManager* sm, const Viewport* vp, GLFWwindow* win)
+            : rendering_manager(rm),
+              scene_manager(sm),
+              viewport(vp),
+              window(win) {}
 
-        // Access to visualizer components - make these const
-        virtual RenderingManager* getRenderingManager() const = 0;
-        virtual gs::SceneManager* getSceneManager() const = 0;
-        virtual const ::Viewport& getViewport() const = 0;
-        virtual ::GLFWwindow* getWindow() const = 0;
+        // Direct access to components
+        RenderingManager* getRenderingManager() const { return rendering_manager; }
+        gs::SceneManager* getSceneManager() const { return scene_manager; }
+        const Viewport& getViewport() const { return *viewport; }
+        GLFWwindow* getWindow() const { return window; }
 
-        // Tool-specific helpers
-        virtual void requestRender() = 0;
-        virtual void logMessage(const std::string& msg) = 0;
+        // Helper methods
+        void requestRender() {
+            if (rendering_manager) {
+                rendering_manager->markDirty();
+            }
+        }
+
+        void logMessage(const std::string& msg); // Implementation will be in cpp file to avoid circular deps
+
+    private:
+        RenderingManager* rendering_manager;
+        gs::SceneManager* scene_manager;
+        const Viewport* viewport;
+        GLFWwindow* window;
     };
 
     // Base class providing default implementations
@@ -77,7 +91,6 @@ namespace gs::visualizer {
         virtual bool initialize([[maybe_unused]] const ToolContext& ctx) { return true; }
         virtual void shutdown() {}
         virtual void update([[maybe_unused]] const ToolContext& ctx) {}
-        virtual void render([[maybe_unused]] const ToolContext& ctx) {}
         virtual void renderUI(const gs::gui::UIContext& ui_ctx, bool* p_open) = 0;
 
     protected:

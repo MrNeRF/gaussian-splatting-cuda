@@ -3,6 +3,7 @@
 #include "core/data_loading_service.hpp"
 #include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
+#include "tools/translation_gizmo_tool.hpp"
 
 namespace gs::visualizer {
 
@@ -50,10 +51,37 @@ namespace gs::visualizer {
 
     VisualizerImpl::~VisualizerImpl() {
         trainer_manager_.reset();
+        translation_gizmo_tool_.reset();
+        tool_context_.reset();
         if (gui_manager_) {
             gui_manager_->shutdown();
         }
         LOG_INFO("Visualizer destroyed.");
+    }
+
+    void VisualizerImpl::initializeTools() {
+        // Create the tool context
+        tool_context_ = std::make_unique<ToolContext>(
+            rendering_manager_.get(),
+            scene_manager_.get(),
+            &viewport_,
+            window_manager_->getWindow());
+
+        // Create translation gizmo tool
+        translation_gizmo_tool_ = std::make_shared<tools::TranslationGizmoTool>();
+
+        // Initialize the tool with the context
+        if (!translation_gizmo_tool_->initialize(*tool_context_)) {
+            LOG_ERROR("Failed to initialize translation gizmo tool");
+            translation_gizmo_tool_.reset();
+        } else {
+            // Connect tool to input controller
+            if (input_controller_) {
+                input_controller_->setTranslationGizmoTool(translation_gizmo_tool_);
+                input_controller_->setToolContext(tool_context_.get());
+            }
+            LOG_INFO("Translation gizmo tool initialized successfully");
+        }
     }
 
     void VisualizerImpl::setupComponentConnections() {
@@ -202,6 +230,9 @@ namespace gs::visualizer {
             rendering_manager_->initialize();
         }
 
+        // Initialize tools AFTER rendering is initialized
+        initializeTools();
+
         return true;
     }
 
@@ -211,6 +242,11 @@ namespace gs::visualizer {
         // Update the main viewport with window size
         viewport_.windowSize = window_manager_->getWindowSize();
         viewport_.frameBufferSize = window_manager_->getFramebufferSize();
+
+        // Update gizmo tool if active
+        if (translation_gizmo_tool_ && translation_gizmo_tool_->isEnabled() && tool_context_) {
+            translation_gizmo_tool_->update(*tool_context_);
+        }
     }
 
     void VisualizerImpl::render() {
@@ -259,7 +295,14 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::shutdown() {
-        // Nothing to shutdown now that tools are gone
+        // Shutdown tools
+        if (translation_gizmo_tool_) {
+            translation_gizmo_tool_->shutdown();
+            translation_gizmo_tool_.reset();
+        }
+
+        // Clean up tool context
+        tool_context_.reset();
     }
 
     bool VisualizerImpl::LoadProject() {

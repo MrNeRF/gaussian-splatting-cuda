@@ -11,6 +11,7 @@
 #include "rendering/rendering.hpp"
 #include "rendering/rendering_manager.hpp"
 #include "scene/scene_manager.hpp"
+#include "tools/tool_base.hpp"
 #include "training/training_manager.hpp"
 #include "visualizer/visualizer.hpp"
 #include "window/window_manager.hpp"
@@ -27,6 +28,10 @@ namespace gs {
 
 namespace gs::visualizer {
     class DataLoadingService;
+
+    namespace tools {
+        class TranslationGizmoTool;
+    }
 
     class VisualizerImpl : public Visualizer {
     public:
@@ -81,11 +86,22 @@ namespace gs::visualizer {
             return rendering_manager_ ? rendering_manager_->getSettings().antialiasing : false;
         }
 
+        tools::TranslationGizmoTool* getTranslationGizmoTool() {
+            return translation_gizmo_tool_.get();
+        }
+
+        const tools::TranslationGizmoTool* getTranslationGizmoTool() const {
+            return translation_gizmo_tool_.get();
+        }
+
         std::shared_ptr<TrainerManager> trainer_manager_;
 
         // GUI manager
         std::unique_ptr<gui::GuiManager> gui_manager_;
         friend class gui::GuiManager;
+
+        // Allow ToolContext to access GUI manager for logging
+        friend class ToolContext;
 
     private:
         // Main loop callbacks
@@ -99,6 +115,9 @@ namespace gs::visualizer {
         void setupComponentConnections();
         void handleLoadProjectCommand(const events::cmd::LoadProject& cmd);
 
+        // Tool initialization
+        void initializeTools();
+
         // Options
         ViewerOptions options_;
 
@@ -111,6 +130,10 @@ namespace gs::visualizer {
         std::unique_ptr<CommandProcessor> command_processor_;
         std::unique_ptr<DataLoadingService> data_loader_;
         std::unique_ptr<MainLoop> main_loop_;
+
+        // Tools
+        std::shared_ptr<tools::TranslationGizmoTool> translation_gizmo_tool_;
+        std::unique_ptr<ToolContext> tool_context_;
 
         // Support components
         std::unique_ptr<ErrorHandler> error_handler_;

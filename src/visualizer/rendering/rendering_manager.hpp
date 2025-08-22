@@ -48,6 +48,10 @@ namespace gs::visualizer {
         // Point cloud
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
+
+        // Translation gizmo
+        bool show_translation_gizmo = false;
+        float gizmo_scale = 1.0f;
     };
 
     struct ViewportRegion {
