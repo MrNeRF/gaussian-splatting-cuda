@@ -1,31 +1,27 @@
 #include <algorithm>
 #include <format>
 #include <imgui.h>
-
 #include "core/logger.hpp"
 #include "input/input_controller.hpp"
 #include "tools/tool_base.hpp"
 #include "tools/translation_gizmo_tool.hpp"
+#include <GLFW/glfw3.h>
 
 namespace gs::visualizer {
-
     InputController* InputController::instance_ = nullptr;
 
     InputController::InputController(GLFWwindow* window, Viewport& viewport)
         : window_(window),
           viewport_(viewport) {
-
         // Subscribe to GoToCamView events
         events::cmd::GoToCamView::when([this](const auto& e) {
             handleGoToCamView(e);
         });
-
         // Subscribe to WindowFocusLost to reset states
         events::internal::WindowFocusLost::when([this](const auto&) {
             drag_mode_ = DragMode::None;
             std::fill(std::begin(keys_wasd_), std::end(keys_wasd_), false);
         });
-
         LOG_DEBUG("InputController created");
     }
 
@@ -37,7 +33,6 @@ namespace gs::visualizer {
 
     void InputController::initialize() {
         // CRITICAL: This must be called AFTER ImGui_ImplGlfw_InitForOpenGL
-
         instance_ = this;
 
         // Store ImGui's callbacks so we can chain to them
@@ -182,12 +177,13 @@ namespace gs::visualizer {
                 LOG_TRACE("Started camera rotate");
             } else if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
                 drag_mode_ = DragMode::Orbit;
+                float current_time = static_cast<float>(glfwGetTime());
+                viewport_.camera.startRotateAroundCenter(glm::vec2(x, y), current_time);
                 LOG_TRACE("Started camera orbit");
             }
         } else if (action == GLFW_RELEASE) {
             // Always handle our own releases if we were dragging
             bool was_dragging = false;
-
             if (button == GLFW_MOUSE_BUTTON_LEFT && drag_mode_ == DragMode::Pan) {
                 drag_mode_ = DragMode::None;
                 was_dragging = true;
@@ -197,6 +193,7 @@ namespace gs::visualizer {
                 was_dragging = true;
                 LOG_TRACE("Ended camera rotate");
             } else if (button == GLFW_MOUSE_BUTTON_MIDDLE && drag_mode_ == DragMode::Orbit) {
+                viewport_.camera.endRotateAroundCenter();
                 drag_mode_ = DragMode::None;
                 was_dragging = true;
                 LOG_TRACE("Ended camera orbit");
@@ -238,13 +235,14 @@ namespace gs::visualizer {
             case DragMode::Rotate:
                 viewport_.camera.rotate(pos);
                 break;
-            case DragMode::Orbit:
-                viewport_.camera.rotate_around_center(pos);
+            case DragMode::Orbit: {
+                float current_time = static_cast<float>(glfwGetTime());
+                viewport_.camera.updateRotateAroundCenter(pos, current_time);
                 break;
+            }
             default:
                 break;
             }
-
             publishCameraMove();
         }
     }
@@ -280,7 +278,6 @@ namespace gs::visualizer {
         }
         if (key == GLFW_KEY_R) {
             key_r_pressed_ = (action != GLFW_RELEASE);
-
             // Reset gizmo position if R is pressed and gizmo is enabled
             if (action == GLFW_PRESS && translation_gizmo_ && translation_gizmo_->isEnabled()) {
                 LOG_DEBUG("Reset key pressed with gizmo enabled");
@@ -328,22 +325,35 @@ namespace gs::visualizer {
         }
 
         if (changed) {
-            // Apply movement
-            const float rate = 1.0f;
-            if (keys_wasd_[0])
-                viewport_.camera.advance_forward(rate);
-            if (keys_wasd_[1])
-                viewport_.camera.advance_left(rate);
-            if (keys_wasd_[2])
-                viewport_.camera.advance_backward(rate);
-            if (keys_wasd_[3])
-                viewport_.camera.advance_right(rate);
+            LOG_TRACE("WASD state changed - W:{} A:{} S:{} D:{}",
+                      keys_wasd_[0], keys_wasd_[1], keys_wasd_[2], keys_wasd_[3]);
+        }
+    }
 
-            if (keys_wasd_[0] || keys_wasd_[1] || keys_wasd_[2] || keys_wasd_[3]) {
-                publishCameraMove();
-                LOG_TRACE("WASD movement - W:{} A:{} S:{} D:{}",
-                          keys_wasd_[0], keys_wasd_[1], keys_wasd_[2], keys_wasd_[3]);
+    void InputController::update(float delta_time) {
+        // Handle inertia for orbiting
+        viewport_.camera.updateInertia(delta_time);
+
+        // Handle continuous WASD movement
+        if (shouldCameraHandleInput() && drag_mode_ != DragMode::Gizmo) {
+            if (keys_wasd_[0]) {
+                viewport_.camera.advance_forward(delta_time);
             }
+            if (keys_wasd_[1]) {
+                viewport_.camera.advance_left(delta_time);
+            }
+            if (keys_wasd_[2]) {
+                viewport_.camera.advance_backward(delta_time);
+            }
+            if (keys_wasd_[3]) {
+                viewport_.camera.advance_right(delta_time);
+            }
+        }
+
+        // Publish if moving or inertia active
+        bool moving = keys_wasd_[0] || keys_wasd_[1] || keys_wasd_[2] || keys_wasd_[3];
+        if (moving || glm::length2(viewport_.camera.orbitVelocity) > 0.0001f) {
+            publishCameraMove();
         }
     }
 
@@ -433,9 +443,7 @@ namespace gs::visualizer {
         if (focal_x > 0.0f && width > 0) {
             float fov_rad = 2.0f * std::atan(width / (2.0f * focal_x));
             float fov_deg = glm::degrees(fov_rad);
-
             LOG_TRACE("Setting FOV to {:.2f} degrees", fov_deg);
-
             events::ui::RenderSettingsChanged{
                 .fov = fov_deg,
                 .scaling_modifier = std::nullopt,
@@ -509,5 +517,4 @@ namespace gs::visualizer {
             last_camera_publish_ = now;
         }
     }
-
 } // namespace gs::visualizer

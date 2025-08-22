@@ -50,6 +50,9 @@ namespace gs::visualizer {
             point_cloud_mode_ = enabled;
         }
 
+        // Update function for continuous input (WASD movement and inertia)
+        void update(float delta_time);
+
     private:
         // Store original ImGui callbacks so we can chain
         struct {
@@ -98,11 +101,13 @@ namespace gs::visualizer {
         } viewport_bounds_{0, 0, 1920, 1080};
 
         // Camera state
-        enum class DragMode { None,
-                              Pan,
-                              Rotate,
-                              Orbit,
-                              Gizmo }; // Add Gizmo mode
+        enum class DragMode {
+            None,
+            Pan,
+            Rotate,
+            Orbit,
+            Gizmo
+        };
         DragMode drag_mode_ = DragMode::None;
         glm::dvec2 last_mouse_pos_{0, 0};
 
