@@ -56,7 +56,7 @@ set_target_properties(gsplat_backend PROPERTIES
         CXX_STANDARD_REQUIRED ON
         CUDA_STANDARD 20
         CUDA_STANDARD_REQUIRED ON
-        CUDA_ARCHITECTURES ${gaussian_splatting_cuda_CUDA_ARCH}
+        CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -81,12 +81,18 @@ target_link_libraries(gsplat_backend
         glm::glm
 )
 
-# Compile options for both CUDA and C++
 target_compile_options(gsplat_backend PRIVATE
-        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 --use_fast_math --expt-relaxed-constexpr -diag-suppress=20012,186>
-        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0 -g>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CXX>>:-O3>
+  # CUDA
+  $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-O0 -g -G -lineinfo>
+  $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-O3 --use_fast_math --expt-relaxed-constexpr --diag-suppress=20012,186,221>
+
+  # C++ MSVC
+  $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/Od /Z7>
+  $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /DNDEBUG>
+
+  # C++ no-MSVC (GCC/Clang/AppleClang/IntelLLVM)
+  $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Debug>>:-O0 -g>
+  $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>,$<CONFIG:Release>>:-O3 -DNDEBUG>
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -97,7 +103,7 @@ endif()
 
 # Print debug info
 message(STATUS "gsplat_backend configuration:")
-message(STATUS "  - CUDA targets available: ${TARGET}")
+message(STATUS "  - CUDA targets available: ${_archs}")
 message(STATUS "  - Sources: ${GSPLAT_SOURCES}")
 message(STATUS "  - Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  - C++ Standard: 23")

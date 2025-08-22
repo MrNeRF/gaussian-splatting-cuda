@@ -416,6 +416,7 @@ namespace gs {
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera; // rasterize needs non-const Camera&
                 torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA);
+                torch::Tensor attention_mask = std::move(camera_with_image.attentionMask);
 
                 // TODO: const_cast is certainly not the correct solution here!
                 auto& splatData_mutable = const_cast<SplatData&>(splatData);

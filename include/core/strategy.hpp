@@ -1,11 +1,11 @@
 #pragma once
-
 #include "core/istrategy.hpp"
 #include <memory>
 #include <torch/torch.h>
 // Add this include for OptimizerParamState
 
 namespace strategy {
+    using OptimizerFnType = std::function<std::unique_ptr<torch::optim::OptimizerParamState>(torch::optim::OptimizerParamState&, const torch::Tensor)>;
     void initialize_gaussians(gs::SplatData& splat_data);
 
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(

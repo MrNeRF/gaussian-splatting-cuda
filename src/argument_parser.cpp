@@ -81,6 +81,7 @@ namespace {
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
+            ::args::ValueFlag<std::string> attention_masks_folder(parser, "attention_masks_folder", "Attention masks folder name", {"attention-masks-folder"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
             ::args::ValueFlag<float> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
             ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "SH degree interval", {"sh-degree-interval"});
@@ -115,6 +116,8 @@ namespace {
                                                                 {"2", 2},
                                                                 {"4", 4},
                                                                 {"8", 8}});
+                                                                
+            ::args::Flag use_attention_mask(parser, "attention_masks", "Use attention masks on training", {"attention-masks"});
 
             // Parse arguments
             try {
@@ -249,6 +252,7 @@ namespace {
                                         init_extent_val = init_extent ? std::optional<float>(::args::get(init_extent)) : std::optional<float>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
+                                        use_attention_mask_flag = bool(use_attention_mask),
                                         enable_eval_flag = bool(enable_eval),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
@@ -284,6 +288,7 @@ namespace {
                 setVal(init_num_pts_val, opt.init_num_pts);
                 setVal(init_extent_val, opt.init_extent);
 
+                setFlag(use_attention_mask_flag, opt.use_attention_mask);
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
                 setFlag(headless_flag, opt.headless);

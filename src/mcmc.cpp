@@ -3,6 +3,7 @@
 #include "core/fused_adam.hpp"
 #include "core/parameters.hpp"
 #include "core/rasterizer.hpp"
+#include <c10/cuda/CUDACachingAllocator.h>
 #include <iostream>
 #include <random>
 
@@ -367,7 +368,7 @@ void MCMC::post_backward(int iter, gs::RenderOutput& render_output) {
     }
 
     // Refine Gaussians
-    if (is_refining(iter)) {
+    if (is_refining(iter)) { 
         // Relocate dead Gaussians
         relocate_gs();
 

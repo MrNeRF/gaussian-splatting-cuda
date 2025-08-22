@@ -39,6 +39,7 @@ namespace gs {
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
             std::string strategy = "mcmc";                    // Optimization strategy: mcmc, default.
+            bool use_attention_mask = false;                  // Skip saving intermediate results and only save final output
 
             // Bilateral grid parameters
             bool use_bilateral_grid = false;
@@ -75,6 +76,7 @@ namespace gs {
             std::filesystem::path output_path = "output";
             std::filesystem::path project_path = ""; // if path is relative it will be saved to output_path/project_name.ls
             std::string images = "images";
+            std::string attention_masks = "masks";
             int resize_factor = -1;
             int test_every = 8;
         };

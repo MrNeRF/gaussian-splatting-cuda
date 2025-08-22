@@ -22,6 +22,7 @@ namespace gs {
                gsplat::CameraModelType camera_model_type,
                const std::string& image_name,
                const std::filesystem::path& image_path,
+               const std::filesystem::path& mask_path,
                int camera_width, int camera_height,
                int uid);
 
@@ -36,6 +37,9 @@ namespace gs {
 
         // Load image from disk and return it
         torch::Tensor load_and_get_image(int resize_factor = -1);
+        
+        // Load mask from disk and return it
+        torch::Tensor load_and_get_attention_weights(int resize_factor = -1);
 
         // Get number of bytes in the image file
         size_t get_num_bytes_from_file() const;
@@ -98,6 +102,7 @@ namespace gs {
         // Image info
         std::string _image_name;
         std::filesystem::path _image_path;
+        std::filesystem::path _mask_path;
         int _camera_width = 0;
         int _camera_height = 0;
         int _image_width = 0;
