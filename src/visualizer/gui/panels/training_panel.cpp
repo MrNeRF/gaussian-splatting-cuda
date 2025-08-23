@@ -66,6 +66,14 @@ namespace gs::gui::panels {
 
         case TrainerManager::State::Completed:
             ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
+
+            // Add Save Project button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.9f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+            if (ImGui::Button("Save Project", ImVec2(-1, 0))) {
+                state.show_save_browser = true;
+            }
+            ImGui::PopStyleColor(2);
             break;
 
         case TrainerManager::State::Error:
@@ -108,6 +116,11 @@ namespace gs::gui::panels {
             } else {
                 state.save_in_progress = false;
             }
+        }
+
+        // Render save project file browser
+        if (state.show_save_browser) {
+            state.save_browser.render(&state.show_save_browser);
         }
 
         // Status display

@@ -36,6 +36,7 @@ add_library(gs_visualizer STATIC
 
         # Training integration
         training/training_manager.cpp
+        gui/windows/save_project_browser.cpp
 )
 
 # Set include directories
