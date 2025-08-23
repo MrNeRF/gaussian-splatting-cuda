@@ -424,8 +424,10 @@ namespace gs::management {
 
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
                                               const param::OptimizationParameters& opt,
-                                              const std::string& project_name) {
-        auto project = std::make_shared<gs::management::Project>(true);
+                                              const std::string& project_name,
+                                              bool udpdate_file_on_change) {
+
+        auto project = std::make_shared<gs::management::Project>(udpdate_file_on_change);
 
         project->setProjectName(project_name);
         if (data.output_path.empty()) {
@@ -495,7 +497,7 @@ namespace gs::management {
 
     std::shared_ptr<Project> CreateTempNewProject(const gs::param::DatasetConfig& data,
                                                   const param::OptimizationParameters& opt,
-                                                  const std::string& project_name) {
+                                                  const std::string& project_name, bool udpdate_file_on_change) {
         namespace fs = std::filesystem;
         gs::param::DatasetConfig data_with_temp_output = data;
 
@@ -518,7 +520,7 @@ namespace gs::management {
             }
         }
         data_with_temp_output.output_path = temp_path;
-        return CreateNewProject(data_with_temp_output, opt, project_name);
+        return CreateNewProject(data_with_temp_output, opt, project_name, udpdate_file_on_change);
     }
 
 } // namespace gs::management
