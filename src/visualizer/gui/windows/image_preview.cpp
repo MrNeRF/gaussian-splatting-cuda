@@ -1,12 +1,13 @@
 #include "gui/windows/image_preview.hpp"
 #include "core/events.hpp"
 #include "core/image_io.hpp"
+#include "core/logger.hpp"
 #include <algorithm>
 #include <format>
 #include <future>
 #include <glad/glad.h>
 #include <imgui.h>
-#include <print>
+#include <stdexcept>
 #include <thread>
 
 namespace gs::gui {
@@ -22,16 +23,16 @@ namespace gs::gui {
         std::call_once(initialized, [this]() {
             if (glGetIntegerv) { // Check if OpenGL is initialized
                 glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size_);
+                LOG_DEBUG("Max texture size: {}x{}", max_texture_size_, max_texture_size_);
             }
         });
     }
 
     void ImagePreview::open(const std::vector<std::filesystem::path>& image_paths, size_t initial_index) {
+        LOG_TIMER_TRACE("ImagePreview::open");
 
         if (image_paths.empty()) {
-            events::notify::Warning{
-                .message = "No images to preview"}
-                .emit();
+            LOG_WARN("No images to preview");
             return;
         }
 
@@ -48,25 +49,22 @@ namespace gs::gui {
         pan_y_ = 0.0f;
         fit_to_window_ = true;
 
+        LOG_DEBUG("Opening image preview with {} images, starting at index {}",
+                  image_paths.size(), current_index_);
+
         // Load current image
         if (!loadImage(image_paths_[current_index_])) {
-            events::notify::Error{
-                .message = "Failed to load image",
-                .details = load_error_}
-                .emit();
+            LOG_ERROR("Failed to load initial image: {}", load_error_);
+            throw std::runtime_error(std::format("Failed to load image: {}", load_error_));
         }
 
         // Start preloading adjacent images
         preloadAdjacentImages();
 
-        events::notify::Log{
-            .level = events::notify::Log::Level::Info,
-            .message = std::format("Opened image {}/{}: {}",
-                                   current_index_ + 1,
-                                   image_paths_.size(),
-                                   image_paths_[current_index_].filename().string()),
-            .source = "ImagePreview"}
-            .emit();
+        LOG_INFO("Opened image {}/{}: {}",
+                 current_index_ + 1,
+                 image_paths_.size(),
+                 image_paths_[current_index_].filename().string());
     }
 
     void ImagePreview::open(const std::filesystem::path& image_path) {
@@ -88,9 +86,14 @@ namespace gs::gui {
         }
 
         load_error_.clear();
+        LOG_DEBUG("Image preview closed");
     }
 
     std::unique_ptr<ImageData> ImagePreview::loadImageData(const std::filesystem::path& path) {
+        LOG_TIMER_TRACE("LoadImageData");
+
+        LOG_TRACE("Loading image data from: {}", path.string());
+
         // Load image
         auto [data, width, height, channels] = ::load_image(path);
 
@@ -99,22 +102,27 @@ namespace gs::gui {
 
         // Validate
         if (!image_data->valid()) {
+            LOG_ERROR("Failed to load image data from: {}", path.string());
             throw std::runtime_error("Failed to load image data");
         }
 
         if (width <= 0 || height <= 0) {
+            LOG_ERROR("Invalid image dimensions: {}x{} for: {}", width, height, path.string());
             throw std::runtime_error(std::format("Invalid image dimensions: {}x{}", width, height));
         }
 
         if (channels < 1 || channels > 4) {
+            LOG_ERROR("Invalid number of channels: {} for: {}", channels, path.string());
             throw std::runtime_error(std::format("Invalid number of channels: {}", channels));
         }
 
+        LOG_TRACE("Loaded image: {}x{}, {} channels", width, height, channels);
         return image_data;
     }
 
     std::unique_ptr<ImagePreview::ImageTexture> ImagePreview::createTexture(
         ImageData&& data, const std::filesystem::path& path) {
+        LOG_TIMER_TRACE("CreateTexture");
 
         ensureMaxTextureSizeInitialized();
 
@@ -131,9 +139,13 @@ namespace gs::gui {
                 scale_factor *= 2;
             }
 
+            LOG_DEBUG("Image too large ({}x{}), downscaling by factor of {}",
+                      width, height, scale_factor);
+
             // Reload at lower resolution
             auto scaled_data = loadImageData(path);
             if (!scaled_data) {
+                LOG_ERROR("Failed to reload image at lower resolution");
                 throw std::runtime_error("Failed to reload image at lower resolution");
             }
 
@@ -154,6 +166,7 @@ namespace gs::gui {
 
         // Generate texture
         if (!texture->texture.generate()) {
+            LOG_ERROR("Failed to generate texture ID for: {}", path.string());
             throw std::runtime_error("Failed to generate texture ID");
         }
 
@@ -186,8 +199,11 @@ namespace gs::gui {
             internal_format = GL_RGBA8;
             break;
         default:
+            LOG_ERROR("Unsupported channel count: {} for: {}", channels, path.string());
             throw std::runtime_error(std::format("Unsupported channel count: {}", channels));
         }
+
+        LOG_TRACE("Creating {}x{} texture with {} channels", width, height, channels);
 
         // Upload texture
         glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0,
@@ -204,6 +220,7 @@ namespace gs::gui {
             case GL_OUT_OF_MEMORY: error_str = "GL_OUT_OF_MEMORY"; break;
             default: error_str = std::format("0x{:X}", error); break;
             }
+            LOG_ERROR("OpenGL error creating texture: {} for: {}", error_str, path.string());
             throw std::runtime_error(std::format("OpenGL error: {}", error_str));
         }
 
@@ -215,6 +232,7 @@ namespace gs::gui {
 
         GLTexture::unbind();
 
+        LOG_DEBUG("Created texture {}x{} for: {}", width, height, path.filename().string());
         return texture;
     }
 
@@ -222,6 +240,8 @@ namespace gs::gui {
         try {
             is_loading_ = true;
             load_error_.clear();
+
+            LOG_DEBUG("Loading image: {}", path.string());
 
             // Load image data with RAII
             auto image_data = loadImageData(path);
@@ -235,15 +255,18 @@ namespace gs::gui {
         } catch (const std::exception& e) {
             load_error_ = e.what();
             is_loading_ = false;
-            std::println("[ImagePreview] Error loading image: {}", e.what());
+            LOG_ERROR("Error loading image '{}': {}", path.string(), e.what());
             return false;
         }
     }
 
     void ImagePreview::preloadAdjacentImages() {
+        LOG_TIMER_TRACE("PreloadAdjacentImages");
+
         // Don't start new preload if one is already in progress
         bool expected = false;
         if (!preload_in_progress_.compare_exchange_strong(expected, true)) {
+            LOG_TRACE("Preload already in progress, skipping");
             return;
         }
 
@@ -264,6 +287,7 @@ namespace gs::gui {
 
         // Preload previous image
         if (current_index_ > 0) {
+            LOG_TRACE("Starting preload of previous image (index {})", current_index_ - 1);
             std::thread([this, prev_idx = current_index_ - 1, max_size]() {
                 try {
                     auto image_data = loadImageData(image_paths_[prev_idx]);
@@ -276,6 +300,7 @@ namespace gs::gui {
                             scale *= 2;
                         }
 
+                        LOG_TRACE("Preloaded image needs downscaling by factor of {}", scale);
                         // Reload at lower resolution
                         auto [data, w, h, c] = ::load_image(image_paths_[prev_idx], scale);
                         image_data = std::make_unique<ImageData>(data, w, h, c);
@@ -289,18 +314,21 @@ namespace gs::gui {
 
                     std::lock_guard<std::mutex> lock(preload_mutex_);
                     prev_result_ = std::move(result);
+                    LOG_TRACE("Successfully preloaded previous image");
                 } catch (const std::exception& e) {
                     auto result = std::make_unique<LoadResult>();
                     result->error = e.what();
 
                     std::lock_guard<std::mutex> lock(preload_mutex_);
                     prev_result_ = std::move(result);
+                    LOG_WARN("Failed to preload previous image: {}", e.what());
                 }
             }).detach();
         }
 
         // Preload next image
         if (current_index_ + 1 < image_paths_.size()) {
+            LOG_TRACE("Starting preload of next image (index {})", current_index_ + 1);
             std::thread([this, next_idx = current_index_ + 1, max_size]() {
                 try {
                     auto image_data = loadImageData(image_paths_[next_idx]);
@@ -313,6 +341,7 @@ namespace gs::gui {
                             scale *= 2;
                         }
 
+                        LOG_TRACE("Preloaded image needs downscaling by factor of {}", scale);
                         // Reload at lower resolution
                         auto [data, w, h, c] = ::load_image(image_paths_[next_idx], scale);
                         image_data = std::make_unique<ImageData>(data, w, h, c);
@@ -326,12 +355,14 @@ namespace gs::gui {
 
                     std::lock_guard<std::mutex> lock(preload_mutex_);
                     next_result_ = std::move(result);
+                    LOG_TRACE("Successfully preloaded next image");
                 } catch (const std::exception& e) {
                     auto result = std::make_unique<LoadResult>();
                     result->error = e.what();
 
                     std::lock_guard<std::mutex> lock(preload_mutex_);
                     next_result_ = std::move(result);
+                    LOG_WARN("Failed to preload next image: {}", e.what());
                 }
 
                 preload_in_progress_ = false;
@@ -351,8 +382,9 @@ namespace gs::gui {
                     prev_texture_ = createTexture(
                         std::move(prev_result_->image->data),
                         prev_result_->image->path);
+                    LOG_TRACE("Created texture for preloaded previous image");
                 } catch (const std::exception& e) {
-                    std::println("[ImagePreview] Failed to create prev texture: {}", e.what());
+                    LOG_WARN("Failed to create prev texture: {}", e.what());
                 }
             }
             prev_result_.reset();
@@ -365,8 +397,9 @@ namespace gs::gui {
                     next_texture_ = createTexture(
                         std::move(next_result_->image->data),
                         next_result_->image->path);
+                    LOG_TRACE("Created texture for preloaded next image");
                 } catch (const std::exception& e) {
-                    std::println("[ImagePreview] Failed to create next texture: {}", e.what());
+                    LOG_WARN("Failed to create next texture: {}", e.what());
                 }
             }
             next_result_.reset();
@@ -385,15 +418,16 @@ namespace gs::gui {
         pan_x_ = 0.0f;
         pan_y_ = 0.0f;
 
+        LOG_DEBUG("Navigating to next image (index {})", current_index_);
+
         // Use preloaded texture if available
         if (next_texture_) {
             current_texture_ = std::move(next_texture_);
+            LOG_TRACE("Using preloaded texture for next image");
         } else {
             if (!loadImage(image_paths_[current_index_])) {
-                events::notify::Error{
-                    .message = "Failed to load next image",
-                    .details = load_error_}
-                    .emit();
+                LOG_ERROR("Failed to load next image: {}", load_error_);
+                // Don't throw here, GUI will display error
             }
         }
 
@@ -412,15 +446,16 @@ namespace gs::gui {
         pan_x_ = 0.0f;
         pan_y_ = 0.0f;
 
+        LOG_DEBUG("Navigating to previous image (index {})", current_index_);
+
         // Use preloaded texture if available
         if (prev_texture_) {
             current_texture_ = std::move(prev_texture_);
+            LOG_TRACE("Using preloaded texture for previous image");
         } else {
             if (!loadImage(image_paths_[current_index_])) {
-                events::notify::Error{
-                    .message = "Failed to load previous image",
-                    .details = load_error_}
-                    .emit();
+                LOG_ERROR("Failed to load previous image: {}", load_error_);
+                // Don't throw here, GUI will display error
             }
         }
 
@@ -439,11 +474,11 @@ namespace gs::gui {
         pan_x_ = 0.0f;
         pan_y_ = 0.0f;
 
+        LOG_DEBUG("Jumping to image index {}", index);
+
         if (!loadImage(image_paths_[current_index_])) {
-            events::notify::Error{
-                .message = "Failed to load image",
-                .details = load_error_}
-                .emit();
+            LOG_ERROR("Failed to load image at index {}: {}", index, load_error_);
+            // Don't throw here, GUI will display error
         }
 
         preloadAdjacentImages();
@@ -573,6 +608,7 @@ namespace gs::gui {
             if (wheel != 0.0f) {
                 float zoom_delta = wheel * 0.1f;
                 zoom_ = std::clamp(zoom_ + zoom_delta, 0.1f, 10.0f);
+                LOG_TRACE("Zoom changed to: {}", zoom_);
             }
 
             if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle)) {
@@ -585,6 +621,7 @@ namespace gs::gui {
                 zoom_ = 1.0f;
                 pan_x_ = 0.0f;
                 pan_y_ = 0.0f;
+                LOG_TRACE("View reset via double-click");
             }
         }
 
@@ -608,6 +645,7 @@ namespace gs::gui {
                 zoom_ = 1.0f;
                 pan_x_ = 0.0f;
                 pan_y_ = 0.0f;
+                LOG_TRACE("View reset via keyboard");
             }
 
             if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) {
