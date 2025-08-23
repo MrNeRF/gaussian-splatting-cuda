@@ -45,12 +45,6 @@ jobs:
           echo "Listing C:\Program Files\NVIDIA GPU Computing Toolkit"
           ls "C:\Program Files\NVIDIA GPU Computing Toolkit" -Force
 
-      - name: Set CUDA Environment Variables
-        run: |
-          echo "CUDA_PATH=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\libnvvp" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Print NVCC
         run: |
           nvcc --version
