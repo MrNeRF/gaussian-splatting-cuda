@@ -1,8 +1,6 @@
 #pragma once
 
-#include "core/error_handler.hpp"
 #include "core/main_loop.hpp"
-#include "core/memory_monitor.hpp"
 #include "core/parameters.hpp"
 #include "gui/gui_manager.hpp"
 #include "input/input_controller.hpp"
@@ -135,13 +133,11 @@ namespace gs::visualizer {
         std::shared_ptr<tools::TranslationGizmoTool> translation_gizmo_tool_;
         std::unique_ptr<ToolContext> tool_context_;
 
-        // Support components
-        std::unique_ptr<ErrorHandler> error_handler_;
-        std::unique_ptr<MemoryMonitor> memory_monitor_;
-
         // State tracking
         bool window_initialized_ = false;
         bool gui_initialized_ = false;
+        bool tools_initialized_ = false; // Added this member!
+
         // Project
         std::shared_ptr<gs::management::Project> project_ = nullptr;
     };
