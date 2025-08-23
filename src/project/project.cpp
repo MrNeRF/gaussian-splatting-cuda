@@ -477,9 +477,9 @@ namespace gs::management {
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
                                               const param::OptimizationParameters& opt,
                                               const std::string& project_name,
-                                              bool udpdate_file_on_change) {
+                                              bool update_file_on_change) {
 
-        auto project = std::make_shared<gs::management::Project>(udpdate_file_on_change);
+        auto project = std::make_shared<gs::management::Project>(update_file_on_change);
 
         project->setProjectName(project_name);
         if (data.output_path.empty()) {
