@@ -191,11 +191,6 @@ namespace gs::visualizer {
             handleLoadProjectCommand(cmd);
         });
 
-        // Listen for file load commands
-        cmd::LoadProject::when([this](const auto& cmd) {
-            handleLoadProjectCommand(cmd);
-        });
-
         // Listen to TrainingCompleted
         events::state::TrainingCompleted::when([this](const auto& event) {
             handleTrainingCompleted(event);
@@ -351,57 +346,6 @@ namespace gs::visualizer {
     bool VisualizerImpl::LoadProject() {
         if (project_) {
             try {
-                LOG_TIMER("LoadProject");
-
-                // slicing intended
-                auto dataset = static_cast<const param::DatasetConfig&>(project_->getProjectData().data_set_info);
-                if (!dataset.data_path.empty()) {
-                    LOG_DEBUG("Loading dataset from project: {}", dataset.data_path.string());
-                    auto result = loadDataset(dataset.data_path);
-                    if (!result) {
-                        LOG_ERROR("Failed to load dataset from project: {}", result.error());
-                        throw std::runtime_error(std::format("Failed to load dataset from project: {}", result.error()));
-                    }
-                }
-
-                // load plys
-                auto plys = project_->getPlys();
-                LOG_DEBUG("Loading {} PLY files from project", plys.size());
-
-                // sort according to iter numbers
-                std::sort(plys.begin(), plys.end(),
-                          [](const gs::management::PlyData& a, const gs::management::PlyData& b) {
-                              return a.ply_training_iter_number < b.ply_training_iter_number;
-                          });
-
-                if (!plys.empty()) {
-                    scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
-                }
-
-                // set all of the nodes to invisible except the last one
-                for (auto it = plys.begin(); it != plys.end(); ++it) {
-                    std::string ply_name = it->ply_name;
-                    bool is_last = (std::next(it) == plys.end());
-
-                    LOG_TRACE("Adding PLY '{}' to scene (visible: {})", ply_name, is_last);
-                    scene_manager_->addPLY(it->ply_path, ply_name, is_last);
-                    scene_manager_->setPLYVisibility(ply_name, is_last);
-                }
-
-                LOG_INFO("Project loaded successfully with {} PLY files", plys.size());
-            } catch (const std::exception& e) {
-                LOG_ERROR("Failed to load project: {}", e.what());
-                throw std::runtime_error(std::format("Failed to load project: {}", e.what()));
-            }
-
-            return true;
-        }
-        return false;
-    }
-
-    bool VisualizerImpl::LoadProject() {
-        if (project_) {
-            try {
                 // slicing intended
                 auto dataset = static_cast<const param::DatasetConfig&>(project_->getProjectData().data_set_info);
                 if (!dataset.data_path.empty()) {
@@ -548,6 +492,11 @@ namespace gs::visualizer {
         }
 
         return success;
+    }
+
+    void VisualizerImpl::attachProject(std::shared_ptr<gs::management::Project> _project) {
+        project_ = _project;
+        updateProjectOnModules();
     }
 
     std::shared_ptr<gs::management::Project> VisualizerImpl::getProject() {
