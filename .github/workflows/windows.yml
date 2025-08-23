@@ -31,11 +31,10 @@ jobs:
 
       - name: Download and Install CUDA 12.8 Toolkit
         if: steps.cache-cuda.outputs.cache-hit != 'true'
-        shell: cmd
         run: |
           cd ..
-          powershell -Command "Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile cuda.exe -Verbose"
-          start /wait cuda.exe --silent --toolkit --override --noDisplayDriver
+          Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile cuda.exe -Verbose
+          Start-Process -FilePath .\cuda.exe -ArgumentList "--silent --toolkit --override --noDisplayDriver" -Wait -NoNewWindow
 
       - name: Setup vcpkg
         run: |
