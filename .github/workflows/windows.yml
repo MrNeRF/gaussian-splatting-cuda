@@ -1,0 +1,66 @@
+name: Windows CUDA Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\..\vcpkg
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Cache CUDA Toolkit
+        id: cache-cuda
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
+          key: cuda-toolkit-12.8-${{ runner.os }}
+
+      - name: Download and Install CUDA 12.8 Toolkit
+        if: steps.cache-cuda.outputs.cache-hit != 'true'
+        run: |
+          cd ..
+          Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile cuda.exe -Verbose
+          Start-Process -FilePath .\cuda.exe -ArgumentList "-y -s -accepteula -toolkit -override -noDisplayDriver" -Wait
+
+      - name: Set CUDA Environment Variables
+        run: |
+          echo "CUDA_PATH_V12_8=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\libnvvp" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Setup vcpkg
+        run: |
+          cd ..
+          git clone https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Cache LibTorch
+        id: cache-libtorch
+        uses: actions/cache@v4
+        with:
+          path: external/release/libtorch
+          key: libtorch-2.7.0-cu128-${{ runner.os }}
+
+      - name: Download LibTorch 2.7.0 (CUDA 12.8 build)
+        if: steps.cache-libtorch.outputs.cache-hit != 'true'
+        run: |
+          mkdir external\release
+          cd ..
+          Invoke-WebRequest -Uri https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-2.7.0%2Bcu128.zip -OutFile libtorch.zip -Verbose
+          Expand-Archive libtorch.zip -DestinationPath $env:GITHUB_WORKSPACE\external\release
+
+      - name: Configure with CMake
+        run: |
+          cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 1
