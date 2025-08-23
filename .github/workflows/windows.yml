@@ -20,7 +20,7 @@ jobs:
       - name: Install Visual Studio Build Tools & VS components
         uses: microsoft/setup-msbuild@v1
         with:
-          vs-version: latest
+          vs-version: 2022
 
       - name: Cache CUDA Toolkit
         id: cache-cuda
