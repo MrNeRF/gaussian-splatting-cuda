@@ -12,6 +12,7 @@ jobs:
     runs-on: windows-2022
     env:
       VCPKG_ROOT: ${{ github.workspace }}\..\vcpkg
+      CudaToolkitDir: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
 
     steps:
       - name: Checkout source
