@@ -71,15 +71,22 @@ namespace gs {
                 return -1;
             }
         } else { // create temporary project until user will save it in desired location
+            std::shared_ptr<gs::management::Project> project = nullptr;
             if (params->dataset.output_path.empty()) {
-                auto project = gs::management::CreateTempNewProject(params->dataset, params->optimization);
+                project = gs::management::CreateTempNewProject(params->dataset, params->optimization);
                 if (!project) {
                     LOG_ERROR("project creation failed");
                     return -1;
                 }
                 params->dataset.output_path = project->getProjectOutputFolder();
-                viewer->attachProject(project);
+            } else {
+                project = gs::management::CreateNewProject(params->dataset, params->optimization);
+                if (!project) {
+                    LOG_ERROR("project creation failed");
+                    return -1;
+                }
             }
+            viewer->attachProject(project);
         }
 
         // Set parameters
