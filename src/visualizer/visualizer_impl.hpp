@@ -46,6 +46,7 @@ namespace gs::visualizer {
         void attachProject(std::shared_ptr<gs::management::Project> _project) override;
         // load project content to viewer
         bool LoadProject();
+        void LoadProjectPlys();
 
         // Getters for GUI (delegating to state manager)
         Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
