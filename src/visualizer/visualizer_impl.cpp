@@ -172,6 +172,11 @@ namespace gs::visualizer {
         cmd::LoadProject::when([this](const auto& cmd) {
             handleLoadProjectCommand(cmd);
         });
+
+        // Listen to TrainingCompleted
+        events::state::TrainingCompleted::when([this](const auto& event) {
+            handleTrainingCompleted(event);
+        });
     }
 
     bool VisualizerImpl::initialize() {
@@ -390,6 +395,10 @@ namespace gs::visualizer {
 
         project_ = project;
 
+        if (trainer_manager_) {
+            trainer_manager_->setProject(project_);
+        }
+
         return true;
     }
 
@@ -410,6 +419,9 @@ namespace gs::visualizer {
     }
     void VisualizerImpl::attachProject(std::shared_ptr<gs::management::Project> _project) {
         project_ = _project;
+        if (trainer_manager_) {
+            trainer_manager_->setProject(_project);
+        }
     }
 
     void VisualizerImpl::handleLoadProjectCommand(const events::cmd::LoadProject& cmd) {
@@ -430,6 +442,37 @@ namespace gs::visualizer {
                 .message = error_msg,
                 .details = std::format("Path: {}", cmd.path.string())}
                 .emit();
+        }
+    }
+
+    void VisualizerImpl::handleTrainingCompleted(const events::state::TrainingCompleted& [[maybe_unused]] event) {
+
+        if (!scene_manager_) {
+            LOG_ERROR("scene manager is not initialized");
+            return;
+        }
+        if (!project_) {
+            LOG_ERROR("project is not initialized");
+            return;
+        }
+        // load plys
+        auto plys = project_->getPlys();
+        // sort according to iter numbers
+        std::sort(plys.begin(), plys.end(),
+                  [](const gs::management::PlyData& a, const gs::management::PlyData& b) {
+                      return a.ply_training_iter_number < b.ply_training_iter_number;
+                  });
+
+        if (!plys.empty()) {
+            scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
+        }
+        // set all of the nodes to invisible except the last one
+        for (auto it = plys.begin(); it != plys.end(); ++it) {
+            std::string ply_name = it->ply_name;
+
+            bool is_last = (std::next(it) == plys.end());
+            scene_manager_->addPLY(it->ply_path, ply_name, is_last);
+            scene_manager_->setPLYVisibility(ply_name, is_last);
         }
     }
 } // namespace gs::visualizer

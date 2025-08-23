@@ -367,13 +367,30 @@ namespace gs::management {
         }
     }
 
-    void Project::addPly(const PlyData& ply) {
-        project_data_.outputs.plys.push_back(ply);
+    bool Project::addPly(const PlyData& ply_to_be_added) {
+
+        for (const auto& ply : project_data_.outputs.plys) {
+            if (ply.ply_name == ply_to_be_added.ply_name) {
+                LOG_ERROR("can not insert two plys with the same name");
+                return false;
+            }
+        }
+
+        project_data_.outputs.plys.push_back(ply_to_be_added);
 
         if (update_file_on_change_ && !output_file_name_.empty()) {
-            writeToFile();
+            if (!writeToFile()) {
+                return false;
+            }
         }
+        return true;
     }
+
+    bool Project::addPly(bool imported, const std::filesystem::path& path, int iter, const std::string& _ply_name) {
+        const PlyData ply_data(imported, path, iter, _ply_name);
+        return addPly(ply_data);
+    }
+
     std::vector<PlyData> Project::getPlys() const {
         return project_data_.outputs.plys;
     }

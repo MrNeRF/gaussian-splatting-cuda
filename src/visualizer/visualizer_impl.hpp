@@ -99,6 +99,7 @@ namespace gs::visualizer {
         void setupEventHandlers();
         void setupComponentConnections();
         void handleLoadProjectCommand(const events::cmd::LoadProject& cmd);
+        void handleTrainingCompleted(const events::state::TrainingCompleted& event);
 
         // Options
         ViewerOptions options_;
