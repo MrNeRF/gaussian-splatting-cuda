@@ -22,23 +22,19 @@ jobs:
         with:
           vs-version: latest
 
-      - name: Cache CUDA installer
+      - name: Cache CUDA Toolkit
         id: cache-cuda
         uses: actions/cache@v4
         with:
-          path: ../cuda_12.8.0_571.96_windows.exe
-          key: cuda-12.8.0-571.96-${{ runner.os }}
+          path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
+          key: cuda-toolkit-12.8-${{ runner.os }}
 
-      - name: Download CUDA 12.8 Installer
+      - name: Download and Install CUDA 12.8 Toolkit
         if: steps.cache-cuda.outputs.cache-hit != 'true'
         run: |
           cd ..
-          Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile cuda_12.8.0_571.96_windows.exe -Verbose
-
-      - name: Install CUDA 12.8 Toolkit
-        run: |
-          cd ..
-          Start-Process -FilePath .\cuda_12.8.0_571.96_windows.exe -ArgumentList "--silent --toolkit" -Wait -NoNewWindow
+          Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile cuda.exe -Verbose
+          Start-Process -FilePath .\cuda.exe -ArgumentList "--silent --toolkit" -Wait -NoNewWindow
 
       - name: Setup vcpkg
         run: |
