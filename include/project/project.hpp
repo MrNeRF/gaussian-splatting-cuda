@@ -134,8 +134,10 @@ namespace gs::management {
         // Convenience methods
         void setProjectName(const std::string& name);
         void setDataInfo(const param::DatasetConfig& data_config);
-        void addPly(const PlyData& ply);
+        bool addPly(const PlyData& ply);
+        bool addPly(bool imported, const std::filesystem::path& path, int iter, const std::string& _ply_name);
         void removePly(size_t index);
+        void clearPlys();
         [[nodiscard]] std::vector<PlyData> getPlys() const;
 
         // Version and compatibility methods
@@ -147,14 +149,23 @@ namespace gs::management {
         std::string generateCurrentTimeStamp() const;
         bool validateProjectData() const;
 
+        bool portProjectToDir(const std::filesystem::path& dst_dir);
+
+        [[nodiscard]] bool getIsTempProject() const { return is_temp_project_; }
+        void setIsTempProject(bool is_temp) { is_temp_project_ = is_temp; }
+
     private:
         std::filesystem::path output_file_name_;
         bool update_file_on_change_ = false; // if true update file on every change
         mutable std::mutex io_mutex_;
+        bool is_temp_project_ = false;
     };
 
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
-                                              const std::string& project_name = "LichtFeldStudioProject");
+                                              const std::string& project_name = "LichtFeldStudioProject", bool update_file_on_change = true);
+
+    std::shared_ptr<Project> CreateTempNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
+                                                  const std::string& project_name = "LichtFeldStudioProject", bool update_file_on_change = true);
 
     // find the
     std::filesystem::path FindProjectFile(const std::filesystem::path& directory);

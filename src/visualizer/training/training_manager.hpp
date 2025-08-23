@@ -91,6 +91,8 @@ namespace gs {
         std::shared_ptr<const Camera> getCamById(int camId) const;
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
+        void setProject(std::shared_ptr<gs::management::Project> project);
+
     private:
         // Training thread function
         void trainingThreadFunc(std::stop_token stop_token);
@@ -119,6 +121,9 @@ namespace gs {
         int max_loss_points_ = 200;
         std::deque<float> loss_buffer_;
         mutable std::mutex loss_buffer_mutex_;
+
+        // project
+        std::shared_ptr<gs::management::Project> project_ = nullptr;
     };
 
 } // namespace gs

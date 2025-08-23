@@ -6,6 +6,23 @@
 
 namespace gs::gui::panels {
 
+    void SaveProjectButton(const UIContext& ctx, TrainingPanelState& state) {
+        // Add Save Project button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.9f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+        if (ImGui::Button("Save Project", ImVec2(-1, 0))) {
+            auto project = ctx.viewer->getProject();
+            if (project) {
+                if (project->getIsTempProject()) {
+                    state.show_save_browser = true;
+                } else {
+                    events::cmd::SaveProject{project->getProjectOutputFolder().string()}.emit();
+                }
+            }
+        }
+        ImGui::PopStyleColor(2);
+    }
+
     void DrawTrainingControls(const UIContext& ctx) {
         ImGui::Text("Training Control");
         ImGui::Separator();
@@ -37,6 +54,7 @@ namespace gs::gui::panels {
                 events::cmd::StartTraining{}.emit();
             }
             ImGui::PopStyleColor(2);
+            SaveProjectButton(ctx, state);
             break;
 
         case TrainerManager::State::Running:
@@ -66,6 +84,7 @@ namespace gs::gui::panels {
 
         case TrainerManager::State::Completed:
             ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
+            SaveProjectButton(ctx, state);
             break;
 
         case TrainerManager::State::Error:
@@ -108,6 +127,11 @@ namespace gs::gui::panels {
             } else {
                 state.save_in_progress = false;
             }
+        }
+
+        // Render save project file browser
+        if (state.show_save_browser) {
+            state.save_browser.render(&state.show_save_browser);
         }
 
         // Status display
