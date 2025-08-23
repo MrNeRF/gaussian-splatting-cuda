@@ -426,10 +426,8 @@ namespace gs::visualizer {
         if (!initialize()) {
             return std::unexpected("Failed to initialize visualizer");
         }
-        auto result = data_loader_->loadDataset(path);
-
         LOG_INFO("Loading dataset: {}", path.string());
-        return data_loader_->loadDataset(path);
+        auto result = data_loader_->loadDataset(path);
         if (result && project_) {
             auto data_config = project_->getProjectData().data_set_info;
             if (data_config.data_path.empty() || data_config.data_path == path) { // empty project or same data
