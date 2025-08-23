@@ -1,4 +1,3 @@
-#include "input/input_controller.hpp"
 #include <algorithm>
 #include <format>
 #include <imgui.h>
@@ -7,9 +6,6 @@
 #include "input/input_controller.hpp"
 #include "tools/tool_base.hpp"
 #include "tools/translation_gizmo_tool.hpp"
-
-#include "core/logger.hpp"
-#include "input/input_controller.hpp"
 
 namespace gs::visualizer {
 
@@ -385,7 +381,7 @@ namespace gs::visualizer {
         // Load dataset if found
         if (dataset_path) {
             events::cmd::LoadFile{.path = *dataset_path, .is_dataset = true}.emit();
-            LOG_INFO("Loading dataset Project via drag-and-drop: {}", dataset_path->filename().string());
+            LOG_INFO("Loading dataset via drag-and-drop: {}", dataset_path->filename().string());
         }
 
         if (paths.size() == 1) {
