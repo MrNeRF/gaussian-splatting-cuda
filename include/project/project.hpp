@@ -162,10 +162,10 @@ namespace gs::management {
     };
 
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
-                                              const std::string& project_name = "LichtFeldStudioProject", bool udpdate_file_on_change = true);
+                                              const std::string& project_name = "LichtFeldStudioProject", bool update_file_on_change = true);
 
     std::shared_ptr<Project> CreateTempNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
-                                                  const std::string& project_name = "LichtFeldStudioProject", bool udpdate_file_on_change = true);
+                                                  const std::string& project_name = "LichtFeldStudioProject", bool update_file_on_change = true);
 
     // find the
     std::filesystem::path FindProjectFile(const std::filesystem::path& directory);
