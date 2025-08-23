@@ -1,9 +1,9 @@
 #pragma once
 
-#include "rasterization_config.h"
 #include "helper_math.h"
-#include <cub/cub.cuh>
+#include "rasterization_config.h"
 #include <cstdint>
+#include <cub/cub.cuh>
 
 namespace fast_gs::rasterization {
 
@@ -12,7 +12,6 @@ namespace fast_gs::rasterization {
         float m21, m22, m23;
         float m31, m32, m33;
     };
-
 
     struct __align__(8) mat3x3_triu {
         float m11, m12, m13, m22, m23, m33;
@@ -25,12 +24,12 @@ namespace fast_gs::rasterization {
         blob = reinterpret_cast<char*>(ptr + count);
     }
 
-    template<typename T, typename... Args> 
-	size_t required(size_t P, Args... args){
-		char* size = nullptr;
-		T::from_blob(size, P, args...);
-		return ((size_t)size) + 128;
-	}
+    template <typename T, typename... Args>
+    size_t required(size_t P, Args... args) {
+        char* size = nullptr;
+        T::from_blob(size, P, args...);
+        return ((size_t)size) + 128;
+    }
 
     struct PerPrimitiveBuffers {
         size_t cub_workspace_size;
@@ -67,14 +66,12 @@ namespace fast_gs::rasterization {
             cub::DeviceScan::ExclusiveSum(
                 nullptr, buffers.cub_workspace_size,
                 buffers.offset, buffers.offset,
-                n_primitives
-            );
+                n_primitives);
             size_t sorting_workspace_size;
             cub::DeviceRadixSort::SortPairs(
                 nullptr, sorting_workspace_size,
                 buffers.depth_keys, buffers.primitive_indices,
-                n_primitives
-            );
+                n_primitives);
             buffers.cub_workspace_size = max(buffers.cub_workspace_size, sorting_workspace_size);
             obtain(blob, buffers.cub_workspace, buffers.cub_workspace_size, 128);
             obtain(blob, buffers.n_visible_primitives, 1, 128);
@@ -88,7 +85,7 @@ namespace fast_gs::rasterization {
         char* cub_workspace;
         cub::DoubleBuffer<ushort> keys;
         cub::DoubleBuffer<uint> primitive_indices;
-    
+
         static PerInstanceBuffers from_blob(char*& blob, size_t n_instances) {
             PerInstanceBuffers buffers;
             ushort* keys_current;
@@ -104,8 +101,7 @@ namespace fast_gs::rasterization {
             cub::DeviceRadixSort::SortPairs(
                 nullptr, buffers.cub_workspace_size,
                 buffers.keys, buffers.primitive_indices,
-                n_instances
-            );
+                n_instances);
             obtain(blob, buffers.cub_workspace, buffers.cub_workspace_size, 128);
             return buffers;
         }
@@ -119,7 +115,7 @@ namespace fast_gs::rasterization {
         uint* bucket_offsets;
         uint* max_n_contributions;
         uint* n_contributions;
-    
+
         static PerTileBuffers from_blob(char*& blob, size_t n_tiles) {
             PerTileBuffers buffers;
             obtain(blob, buffers.instance_ranges, n_tiles, 128);
@@ -130,8 +126,7 @@ namespace fast_gs::rasterization {
             cub::DeviceScan::InclusiveSum(
                 nullptr, buffers.cub_workspace_size,
                 buffers.n_buckets, buffers.bucket_offsets,
-                n_tiles
-            );
+                n_tiles);
             obtain(blob, buffers.cub_workspace, buffers.cub_workspace_size, 128);
             return buffers;
         }
@@ -149,4 +144,4 @@ namespace fast_gs::rasterization {
         }
     };
 
-}
+} // namespace fast_gs::rasterization

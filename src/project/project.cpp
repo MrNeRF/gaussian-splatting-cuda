@@ -1,3 +1,4 @@
+#include "project/project.hpp"
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -388,11 +389,6 @@ namespace gs::management {
         return true;
     }
 
-    bool Project::addPly(bool imported, const std::filesystem::path& path, int iter, const std::string& _ply_name) {
-        const PlyData ply_data(imported, path, iter, _ply_name);
-        return addPly(ply_data);
-    }
-
     std::vector<PlyData> Project::getPlys() const {
         return project_data_.outputs.plys;
     }
@@ -585,4 +581,5 @@ namespace gs::management {
 
         return project;
     }
+
 } // namespace gs::management

@@ -1,8 +1,6 @@
 #pragma once
 
-#include <chrono>
 #include <functional>
-#include <memory>
 
 namespace gs::visualizer {
 
@@ -14,16 +12,12 @@ namespace gs::visualizer {
         using ShutdownCallback = std::function<void()>;
         using ShouldCloseCallback = std::function<bool()>;
 
-        MainLoop();
-
-        // Set callbacks
         void setInitCallback(InitCallback cb) { init_callback_ = cb; }
         void setUpdateCallback(UpdateCallback cb) { update_callback_ = cb; }
         void setRenderCallback(RenderCallback cb) { render_callback_ = cb; }
         void setShutdownCallback(ShutdownCallback cb) { shutdown_callback_ = cb; }
         void setShouldCloseCallback(ShouldCloseCallback cb) { should_close_callback_ = cb; }
 
-        // Main run loop
         void run();
 
     private:

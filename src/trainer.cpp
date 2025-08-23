@@ -498,12 +498,6 @@ namespace gs {
                     .iteration = iter - 1,
                     .path = final_path}
                     .emit();
-
-                events::notify::Log{
-                    .level = events::notify::Log::Level::Info,
-                    .message = std::format("Training completed. Final model saved at iteration {}", iter - 1),
-                    .source = "Trainer"}
-                    .emit();
             }
 
             if (progress_) {

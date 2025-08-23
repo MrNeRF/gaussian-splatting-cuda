@@ -7,9 +7,47 @@
 #include "rendering_pipeline.hpp"
 #include "screen_renderer.hpp"
 #include "shader_manager.hpp"
+#include "translation_gizmo.hpp"
 #include "viewport_gizmo.hpp"
 
 namespace gs::rendering {
+
+    // Adapter to bridge public interface with internal implementation
+    class GizmoInteractionAdapter : public GizmoInteraction {
+        TranslationGizmo* gizmo_;
+
+    public:
+        explicit GizmoInteractionAdapter(TranslationGizmo* gizmo) : gizmo_(gizmo) {}
+
+        GizmoElement pick(const glm::vec2& mouse_pos, const glm::mat4& view,
+                          const glm::mat4& projection, const glm::vec3& position) override {
+            auto elem = gizmo_->pick(mouse_pos, view, projection, position);
+            return static_cast<GizmoElement>(elem);
+        }
+
+        glm::vec3 startDrag(GizmoElement element, const glm::vec2& mouse_pos,
+                            const glm::mat4& view, const glm::mat4& projection,
+                            const glm::vec3& position) override {
+            return gizmo_->startDrag(static_cast<TranslationGizmo::Element>(element),
+                                     mouse_pos, view, projection, position);
+        }
+
+        glm::vec3 updateDrag(const glm::vec2& mouse_pos, const glm::mat4& view,
+                             const glm::mat4& projection) override {
+            return gizmo_->updateDrag(mouse_pos, view, projection);
+        }
+
+        void endDrag() override { gizmo_->endDrag(); }
+        bool isDragging() const override { return gizmo_->isDragging(); }
+
+        void setHovered(GizmoElement element) override {
+            gizmo_->setHoveredElement(static_cast<TranslationGizmo::Element>(element));
+        }
+
+        GizmoElement getHovered() const override {
+            return static_cast<GizmoElement>(gizmo_->getHoveredElement());
+        }
+    };
 
     class RenderingEngineImpl : public RenderingEngine {
     public:
@@ -50,6 +88,13 @@ namespace gs::rendering {
             const glm::vec2& viewport_pos,
             const glm::vec2& viewport_size) override;
 
+        Result<void> renderTranslationGizmo(
+            const glm::vec3& position,
+            const ViewportData& viewport,
+            float scale) override;
+
+        std::shared_ptr<GizmoInteraction> getGizmoInteraction() override;
+
         // Pipeline compatibility
         RenderingPipelineResult renderWithPipeline(
             const SplatData& model,
@@ -66,7 +111,6 @@ namespace gs::rendering {
 
         // Core components
         RenderingPipeline pipeline_;
-        // REMOVED: PointCloudRenderer point_cloud_renderer_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
 
         // Overlay renderers
@@ -74,6 +118,10 @@ namespace gs::rendering {
         RenderBoundingBox bbox_renderer_;
         RenderCoordinateAxes axes_renderer_;
         ViewportGizmo viewport_gizmo_;
+        TranslationGizmo translation_gizmo_;
+
+        // Gizmo interaction adapter
+        std::shared_ptr<GizmoInteractionAdapter> gizmo_interaction_;
 
         // Shaders
         ManagedShader quad_shader_;

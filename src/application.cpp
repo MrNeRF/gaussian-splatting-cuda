@@ -1,7 +1,7 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
-#include "core/training_setup.hpp"
 #include "core/logger.hpp"
+#include "core/training_setup.hpp"
 #include "project/project.hpp"
 #include "visualizer/visualizer.hpp"
 #include <print>
@@ -70,7 +70,7 @@ namespace gs {
                 std::println(stderr, "cannot open new data_path and project from commandline");
                 return -1;
             }
-        }else { // create temporary project until user will save it in desired location
+        } else { // create temporary project until user will save it in desired location
             if (params->dataset.output_path.empty()) {
                 auto project = gs::management::CreateTempNewProject(params->dataset, params->optimization);
                 if (!project) {
@@ -80,7 +80,6 @@ namespace gs {
                 params->dataset.output_path = project->getProjectOutputFolder();
                 viewer->attachProject(project);
             }
-
         }
 
         // Set parameters

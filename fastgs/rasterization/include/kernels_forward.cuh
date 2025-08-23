@@ -1,12 +1,12 @@
 #pragma once
 
-#include "rasterization_config.h"
-#include "kernel_utils.cuh"
 #include "buffer_utils.h"
 #include "helper_math.h"
+#include "kernel_utils.cuh"
+#include "rasterization_config.h"
 #include "utils.h"
-#include <cstdint>
 #include <cooperative_groups.h>
+#include <cstdint>
 namespace cg = cooperative_groups;
 
 namespace fast_gs::rasterization::kernels::forward {
@@ -41,8 +41,7 @@ namespace fast_gs::rasterization::kernels::forward {
         const float cx,
         const float cy,
         const float near_, // near and far are macros in windowns
-        const float far_)
-    {
+        const float far_) {
         auto primitive_idx = cg::this_grid().thread_rank();
         bool active = true;
         if (primitive_idx >= n_primitives) {
@@ -50,7 +49,8 @@ namespace fast_gs::rasterization::kernels::forward {
             primitive_idx = n_primitives - 1;
         }
 
-        if (active) primitive_n_touched_tiles[primitive_idx] = 0;
+        if (active)
+            primitive_n_touched_tiles[primitive_idx] = 0;
 
         // load 3d mean
         const float3 mean3d = means[primitive_idx];
@@ -58,15 +58,18 @@ namespace fast_gs::rasterization::kernels::forward {
         // z culling
         const float4 w2c_r3 = w2c[2];
         const float depth = w2c_r3.x * mean3d.x + w2c_r3.y * mean3d.y + w2c_r3.z * mean3d.z + w2c_r3.w;
-        if (depth < near_ || depth > far_) active = false;
+        if (depth < near_ || depth > far_)
+            active = false;
 
         // early exit if whole warp is inactive
-        if (__ballot_sync(0xffffffffu, active) == 0) return;
+        if (__ballot_sync(0xffffffffu, active) == 0)
+            return;
 
         // load opacity
         const float raw_opacity = raw_opacities[primitive_idx];
         const float opacity = 1.0f / (1.0f + expf(-raw_opacity));
-        if (opacity < config::min_alpha_threshold) active = false;
+        if (opacity < config::min_alpha_threshold)
+            active = false;
 
         // compute 3d covariance from raw scale and rotation
         const float3 raw_scale = raw_scales[primitive_idx];
@@ -74,21 +77,20 @@ namespace fast_gs::rasterization::kernels::forward {
         auto [qr, qx, qy, qz] = raw_rotations[primitive_idx];
         const float qrr_raw = qr * qr, qxx_raw = qx * qx, qyy_raw = qy * qy, qzz_raw = qz * qz;
         const float q_norm_sq = qrr_raw + qxx_raw + qyy_raw + qzz_raw;
-        if (q_norm_sq < 1e-8f) active = false;
+        if (q_norm_sq < 1e-8f)
+            active = false;
         const float qxx = 2.0f * qxx_raw / q_norm_sq, qyy = 2.0f * qyy_raw / q_norm_sq, qzz = 2.0f * qzz_raw / q_norm_sq;
         const float qxy = 2.0f * qx * qy / q_norm_sq, qxz = 2.0f * qx * qz / q_norm_sq, qyz = 2.0f * qy * qz / q_norm_sq;
         const float qrx = 2.0f * qr * qx / q_norm_sq, qry = 2.0f * qr * qy / q_norm_sq, qrz = 2.0f * qr * qz / q_norm_sq;
         const mat3x3 rotation = {
             1.0f - (qyy + qzz), qxy - qrz, qry + qxz,
             qrz + qxy, 1.0f - (qxx + qzz), qyz - qrx,
-            qxz - qry, qrx + qyz, 1.0f - (qxx + qyy)
-        };
+            qxz - qry, qrx + qyz, 1.0f - (qxx + qyy)};
         const mat3x3 rotation_scaled = {
             rotation.m11 * variance.x, rotation.m12 * variance.y, rotation.m13 * variance.z,
             rotation.m21 * variance.x, rotation.m22 * variance.y, rotation.m23 * variance.z,
-            rotation.m31 * variance.x, rotation.m32 * variance.y, rotation.m33 * variance.z
-        };
-        const mat3x3_triu cov3d {
+            rotation.m31 * variance.x, rotation.m32 * variance.y, rotation.m33 * variance.z};
+        const mat3x3_triu cov3d{
             rotation_scaled.m11 * rotation.m11 + rotation_scaled.m12 * rotation.m12 + rotation_scaled.m13 * rotation.m13,
             rotation_scaled.m11 * rotation.m21 + rotation_scaled.m12 * rotation.m22 + rotation_scaled.m13 * rotation.m23,
             rotation_scaled.m11 * rotation.m31 + rotation_scaled.m12 * rotation.m32 + rotation_scaled.m13 * rotation.m33,
@@ -117,43 +119,37 @@ namespace fast_gs::rasterization::kernels::forward {
         const float3 jw_r1 = make_float3(
             j11 * w2c_r1.x + j13 * w2c_r3.x,
             j11 * w2c_r1.y + j13 * w2c_r3.y,
-            j11 * w2c_r1.z + j13 * w2c_r3.z
-        );
+            j11 * w2c_r1.z + j13 * w2c_r3.z);
         const float3 jw_r2 = make_float3(
             j22 * w2c_r2.x + j23 * w2c_r3.x,
             j22 * w2c_r2.y + j23 * w2c_r3.y,
-            j22 * w2c_r2.z + j23 * w2c_r3.z
-        );
+            j22 * w2c_r2.z + j23 * w2c_r3.z);
         const float3 jwc_r1 = make_float3(
             jw_r1.x * cov3d.m11 + jw_r1.y * cov3d.m12 + jw_r1.z * cov3d.m13,
             jw_r1.x * cov3d.m12 + jw_r1.y * cov3d.m22 + jw_r1.z * cov3d.m23,
-            jw_r1.x * cov3d.m13 + jw_r1.y * cov3d.m23 + jw_r1.z * cov3d.m33
-        );
+            jw_r1.x * cov3d.m13 + jw_r1.y * cov3d.m23 + jw_r1.z * cov3d.m33);
         const float3 jwc_r2 = make_float3(
             jw_r2.x * cov3d.m11 + jw_r2.y * cov3d.m12 + jw_r2.z * cov3d.m13,
             jw_r2.x * cov3d.m12 + jw_r2.y * cov3d.m22 + jw_r2.z * cov3d.m23,
-            jw_r2.x * cov3d.m13 + jw_r2.y * cov3d.m23 + jw_r2.z * cov3d.m33
-        );
+            jw_r2.x * cov3d.m13 + jw_r2.y * cov3d.m23 + jw_r2.z * cov3d.m33);
         float3 cov2d = make_float3(
             dot(jwc_r1, jw_r1),
             dot(jwc_r1, jw_r2),
-            dot(jwc_r2, jw_r2)
-        );
+            dot(jwc_r2, jw_r2));
         cov2d.x += config::dilation;
         cov2d.z += config::dilation;
         const float determinant = cov2d.x * cov2d.z - cov2d.y * cov2d.y;
-        if (determinant < 1e-8f) active = false;
+        if (determinant < 1e-8f)
+            active = false;
         const float3 conic = make_float3(
             cov2d.z / determinant,
             -cov2d.y / determinant,
-            cov2d.x / determinant
-        );
+            cov2d.x / determinant);
 
         // 2d mean in screen space
         const float2 mean2d = make_float2(
             x * fx + cx,
-            y * fy + cy
-        );
+            y * fy + cy);
 
         // compute bounds
         const float power_threshold = logf(opacity * config::min_alpha_threshold_rcp);
@@ -161,24 +157,27 @@ namespace fast_gs::rasterization::kernels::forward {
         float extent_x = fmaxf(power_threshold_factor * sqrtf(cov2d.x) - 0.5f, 0.0f);
         float extent_y = fmaxf(power_threshold_factor * sqrtf(cov2d.z) - 0.5f, 0.0f);
         const uint4 screen_bounds = make_uint4(
-            min(grid_width, static_cast<uint>(max(0, __float2int_rd((mean2d.x - extent_x) / static_cast<float>(config::tile_width))))), // x_min
-            min(grid_width, static_cast<uint>(max(0, __float2int_ru((mean2d.x + extent_x) / static_cast<float>(config::tile_width))))), // x_max
+            min(grid_width, static_cast<uint>(max(0, __float2int_rd((mean2d.x - extent_x) / static_cast<float>(config::tile_width))))),   // x_min
+            min(grid_width, static_cast<uint>(max(0, __float2int_ru((mean2d.x + extent_x) / static_cast<float>(config::tile_width))))),   // x_max
             min(grid_height, static_cast<uint>(max(0, __float2int_rd((mean2d.y - extent_y) / static_cast<float>(config::tile_height))))), // y_min
-            min(grid_height, static_cast<uint>(max(0, __float2int_ru((mean2d.y + extent_y) / static_cast<float>(config::tile_height))))) // y_max
+            min(grid_height, static_cast<uint>(max(0, __float2int_ru((mean2d.y + extent_y) / static_cast<float>(config::tile_height)))))  // y_max
         );
         const uint n_touched_tiles_max = (screen_bounds.y - screen_bounds.x) * (screen_bounds.w - screen_bounds.z);
-        if (n_touched_tiles_max == 0) active = false;
+        if (n_touched_tiles_max == 0)
+            active = false;
 
         // early exit if whole warp is inactive
-        if (__ballot_sync(0xffffffffu, active) == 0) return;
+        if (__ballot_sync(0xffffffffu, active) == 0)
+            return;
 
         // compute exact number of tiles the primitive overlaps
         const uint n_touched_tiles = compute_exact_n_touched_tiles(
             mean2d, conic, screen_bounds,
             power_threshold, n_touched_tiles_max, active);
 
-         // cooperative threads no longer needed
-        if (n_touched_tiles == 0 || !active) return;
+        // cooperative threads no longer needed
+        if (n_touched_tiles == 0 || !active)
+            return;
 
         // store results
         primitive_n_touched_tiles[primitive_idx] = n_touched_tiles;
@@ -186,8 +185,7 @@ namespace fast_gs::rasterization::kernels::forward {
             static_cast<ushort>(screen_bounds.x),
             static_cast<ushort>(screen_bounds.y),
             static_cast<ushort>(screen_bounds.z),
-            static_cast<ushort>(screen_bounds.w)
-        );
+            static_cast<ushort>(screen_bounds.w));
         primitive_mean2d[primitive_idx] = mean2d;
         primitive_conic_opacity[primitive_idx] = make_float4(conic, opacity);
         primitive_color[primitive_idx] = convert_sh_to_color(
@@ -206,10 +204,10 @@ namespace fast_gs::rasterization::kernels::forward {
         const uint* primitive_indices_sorted,
         const uint* primitive_n_touched_tiles,
         uint* primitive_offset,
-        const uint n_visible_primitives)
-    {
+        const uint n_visible_primitives) {
         auto idx = cg::this_grid().thread_rank();
-        if (idx >= n_visible_primitives) return;
+        if (idx >= n_visible_primitives)
+            return;
         const uint primitive_idx = primitive_indices_sorted[idx];
         primitive_offset[idx] = primitive_n_touched_tiles[primitive_idx];
     }
@@ -224,8 +222,7 @@ namespace fast_gs::rasterization::kernels::forward {
         ushort* instance_keys,
         uint* instance_primitive_indices,
         const uint grid_width,
-        const uint n_visible_primitives)
-    {
+        const uint n_visible_primitives) {
         auto block = cg::this_thread_block();
         auto warp = cg::tiled_partition<32u>(block);
         uint idx = cg::this_grid().thread_rank();
@@ -236,10 +233,11 @@ namespace fast_gs::rasterization::kernels::forward {
             idx = n_visible_primitives - 1;
         }
 
-        if (__ballot_sync(0xffffffffu, active) == 0) return;
+        if (__ballot_sync(0xffffffffu, active) == 0)
+            return;
 
         const uint primitive_idx = primitive_indices_sorted[idx];
-        
+
         const ushort4 screen_bounds = primitive_screen_bounds[primitive_idx];
         const uint screen_bounds_width = static_cast<uint>(screen_bounds.y - screen_bounds.x);
         const uint tile_count = static_cast<uint>(screen_bounds.w - screen_bounds.z) * screen_bounds_width;
@@ -252,7 +250,7 @@ namespace fast_gs::rasterization::kernels::forward {
         collected_conic_opacity[block.thread_rank()] = primitive_conic_opacity[primitive_idx];
 
         uint current_write_offset = primitive_offsets[idx];
-        
+
         if (active) {
             const float2 mean2d_shifted = collected_mean2d_shifted[block.thread_rank()];
             const float4 conic_opacity = collected_conic_opacity[block.thread_rank()];
@@ -276,7 +274,8 @@ namespace fast_gs::rasterization::kernels::forward {
         const uint lane_mask_allprev_excl = 0xffffffffu >> (32u - lane_idx);
         const int compute_cooperatively = active && tile_count > config::n_sequential_threshold;
         const uint remaining_threads = __ballot_sync(0xffffffffu, compute_cooperatively);
-        if (remaining_threads == 0) return;
+        if (remaining_threads == 0)
+            return;
 
         const uint n_remaining_threads = __popc(remaining_threads);
         for (int n = 0; n < n_remaining_threads && n < 32; n++) {
@@ -320,12 +319,13 @@ namespace fast_gs::rasterization::kernels::forward {
     __global__ void extract_instance_ranges_cu(
         const ushort* instance_keys,
         uint2* tile_instance_ranges,
-        const uint n_instances)
-    {
+        const uint n_instances) {
         auto instance_idx = cg::this_grid().thread_rank();
-        if (instance_idx >= n_instances) return;
+        if (instance_idx >= n_instances)
+            return;
         const ushort instance_tile_idx = instance_keys[instance_idx];
-        if (instance_idx == 0) tile_instance_ranges[instance_tile_idx].x = 0;
+        if (instance_idx == 0)
+            tile_instance_ranges[instance_tile_idx].x = 0;
         else {
             const ushort previous_instance_tile_idx = instance_keys[instance_idx - 1];
             if (instance_tile_idx != previous_instance_tile_idx) {
@@ -333,16 +333,17 @@ namespace fast_gs::rasterization::kernels::forward {
                 tile_instance_ranges[instance_tile_idx].x = instance_idx;
             }
         }
-        if (instance_idx == n_instances - 1) tile_instance_ranges[instance_tile_idx].y = n_instances;
+        if (instance_idx == n_instances - 1)
+            tile_instance_ranges[instance_tile_idx].y = n_instances;
     }
 
     __global__ void extract_bucket_counts(
         uint2* tile_instance_ranges,
         uint* tile_n_buckets,
-        const uint n_tiles)
-    {
+        const uint n_tiles) {
         auto tile_idx = cg::this_grid().thread_rank();
-        if (tile_idx >= n_tiles) return;
+        if (tile_idx >= n_tiles)
+            return;
         const uint2 instance_range = tile_instance_ranges[tile_idx];
         const uint n_buckets = div_round_up(instance_range.y - instance_range.x, 32u);
         tile_n_buckets[tile_idx] = n_buckets;
@@ -363,8 +364,7 @@ namespace fast_gs::rasterization::kernels::forward {
         float4* bucket_color_transmittance,
         const uint width,
         const uint height,
-        const uint grid_width)
-    {
+        const uint grid_width) {
         auto block = cg::this_thread_block();
         const dim3 group_index = block.group_index();
         const dim3 thread_index = block.thread_index();
@@ -380,7 +380,8 @@ namespace fast_gs::rasterization::kernels::forward {
         uint bucket_offset = tile_idx == 0 ? 0 : tile_bucket_offsets[tile_idx - 1];
         const int n_buckets = div_round_up(n_points_total, 32); // re-computing is faster than reading from tile_n_buckets
         for (int n_buckets_remaining = n_buckets, current_bucket_idx = thread_rank; n_buckets_remaining > 0; n_buckets_remaining -= config::block_size_blend, current_bucket_idx += config::block_size_blend) {
-            if (current_bucket_idx < n_buckets) bucket_tile_index[bucket_offset + current_bucket_idx] = tile_idx;
+            if (current_bucket_idx < n_buckets)
+                bucket_tile_index[bucket_offset + current_bucket_idx] = tile_idx;
         }
 
         // setup shared memory
@@ -395,7 +396,8 @@ namespace fast_gs::rasterization::kernels::forward {
         bool done = !inside;
         // collaborative loading and processing
         for (int n_points_remaining = n_points_total, current_fetch_idx = tile_range.x + thread_rank; n_points_remaining > 0; n_points_remaining -= config::block_size_blend, current_fetch_idx += config::block_size_blend) {
-            if (__syncthreads_count(done) == config::block_size_blend) break;
+            if (__syncthreads_count(done) == config::block_size_blend)
+                break;
             if (current_fetch_idx < tile_range.y) {
                 const uint primitive_idx = instance_primitive_indices[current_fetch_idx];
                 collected_mean2d[thread_rank] = primitive_mean2d[primitive_idx];
@@ -417,10 +419,12 @@ namespace fast_gs::rasterization::kernels::forward {
                 const float2 delta = collected_mean2d[j] - pixel;
                 const float opacity = conic_opacity.w;
                 const float sigma_over_2 = 0.5f * (conic.x * delta.x * delta.x + conic.z * delta.y * delta.y) + conic.y * delta.x * delta.y;
-                if (sigma_over_2 < 0.0f) continue;
+                if (sigma_over_2 < 0.0f)
+                    continue;
                 const float gaussian = expf(-sigma_over_2);
                 const float alpha = fminf(opacity * gaussian, config::max_fragment_alpha);
-                if (alpha < config::min_alpha_threshold) continue;
+                if (alpha < config::min_alpha_threshold)
+                    continue;
                 const float next_transmittance = transmittance * (1.0f - alpha);
                 if (next_transmittance < config::transmittance_threshold) {
                     done = true;
@@ -446,7 +450,8 @@ namespace fast_gs::rasterization::kernels::forward {
         typedef cub::BlockReduce<uint, config::tile_width, cub::BLOCK_REDUCE_WARP_REDUCTIONS, config::tile_height> BlockReduce;
         __shared__ typename BlockReduce::TempStorage temp_storage;
         n_contributions = BlockReduce(temp_storage).Reduce(n_contributions, cub::Max());
-        if (thread_rank == 0) tile_max_n_contributions[tile_idx] = n_contributions;
+        if (thread_rank == 0)
+            tile_max_n_contributions[tile_idx] = n_contributions;
     }
 
-}
+} // namespace fast_gs::rasterization::kernels::forward

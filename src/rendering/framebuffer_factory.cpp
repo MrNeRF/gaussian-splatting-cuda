@@ -13,8 +13,10 @@ namespace gs::rendering {
 #ifdef CUDA_GL_INTEROP_ENABLED
             try {
                 LOG_TIMER_TRACE("createFrameBuffer::CUDA_INTEROP");
+
+                // Create with default size, will resize on first use if needed
                 auto interop_fb = std::make_shared<InteropFrameBuffer>(true);
-                LOG_INFO("CUDA-OpenGL interop framebuffer initialized successfully");
+                LOG_INFO("CUDA-OpenGL interop framebuffer created (will size on first use)");
                 return interop_fb;
             } catch (const std::exception& e) {
                 LOG_WARN("Failed to initialize interop framebuffer: {}", e.what());
