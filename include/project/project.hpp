@@ -149,10 +149,16 @@ namespace gs::management {
         std::string generateCurrentTimeStamp() const;
         bool validateProjectData() const;
 
+        bool portProjectToDir(const std::filesystem::path& dst_dir);
+
+        [[nodiscard]] bool getIsTempProject() const { return is_temp_project_; }
+        void setIsTempProject(bool is_temp) { is_temp_project_ = is_temp; }
+
     private:
         std::filesystem::path output_file_name_;
         bool update_file_on_change_ = false; // if true update file on every change
         mutable std::mutex io_mutex_;
+        bool is_temp_project_ = false;
     };
 
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,

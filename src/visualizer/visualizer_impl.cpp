@@ -182,6 +182,11 @@ namespace gs::visualizer {
         cmd::LoadFile::when([this](const auto& cmd) {
             handleLoadFileCommand(cmd);
         });
+
+        // Listen to save project
+        cmd::SaveProject::when([this](const auto& cmd) {
+            handleSaveProject(cmd);
+        });
     }
 
     bool VisualizerImpl::initialize() {
@@ -380,9 +385,13 @@ namespace gs::visualizer {
 
         if (result && project_) {
             auto data_config = project_->getProjectData().data_set_info;
-            data_config.data_path = path;
-            project_->setDataInfo(data_config);
-            project_->clearPlys(); // clear existing plys
+            if (data_config.data_path.empty() || data_config.data_path == path) { // empty project or same data
+                data_config.data_path = path;
+                project_->setDataInfo(data_config);
+            } else {
+                project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
+                updateProjectOnModules();
+            }
         }
 
         return result;
@@ -411,9 +420,7 @@ namespace gs::visualizer {
 
         project_ = project;
 
-        if (trainer_manager_) {
-            trainer_manager_->setProject(project_);
-        }
+        updateProjectOnModules();
 
         return true;
     }
@@ -435,9 +442,7 @@ namespace gs::visualizer {
     }
     void VisualizerImpl::attachProject(std::shared_ptr<gs::management::Project> _project) {
         project_ = _project;
-        if (trainer_manager_) {
-            trainer_manager_->setProject(_project);
-        }
+        updateProjectOnModules();
     }
 
     void VisualizerImpl::handleLoadProjectCommand(const events::cmd::LoadProject& cmd) {
@@ -465,8 +470,35 @@ namespace gs::visualizer {
         if (cmd.is_dataset && project_) {
             auto data_config = project_->getProjectData().data_set_info;
             data_config.data_path = cmd.path;
-            project_->setDataInfo(data_config);
-            project_->clearPlys(); // clear existing plys
+            data_config.output_path.clear();
+
+            project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
+            updateProjectOnModules();
+        }
+    }
+
+    void VisualizerImpl::handleSaveProject(const events::cmd::SaveProject& cmd) {
+        if (project_) {
+            const auto& dst_dir = cmd.project_dir;
+            if (!std::filesystem::exists(dst_dir)) {
+                bool success = std::filesystem::create_directories(dst_dir);
+                if (!success) {
+                    LOG_ERROR("Directory creation failed {}", dst_dir.string());
+                    return;
+                }
+                LOG_INFO("created directory successfully {}", dst_dir.string());
+            }
+            if (project_->getIsTempProject()) {
+                if (!project_->portProjectToDir(dst_dir)) {
+                    LOG_ERROR("porting project failed. Dst dir {} ", project_->getProjectOutputFolder().string());
+                }
+                project_->setIsTempProject(false);
+            } else {
+                if (!project_->writeToFile()) {
+                    LOG_ERROR("save project failed {} ", project_->getProjectFileName().string());
+                }
+            }
+            LOG_INFO("Project was saved successfully to {}", project_->getProjectFileName().string());
         }
     }
 
@@ -485,6 +517,12 @@ namespace gs::visualizer {
 
         if (scene_manager_) {
             scene_manager_->changeContentType(SceneManager::ContentType::Dataset);
+        }
+    }
+
+    void VisualizerImpl::updateProjectOnModules() {
+        if (trainer_manager_) {
+            trainer_manager_->setProject(project_);
         }
     }
 } // namespace gs::visualizer

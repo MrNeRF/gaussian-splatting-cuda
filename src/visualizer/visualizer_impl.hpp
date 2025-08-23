@@ -102,6 +102,7 @@ namespace gs::visualizer {
         void handleLoadProjectCommand(const events::cmd::LoadProject& cmd);
         void handleTrainingCompleted(const events::state::TrainingCompleted& event);
         void handleLoadFileCommand(const events::cmd::LoadFile& cmd);
+        void handleSaveProject(const events::cmd::SaveProject& cmd);
 
         // Options
         ViewerOptions options_;
@@ -125,6 +126,7 @@ namespace gs::visualizer {
         bool gui_initialized_ = false;
         // Project
         std::shared_ptr<gs::management::Project> project_ = nullptr;
+        void updateProjectOnModules();
     };
 
 } // namespace gs::visualizer
