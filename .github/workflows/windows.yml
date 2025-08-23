@@ -29,17 +29,6 @@ jobs:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
           key: cuda-toolkit-12.8-${{ runner.os }}
 
-      - name: Check for Administrator Privileges
-        run: |
-          $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-          $principal = New-Object System.Security.Principal.WindowsPrincipal($identity)
-          if ($principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) {
-            Write-Host "The script is running with Administrator privileges."
-          } else {
-            Write-Host "The script is NOT running with Administrator privileges."
-            exit 1
-          }
-
       - name: Download and Install CUDA 12.8 Toolkit
         if: steps.cache-cuda.outputs.cache-hit != 'true'
         run: |
