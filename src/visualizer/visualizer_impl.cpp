@@ -177,6 +177,11 @@ namespace gs::visualizer {
         events::state::TrainingCompleted::when([this](const auto& event) {
             handleTrainingCompleted(event);
         });
+
+        // Listen to load file ( we need to update project)
+        cmd::LoadFile::when([this](const auto& cmd) {
+            handleLoadFileCommand(cmd);
+        });
     }
 
     bool VisualizerImpl::initialize() {
@@ -307,6 +312,7 @@ namespace gs::visualizer {
         if (!plys.empty()) {
             scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
         }
+
         // set all of the nodes to invisible except the last one
         for (auto it = plys.begin(); it != plys.end(); ++it) {
             std::string ply_name = it->ply_name;
@@ -376,6 +382,7 @@ namespace gs::visualizer {
             auto data_config = project_->getProjectData().data_set_info;
             data_config.data_path = path;
             project_->setDataInfo(data_config);
+            project_->clearPlys(); // clear existing plys
         }
 
         return result;
@@ -454,6 +461,15 @@ namespace gs::visualizer {
         }
     }
 
+    void VisualizerImpl::handleLoadFileCommand(const events::cmd::LoadFile& cmd) {
+        if (cmd.is_dataset && project_) {
+            auto data_config = project_->getProjectData().data_set_info;
+            data_config.data_path = cmd.path;
+            project_->setDataInfo(data_config);
+            project_->clearPlys(); // clear existing plys
+        }
+    }
+
     void VisualizerImpl::handleTrainingCompleted(const events::state::TrainingCompleted& [[maybe_unused]] event) {
 
         if (!scene_manager_) {
@@ -466,5 +482,9 @@ namespace gs::visualizer {
         }
         // load plys
         LoadProjectPlys();
+
+        if (scene_manager_) {
+            scene_manager_->changeContentType(SceneManager::ContentType::Dataset);
+        }
     }
 } // namespace gs::visualizer

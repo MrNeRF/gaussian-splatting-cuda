@@ -405,6 +405,13 @@ namespace gs::management {
         }
     }
 
+    void Project::clearPlys() {
+        project_data_.outputs.plys.clear();
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
+        }
+    }
+
     bool Project::isCompatible(const Version& fileVersion) const {
         return fileVersion <= CURRENT_VERSION;
     }

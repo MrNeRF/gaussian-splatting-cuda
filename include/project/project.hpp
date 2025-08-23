@@ -137,6 +137,7 @@ namespace gs::management {
         bool addPly(const PlyData& ply);
         bool addPly(bool imported, const std::filesystem::path& path, int iter, const std::string& _ply_name);
         void removePly(size_t index);
+        void clearPlys();
         [[nodiscard]] std::vector<PlyData> getPlys() const;
 
         // Version and compatibility methods
