@@ -60,7 +60,11 @@ jobs:
 
       - name: Configure with CMake
         run: |
-          cmake -S . -B build
+          if (${{ steps.cache-cuda.outputs.cache-hit }}) {
+            cmake -S . -B build -T cuda=12.8
+          } else {
+            cmake -S . -B build
+          }
 
       - name: Build
         run: cmake --build build --config Release --parallel 1
