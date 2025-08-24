@@ -17,15 +17,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Cache CUDA Toolkit
-        id: cache-cuda
-        uses: actions/cache@v4
-        with:
-          path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8
-          key: cuda-toolkit-12.8-${{ runner.os }}
-
       - name: Download and Install CUDA 12.8 Toolkit
-        if: steps.cache-cuda.outputs.cache-hit != 'true'
         run: |
           cd ..
           Invoke-WebRequest https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_571.96_windows.exe -OutFile cuda.exe -Verbose
