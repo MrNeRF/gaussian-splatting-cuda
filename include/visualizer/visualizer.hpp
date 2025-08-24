@@ -38,6 +38,7 @@ namespace gs::visualizer {
         virtual bool openProject(const std::filesystem::path& path) = 0;
         virtual bool closeProject(const std::filesystem::path& path) = 0;
         virtual std::shared_ptr<gs::management::Project> getProject() = 0;
+        virtual void attachProject(std::shared_ptr<gs::management::Project> _project) = 0;
 
         virtual void clearScene() = 0;
 

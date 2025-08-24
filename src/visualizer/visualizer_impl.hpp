@@ -46,8 +46,10 @@ namespace gs::visualizer {
         bool openProject(const std::filesystem::path& path) override;
         bool closeProject(const std::filesystem::path& path = {}) override;
         std::shared_ptr<gs::management::Project> getProject() override;
+        void attachProject(std::shared_ptr<gs::management::Project> _project) override;
         // load project content to viewer
         bool LoadProject();
+        void LoadProjectPlys();
 
         // Getters for GUI (delegating to state manager)
         Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
@@ -112,6 +114,9 @@ namespace gs::visualizer {
         void setupEventHandlers();
         void setupComponentConnections();
         void handleLoadProjectCommand(const events::cmd::LoadProject& cmd);
+        void handleTrainingCompleted(const events::state::TrainingCompleted& event);
+        void handleLoadFileCommand(const events::cmd::LoadFile& cmd);
+        void handleSaveProject(const events::cmd::SaveProject& cmd);
 
         // Tool initialization
         void initializeTools();
@@ -137,9 +142,9 @@ namespace gs::visualizer {
         bool window_initialized_ = false;
         bool gui_initialized_ = false;
         bool tools_initialized_ = false; // Added this member!
-
         // Project
         std::shared_ptr<gs::management::Project> project_ = nullptr;
+        void updateProjectOnModules();
     };
 
 } // namespace gs::visualizer

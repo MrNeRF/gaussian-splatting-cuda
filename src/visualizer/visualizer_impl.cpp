@@ -190,6 +190,21 @@ namespace gs::visualizer {
         cmd::LoadProject::when([this](const auto& cmd) {
             handleLoadProjectCommand(cmd);
         });
+
+        // Listen to TrainingCompleted
+        events::state::TrainingCompleted::when([this](const auto& event) {
+            handleTrainingCompleted(event);
+        });
+
+        // Listen to load file ( we need to update project)
+        cmd::LoadFile::when([this](const auto& cmd) {
+            handleLoadFileCommand(cmd);
+        });
+
+        // Listen to save project
+        cmd::SaveProject::when([this](const auto& cmd) {
+            handleSaveProject(cmd);
+        });
     }
 
     bool VisualizerImpl::initialize() {
@@ -331,47 +346,20 @@ namespace gs::visualizer {
     bool VisualizerImpl::LoadProject() {
         if (project_) {
             try {
-                LOG_TIMER("LoadProject");
-
                 // slicing intended
                 auto dataset = static_cast<const param::DatasetConfig&>(project_->getProjectData().data_set_info);
                 if (!dataset.data_path.empty()) {
-                    LOG_DEBUG("Loading dataset from project: {}", dataset.data_path.string());
                     auto result = loadDataset(dataset.data_path);
                     if (!result) {
-                        LOG_ERROR("Failed to load dataset from project: {}", result.error());
-                        throw std::runtime_error(std::format("Failed to load dataset from project: {}", result.error()));
+                        LOG_ERROR("Error: {}", result.error());
+                        return false;
                     }
                 }
-
                 // load plys
-                auto plys = project_->getPlys();
-                LOG_DEBUG("Loading {} PLY files from project", plys.size());
-
-                // sort according to iter numbers
-                std::sort(plys.begin(), plys.end(),
-                          [](const gs::management::PlyData& a, const gs::management::PlyData& b) {
-                              return a.ply_training_iter_number < b.ply_training_iter_number;
-                          });
-
-                if (!plys.empty()) {
-                    scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
-                }
-
-                // set all of the nodes to invisible except the last one
-                for (auto it = plys.begin(); it != plys.end(); ++it) {
-                    std::string ply_name = it->ply_name;
-                    bool is_last = (std::next(it) == plys.end());
-
-                    LOG_TRACE("Adding PLY '{}' to scene (visible: {})", ply_name, is_last);
-                    scene_manager_->addPLY(it->ply_path, ply_name, is_last);
-                    scene_manager_->setPLYVisibility(ply_name, is_last);
-                }
-
-                LOG_INFO("Project loaded successfully with {} PLY files", plys.size());
+                LoadProjectPlys();
             } catch (const std::exception& e) {
                 LOG_ERROR("Failed to load project: {}", e.what());
-                throw std::runtime_error(std::format("Failed to load project: {}", e.what()));
+                return false;
             }
 
             return true;
@@ -379,9 +367,37 @@ namespace gs::visualizer {
         return false;
     }
 
+    void VisualizerImpl::LoadProjectPlys() {
+        if (!project_) {
+            LOG_ERROR("LoadProjectPlys: project is not initialized");
+            return;
+        }
+
+        auto plys = project_->getPlys();
+        // sort according to iter numbers
+        std::sort(plys.begin(), plys.end(),
+                  [](const gs::management::PlyData& a, const gs::management::PlyData& b) {
+                      return a.ply_training_iter_number < b.ply_training_iter_number;
+                  });
+
+        if (!plys.empty()) {
+            scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
+        }
+
+        // set all of the nodes to invisible except the last one
+        for (auto it = plys.begin(); it != plys.end(); ++it) {
+            std::string ply_name = it->ply_name;
+
+            bool is_last = (std::next(it) == plys.end());
+            scene_manager_->addPLY(it->ply_path, ply_name, is_last);
+            scene_manager_->setPLYVisibility(ply_name, is_last);
+        }
+    }
+
     void VisualizerImpl::run() {
         // The main loop will call initialize() as its init callback
         // Don't duplicate initialization here
+        LoadProject();
         main_loop_->run();
     }
 
@@ -410,9 +426,20 @@ namespace gs::visualizer {
         if (!initialize()) {
             return std::unexpected("Failed to initialize visualizer");
         }
-
         LOG_INFO("Loading dataset: {}", path.string());
-        return data_loader_->loadDataset(path);
+        auto result = data_loader_->loadDataset(path);
+        if (result && project_) {
+            auto data_config = project_->getProjectData().data_set_info;
+            if (data_config.data_path.empty() || data_config.data_path == path) { // empty project or same data
+                data_config.data_path = path;
+                project_->setDataInfo(data_config);
+            } else {
+                project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
+                updateProjectOnModules();
+            }
+        }
+
+        return result;
     }
 
     void VisualizerImpl::clearScene() {
@@ -465,6 +492,11 @@ namespace gs::visualizer {
         return success;
     }
 
+    void VisualizerImpl::attachProject(std::shared_ptr<gs::management::Project> _project) {
+        project_ = _project;
+        updateProjectOnModules();
+    }
+
     std::shared_ptr<gs::management::Project> VisualizerImpl::getProject() {
         return project_;
     }
@@ -489,6 +521,66 @@ namespace gs::visualizer {
 
             // Re-throw to let higher level handle it
             throw;
+        }
+    }
+
+    void VisualizerImpl::handleLoadFileCommand(const events::cmd::LoadFile& cmd) {
+        if (cmd.is_dataset && project_) {
+            auto data_config = project_->getProjectData().data_set_info;
+            data_config.data_path = cmd.path;
+            data_config.output_path.clear();
+
+            project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
+            updateProjectOnModules();
+        }
+    }
+
+    void VisualizerImpl::handleSaveProject(const events::cmd::SaveProject& cmd) {
+        if (project_) {
+            const auto& dst_dir = cmd.project_dir;
+            if (!std::filesystem::exists(dst_dir)) {
+                bool success = std::filesystem::create_directories(dst_dir);
+                if (!success) {
+                    LOG_ERROR("Directory creation failed {}", dst_dir.string());
+                    return;
+                }
+                LOG_INFO("created directory successfully {}", dst_dir.string());
+            }
+            if (project_->getIsTempProject()) {
+                if (!project_->portProjectToDir(dst_dir)) {
+                    LOG_ERROR("porting project failed. Dst dir {} ", project_->getProjectOutputFolder().string());
+                }
+                project_->setIsTempProject(false);
+            } else {
+                if (!project_->writeToFile()) {
+                    LOG_ERROR("save project failed {} ", project_->getProjectFileName().string());
+                }
+            }
+            LOG_INFO("Project was saved successfully to {}", project_->getProjectFileName().string());
+        }
+    }
+
+    void VisualizerImpl::handleTrainingCompleted(const events::state::TrainingCompleted& [[maybe_unused]] event) {
+
+        if (!scene_manager_) {
+            LOG_ERROR("scene manager is not initialized");
+            return;
+        }
+        if (!project_) {
+            LOG_ERROR("project is not initialized");
+            return;
+        }
+        // load plys
+        LoadProjectPlys();
+
+        if (scene_manager_) {
+            scene_manager_->changeContentType(SceneManager::ContentType::Dataset);
+        }
+    }
+
+    void VisualizerImpl::updateProjectOnModules() {
+        if (trainer_manager_) {
+            trainer_manager_->setProject(project_);
         }
     }
 } // namespace gs::visualizer
