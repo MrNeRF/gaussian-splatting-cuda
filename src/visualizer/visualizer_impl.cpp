@@ -349,7 +349,7 @@ namespace gs::visualizer {
                 // slicing intended
                 auto dataset = static_cast<const param::DatasetConfig&>(project_->getProjectData().data_set_info);
                 if (!dataset.data_path.empty()) {
-                    auto result = loadDataset(dataset.data_path);
+                    auto result = data_loader_->loadDataset(dataset.data_path);
                     if (!result) {
                         LOG_ERROR("Error: {}", result.error());
                         return false;
