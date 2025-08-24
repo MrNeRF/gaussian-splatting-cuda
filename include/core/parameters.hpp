@@ -77,6 +77,8 @@ namespace gs {
             std::string images = "images";
             int resize_factor = -1;
             int test_every = 8;
+            std::vector<std::string> timelapse_images = {};
+            int timelapse_every = 50;
         };
 
         struct TrainingParameters {

@@ -1,5 +1,6 @@
 #include "core/trainer.hpp"
 #include "core/fast_rasterizer.hpp"
+#include "core/image_io.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <ATen/cuda/CUDAEvent.h>
@@ -381,6 +382,40 @@ namespace gs {
                                 .iteration = iter,
                                 .path = save_path}
                                 .emit();
+                        }
+                    }
+                }
+
+                if (!params_.dataset.timelapse_images.empty() && iter % params_.dataset.timelapse_every == 0) {
+                    for (const auto& img_name : params_.dataset.timelapse_images) {
+                        auto train_cam = train_dataset_->get_camera_by_filename(img_name);
+                        auto val_cam = val_dataset_ ? val_dataset_->get_camera_by_filename(img_name) : std::nullopt;
+                        if (train_cam.has_value() || val_cam.has_value()) {
+                            Camera* cam_to_use = train_cam.has_value() ? train_cam.value() : val_cam.value();
+
+                            // Image size isn't correct until the image has been loaded once
+                            // If we use the camera before it's loaded, it will render images at the non-scaled size
+                            if (cam_to_use->camera_height() == cam_to_use->image_height() && params_.dataset.resize_factor != 1) {
+                                cam_to_use->load_image_size(params_.dataset.resize_factor);
+                            }
+
+                            RenderOutput rendered_timelapse_output = fast_rasterize(*cam_to_use, strategy_->get_model(), background_);
+
+                            // Get folder name to save in by stripping file extension
+                            std::string folder_name = img_name;
+                            auto last_dot = folder_name.find_last_of('.');
+                            if (last_dot != std::string::npos) {
+                                folder_name = folder_name.substr(0, last_dot);
+                            }
+
+                            auto output_path = params_.dataset.output_path / "timelapse" / folder_name;
+                            std::filesystem::create_directories(output_path);
+
+                            image_io::save_image_async(output_path / std::format("{:06d}.jpg", iter),
+                                                       rendered_timelapse_output.image);
+
+                        } else {
+                            std::println("Warning: Timelapse image '{}' not found in dataset.", img_name);
                         }
                     }
                 }
