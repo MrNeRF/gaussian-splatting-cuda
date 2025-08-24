@@ -61,7 +61,7 @@ jobs:
       - name: Configure with CMake
         run: |
           if (${{ steps.cache-cuda.outputs.cache-hit }}) {
-            cmake -S . -B build -DCUDA_TOOLKIT_ROOT_DIR="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8"
+            cmake -S . -B build -DCUDA_TOOLKIT_ROOT_DIR="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" -DCMAKE_VS_PLATFORM_TOOLSET_CUDA=12.8
           } else {
             cmake -S . -B build
           }
