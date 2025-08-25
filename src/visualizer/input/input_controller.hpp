@@ -50,6 +50,9 @@ namespace gs::visualizer {
             point_cloud_mode_ = enabled;
         }
 
+        // Update function for continuous input (WASD movement and inertia)
+        void update(float delta_time);
+
     private:
         // Store original ImGui callbacks so we can chain
         struct {
@@ -77,6 +80,9 @@ namespace gs::visualizer {
         void handleFileDrop(const std::vector<std::string>& paths);
         void handleGoToCamView(const events::cmd::GoToCamView& event);
 
+        // WASD processing with proper frame timing
+        void processWASDMovement();
+
         // Helpers
         bool isInViewport(double x, double y) const;
         bool shouldCameraHandleInput() const;
@@ -98,11 +104,13 @@ namespace gs::visualizer {
         } viewport_bounds_{0, 0, 1920, 1080};
 
         // Camera state
-        enum class DragMode { None,
-                              Pan,
-                              Rotate,
-                              Orbit,
-                              Gizmo }; // Add Gizmo mode
+        enum class DragMode {
+            None,
+            Pan,
+            Rotate,
+            Orbit,
+            Gizmo
+        };
         DragMode drag_mode_ = DragMode::None;
         glm::dvec2 last_mouse_pos_{0, 0};
 
@@ -117,6 +125,9 @@ namespace gs::visualizer {
         // Throttling for camera events
         std::chrono::steady_clock::time_point last_camera_publish_;
         static constexpr auto camera_publish_interval_ = std::chrono::milliseconds(100);
+
+        // Frame timing for WASD movement
+        std::chrono::high_resolution_clock::time_point last_frame_time_;
 
         // Static instance for callbacks
         static InputController* instance_;

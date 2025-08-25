@@ -22,7 +22,6 @@ namespace gs::visualizer {
 
         LOG_TIMER("RenderingEngine initialization");
 
-        // Pass initial viewport size to engine
         engine_ = gs::rendering::RenderingEngine::create();
         auto init_result = engine_->initialize();
         if (!init_result) {
@@ -77,8 +76,7 @@ namespace gs::visualizer {
 
         // Scene changes
         events::state::SceneLoaded::when([this](const auto&) {
-            LOG_DEBUG("Scene loaded, marking render dirty and clearing cache");
-            cached_result_ = {}; // Clear cache to force immediate render
+            LOG_DEBUG("Scene loaded, marking render dirty");
             markDirty();
         });
 
@@ -93,8 +91,7 @@ namespace gs::visualizer {
 
         // PLY added/removed
         events::state::PLYAdded::when([this](const auto&) {
-            LOG_DEBUG("PLY added, marking render dirty and clearing cache");
-            cached_result_ = {}; // Clear cache to force immediate render
+            LOG_DEBUG("PLY added, marking render dirty");
             markDirty();
         });
 
