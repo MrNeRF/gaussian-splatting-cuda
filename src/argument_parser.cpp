@@ -90,6 +90,8 @@ namespace {
             ::args::ValueFlag<std::string> strategy(parser, "strategy", "Optimization strategy: mcmc, default", {"strategy"});
             ::args::ValueFlag<int> init_num_pts(parser, "init_num_pts", "Number of random initialization points", {"init-num-pts"});
             ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
+            ::args::ValueFlagList<std::string> timelapse_images(parser, "timelapse_images", "Image filenames to render timelapse images for", {"timelapse-images"});
+            ::args::ValueFlag<int> timelapse_every(parser, "timelapse_every", "Render timelapse image every N iterations (default: 50)", {"timelapse-every"});
 
             // Logging options
             ::args::ValueFlag<std::string> log_level(parser, "level", "Log level: trace, debug, info, warn, error, critical, off (default: info)", {"log-level"});
@@ -247,6 +249,8 @@ namespace {
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
                                         init_num_pts_val = init_num_pts ? std::optional<int>(::args::get(init_num_pts)) : std::optional<int>(),
                                         init_extent_val = init_extent ? std::optional<float>(::args::get(init_extent)) : std::optional<float>(),
+                                        timelapse_images_val = timelapse_images ? std::optional<std::vector<std::string>>(::args::get(timelapse_images)) : std::optional<std::vector<std::string>>(),
+                                        timelapse_every_val = timelapse_every ? std::optional<int>(::args::get(timelapse_every)) : std::optional<int>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
@@ -283,6 +287,8 @@ namespace {
                 setVal(render_mode_val, opt.render_mode);
                 setVal(init_num_pts_val, opt.init_num_pts);
                 setVal(init_extent_val, opt.init_extent);
+                setVal(timelapse_images_val, ds.timelapse_images);
+                setVal(timelapse_every_val, ds.timelapse_every);
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);

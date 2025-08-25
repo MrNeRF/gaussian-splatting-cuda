@@ -27,6 +27,8 @@ namespace gs {
         if (trainer) {
             LOG_DEBUG("Setting new trainer");
             trainer_ = std::move(trainer);
+            trainer_->setProject(project_);
+
             setState(State::Ready);
 
             // Trainer is ready
@@ -341,6 +343,13 @@ namespace gs {
         }
         LOG_ERROR("getCamList called but trainer is not initialized");
         return {};
+    }
+
+    void TrainerManager::setProject(std::shared_ptr<gs::management::Project> project) {
+        project_ = project;
+        if (trainer_) {
+            trainer_->setProject(project);
+        }
     }
 
 } // namespace gs

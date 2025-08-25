@@ -22,6 +22,7 @@ namespace gs::visualizer {
             drag_mode_ = DragMode::None;
             std::fill(std::begin(keys_wasd_), std::end(keys_wasd_), false);
         });
+
         LOG_DEBUG("InputController created");
     }
 
@@ -370,7 +371,8 @@ namespace gs::visualizer {
         // Publish camera move if we moved
         if (any_movement) {
             publishCameraMove();
-        }
+        LOG_TRACE("WASD movement - W:{} A:{} S:{} D:{}",
+                          keys_wasd_[0], keys_wasd_[1], keys_wasd_[2], keys_wasd_[3]);}
     }
 
     void InputController::update(float delta_time) {

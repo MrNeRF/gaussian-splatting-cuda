@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
 
     // Logger is now ready to use
     LOG_INFO("========================================");
-    LOG_INFO("3D Gaussian Splatting CUDA");
+    LOG_INFO("LichtFeld Studio");
     LOG_INFO("========================================");
 
     auto params = std::move(*params_result);

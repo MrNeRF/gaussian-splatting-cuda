@@ -180,6 +180,14 @@ namespace gs::visualizer {
                 static_cast<int>(context.viewport_region->height));
         }
 
+        // SAFETY CHECK: Don't render with invalid viewport dimensions
+        if (current_size.x <= 0 || current_size.y <= 0) {
+            LOG_TRACE("Skipping render - invalid viewport size: {}x{}", current_size.x, current_size.y);
+            // Keep needs_render flag set so we render on next valid frame
+            framerate_controller_.endFrame();
+            return;
+        }
+
         // Detect viewport size change and invalidate cache
         if (current_size != last_render_size_) {
             LOG_TRACE("Viewport size changed from {}x{} to {}x{}",
@@ -202,22 +210,28 @@ namespace gs::visualizer {
             cached_result_ = {}; // Always clear cache on model change
         }
 
-        // Check if we should render
+        // Simplified render decision logic for immediate rendering
         bool should_render = false;
 
-        // Always render if we don't have a cached result
-        if (!cached_result_.image) {
+        // Store needs_render value before clearing it
+        bool needs_render_now = needs_render_.load();
+
+        // ALWAYS render if:
+        // 1. We don't have a cached result (first render or cache cleared)
+        // 2. We need to render (scene changed, settings changed, etc.)
+        // 3. Viewport has focus (for interactivity)
+        if (!cached_result_.image || needs_render_now) {
             should_render = true;
-        } else if (needs_render_) {
-            should_render = true;
-            needs_render_ = false;
+            needs_render_ = false; // Clear the flag after deciding to render
+            LOG_TRACE("Forcing render: no cache={}, needs_render={}",
+                      !cached_result_.image, needs_render_now);
         } else if (context.has_focus) {
+            // Always render when viewport has focus for smooth interaction
             should_render = true;
         } else if (scene_manager && scene_manager->hasDataset()) {
-            // Check if actively training
+            // Throttle training renders only when we have a cache and don't need immediate render
             const auto* trainer_manager = scene_manager->getTrainerManager();
             if (trainer_manager && trainer_manager->isRunning()) {
-                // Throttle training renders to 1 FPS
                 auto now = std::chrono::steady_clock::now();
                 if (now - last_training_render_ > std::chrono::seconds(1)) {
                     should_render = true;

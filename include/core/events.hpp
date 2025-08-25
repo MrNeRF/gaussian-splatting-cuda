@@ -38,6 +38,7 @@ namespace gs {
             EVENT(ResumeTraining, );
             EVENT(StopTraining, );
             EVENT(SaveCheckpoint, std::optional<int> iteration;);
+            EVENT(SaveProject, std::filesystem::path project_dir;);
             EVENT(LoadFile, std::filesystem::path path; bool is_dataset;);
             EVENT(LoadProject, std::filesystem::path path;);
             EVENT(ClearScene, );
@@ -156,7 +157,7 @@ namespace gs {
             EVENT(TrainingReadyToStart, );
             EVENT(WindowFocusLost, );
         } // namespace internal
-    }     // namespace events
+    } // namespace events
 
     // ============================================================================
     // Convenience functions
