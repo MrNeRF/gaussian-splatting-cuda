@@ -100,6 +100,7 @@ namespace gs {
 
             events::state::PLYAdded{
                 .name = name,
+                .node_gaussians = gaussian_count,
                 .total_gaussians = scene_.getTotalGaussianCount(),
                 .is_visible = true}
                 .emit();
@@ -171,6 +172,7 @@ namespace gs {
 
             events::state::PLYAdded{
                 .name = name,
+                .node_gaussians = gaussian_count,
                 .total_gaussians = scene_.getTotalGaussianCount(),
                 .is_visible = is_visible}
                 .emit();

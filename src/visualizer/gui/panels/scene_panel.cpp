@@ -75,23 +75,24 @@ namespace gs::gui {
     }
 
     void ScenePanel::handlePLYAdded(const events::state::PLYAdded& event) {
-        LOG_DEBUG("PLY added to scene panel: '{}' ({} gaussians)", event.name, event.total_gaussians);
+        LOG_DEBUG("PLY added to scene panel: '{}' ({} gaussians, {} total)",
+                  event.name, event.node_gaussians, event.total_gaussians);
 
         // Add or update the PLY node
         auto it = std::find_if(m_plyNodes.begin(), m_plyNodes.end(),
                                [&event](const PLYNode& node) { return node.name == event.name; });
 
         if (it != m_plyNodes.end()) {
-            // Update existing node
-            it->gaussian_count = event.total_gaussians;
+            // Update existing node with its individual gaussian count
+            it->gaussian_count = event.node_gaussians;
             LOG_TRACE("Updated existing PLY node '{}'", event.name);
         } else {
-            // Add new node
+            // Add new node with its individual gaussian count
             PLYNode node;
             node.name = event.name;
             node.visible = event.is_visible;
             node.selected = false;
-            node.gaussian_count = event.total_gaussians;
+            node.gaussian_count = event.node_gaussians; // Use node-specific count
             m_plyNodes.push_back(node);
             LOG_TRACE("Added new PLY node '{}'", event.name);
         }
