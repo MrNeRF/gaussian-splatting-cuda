@@ -371,8 +371,9 @@ namespace gs::visualizer {
         // Publish camera move if we moved
         if (any_movement) {
             publishCameraMove();
-        LOG_TRACE("WASD movement - W:{} A:{} S:{} D:{}",
-                          keys_wasd_[0], keys_wasd_[1], keys_wasd_[2], keys_wasd_[3]);}
+            LOG_TRACE("WASD movement - W:{} A:{} S:{} D:{}",
+                      keys_wasd_[0], keys_wasd_[1], keys_wasd_[2], keys_wasd_[3]);
+        }
     }
 
     void InputController::update(float delta_time) {
@@ -396,9 +397,6 @@ namespace gs::visualizer {
             LOG_TRACE("Pan stopped - button released outside window");
         }
 
-        // Handle inertia for orbiting
-        viewport_.camera.updateInertia(delta_time);
-
         // Handle continuous WASD movement
         if (shouldCameraHandleInput() && drag_mode_ != DragMode::Gizmo) {
             if (keys_wasd_[0]) {
@@ -415,9 +413,9 @@ namespace gs::visualizer {
             }
         }
 
-        // Publish if moving or inertia active
+        // Publish if moving (removed inertia check)
         bool moving = keys_wasd_[0] || keys_wasd_[1] || keys_wasd_[2] || keys_wasd_[3];
-        if (moving || glm::length2(viewport_.camera.orbitVelocity) > 0.0001f) {
+        if (moving) {
             publishCameraMove();
         }
     }

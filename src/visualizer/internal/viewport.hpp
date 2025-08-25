@@ -4,9 +4,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <cmath>
-#include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/norm.hpp>
-#include <glm/gtx/transform.hpp>
 #include <iostream>
 
 class Viewport {
@@ -18,25 +16,27 @@ class Viewport {
         float rotateCenterSpeed = 0.002f;
         float rotateRollSpeed = 0.01f;
         float translateSpeed = 0.001f;
-        float wasdSpeed = 10.0f;                 // FIXED: Was 0.06f - now 10.0f for reasonable speed
-        float maxWasdSpeed = 1000.0f;            // FIXED: Was 1.0f - now 1000.0f for proper range
-        float wasdSpeedChangePercentage = 10.0f; // FIXED: Was 1.0f - now 10% change per key press
-        glm::vec2 orbitVelocity = glm::vec2(0.0f);
-        float preTime = 0.0f;
+        float wasdSpeed = 10.0f;
+        float maxWasdSpeed = 1000.0f;
+        float wasdSpeedChangePercentage = 10.0f;
+
+        // REMOVED: Orbit velocity and inertia - we don't want spinning to continue
+        // glm::vec2 orbitVelocity = glm::vec2(0.0f);
+        // float preTime = 0.0f;
         bool isOrbiting = false;
-        float orbitFriction = 3.0f;
+        // float orbitFriction = 3.0f;
 
         void increaseWasdSpeed() {
-            wasdSpeed = std::min(wasdSpeed * 1.5f, maxWasdSpeed); // FIXED: Multiply by 1.5x instead of tiny increment
+            wasdSpeed = std::min(wasdSpeed * 1.5f, maxWasdSpeed);
         }
 
         void decreaseWasdSpeed() {
-            wasdSpeed = std::max(wasdSpeed / 1.5f, 0.1f); // FIXED: Divide by 1.5x, minimum 0.1
+            wasdSpeed = std::max(wasdSpeed / 1.5f, 0.1f);
         }
 
         void setMaxWasdSpeed(float maxSpeed) {
             maxWasdSpeed = maxSpeed;
-            wasdSpeed = std::min(wasdSpeed, maxWasdSpeed); // Clamp current speed if it exceeds new max
+            wasdSpeed = std::min(wasdSpeed, maxWasdSpeed);
         }
 
         float getWasdSpeed() const {
@@ -48,15 +48,7 @@ class Viewport {
         }
 
         void setWasdSpeedChangePercentage(float percentage) {
-            wasdSpeedChangePercentage = std::max(1.0f, std::min(percentage, 100.0f)); // Clamp between 1% and 100%
-        }
-
-        void setOrbitFriction(float friction) {
-            orbitFriction = friction;
-        }
-
-        float getOrbitFriction() const {
-            return orbitFriction;
+            wasdSpeedChangePercentage = std::max(1.0f, std::min(percentage, 100.0f));
         }
 
         glm::mat3 R = glm::mat3(1.0f);
@@ -113,19 +105,14 @@ class Viewport {
             prePos = pos;
         }
 
-        void startRotateAroundCenter(const glm::vec2& pos, float time) {
+        // Simplified orbit methods - no velocity tracking
+        void startRotateAroundCenter(const glm::vec2& pos, float /*time*/) {
             prePos = pos;
-            preTime = time;
-            orbitVelocity = glm::vec2(0.0f);
             isOrbiting = true;
         }
 
-        void updateRotateAroundCenter(const glm::vec2& pos, float time) {
+        void updateRotateAroundCenter(const glm::vec2& pos, float /*time*/) {
             if (!isOrbiting)
-                return;
-
-            float dt = time - preTime;
-            if (dt <= 0.0f)
                 return;
 
             glm::vec2 delta = pos - prePos;
@@ -133,36 +120,22 @@ class Viewport {
             float pitch = -delta.y * rotateCenterSpeed;
 
             applyRotationAroundCenter(yaw, pitch);
-
-            orbitVelocity = glm::vec2(yaw / dt, pitch / dt);
             prePos = pos;
-            preTime = time;
         }
 
         void endRotateAroundCenter() {
             isOrbiting = false;
+            // No velocity to clear
         }
 
-        void updateInertia(float deltaTime) {
-            if (isOrbiting)
-                return;
-            if (glm::length2(orbitVelocity) < 0.0001f)
-                return;
-
-            float yaw = orbitVelocity.x * deltaTime;
-            float pitch = orbitVelocity.y * deltaTime;
-
-            applyRotationAroundCenter(yaw, pitch);
-
-            orbitVelocity *= std::exp(-orbitFriction * deltaTime);
-            if (glm::length2(orbitVelocity) < 0.0001f) {
-                orbitVelocity = glm::vec2(0.0f);
-            }
+        // No-op since we removed inertia
+        void updateInertia(float /*deltaTime*/) {
+            // Inertia disabled - do nothing
         }
 
     private:
         void applyRotationAroundCenter(float yaw, float pitch) {
-            // FIXED: Use world Y-axis for yaw rotation to maintain height
+            // Use world Y-axis for yaw rotation to maintain height
             // and camera's local right axis for pitch
             glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
 
