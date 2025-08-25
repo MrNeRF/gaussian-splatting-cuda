@@ -75,8 +75,8 @@ namespace gs::rendering {
             auto output = gs::fast_rasterize(cam, mutable_model, background_);
 
             // Manually blend the background since fast_rasterize does not do it
-            torch::Tensor bg = background_.unsqueeze(1).unsqueeze(2);  // [3, 1, 1]
-            torch::Tensor alpha = output.alpha;  // Assuming [1, H, W]
+            torch::Tensor bg = background_.unsqueeze(1).unsqueeze(2); // [3, 1, 1]
+            torch::Tensor alpha = output.alpha;                       // Assuming [1, H, W]
             torch::Tensor blended_image = output.image + (1.0f - alpha) * bg;
 
             // Clamp the image to [0, 1] range for consistency with the original rasterize
@@ -84,7 +84,7 @@ namespace gs::rendering {
 
             RenderResult result;
             result.image = blended_image;
-            result.depth = torch::empty({0}, torch::kFloat32);  // No depth support in fast_rasterize; set empty
+            result.depth = torch::empty({0}, torch::kFloat32); // No depth support in fast_rasterize; set empty
             result.valid = true;
 
             LOG_TRACE("Rasterization completed successfully");
