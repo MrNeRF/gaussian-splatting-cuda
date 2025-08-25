@@ -29,6 +29,14 @@ inline void print_tensor_with_precision(const torch::Tensor& tensor, int precisi
 // Macro to inspect tensor properties with 5 decimal precision
 #define INSPECT_TENSOR(tensor)                                                                              \
     do {                                                                                                    \
+        if (!(tensor).defined() ) {                                                                               \
+        std::cout << ts::color::CYAN << #tensor << ts::color::RESET << " is not defined!" << std::endl;     \
+        break;                                                                                              \
+        }                                                                                                       \
+        if ((tensor).numel() == 0) {                                                                            \
+        std::cout << ts::color::CYAN << #tensor << ts::color::RESET << " is empty!" << std::endl;           \
+        break;                                                                                              \
+        }                                                                                                       \
         std::cout << ts::color::CYAN << #tensor << ts::color::RESET << " | "                                \
                   << "shape: " << (tensor).sizes() << " | "                                                 \
                   << "device: " << (tensor).device() << " | "                                               \

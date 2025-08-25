@@ -1,6 +1,6 @@
 #include "rendering_pipeline.hpp"
-#include "core/logger.hpp"
-#include <format>
+#include "core/fast_rasterizer.hpp"
+#include <print>
 
 namespace gs::rendering {
 
@@ -52,7 +52,6 @@ namespace gs::rendering {
         // Create camera for this frame
         auto cam_result = createCamera(request);
         if (!cam_result) {
-            LOG_ERROR("Failed to create camera: {}", cam_result.error());
             return std::unexpected(cam_result.error());
         }
         Camera cam = std::move(*cam_result);
@@ -71,20 +70,21 @@ namespace gs::rendering {
         }
 
         try {
-            // Perform rendering with transformed data
-            auto output = gs::rasterize(
-                cam,
-                *data_to_render, // Use transformed data
-                background_,
-                request.scaling_modifier,
-                false, // train
-                request.antialiasing,
-                static_cast<gs::RenderMode>(request.render_mode),
-                geom_bbox);
+            // Perform rendering with fast_rasterize
+            SplatData& mutable_model = const_cast<SplatData&>(model);
+            auto output = gs::fast_rasterize(cam, mutable_model, background_);
+
+            // Manually blend the background since fast_rasterize does not do it
+            torch::Tensor bg = background_.unsqueeze(1).unsqueeze(2);  // [3, 1, 1]
+            torch::Tensor alpha = output.alpha;  // Assuming [1, H, W]
+            torch::Tensor blended_image = output.image + (1.0f - alpha) * bg;
+
+            // Clamp the image to [0, 1] range for consistency with the original rasterize
+            blended_image = torch::clamp(blended_image, 0.0f, 1.0f);
 
             RenderResult result;
-            result.image = output.image;
-            result.depth = output.depth;
+            result.image = blended_image;
+            result.depth = torch::empty({0}, torch::kFloat32);  // No depth support in fast_rasterize; set empty
             result.valid = true;
 
             LOG_TRACE("Rasterization completed successfully");

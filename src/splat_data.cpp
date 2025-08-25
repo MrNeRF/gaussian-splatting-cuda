@@ -238,8 +238,7 @@ namespace gs {
           _shN{std::move(shN)},
           _scaling{std::move(scaling)},
           _rotation{std::move(rotation)},
-          _opacity{std::move(opacity)},
-          _densification_info(std::move(_densification_info)) {}
+          _opacity{std::move(opacity)} {}
 
     // Computed getters
     torch::Tensor SplatData::get_means() const {
