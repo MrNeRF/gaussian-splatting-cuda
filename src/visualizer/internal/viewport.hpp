@@ -1,40 +1,42 @@
 #pragma once
-
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/euler_angles.hpp>
-#include <glm/gtx/transform.hpp>
+#include <cmath>
+#include <glm/gtx/norm.hpp>
 #include <iostream>
 
 class Viewport {
-
     class CameraMotion {
     public:
         glm::vec2 prePos;
-
         float zoomSpeed = 1.0f;
         float rotateSpeed = 0.001f;
         float rotateCenterSpeed = 0.002f;
         float rotateRollSpeed = 0.01f;
         float translateSpeed = 0.001f;
-        float wasdSpeed = 0.06f;
+        float wasdSpeed = 10.0f;
+        float maxWasdSpeed = 1000.0f;
+        float wasdSpeedChangePercentage = 10.0f;
 
-        float maxWasdSpeed = 1.0f;              // Maximum WASD speed
-        float wasdSpeedChangePercentage = 1.0f; // 1% change per key press
+        // REMOVED: Orbit velocity and inertia - we don't want spinning to continue
+        // glm::vec2 orbitVelocity = glm::vec2(0.0f);
+        // float preTime = 0.0f;
+        bool isOrbiting = false;
+        // float orbitFriction = 3.0f;
 
         void increaseWasdSpeed() {
-            wasdSpeed = std::min(wasdSpeed + maxWasdSpeed * wasdSpeedChangePercentage / 100, maxWasdSpeed);
+            wasdSpeed = std::min(wasdSpeed * 1.5f, maxWasdSpeed);
         }
 
         void decreaseWasdSpeed() {
-            wasdSpeed = std::max(wasdSpeed - maxWasdSpeed * wasdSpeedChangePercentage / 100, 0.001f); // Minimum speed to avoid zero
+            wasdSpeed = std::max(wasdSpeed / 1.5f, 0.1f);
         }
 
         void setMaxWasdSpeed(float maxSpeed) {
             maxWasdSpeed = maxSpeed;
-            wasdSpeed = std::min(wasdSpeed, maxWasdSpeed); // Clamp current speed if it exceeds new max
+            wasdSpeed = std::min(wasdSpeed, maxWasdSpeed);
         }
 
         float getWasdSpeed() const {
@@ -46,7 +48,7 @@ class Viewport {
         }
 
         void setWasdSpeedChangePercentage(float percentage) {
-            wasdSpeedChangePercentage = std::max(1.0f, std::min(percentage, 100.0f)); // Clamp between 1% and 100%
+            wasdSpeedChangePercentage = std::max(1.0f, std::min(percentage, 100.0f));
         }
 
         glm::mat3 R = glm::mat3(1.0f);
@@ -64,25 +66,12 @@ class Viewport {
             prePos = pos;
         }
 
-        void rotate_around_center(const glm::vec2& pos) {
-            glm::vec2 delta = pos - prePos;
-            float y = +delta.x * rotateCenterSpeed;
-            float p = -delta.y * rotateCenterSpeed;
-            glm::mat3 Ry = glm::mat3(glm::rotate(glm::mat4(1.0f), y, R[1]));
-            glm::mat3 Rp = glm::mat3(glm::rotate(glm::mat4(1.0f), p, R[0]));
-            auto U = Rp * Ry;
-            t = U * t;
-            R = U * R;
-            prePos = pos;
-        }
-
         void rotate_roll(float diff) {
             float ang_rad = diff * rotateRollSpeed;
             glm::mat3 rot_z = glm::mat3(
                 glm::cos(ang_rad), -glm::sin(ang_rad), 0.0f,
                 glm::sin(ang_rad), glm::cos(ang_rad), 0.0f,
                 0.0f, 0.0f, 1.0f);
-
             R = R * rot_z;
         }
 
@@ -97,21 +86,72 @@ class Viewport {
         }
 
         void advance_forward(float deltaTime) {
-
             t += R * glm::vec3(0, 0, 1) * deltaTime * wasdSpeed;
         }
+
         void advance_backward(float deltaTime) {
             t += R * glm::vec3(0, 0, -1) * deltaTime * wasdSpeed;
         }
+
         void advance_left(float deltaTime) {
             t += R * glm::vec3(-1, 0, 0) * deltaTime * wasdSpeed;
         }
+
         void advance_right(float deltaTime) {
             t += R * glm::vec3(1, 0, 0) * deltaTime * wasdSpeed;
         }
 
         void initScreenPos(const glm::vec2& pos) {
             prePos = pos;
+        }
+
+        // Simplified orbit methods - no velocity tracking
+        void startRotateAroundCenter(const glm::vec2& pos, float /*time*/) {
+            prePos = pos;
+            isOrbiting = true;
+        }
+
+        void updateRotateAroundCenter(const glm::vec2& pos, float /*time*/) {
+            if (!isOrbiting)
+                return;
+
+            glm::vec2 delta = pos - prePos;
+            float yaw = +delta.x * rotateCenterSpeed;
+            float pitch = -delta.y * rotateCenterSpeed;
+
+            applyRotationAroundCenter(yaw, pitch);
+            prePos = pos;
+        }
+
+        void endRotateAroundCenter() {
+            isOrbiting = false;
+            // No velocity to clear
+        }
+
+        // No-op since we removed inertia
+        void updateInertia(float /*deltaTime*/) {
+            // Inertia disabled - do nothing
+        }
+
+    private:
+        void applyRotationAroundCenter(float yaw, float pitch) {
+            // Use world Y-axis for yaw rotation to maintain height
+            // and camera's local right axis for pitch
+            glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
+
+            // Yaw rotation around world Y-axis
+            glm::mat3 Ry = glm::mat3(glm::rotate(glm::mat4(1.0f), yaw, worldUp));
+
+            // Pitch rotation around camera's local right axis
+            glm::mat3 Rp = glm::mat3(glm::rotate(glm::mat4(1.0f), pitch, R[0]));
+
+            // Apply rotations: first yaw (around world), then pitch (around local)
+            // This order maintains the horizon level during pure horizontal orbiting
+            glm::mat3 U = Rp * Ry;
+
+            // Transform both position and orientation
+            t = U * t;
+            R = U * R;
         }
     };
 
@@ -121,9 +161,7 @@ public:
     CameraMotion camera;
 
     Viewport(size_t width = 1280, size_t height = 720) {
-
         windowSize = glm::ivec2(width, height);
-
         camera = CameraMotion();
     }
 
@@ -143,7 +181,6 @@ public:
     glm::mat4 getViewMatrix() const {
         // Convert R (3x3) and t (3x1) to a 4x4 view matrix
         // The view matrix transforms world coordinates to camera coordinates
-
         // In your system: camera.R is rotation, camera.t is translation
         // View matrix is the inverse of the camera transform
 
@@ -159,7 +196,6 @@ public:
         t_inv = flip_yz * t_inv;
 
         glm::mat4 view(1.0f);
-
         // Set rotation part (top-left 3x3)
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
@@ -178,7 +214,6 @@ public:
         // Create perspective projection matrix
         float aspect_ratio = static_cast<float>(windowSize.x) / static_cast<float>(windowSize.y);
         float fov_radians = glm::radians(fov_degrees);
-
         return glm::perspective(fov_radians, aspect_ratio, near_plane, far_plane);
     }
 };
