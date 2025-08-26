@@ -1,6 +1,21 @@
-#include "fast_rasterizer.hpp"
+#include "gs_rasterizer.hpp"
+#include "rasterization_api.h"
 
 namespace gs::rendering {
+
+    struct FastGSSettings {
+        torch::Tensor w2c;
+        torch::Tensor cam_position;
+        int active_sh_bases;
+        int width;
+        int height;
+        float focal_x;
+        float focal_y;
+        float center_x;
+        float center_y;
+        float near_plane;
+        float far_plane;
+    };
 
     static std::tuple<torch::Tensor, torch::Tensor> forward(
         const torch::Tensor& means,                               // [N, 3]
@@ -49,7 +64,7 @@ namespace gs::rendering {
     using torch::indexing::None;
     using torch::indexing::Slice;
 
-    RenderOutput fast_rasterize(
+    torch::Tensor rasterize(
         Camera& viewpoint_camera,
         SplatData& gaussian_model,
         torch::Tensor& bg_color) {
@@ -86,7 +101,7 @@ namespace gs::rendering {
         settings.near_plane = near_plane;
         settings.far_plane = far_plane;
 
-        auto [image, alpha]= forward(
+        auto [image, alpha] = forward(
             means,
             raw_scales,
             raw_rotations,
@@ -96,15 +111,15 @@ namespace gs::rendering {
             gaussian_model._densification_info,
             settings);
 
-        RenderOutput output;
-        output.image = image;
-        output.alpha = alpha;
 
-        // output.image = image + (1.0f - alpha) * bg_color.unsqueeze(-1).unsqueeze(-1);
+        // Manually blend the background since fast_rasterize does not do it
+        torch::Tensor bg = bg_color.unsqueeze(1).unsqueeze(2); // [3, 1, 1]
+        torch::Tensor blended_image = image + (1.0f - alpha) * bg;
 
-        // TODO: if the background color is blended into the image, the resulting image has alpha=1 everywhere
-        // output.alpha = torch::ones_like(alpha);
-        return output;
+        // Clamp the image to [0, 1] range for consistency with the original rasterize
+        blended_image = torch::clamp(blended_image, 0.0f, 1.0f);
+
+        return blended_image;
     }
 
 } // namespace gs

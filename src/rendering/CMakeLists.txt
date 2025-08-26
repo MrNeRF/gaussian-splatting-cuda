@@ -5,7 +5,7 @@ set(RENDERING_SOURCES
         rendering_engine.cpp
         rendering_engine_impl.cpp
         rendering_pipeline.cpp
-        fast_rasterizer.cpp
+        gs_rasterizer.cpp
         point_cloud_renderer.cpp
         translation_gizmo.cpp
         grid_renderer.cpp

@@ -2,7 +2,6 @@
 set(CUDA_RASTERIZER_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/rasterization/src/rasterization_api.cu
         ${CMAKE_CURRENT_SOURCE_DIR}/rasterization/src/forward.cu
-        ${CMAKE_CURRENT_SOURCE_DIR}/rasterization/src/backward.cu
 )
 
 # Create internal CUDA rasterization library
