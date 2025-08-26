@@ -84,7 +84,7 @@ namespace gs::rendering {
             gaussian_model.shN(),
             settings);
 
-        // Manually blend the background since fast_rasterize does not do it
+        // Manually blend the background since the forward pass does not support it
         torch::Tensor bg = bg_color.unsqueeze(1).unsqueeze(2); // [3, 1, 1]
         torch::Tensor blended_image = image + (1.0f - alpha) * bg;
 

@@ -47,13 +47,11 @@ namespace gs::rendering {
         const std::function<char*(size_t)> per_primitive_buffers_func = resize_function_wrapper(per_primitive_buffers);
         const std::function<char*(size_t)> per_tile_buffers_func = resize_function_wrapper(per_tile_buffers);
         const std::function<char*(size_t)> per_instance_buffers_func = resize_function_wrapper(per_instance_buffers);
-        const std::function<char*(size_t)> per_bucket_buffers_func = [](size_t) { return nullptr; }; // Dummy function
 
         forward(
             per_primitive_buffers_func,
             per_tile_buffers_func,
             per_instance_buffers_func,
-            per_bucket_buffers_func,
             reinterpret_cast<float3*>(means.data_ptr<float>()),
             reinterpret_cast<float3*>(scales_raw.data_ptr<float>()),
             reinterpret_cast<float4*>(rotations_raw.data_ptr<float>()),
