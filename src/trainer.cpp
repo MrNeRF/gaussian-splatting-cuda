@@ -300,7 +300,6 @@ namespace gs {
                 r_output = rasterize(adjusted_cam, strategy_->get_model(), background_, 1.0f, false, false, render_mode, nullptr, true);
             }
 
-
             // Apply bilateral grid if enabled
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());

@@ -10,12 +10,12 @@ namespace gs {
     // ProjectionFunction implementation
     torch::autograd::tensor_list ProjectionFunction::forward(
         torch::autograd::AutogradContext* ctx,
-        torch::Tensor means3D,    // [N, 3]
-        torch::Tensor quats,      // [N, 4]
-        torch::Tensor scales,     // [N, 3]
-        torch::Tensor opacities,  // [N] or undefined (optional)
-        torch::Tensor viewmat,    // [C, 4, 4]
-        torch::Tensor K,          // [C, 3, 3]
+        torch::Tensor means3D,   // [N, 3]
+        torch::Tensor quats,     // [N, 4]
+        torch::Tensor scales,    // [N, 3]
+        torch::Tensor opacities, // [N] or undefined (optional)
+        torch::Tensor viewmat,   // [C, 4, 4]
+        torch::Tensor K,         // [C, 3, 3]
         ProjectionSettings settings) {
 
         // Input validation
@@ -603,13 +603,13 @@ namespace gs {
 
     // ProjectionFunction implementation
     torch::autograd::tensor_list fully_fused_projection_with_ut(
-        torch::Tensor means3D,   // [N, 3]
-        torch::Tensor quats,     // [N, 4]
-        torch::Tensor scales,    // [N, 3]
-        torch::Tensor opacities, // [N]
-        torch::Tensor viewmat,   // [C, 4, 4]
-        torch::Tensor K,         // [C, 3, 3]
-        std::optional<torch::Tensor> radial_coeffs, // [..., C, 6] or [..., C, 4]
+        torch::Tensor means3D,                          // [N, 3]
+        torch::Tensor quats,                            // [N, 4]
+        torch::Tensor scales,                           // [N, 3]
+        torch::Tensor opacities,                        // [N]
+        torch::Tensor viewmat,                          // [C, 4, 4]
+        torch::Tensor K,                                // [C, 3, 3]
+        std::optional<torch::Tensor> radial_coeffs,     // [..., C, 6] or [..., C, 4]
         std::optional<torch::Tensor> tangential_coeffs, // [..., C, 2]
         std::optional<torch::Tensor> thin_prism_coeffs, // [..., C, 4]
         GUTProjectionSettings settings,
@@ -670,7 +670,6 @@ namespace gs {
             TORCH_CHECK(thin_prism_coeffs->is_cuda(), "thin_prism_coeffs must be on CUDA");
             thin_prism_coeffs = thin_prism_coeffs->contiguous();
         }
-
 
         // Ensure all tensors are contiguous
         means3D = means3D.contiguous();
@@ -737,23 +736,23 @@ namespace gs {
     }
 
     torch::autograd::tensor_list GUTRasterizationFunction::forward(
-            torch::autograd::AutogradContext* ctx,
-            torch::Tensor means3D,   // [N, 3]
-             torch::Tensor quats,     // [N, 4]
-             torch::Tensor scales,    // [N, 3]
-             torch::Tensor colors,        // [N, C]
-             torch::Tensor opacities, // [N]
-             torch::Tensor bg_color,      // [N, C]
-             std::optional<torch::Tensor> masks, // [N, C, tile_height, tile_width]
-             torch::Tensor viewmat,   // [C, 4, 4]
-             torch::Tensor K,         // [C, 3, 3]
-             std::optional<torch::Tensor> radial_coeffs, // [..., C, 6] or [..., C, 4]
-             std::optional<torch::Tensor> tangential_coeffs, // [..., C, 2]
-             std::optional<torch::Tensor> thin_prism_coeffs, // [..., C, 4]
-             torch::Tensor isect_offsets, // [C, tile_height, tile_width]
-                torch::Tensor flatten_ids,   // [nnz]
-            GUTRasterizationSettings settings,
-            UnscentedTransformParameters ut_params) {
+        torch::autograd::AutogradContext* ctx,
+        torch::Tensor means3D,                          // [N, 3]
+        torch::Tensor quats,                            // [N, 4]
+        torch::Tensor scales,                           // [N, 3]
+        torch::Tensor colors,                           // [N, C]
+        torch::Tensor opacities,                        // [N]
+        torch::Tensor bg_color,                         // [N, C]
+        std::optional<torch::Tensor> masks,             // [N, C, tile_height, tile_width]
+        torch::Tensor viewmat,                          // [C, 4, 4]
+        torch::Tensor K,                                // [C, 3, 3]
+        std::optional<torch::Tensor> radial_coeffs,     // [..., C, 6] or [..., C, 4]
+        std::optional<torch::Tensor> tangential_coeffs, // [..., C, 2]
+        std::optional<torch::Tensor> thin_prism_coeffs, // [..., C, 4]
+        torch::Tensor isect_offsets,                    // [C, tile_height, tile_width]
+        torch::Tensor flatten_ids,                      // [nnz]
+        GUTRasterizationSettings settings,
+        UnscentedTransformParameters ut_params) {
         TORCH_CHECK(colors.size(-1) == 3, "Only 3 colors are supported currently.");
         ctx->saved_data["width"] = settings.width;
         ctx->saved_data["height"] = settings.height;
@@ -782,8 +781,7 @@ namespace gs {
             tangential_coeffs,
             thin_prism_coeffs,
             isect_offsets.contiguous(),
-            flatten_ids.contiguous()
-        );
+            flatten_ids.contiguous());
 
         auto render_colors = std::get<0>(results).contiguous();
         auto render_alpha = std::get<1>(results).contiguous();
@@ -798,8 +796,8 @@ namespace gs {
     }
 
     torch::autograd::tensor_list GUTRasterizationFunction::backward(
-            torch::autograd::AutogradContext* ctx,
-            torch::autograd::tensor_list grad_outputs) {
+        torch::autograd::AutogradContext* ctx,
+        torch::autograd::tensor_list grad_outputs) {
 
         auto v_render_colors = grad_outputs[0].contiguous();
         auto v_render_alpha = grad_outputs[1].contiguous();
@@ -836,8 +834,7 @@ namespace gs {
             viewmat, std::nullopt, K, camera_model, ut_params, ShutterType::GLOBAL,
             radial_coeffs, tangential_coeffs, thin_prism_coeffs,
             isect_offsets, flatten_ids, render_alpha, last_ids,
-            v_render_colors, v_render_alpha
-            );
+            v_render_colors, v_render_alpha);
 
         // Extract gradients
         auto v_means3D = std::get<0>(raster_grads);

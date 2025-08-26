@@ -184,7 +184,7 @@ namespace gs {
         torch::Tensor conics;
         torch::Tensor compensations;
         if (gut) {
-            auto proj_settings = GUTProjectionSettings {
+            auto proj_settings = GUTProjectionSettings{
                 image_width,
                 image_height,
                 eps2d,
@@ -192,8 +192,7 @@ namespace gs {
                 far_plane,
                 radius_clip,
                 scaling_modifier,
-                viewpoint_camera.camera_model_type()
-            };
+                viewpoint_camera.camera_model_type()};
             auto proj_outputs = fully_fused_projection_with_ut(
                 means3D,
                 rotations,
@@ -205,8 +204,7 @@ namespace gs {
                 std::nullopt,
                 std::nullopt,
                 proj_settings,
-                UnscentedTransformParameters()
-            );
+                UnscentedTransformParameters());
 
             radii = proj_outputs[0];
             means2d = proj_outputs[1];
@@ -214,13 +212,13 @@ namespace gs {
             conics = proj_outputs[3];
             compensations = proj_outputs[4];
         } else {
-            auto proj_settings = ProjectionSettings {image_width,
-                                            image_height,
-                                            eps2d,
-                                            near_plane,
-                                            far_plane,
-                                            radius_clip,
-                                            scaling_modifier};
+            auto proj_settings = ProjectionSettings{image_width,
+                                                    image_height,
+                                                    eps2d,
+                                                    near_plane,
+                                                    far_plane,
+                                                    radius_clip,
+                                                    scaling_modifier};
 
             auto proj_outputs = ProjectionFunction::apply(
                 means3D, rotations, scales, opacities, viewmat, K, proj_settings);
@@ -231,7 +229,6 @@ namespace gs {
             conics = proj_outputs[3];
             compensations = proj_outputs[4];
         }
-
 
         // Create means2d with gradient tracking for backward compatibility
         auto means2d_with_grad = means2d.contiguous();
@@ -330,14 +327,13 @@ namespace gs {
         torch::Tensor rendered_image;
         torch::Tensor rendered_alpha;
         if (gut) {
-            auto raster_settings = GUTRasterizationSettings {
+            auto raster_settings = GUTRasterizationSettings{
                 image_width,
                 image_height,
                 tile_size,
                 scaling_modifier,
-                gsplat::PINHOLE
-            };
-            auto ut_params = UnscentedTransformParameters {};
+                gsplat::PINHOLE};
+            auto ut_params = UnscentedTransformParameters{};
             auto raster_outputs = GUTRasterizationFunction::apply(
                 means3D,
                 rotations,
@@ -354,14 +350,13 @@ namespace gs {
                 isect_offsets,
                 flatten_ids,
                 raster_settings,
-                ut_params
-                );
+                ut_params);
             rendered_image = raster_outputs[0];
             rendered_alpha = raster_outputs[1];
         } else {
-            auto raster_settings = RasterizationSettings { image_width,
-                                                  image_height,
-                                                  tile_size };
+            auto raster_settings = RasterizationSettings{image_width,
+                                                         image_height,
+                                                         tile_size};
 
             auto raster_outputs = RasterizationFunction::apply(
                 means2d_with_grad, conics, render_colors, final_opacities, final_bg,
@@ -369,8 +364,6 @@ namespace gs {
             rendered_image = raster_outputs[0];
             rendered_alpha = raster_outputs[1];
         }
-
-
 
         // Step 7: Post-process based on render mode
         torch::Tensor final_image, final_depth;

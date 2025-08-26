@@ -1,12 +1,12 @@
 #pragma once
 
-#include <torch/torch.h>
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <limits>
+#include <torch/torch.h>
 #include <variant>
 
 // ---------------------------------------------------------------------------------------------
@@ -40,8 +40,8 @@ struct UnscentedTransformParameters {
               // state
     bool require_all_sigma_points_valid =
         true; // true: all sigma points must be valid to mark a projection as
-               // "valid" false: a single valid sigma point is sufficient to
-               // mark a projection as "valid"
+              // "valid" false: a single valid sigma point is sufficient to
+              // mark a projection as "valid"
 
     torch::Tensor to_tensor() const {
         return torch::tensor({alpha, beta, kappa, in_image_margin_factor,
