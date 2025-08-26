@@ -152,6 +152,10 @@ namespace gs::training {
                 throw std::runtime_error("Evaluating with pose optimization is not supported yet. "
                                          "Please disable pose optimization or evaluation.");
             }
+            if (params.optimization.gut) {
+                throw std::runtime_error("The 3DGUT rasterizer doesn't have camera gradients yet. "
+                                         "Please disable pose optimization or disable gut.");
+            }
             if (params.optimization.pose_optimization == "direct") {
                 poseopt_module_ = std::make_unique<DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
             } else if (params.optimization.pose_optimization == "mlp") {
