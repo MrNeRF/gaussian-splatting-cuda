@@ -1,5 +1,5 @@
 #include "rendering_pipeline.hpp"
-#include "core/fast_rasterizer.hpp"
+#include "gs_rasterizer.hpp"
 #include <print>
 
 namespace gs::rendering {
@@ -72,18 +72,9 @@ namespace gs::rendering {
         try {
             // Perform rendering with fast_rasterize
             SplatData& mutable_model = const_cast<SplatData&>(model);
-            auto output = gs::fast_rasterize(cam, mutable_model, background_);
-
-            // Manually blend the background since fast_rasterize does not do it
-            torch::Tensor bg = background_.unsqueeze(1).unsqueeze(2); // [3, 1, 1]
-            torch::Tensor alpha = output.alpha;                       // Assuming [1, H, W]
-            torch::Tensor blended_image = output.image + (1.0f - alpha) * bg;
-
-            // Clamp the image to [0, 1] range for consistency with the original rasterize
-            blended_image = torch::clamp(blended_image, 0.0f, 1.0f);
 
             RenderResult result;
-            result.image = blended_image;
+            result.image = rasterize(cam, mutable_model, background_);
             result.depth = torch::empty({0}, torch::kFloat32); // No depth support in fast_rasterize; set empty
             result.valid = true;
 
