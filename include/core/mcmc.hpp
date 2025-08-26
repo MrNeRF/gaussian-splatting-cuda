@@ -1,14 +1,13 @@
 #pragma once
 
 #include "core/istrategy.hpp"
-#include "core/selective_adam.hpp"
 #include <memory>
 #include <torch/torch.h>
 
 class MCMC : public IStrategy {
 public:
     MCMC() = delete;
-    MCMC(SplatData&& splat_data);
+    MCMC(gs::SplatData&& splat_data);
 
     MCMC(const MCMC&) = delete;
     MCMC& operator=(const MCMC&) = delete;
@@ -20,8 +19,8 @@ public:
     void post_backward(int iter, gs::RenderOutput& render_output) override;
     bool is_refining(int iter) const override;
     void step(int iter) override;
-    SplatData& get_model() override { return _splat_data; }
-    const SplatData& get_model() const override { return _splat_data; }
+    gs::SplatData& get_model() override { return _splat_data; }
+    const gs::SplatData& get_model() const override { return _splat_data; }
 
 private:
     // Simple ExponentialLR implementation since C++ API is different
@@ -53,7 +52,7 @@ private:
     // Member variables
     std::unique_ptr<torch::optim::Optimizer> _optimizer;
     std::unique_ptr<ExponentialLR> _scheduler;
-    SplatData _splat_data;
+    gs::SplatData _splat_data;
     std::unique_ptr<const gs::param::OptimizationParameters> _params;
 
     // MCMC specific parameters

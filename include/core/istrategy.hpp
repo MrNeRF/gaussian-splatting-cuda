@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/parameters.hpp"
+#include "core/scheduler.hpp"
 #include "core/splat_data.hpp"
 
 namespace gs {
@@ -16,6 +17,6 @@ public:
     virtual void step(int iter) = 0;
     virtual bool is_refining(int iter) const = 0;
     // Get the underlying Gaussian model for rendering
-    virtual SplatData& get_model() = 0;
-    virtual const SplatData& get_model() const = 0;
+    virtual gs::SplatData& get_model() = 0;
+    virtual const gs::SplatData& get_model() const = 0;
 };

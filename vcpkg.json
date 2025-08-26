@@ -1,4 +1,5 @@
 {
+  "builtin-baseline": "dd3097e305afa53f7b4312371f62058d2e665320",
   "dependencies": [
     "args",
     "glad",
@@ -8,11 +9,14 @@
     {
       "name": "imgui",
       "features": [
+        "docking-experimental",
         "glfw-binding",
         "opengl3-binding"
       ]
     },
     "nlohmann-json",
-    "tbb"
+    "spdlog",
+    "tbb",
+    "freetype"
   ]
 }

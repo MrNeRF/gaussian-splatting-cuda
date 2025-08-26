@@ -10,7 +10,6 @@
 #include <sstream>
 #include <string>
 #include <torch/script.h>
-#include <torch/torch.h>
 #include <vector>
 
 class splatData;
@@ -70,7 +69,7 @@ namespace gs {
             int num_gaussians;
             int iteration;
 
-            std::string to_string() const {
+            [[nodiscard]] std::string to_string() const {
                 std::stringstream ss;
                 ss << std::fixed << std::setprecision(4);
                 ss << "PSNR: " << psnr
@@ -81,11 +80,11 @@ namespace gs {
                 return ss.str();
             }
 
-            std::string to_csv_header() const {
+            static std::string to_csv_header() {
                 return "iteration,psnr,ssim,lpips,time_per_image,num_gaussians";
             }
 
-            std::string to_csv_row() const {
+            [[nodiscard]] std::string to_csv_row() const {
                 std::stringstream ss;
                 ss << iteration << ","
                    << std::fixed << std::setprecision(6)
@@ -144,7 +143,7 @@ namespace gs {
 
         private:
             // Configuration
-            const param::TrainingParameters& _params;
+            const param::TrainingParameters _params;
 
             // Metrics
             std::unique_ptr<PSNR> _psnr_metric;
