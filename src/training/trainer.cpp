@@ -13,15 +13,14 @@
 #include <memory>
 #include <print>
 
-namespace gs {
-
+namespace gs::training {
     std::expected<void, std::string> Trainer::initialize_bilateral_grid() {
         if (!params_.optimization.use_bilateral_grid) {
             return {};
         }
 
         try {
-            bilateral_grid_ = std::make_unique<gs::BilateralGrid>(
+            bilateral_grid_ = std::make_unique<BilateralGrid>(
                 train_dataset_size_,
                 params_.optimization.bilateral_grid_X,
                 params_.optimization.bilateral_grid_Y,
@@ -43,7 +42,6 @@ namespace gs {
         const torch::Tensor& gt_image,
         const SplatData& splatData,
         const param::OptimizationParameters& opt_params) {
-
         try {
             // Ensure images have same dimensions
             torch::Tensor rendered = render_output.image;
@@ -71,7 +69,6 @@ namespace gs {
     std::expected<torch::Tensor, std::string> Trainer::compute_scale_reg_loss(
         const SplatData& splatData,
         const param::OptimizationParameters& opt_params) {
-
         try {
             if (opt_params.scale_reg > 0.0f) {
                 auto scale_l1 = splatData.get_scaling().mean();
@@ -86,7 +83,6 @@ namespace gs {
     std::expected<torch::Tensor, std::string> Trainer::compute_opacity_reg_loss(
         const SplatData& splatData,
         const param::OptimizationParameters& opt_params) {
-
         try {
             if (opt_params.opacity_reg > 0.0f) {
                 auto opacity_l1 = splatData.get_opacity().mean();
@@ -99,9 +95,8 @@ namespace gs {
     }
 
     std::expected<torch::Tensor, std::string> Trainer::compute_bilateral_grid_tv_loss(
-        const std::unique_ptr<gs::BilateralGrid>& bilateral_grid,
+        const std::unique_ptr<BilateralGrid>& bilateral_grid,
         const param::OptimizationParameters& opt_params) {
-
         try {
             if (opt_params.use_bilateral_grid) {
                 return opt_params.tv_loss_weight * bilateral_grid->tv_loss();
@@ -117,7 +112,6 @@ namespace gs {
                      const param::TrainingParameters& params)
         : strategy_(std::move(strategy)),
           params_(params) {
-
         if (!torch::cuda::is_available()) {
             throw std::runtime_error("CUDA is not available – aborting.");
         }
@@ -151,16 +145,17 @@ namespace gs {
             throw std::runtime_error(result.error());
         }
 
-        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+        background_ = torch::tensor({0.f, 0.f, 0.f},
+                                    torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
         if (params.optimization.pose_optimization != "none") {
             if (params.optimization.enable_eval) {
                 throw std::runtime_error("Evaluating with pose optimization is not supported yet. "
                                          "Please disable pose optimization or evaluation.");
             }
             if (params.optimization.pose_optimization == "direct") {
-                poseopt_module_ = std::make_unique<gs::DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
+                poseopt_module_ = std::make_unique<DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
             } else if (params.optimization.pose_optimization == "mlp") {
-                poseopt_module_ = std::make_unique<gs::MLPPoseOptimizationModule>(train_dataset_->get_cameras().size());
+                poseopt_module_ = std::make_unique<MLPPoseOptimizationModule>(train_dataset_->get_cameras().size());
             } else {
                 throw std::runtime_error("Invalid pose optimization type: " + params.optimization.pose_optimization);
             }
@@ -168,7 +163,7 @@ namespace gs {
                 std::vector<torch::Tensor>{poseopt_module_->parameters()},
                 torch::optim::AdamOptions(1e-5));
         } else {
-            poseopt_module_ = std::make_unique<gs::PoseOptimizationModule>();
+            poseopt_module_ = std::make_unique<PoseOptimizationModule>();
         }
 
         background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
@@ -182,7 +177,7 @@ namespace gs {
         }
 
         // Initialize the evaluator - it handles all metrics internally
-        evaluator_ = std::make_unique<metrics::MetricsEvaluator>(params);
+        evaluator_ = std::make_unique<MetricsEvaluator>(params);
 
         // setup camera cache
         for (const auto& cam : dataset->get_cameras()) {
@@ -258,7 +253,6 @@ namespace gs {
         torch::Tensor gt_image,
         RenderMode render_mode,
         std::stop_token stop_token) {
-
         try {
             if (cam->radial_distortion().numel() != 0 ||
                 cam->tangential_distortion().numel() != 0) {
@@ -297,7 +291,8 @@ namespace gs {
             if (!params_.optimization.gut) {
                 r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), background_);
             } else {
-                r_output = rasterize(adjusted_cam, strategy_->get_model(), background_, 1.0f, false, false, render_mode, nullptr, true);
+                r_output = rasterize(adjusted_cam, strategy_->get_model(), background_, 1.0f, false, false, render_mode,
+                                     nullptr, true);
             }
 
             // Apply bilateral grid if enabled
@@ -356,7 +351,8 @@ namespace gs {
             }
 
             // Emit training progress event (throttled to reduce GUI updates)
-            if (iter % 10 == 0 || iter == 1) { // Only update every 10 iterations
+            if (iter % 10 == 0 || iter == 1) {
+                // Only update every 10 iterations
                 events::state::TrainingProgress{
                     .iteration = iter,
                     .loss = loss_value,
@@ -364,12 +360,10 @@ namespace gs {
                     .is_refining = strategy_->is_refining(iter)}
                     .emit();
             }
-
             {
                 torch::NoGradGuard no_grad;
 
                 DeferredEvents deferred;
-
                 {
                     std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
@@ -433,7 +427,8 @@ namespace gs {
                                 cam_to_use->load_image_size(params_.dataset.resize_factor);
                             }
 
-                            RenderOutput rendered_timelapse_output = fast_rasterize(*cam_to_use, strategy_->get_model(), background_);
+                            RenderOutput rendered_timelapse_output = fast_rasterize(
+                                *cam_to_use, strategy_->get_model(), background_);
 
                             // Get folder name to save in by stripping file extension
                             std::string folder_name = img_name;
@@ -447,7 +442,6 @@ namespace gs {
 
                             image_io::save_image_async(output_path / std::format("{:06d}.jpg", iter),
                                                        rendered_timelapse_output.image);
-
                         } else {
                             std::println("Warning: Timelapse image '{}' not found in dataset.", img_name);
                         }
@@ -461,7 +455,6 @@ namespace gs {
             } else {
                 return StepResult::Stop;
             }
-
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Training step failed: {}", e.what()));
         }
@@ -581,7 +574,6 @@ namespace gs {
             training_complete_ = true;
 
             return {};
-
         } catch (const std::exception& e) {
             is_running_ = false;
             return std::unexpected(std::format("Training failed: {}", e.what()));
@@ -598,7 +590,6 @@ namespace gs {
     }
 
     std::vector<std::shared_ptr<const Camera>> Trainer::getCamList() const {
-
         std::vector<std::shared_ptr<const Camera>> cams;
         cams.reserve(m_cam_id_to_cam.size());
         for (auto& [key, value] : m_cam_id_to_cam) {
@@ -616,5 +607,4 @@ namespace gs {
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }
     }
-
-} // namespace gs
+} // namespace gs::training

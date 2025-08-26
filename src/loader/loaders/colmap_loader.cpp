@@ -177,9 +177,9 @@ namespace gs::loader {
             dataset_config.images = options.images_folder;
             dataset_config.resize_factor = options.resize_factor;
 
-            // Create dataset with ALL images
-            auto dataset = std::make_shared<gs::CameraDataset>(
-                std::move(cameras), dataset_config, gs::CameraDataset::Split::ALL);
+            // Create dataset with ALL images - use correct namespace
+            auto dataset = std::make_shared<gs::training::CameraDataset>(
+                std::move(cameras), dataset_config, gs::training::CameraDataset::Split::ALL);
 
             if (options.progress) {
                 options.progress(60.0f, "Loading point cloud...");

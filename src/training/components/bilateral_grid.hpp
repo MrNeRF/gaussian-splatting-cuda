@@ -1,7 +1,7 @@
 #pragma once
 #include <torch/torch.h>
 
-namespace gs {
+namespace gs::training {
 
     class BilateralGrid {
     public:
@@ -30,4 +30,4 @@ namespace gs {
         int grid_guidance_;
     };
 
-} // namespace gs
+} // namespace gs::training

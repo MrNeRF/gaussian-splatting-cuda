@@ -1,7 +1,7 @@
 #include "strategy_utils.hpp"
 #include "optimizers/fused_adam.hpp"
 
-namespace strategy {
+namespace gs::training {
     void initialize_gaussians(gs::SplatData& splat_data) {
         const auto dev = torch::kCUDA;
         splat_data.means() = splat_data.means().to(dev).set_requires_grad(true);
@@ -16,7 +16,7 @@ namespace strategy {
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(
         gs::SplatData& splat_data,
         const gs::param::OptimizationParameters& params) {
-        using Options = gs::FusedAdam::Options;
+        using Options = FusedAdam::Options;
         std::vector<torch::optim::OptimizerParamGroup> groups;
 
         // Create groups with proper unique_ptr<Options>
@@ -37,7 +37,7 @@ namespace strategy {
 
         auto global_options = std::make_unique<Options>(0.f);
         global_options->eps(1e-15);
-        return std::make_unique<gs::FusedAdam>(std::move(groups), std::move(global_options));
+        return std::make_unique<FusedAdam>(std::move(groups), std::move(global_options));
     }
 
     std::unique_ptr<ExponentialLR> create_scheduler(
@@ -82,7 +82,7 @@ namespace strategy {
             // Check if state exists
             auto state_it = optimizer->state().find(old_param_key);
             if (state_it != optimizer->state().end()) {
-                auto* fused_adam_state = static_cast<gs::FusedAdam::AdamParamState*>(state_it->second.get());
+                auto* fused_adam_state = static_cast<FusedAdam::AdamParamState*>(state_it->second.get());
                 auto new_state = optimizer_fn(*fused_adam_state, new_param);
                 saved_states[i] = std::move(new_state);
             } else {
@@ -122,5 +122,4 @@ namespace strategy {
             }
         }
     }
-
-} // namespace strategy
+} // namespace gs::training

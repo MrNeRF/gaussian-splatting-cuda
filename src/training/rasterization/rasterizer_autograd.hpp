@@ -5,7 +5,7 @@
 #include "core/splat_data.hpp"
 #include <torch/torch.h>
 
-namespace gs {
+namespace gs::training {
     struct ProjectionSettings {
         int width;
         int height;
@@ -154,4 +154,4 @@ namespace gs {
             torch::autograd::AutogradContext* ctx,
             torch::autograd::tensor_list grad_outputs);
     };
-} // namespace gs
+} // namespace gs::training

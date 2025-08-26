@@ -3,7 +3,6 @@
 
 namespace gs {
     namespace bilateral_grid {
-
         // RGB to grayscale conversion constants
         __constant__ float kC2G[3] = {0.299f, 0.587f, 0.114f};
 
@@ -68,9 +67,13 @@ namespace gs {
                 int si = ci % 4; // source index
                 int di = ci / 4; // destination index
 
-                float coeff = (si == 0) ? color.x : (si == 1) ? color.y
-                                                : (si == 2)   ? color.z
-                                                              : 1.0f;
+                float coeff = (si == 0)
+                                  ? color.x
+                              : (si == 1)
+                                  ? color.y
+                              : (si == 2)
+                                  ? color.z
+                                  : 1.0f;
 
                 if (di == 0)
                     result.x += val * coeff;
@@ -106,6 +109,5 @@ namespace gs {
                 output.data_ptr<float>(),
                 L, H, W, h, w);
         }
-
     } // namespace bilateral_grid
 } // namespace gs

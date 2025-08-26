@@ -1,8 +1,9 @@
 #pragma once
 #include "torch/nn/module.h"
+#include "torch/nn/modules/container/sequential.h"
 #include "torch/nn/modules/embedding.h"
 
-namespace gs {
+namespace gs::training {
     struct PoseOptimizationModule : torch::nn::Module {
         PoseOptimizationModule() {}
         virtual torch::Tensor forward(torch::Tensor camera_transforms, [[maybe_unused]] torch::Tensor embedding_ids) {
@@ -23,4 +24,4 @@ namespace gs {
         torch::Tensor rot_identity;             // [6] identity rotation in 6D representation
         torch::nn::Sequential mlp;
     };
-} // namespace gs
+} // namespace gs::training

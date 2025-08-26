@@ -52,7 +52,7 @@ namespace gs::visualizer {
         void LoadProjectPlys();
 
         // Getters for GUI (delegating to state manager)
-        Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
+        gs::training::Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
 
         // Component access
         TrainerManager* getTrainerManager() { return trainer_manager_.get(); }

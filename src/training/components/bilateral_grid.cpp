@@ -1,7 +1,7 @@
 #include "bilateral_grid.hpp"
 #include "kernels/bilateral_grid.cuh"
 
-namespace gs {
+namespace gs::training {
 
     // Autograd function for bilateral grid slicing
     class BilateralGridSliceFunction : public torch::autograd::Function<BilateralGridSliceFunction> {
@@ -126,4 +126,4 @@ namespace gs {
         return BilateralGridTVLossFunction::apply(grids_);
     }
 
-} // namespace gs
+} // namespace gs::training

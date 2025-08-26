@@ -9,8 +9,7 @@
 // It also causes a *very* small drop in quality metrics and robustness. Thus, I disable it by default.
 #define SKIP_SH_STEPS false
 
-namespace gs {
-
+namespace gs::training {
     torch::Tensor FusedAdam::step(LossClosure closure) {
         TORCH_CHECK(false, "FusedAdam does not support closures.");
         return {};
@@ -113,5 +112,4 @@ namespace gs {
         } else
             Optimizer::zero_grad(set_to_none);
     }
-
-} // namespace gs
+} // namespace gs::training

@@ -5,7 +5,7 @@
 #include <memory>
 #include <torch/torch.h>
 
-namespace strategy {
+namespace gs::training {
     void initialize_gaussians(gs::SplatData& splat_data);
 
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(
@@ -19,7 +19,8 @@ namespace strategy {
 
     // Use explicit type alias to help MSVC
     using ParamUpdateFn = std::function<torch::Tensor(const int, const torch::Tensor)>;
-    using OptimizerUpdateFn = std::function<std::unique_ptr<torch::optim::OptimizerParamState>(torch::optim::OptimizerParamState&, const torch::Tensor)>;
+    using OptimizerUpdateFn = std::function<std::unique_ptr<torch::optim::OptimizerParamState>(
+        torch::optim::OptimizerParamState&, const torch::Tensor)>;
 
     void update_param_with_optimizer(
         const ParamUpdateFn& param_fn,
@@ -27,5 +28,4 @@ namespace strategy {
         std::unique_ptr<torch::optim::Optimizer>& optimizer,
         gs::SplatData& splat_data,
         std::vector<size_t> param_idxs = {0, 1, 2, 3, 4, 5});
-
-} // namespace strategy
+} // namespace gs::training

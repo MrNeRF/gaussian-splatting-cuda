@@ -4,8 +4,7 @@
 #include <torch/torch.h>
 #include <vector>
 
-namespace gs {
-
+namespace gs::training {
     /**
      * @brief FusedAdam optimizer
      *
@@ -14,7 +13,8 @@ namespace gs {
     class FusedAdam : public torch::optim::Optimizer {
     public:
         struct Options : public torch::optim::OptimizerCloneableOptions<Options> {
-            Options(double lr = 1e-3) : lr_(lr) {}
+            Options(double lr = 1e-3) : lr_(lr) {
+            }
 
             Options& lr(double lr) {
                 lr_ = lr;
@@ -64,12 +64,16 @@ namespace gs {
             }
         };
 
-        explicit FusedAdam(std::vector<torch::optim::OptimizerParamGroup> param_groups, std::unique_ptr<Options> options)
+        explicit FusedAdam(std::vector<torch::optim::OptimizerParamGroup> param_groups,
+                           std::unique_ptr<Options> options)
             : Optimizer(std::move(param_groups),
-                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
+                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {
+        }
 
         explicit FusedAdam(std::vector<torch::Tensor> params, std::unique_ptr<Options> options)
-            : Optimizer({torch::optim::OptimizerParamGroup(std::move(params))}, std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
+            : Optimizer({torch::optim::OptimizerParamGroup(std::move(params))},
+                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {
+        }
 
         // Override the base class step() with proper signature
         torch::Tensor step(LossClosure closure) override;
@@ -86,5 +90,4 @@ namespace gs {
             return static_cast<const Options&>(defaults());
         }
     };
-
-} // namespace gs
+} // namespace gs::training

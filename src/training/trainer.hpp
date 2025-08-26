@@ -21,8 +21,7 @@
 // Forward declaration
 class Camera;
 
-namespace gs {
-
+namespace gs::training {
     class Trainer {
     public:
         // Constructor that takes ownership of strategy and shares datasets
@@ -32,10 +31,12 @@ namespace gs {
 
         // Delete copy operations
         Trainer(const Trainer&) = delete;
+
         Trainer& operator=(const Trainer&) = delete;
 
         // Allow move operations
         Trainer(Trainer&&) = default;
+
         Trainer& operator=(Trainer&&) = default;
 
         ~Trainer();
@@ -67,6 +68,7 @@ namespace gs {
         const param::TrainingParameters& getParams() const { return params_; }
 
         std::shared_ptr<const Camera> getCamById(int camId) const;
+
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
         void setProject(std::shared_ptr<gs::management::Project> project) { lf_project_ = project; }
@@ -118,7 +120,7 @@ namespace gs {
             const param::OptimizationParameters& opt_params);
 
         std::expected<torch::Tensor, std::string> compute_bilateral_grid_tv_loss(
-            const std::unique_ptr<gs::BilateralGrid>& bilateral_grid,
+            const std::unique_ptr<BilateralGrid>& bilateral_grid,
             const param::OptimizationParameters& opt_params);
 
         std::expected<void, std::string> initialize_bilateral_grid();
@@ -139,14 +141,14 @@ namespace gs {
         size_t train_dataset_size_;
 
         // Bilateral grid components
-        std::unique_ptr<gs::BilateralGrid> bilateral_grid_;
+        std::unique_ptr<BilateralGrid> bilateral_grid_;
         std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
 
-        std::unique_ptr<gs::PoseOptimizationModule> poseopt_module_; // Pose optimization module
-        std::unique_ptr<torch::optim::Adam> poseopt_optimizer_;      // Optimizer for pose optimization
+        std::unique_ptr<PoseOptimizationModule> poseopt_module_; // Pose optimization module
+        std::unique_ptr<torch::optim::Adam> poseopt_optimizer_;  // Optimizer for pose optimization
 
         // Metrics evaluator - handles all evaluation logic
-        std::unique_ptr<metrics::MetricsEvaluator> evaluator_;
+        std::unique_ptr<MetricsEvaluator> evaluator_;
 
         // Single mutex that protects the model during training
         mutable std::shared_mutex render_mutex_;
@@ -176,5 +178,4 @@ namespace gs {
         // LichtFeld project
         std::shared_ptr<gs::management::Project> lf_project_ = nullptr;
     };
-
-} // namespace gs
+} // namespace gs::training

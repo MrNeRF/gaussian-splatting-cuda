@@ -5,12 +5,10 @@
 #include "rasterization_api.h"
 #include "rasterizer.hpp"
 
-namespace gs {
-
+namespace gs::training {
     // Wrapper function to use fastgs backend for rendering
     RenderOutput fast_rasterize(
         Camera& viewpoint_camera,
         SplatData& gaussian_model,
         torch::Tensor& bg_color);
-
-} // namespace gs
+} // namespace gs::training

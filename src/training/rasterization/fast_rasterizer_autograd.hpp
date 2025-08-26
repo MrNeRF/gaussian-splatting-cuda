@@ -3,8 +3,7 @@
 #include "rasterization_api.h"
 #include <torch/torch.h>
 
-namespace gs {
-
+namespace gs::training {
     // Autograd function for projection
     class FastGSRasterize : public torch::autograd::Function<FastGSRasterize> {
     public:
@@ -24,5 +23,4 @@ namespace gs {
             torch::autograd::AutogradContext* ctx,
             torch::autograd::tensor_list grad_outputs);
     };
-
-} // namespace gs
+} // namespace gs::training

@@ -3,8 +3,7 @@
 #include "rasterizer_autograd.hpp"
 #include <torch/torch.h>
 
-namespace gs {
-
+namespace gs::training {
     using torch::indexing::None;
     using torch::indexing::Slice;
 
@@ -13,7 +12,6 @@ namespace gs {
         const torch::Tensor& dirs,
         const torch::Tensor& coeffs,
         const torch::Tensor& masks = {}) {
-
         // Validate inputs
         TORCH_CHECK((sh_degree + 1) * (sh_degree + 1) <= coeffs.size(-2),
                     "coeffs K dimension must be at least ", (sh_degree + 1) * (sh_degree + 1),
@@ -97,7 +95,8 @@ namespace gs {
             const glm::mat4 world2bbox = bounding_box->getworld2BBox().toMat4();
 
             // Convert GLM matrix to torch tensor [4, 4]
-            auto world2bbox_tensor = torch::zeros({4, 4}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+            auto world2bbox_tensor = torch::zeros(
+                {4, 4}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
             for (int i = 0; i < 4; ++i) {
                 for (int j = 0; j < 4; ++j) {
                     world2bbox_tensor[i][j] = world2bbox[j][i]; // GLM is column-major!
@@ -107,7 +106,8 @@ namespace gs {
             // Transform points from world space to bounding box space
             // means3D: [N, 3] -> homogeneous: [N, 4]
             const int N = means3D.size(0);
-            auto means3D_homogeneous = torch::cat({means3D, torch::ones({N, 1}, means3D.options())}, /*dim=*/1); // [N, 4]
+            auto means3D_homogeneous = torch::cat({means3D, torch::ones({N, 1}, means3D.options())}, /*dim=*/1);
+            // [N, 4]
 
             // Apply transformation: [N, 4] @ [4, 4]^T = [N, 4]
             auto means3D_bbox = torch::matmul(means3D_homogeneous, world2bbox_tensor.transpose(0, 1)); // [N, 4]
@@ -212,13 +212,14 @@ namespace gs {
             conics = proj_outputs[3];
             compensations = proj_outputs[4];
         } else {
-            auto proj_settings = ProjectionSettings{image_width,
-                                                    image_height,
-                                                    eps2d,
-                                                    near_plane,
-                                                    far_plane,
-                                                    radius_clip,
-                                                    scaling_modifier};
+            auto proj_settings = ProjectionSettings{
+                image_width,
+                image_height,
+                eps2d,
+                near_plane,
+                far_plane,
+                radius_clip,
+                scaling_modifier};
 
             auto proj_outputs = ProjectionFunction::apply(
                 means3D, rotations, scales, opacities, viewmat, K, proj_settings);
@@ -354,9 +355,10 @@ namespace gs {
             rendered_image = raster_outputs[0];
             rendered_alpha = raster_outputs[1];
         } else {
-            auto raster_settings = RasterizationSettings{image_width,
-                                                         image_height,
-                                                         tile_size};
+            auto raster_settings = RasterizationSettings{
+                image_width,
+                image_height,
+                tile_size};
 
             auto raster_outputs = RasterizationFunction::apply(
                 means2d_with_grad, conics, render_colors, final_opacities, final_bg,
@@ -439,5 +441,4 @@ namespace gs {
 
         return result;
     }
-
-} // namespace gs
+} // namespace gs::training

@@ -1,21 +1,20 @@
+#include "poseopt.hpp"
 #include <torch/torch.h>
 
 namespace F = torch::nn::functional;
 
-#include <components/poseopt.hpp>
+namespace gs::training {
+    // Converts a 6D rotation representation to a 3x3 rotation matrix
+    torch::Tensor rotation_6d_to_matrix(torch::Tensor rot_6d) {
+        auto a1 = rot_6d.index({at::indexing::Ellipsis, at::indexing::Slice(at::indexing::None, 3)});
+        auto a2 = rot_6d.index({at::indexing::Ellipsis, at::indexing::Slice(3, at::indexing::None)});
+        auto b1 = F::normalize(a1, F::NormalizeFuncOptions().dim(-1));
+        auto b2 = a2 - (b1 * a2).sum(-1, true) * b1;
+        b2 = F::normalize(b2, F::NormalizeFuncOptions().dim(-1));
+        auto b3 = torch::cross(b1, b2, -1);
+        return torch::stack({b1, b2, b3}, -2);
+    }
 
-// Converts a 6D rotation representation to a 3x3 rotation matrix
-torch::Tensor rotation_6d_to_matrix(torch::Tensor rot_6d) {
-    auto a1 = rot_6d.index({at::indexing::Ellipsis, at::indexing::Slice(at::indexing::None, 3)});
-    auto a2 = rot_6d.index({at::indexing::Ellipsis, at::indexing::Slice(3, at::indexing::None)});
-    auto b1 = F::normalize(a1, F::NormalizeFuncOptions().dim(-1));
-    auto b2 = a2 - (b1 * a2).sum(-1, true) * b1;
-    b2 = F::normalize(b2, F::NormalizeFuncOptions().dim(-1));
-    auto b3 = torch::cross(b1, b2, -1);
-    return torch::stack({b1, b2, b3}, -2);
-}
-
-namespace gs {
     DirectPoseOptimizationModule::DirectPoseOptimizationModule(int number_of_cameras)
         : camera_embeddings(register_module("camera_embeddings",
                                             torch::nn::Embedding(number_of_cameras, 9))),
@@ -71,4 +70,4 @@ namespace gs {
         return torch::matmul(camera_transforms, transform);
     }
 
-} // namespace gs
+} // namespace gs::training

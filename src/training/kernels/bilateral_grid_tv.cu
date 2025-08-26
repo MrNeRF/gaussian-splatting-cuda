@@ -4,7 +4,6 @@
 
 namespace gs {
     namespace bilateral_grid {
-
         // Forward pass - compute total variation loss
         __global__ void tv_loss_forward_kernel(
             const float* __restrict__ grids, // [N, 12, L, H, W]
@@ -32,7 +31,7 @@ namespace gs {
                 tmp /= L;
                 int ni = tmp;
 
-// Process all 12 channels
+                // Process all 12 channels
 #pragma unroll 12
                 for (int ci = 0; ci < 12; ci++) {
                     int base = (ni * 12 + ci) * L * H * W;
@@ -183,6 +182,5 @@ namespace gs {
 
             return grad_grids;
         }
-
     } // namespace bilateral_grid
 } // namespace gs

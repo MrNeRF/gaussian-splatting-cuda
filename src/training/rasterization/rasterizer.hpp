@@ -5,8 +5,7 @@
 #include "geometry/bounding_box.hpp"
 #include <torch/torch.h>
 
-namespace gs {
-
+namespace gs::training {
     struct RenderOutput {
         torch::Tensor image;      // [..., channels, H, W]
         torch::Tensor alpha;      // [..., C, H, W, 1]
@@ -66,5 +65,4 @@ namespace gs {
         RenderMode render_mode = RenderMode::RGB,
         const gs::geometry::BoundingBox* = nullptr,
         bool gut = false);
-
-} // namespace gs
+} // namespace gs::training

@@ -10,7 +10,7 @@
 #include <vector>
 
 // Camera with loaded image
-namespace gs {
+namespace gs::training {
     struct CameraWithImage {
         Camera* camera;
         torch::Tensor image;
@@ -32,7 +32,6 @@ namespace gs {
             : _cameras(std::move(cameras)),
               _datasetConfig(params),
               _split(split) {
-
             // Create indices based on split
             _indices.clear();
             for (size_t i = 0; i < _cameras.size(); ++i) {
@@ -48,10 +47,14 @@ namespace gs {
             std::cout << "Dataset created with " << _indices.size()
                       << " images (split: " << static_cast<int>(_split) << ")" << std::endl;
         }
+
         // Default copy constructor works with shared_ptr
         CameraDataset(const CameraDataset&) = default;
+
         CameraDataset(CameraDataset&&) noexcept = default;
+
         CameraDataset& operator=(CameraDataset&&) noexcept = default;
+
         CameraDataset& operator=(const CameraDataset&) = default;
 
         CameraExample get(size_t index) override {
@@ -113,7 +116,8 @@ namespace gs {
         using super = torch::data::samplers::RandomSampler;
 
         explicit InfiniteRandomSampler(size_t dataset_size)
-            : super(dataset_size) {}
+            : super(dataset_size) {
+        }
 
         std::optional<std::vector<size_t>> next(size_t batch_size) override {
             auto indices = super::next(batch_size);
@@ -130,7 +134,6 @@ namespace gs {
 
     inline std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
     create_dataset_from_colmap(const gs::param::DatasetConfig& datasetConfig) {
-
         try {
             if (!std::filesystem::exists(datasetConfig.data_path)) {
                 return std::unexpected(std::format("Data path does not exist: {}",
@@ -153,23 +156,24 @@ namespace gs {
             }
 
             // Handle the result
-            return std::visit([&datasetConfig, &result](auto&& data) -> std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string> {
-                using T = std::decay_t<decltype(data)>;
+            return std::visit(
+                [&datasetConfig, &result](
+                    auto&& data) -> std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string> {
+                    using T = std::decay_t<decltype(data)>;
 
-                if constexpr (std::is_same_v<T, std::shared_ptr<gs::SplatData>>) {
-                    return std::unexpected("Expected COLMAP dataset but got PLY file");
-                } else if constexpr (std::is_same_v<T, gs::loader::LoadedScene>) {
-                    if (!data.cameras) {
-                        return std::unexpected("Loaded scene has no cameras");
+                    if constexpr (std::is_same_v<T, std::shared_ptr<gs::SplatData>>) {
+                        return std::unexpected("Expected COLMAP dataset but got PLY file");
+                    } else if constexpr (std::is_same_v<T, gs::loader::LoadedScene>) {
+                        if (!data.cameras) {
+                            return std::unexpected("Loaded scene has no cameras");
+                        }
+                        // Return the cameras that were already loaded
+                        return std::make_tuple(data.cameras, result->scene_center);
+                    } else {
+                        return std::unexpected("Unknown data type returned from loader");
                     }
-                    // Return the cameras that were already loaded
-                    return std::make_tuple(data.cameras, result->scene_center);
-                } else {
-                    return std::unexpected("Unknown data type returned from loader");
-                }
-            },
-                              result->data);
-
+                },
+                result->data);
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to create dataset from COLMAP: {}", e.what()));
         }
@@ -177,7 +181,6 @@ namespace gs {
 
     inline std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
     create_dataset_from_transforms(const gs::param::DatasetConfig& datasetConfig) {
-
         try {
             if (!std::filesystem::exists(datasetConfig.data_path)) {
                 return std::unexpected(std::format("Data path does not exist: {}",
@@ -200,23 +203,24 @@ namespace gs {
             }
 
             // Handle the result
-            return std::visit([&datasetConfig, &result](auto&& data) -> std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string> {
-                using T = std::decay_t<decltype(data)>;
+            return std::visit(
+                [&datasetConfig, &result](
+                    auto&& data) -> std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string> {
+                    using T = std::decay_t<decltype(data)>;
 
-                if constexpr (std::is_same_v<T, std::shared_ptr<gs::SplatData>>) {
-                    return std::unexpected("Expected transforms.json dataset but got PLY file");
-                } else if constexpr (std::is_same_v<T, gs::loader::LoadedScene>) {
-                    if (!data.cameras) {
-                        return std::unexpected("Loaded scene has no cameras");
+                    if constexpr (std::is_same_v<T, std::shared_ptr<gs::SplatData>>) {
+                        return std::unexpected("Expected transforms.json dataset but got PLY file");
+                    } else if constexpr (std::is_same_v<T, gs::loader::LoadedScene>) {
+                        if (!data.cameras) {
+                            return std::unexpected("Loaded scene has no cameras");
+                        }
+                        // Return the cameras that were already loaded
+                        return std::make_tuple(data.cameras, result->scene_center);
+                    } else {
+                        return std::unexpected("Unknown data type returned from loader");
                     }
-                    // Return the cameras that were already loaded
-                    return std::make_tuple(data.cameras, result->scene_center);
-                } else {
-                    return std::unexpected("Unknown data type returned from loader");
-                }
-            },
-                              result->data);
-
+                },
+                result->data);
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to create dataset from transforms: {}", e.what()));
         }
@@ -225,7 +229,6 @@ namespace gs {
     inline auto create_dataloader_from_dataset(
         std::shared_ptr<CameraDataset> dataset,
         int num_workers = 4) {
-
         const size_t dataset_size = dataset->size().value();
 
         return torch::data::make_data_loader(
@@ -240,7 +243,6 @@ namespace gs {
     inline auto create_infinite_dataloader_from_dataset(
         std::shared_ptr<CameraDataset> dataset,
         int num_workers = 4) {
-
         const size_t dataset_size = dataset->size().value();
 
         return torch::data::make_data_loader(
@@ -251,4 +253,4 @@ namespace gs {
                 .workers(num_workers)
                 .enforce_ordering(false));
     }
-} // namespace gs
+} // namespace gs::training

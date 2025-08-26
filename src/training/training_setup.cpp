@@ -6,8 +6,7 @@
 #include <format>
 #include <print>
 
-namespace gs {
-
+namespace gs::training {
     std::expected<TrainingSetup, std::string> setupTraining(const param::TrainingParameters& params) {
         // 1. Create loader
         auto loader = loader::Loader::create();
@@ -35,8 +34,8 @@ namespace gs {
 
             if constexpr (std::is_same_v<T, std::shared_ptr<gs::SplatData>>) {
                 // Direct PLY load - not supported for training
-                return std::unexpected("Direct PLY loading is not supported for training. Please use a dataset format (COLMAP or Blender).");
-
+                return std::unexpected(
+                    "Direct PLY loading is not supported for training. Please use a dataset format (COLMAP or Blender).");
             } else if constexpr (std::is_same_v<T, loader::LoadedScene>) {
                 // Full scene data - set up training
 
@@ -55,7 +54,8 @@ namespace gs {
 
                     torch::Tensor positions = torch::rand({numInitGaussian, 3}); // in [0, 1]
                     positions = positions * 2.0 - 1.0;                           // now in [-1, 1]
-                    torch::Tensor colors = torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
+                    torch::Tensor colors =
+                        torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
 
                     point_cloud_to_use = PointCloud(positions, colors);
                 }
@@ -67,7 +67,8 @@ namespace gs {
                     point_cloud_to_use);
 
                 if (!splat_result) {
-                    return std::unexpected(std::format("Failed to initialize model: {}", splat_result.error()));
+                    return std::unexpected(
+                        std::format("Failed to initialize model: {}", splat_result.error()));
                 }
 
                 // 5. Create strategy
@@ -94,5 +95,4 @@ namespace gs {
         },
                           load_result->data);
     }
-
-} // namespace gs
+} // namespace gs::training

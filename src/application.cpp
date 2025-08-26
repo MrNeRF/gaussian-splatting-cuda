@@ -22,7 +22,7 @@ namespace gs {
             return -1;
         }
 
-        auto setup_result = gs::setupTraining(*params);
+        auto setup_result = gs::training::setupTraining(*params);
         if (!setup_result) {
             std::println(stderr, "Error: {}", setup_result.error());
             return -1;

@@ -238,7 +238,7 @@ namespace gs {
             LOG_TRACE("Dataset path: {}", path.string());
             LOG_TRACE("Iterations: {}", dataset_params.optimization.iterations);
 
-            auto setup_result = gs::setupTraining(dataset_params);
+            auto setup_result = gs::training::setupTraining(dataset_params);
             if (!setup_result) {
                 LOG_ERROR("Failed to setup training: {}", setup_result.error());
                 throw std::runtime_error(setup_result.error());

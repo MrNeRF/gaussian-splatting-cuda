@@ -1,8 +1,7 @@
 #include "fast_rasterizer.hpp"
 #include "fast_rasterizer_autograd.hpp"
 
-namespace gs {
-
+namespace gs::training {
     using torch::indexing::None;
     using torch::indexing::Slice;
 
@@ -10,7 +9,6 @@ namespace gs {
         Camera& viewpoint_camera,
         SplatData& gaussian_model,
         torch::Tensor& bg_color) {
-
         // Get camera parameters
         const int width = static_cast<int>(viewpoint_camera.image_width());
         const int height = static_cast<int>(viewpoint_camera.image_height());
@@ -64,5 +62,4 @@ namespace gs {
         // output.alpha = torch::ones_like(alpha);
         return output;
     }
-
-} // namespace gs
+} // namespace gs::training

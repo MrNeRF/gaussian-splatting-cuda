@@ -1,19 +1,19 @@
 #include "fast_rasterizer_autograd.hpp"
 
-namespace gs {
-
+namespace gs::training {
     // FastGSRasterize implementation
     torch::autograd::tensor_list FastGSRasterize::forward(
         torch::autograd::AutogradContext* ctx,
-        const torch::Tensor& means,                               // [N, 3]
-        const torch::Tensor& scales_raw,                          // [N, 3]
-        const torch::Tensor& rotations_raw,                       // [N, 4]
-        const torch::Tensor& opacities_raw,                       // [N, 1]
-        const torch::Tensor& sh_coefficients_0,                   // [N, 1, 3]
-        const torch::Tensor& sh_coefficients_rest,                // [C, B-1, 3]
-        const torch::Tensor& w2c,                                 // [C, 4, 4]
-        torch::Tensor& densification_info,                        // [2, N] or empty tensor
-        const fast_gs::rasterization::FastGSSettings& settings) { // rasterizer settings
+        const torch::Tensor& means,                // [N, 3]
+        const torch::Tensor& scales_raw,           // [N, 3]
+        const torch::Tensor& rotations_raw,        // [N, 4]
+        const torch::Tensor& opacities_raw,        // [N, 1]
+        const torch::Tensor& sh_coefficients_0,    // [N, 1, 3]
+        const torch::Tensor& sh_coefficients_rest, // [C, B-1, 3]
+        const torch::Tensor& w2c,                  // [C, 4, 4]
+        torch::Tensor& densification_info,         // [2, N] or empty tensor
+        const fast_gs::rasterization::FastGSSettings& settings) {
+        // rasterizer settings
 
         auto outputs = fast_gs::rasterization::forward_wrapper(
             means,
@@ -89,7 +89,6 @@ namespace gs {
     torch::autograd::tensor_list FastGSRasterize::backward(
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
-
         auto grad_image = grad_outputs[0];
         auto grad_alpha = grad_outputs[1];
 
@@ -158,5 +157,4 @@ namespace gs {
             torch::Tensor(), // settings (no gradient)
         };
     }
-
-} // namespace gs
+} // namespace gs::training

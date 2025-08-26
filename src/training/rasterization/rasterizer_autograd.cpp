@@ -1,8 +1,7 @@
 #include "rasterization/rasterizer_autograd.hpp"
 #include "Projection.h"
 
-namespace gs {
-
+namespace gs::training {
     using namespace torch::indexing;
 
     // ProjectionFunction implementation
@@ -15,7 +14,6 @@ namespace gs {
         torch::Tensor viewmat,   // [C, 4, 4]
         torch::Tensor K,         // [C, 3, 3]
         ProjectionSettings settings) {
-
         // Input validation
         const int N = static_cast<int>(means3D.size(0));
         const int C = static_cast<int>(viewmat.size(0));
@@ -124,7 +122,6 @@ namespace gs {
     torch::autograd::tensor_list ProjectionFunction::backward(
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
-
         auto v_radii = grad_outputs[0];
         auto v_means2d = grad_outputs[1].contiguous();
         auto v_depths = grad_outputs[2].contiguous();
@@ -201,19 +198,24 @@ namespace gs {
 
         // Check which inputs need gradients and set to undefined if not needed
         // Input order: means3D(0), quats(1), scales(2), opacities(3), viewmat(4), K(5), settings(6)
-        if (!ctx->needs_input_grad(0)) { // means3D
+        if (!ctx->needs_input_grad(0)) {
+            // means3D
             v_means3D = torch::Tensor();
         }
-        if (!ctx->needs_input_grad(1)) { // quats
+        if (!ctx->needs_input_grad(1)) {
+            // quats
             v_quats = torch::Tensor();
         }
-        if (!ctx->needs_input_grad(2)) { // scales
+        if (!ctx->needs_input_grad(2)) {
+            // scales
             v_scales = torch::Tensor();
         }
-        if (!ctx->needs_input_grad(3)) { // opacities
+        if (!ctx->needs_input_grad(3)) {
+            // opacities
             v_opacities = torch::Tensor();
         }
-        if (!ctx->needs_input_grad(4)) { // viewmat
+        if (!ctx->needs_input_grad(4)) {
+            // viewmat
             v_viewmat = torch::Tensor();
         }
 
@@ -227,7 +229,8 @@ namespace gs {
         torch::Tensor sh_degree_tensor, // [1] containing sh_degree
         torch::Tensor dirs,             // [..., 3]
         torch::Tensor coeffs,           // [..., K, 3]
-        torch::Tensor masks) {          // [...] optional
+        torch::Tensor masks) {
+        // [...] optional
 
         const int sh_degree = sh_degree_tensor.item<int>();
         const int num_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
@@ -296,7 +299,6 @@ namespace gs {
     torch::autograd::tensor_list SphericalHarmonicsFunction::backward(
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
-
         auto v_colors = grad_outputs[0].contiguous();
 
         auto saved = ctx->get_saved_variables();
@@ -355,7 +357,6 @@ namespace gs {
         torch::Tensor isect_offsets, // [C, tile_height, tile_width]
         torch::Tensor flatten_ids,   // [nnz]
         RasterizationSettings settings) {
-
         ctx->saved_data["width"] = settings.width;
         ctx->saved_data["height"] = settings.height;
         ctx->saved_data["tile_size"] = settings.tile_size;
@@ -441,7 +442,6 @@ namespace gs {
     torch::autograd::tensor_list RasterizationFunction::backward(
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
-
         auto grad_image = grad_outputs[0].contiguous();
         auto grad_alpha = grad_outputs[1].contiguous();
 
@@ -506,8 +506,9 @@ namespace gs {
             v_opacities = torch::Tensor();
         }
 
-        return {v_means2d, v_conics, v_colors, v_opacities, v_bg_color,
-                torch::Tensor(), torch::Tensor(), torch::Tensor()};
+        return {
+            v_means2d, v_conics, v_colors, v_opacities, v_bg_color,
+            torch::Tensor(), torch::Tensor(), torch::Tensor()};
     }
 
     // QuatScaleToCovarPreciFunction implementation
@@ -516,7 +517,6 @@ namespace gs {
         torch::Tensor quats,
         torch::Tensor scales,
         QuatScaleToCovarPreciSettings settings) {
-
         // Ensure inputs are contiguous and on CUDA
         quats = quats.contiguous();
         scales = scales.contiguous();
@@ -556,7 +556,6 @@ namespace gs {
     torch::autograd::tensor_list QuatScaleToCovarPreciFunction::backward(
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
-
         auto saved = ctx->get_saved_variables();
         auto quats = saved[0];
         auto scales = saved[1];
@@ -612,7 +611,6 @@ namespace gs {
         std::optional<torch::Tensor> thin_prism_coeffs, // [..., C, 4]
         GUTProjectionSettings settings,
         UnscentedTransformParameters ut_params) {
-
         // Input validation
         const int N = static_cast<int>(means3D.size(0));
         const int C = static_cast<int>(viewmat.size(0));
@@ -787,7 +785,9 @@ namespace gs {
 
         ctx->save_for_backward({means3D, quats, scales, colors, opacities, bg_color,
                                 masks.has_value() ? *masks : torch::Tensor(), viewmat, K,
-                                radial_coeffs.has_value() ? *radial_coeffs : torch::Tensor(), tangential_coeffs.has_value() ? *tangential_coeffs : torch::Tensor(), thin_prism_coeffs.has_value() ? *thin_prism_coeffs : torch::Tensor(),
+                                radial_coeffs.has_value() ? *radial_coeffs : torch::Tensor(),
+                                tangential_coeffs.has_value() ? *tangential_coeffs : torch::Tensor(),
+                                thin_prism_coeffs.has_value() ? *thin_prism_coeffs : torch::Tensor(),
                                 isect_offsets, flatten_ids, render_alpha, last_ids});
 
         return {render_colors, render_alpha};
@@ -796,7 +796,6 @@ namespace gs {
     torch::autograd::tensor_list GUTRasterizationFunction::backward(
         torch::autograd::AutogradContext* ctx,
         torch::autograd::tensor_list grad_outputs) {
-
         auto v_render_colors = grad_outputs[0].contiguous();
         auto v_render_alpha = grad_outputs[1].contiguous();
 
@@ -810,9 +809,14 @@ namespace gs {
         const std::optional<torch::Tensor> masks = saved[6].numel() > 0 ? std::optional(saved[6]) : std::nullopt;
         const auto& viewmat = saved[7];
         const auto& K = saved[8];
-        const std::optional<torch::Tensor> radial_coeffs = saved[9].numel() > 0 ? std::optional(saved[9]) : std::nullopt;
-        const std::optional<torch::Tensor> tangential_coeffs = saved[10].numel() > 0 ? std::optional(saved[10]) : std::nullopt;
-        const std::optional<torch::Tensor> thin_prism_coeffs = saved[11].numel() > 0 ? std::optional(saved[11]) : std::nullopt;
+        const std::optional<torch::Tensor> radial_coeffs =
+            saved[9].numel() > 0 ? std::optional(saved[9]) : std::nullopt;
+        const std::optional<torch::Tensor> tangential_coeffs = saved[10].numel() > 0
+                                                                   ? std::optional(saved[10])
+                                                                   : std::nullopt;
+        const std::optional<torch::Tensor> thin_prism_coeffs = saved[11].numel() > 0
+                                                                   ? std::optional(saved[11])
+                                                                   : std::nullopt;
         const auto& isect_offsets = saved[12];
         const auto& flatten_ids = saved[13];
         const auto& render_alpha = saved[14];
@@ -846,9 +850,10 @@ namespace gs {
             v_bg_color = (v_render_colors * (1.0f - render_alpha)).toType(torch::kFloat32).sum({-3, -2});
         }
 
-        return {v_means3D, v_quats, v_scales, v_colors, v_opacities,
-                v_bg_color, torch::Tensor(), torch::Tensor(), torch::Tensor(),
-                torch::Tensor(), torch::Tensor(), torch::Tensor(),
-                torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor()};
+        return {
+            v_means3D, v_quats, v_scales, v_colors, v_opacities,
+            v_bg_color, torch::Tensor(), torch::Tensor(), torch::Tensor(),
+            torch::Tensor(), torch::Tensor(), torch::Tensor(),
+            torch::Tensor(), torch::Tensor(), torch::Tensor(), torch::Tensor()};
     }
-} // namespace gs
+} // namespace gs::training

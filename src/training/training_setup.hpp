@@ -5,8 +5,7 @@
 #include <expected>
 #include <memory>
 
-namespace gs {
-
+namespace gs::training {
     struct TrainingSetup {
         std::unique_ptr<Trainer> trainer;
         std::shared_ptr<CameraDataset> dataset;
@@ -15,5 +14,4 @@ namespace gs {
 
     // Reusable function to set up training from parameters
     std::expected<TrainingSetup, std::string> setupTraining(const param::TrainingParameters& params);
-
-} // namespace gs
+} // namespace gs::training
