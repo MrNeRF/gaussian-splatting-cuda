@@ -706,10 +706,7 @@ namespace gs {
             ShutterType::GLOBAL,
             radial_coeffs,
             tangential_coeffs,
-            thin_prism_coeffs
-
-        );
-
+            thin_prism_coeffs);
         auto radii = std::get<0>(proj_results).contiguous();
         auto means2d = std::get<1>(proj_results).contiguous();
         auto depths = std::get<2>(proj_results).contiguous();
