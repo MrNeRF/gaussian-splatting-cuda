@@ -59,7 +59,7 @@ namespace gs {
             size_t reset_every = 3'000;
             size_t pause_refine_after_reset = 0;
             bool revised_opacity = false;
-
+            bool gut = false;
             float steps_scaler = 0.f;  // If < 0, step size scaling is disabled
             bool antialiasing = false; // Enable antialiasing in rendering
 

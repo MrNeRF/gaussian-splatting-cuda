@@ -64,6 +64,7 @@ namespace gs {
         bool packed = false,
         bool antialiased = false,
         RenderMode render_mode = RenderMode::RGB,
-        const gs::geometry::BoundingBox* = nullptr);
+        const gs::geometry::BoundingBox* = nullptr,
+        bool gut = false);
 
 } // namespace gs

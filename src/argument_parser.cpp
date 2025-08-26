@@ -107,6 +107,7 @@ namespace {
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
             ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
             ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
+            ::args::Flag gut(parser, "gut", "Enable GUT mode", {"gut"});
 
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
                                                             "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
@@ -270,7 +271,8 @@ namespace {
                                         antialiasing_flag = bool(antialiasing),
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
                                         skip_intermediate_saving_flag = bool(skip_intermediate_saving),
-                                        random_flag = bool(random)]() {
+                                        random_flag = bool(random),
+                                        gut_flag = bool(gut)]() {
                 auto& opt = params.optimization;
                 auto& ds = params.dataset;
 
@@ -311,6 +313,7 @@ namespace {
                 setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
                 setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
                 setFlag(random_flag, opt.random);
+                setFlag(gut_flag, opt.gut);
             };
 
             return std::make_tuple(ParseResult::Success, apply_cmd_overrides);
