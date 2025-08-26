@@ -1,5 +1,4 @@
 // Copyright (c) 2023 Janusch Patas.
-// All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
 
 #include "core/parameters.hpp"
 #include <chrono>
@@ -122,6 +121,7 @@ namespace gs {
                     {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
                     {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
                     {"strategy", defaults.strategy, "Optimization strategy: mcmc, default"},
+                    {"pose_optimization", defaults.pose_optimization, "Pose optimization type: none, direct, mlp"},
                     {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
                     {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
                     {"skip_intermediate", defaults.skip_intermediate_saving, "Skip saving intermediate results and only save final output"},
@@ -266,6 +266,7 @@ namespace gs {
             opt_json["init_scaling"] = init_scaling;
             opt_json["max_cap"] = max_cap;
             opt_json["render_mode"] = render_mode;
+            opt_json["pose_optimization"] = pose_optimization;
             opt_json["eval_steps"] = eval_steps;
             opt_json["save_steps"] = save_steps;
             opt_json["enable_eval"] = enable_eval;
@@ -338,6 +339,15 @@ namespace gs {
                     params.render_mode = mode;
                 } else {
                     std::println(stderr, "Warning: Invalid render mode '{}' in JSON. Using default 'RGB'", mode);
+                }
+            }
+
+            if (json.contains("pose_optimization")) {
+                std::string pose_opt = json["pose_optimization"];
+                if (pose_opt == "none" || pose_opt == "direct" || pose_opt == "mlp") {
+                    params.pose_optimization = pose_opt;
+                } else {
+                    std::println(stderr, "Warning: Invalid pose optimization '{}' in JSON. Using default 'none'", pose_opt);
                 }
             }
 
@@ -420,9 +430,6 @@ namespace gs {
             }
             if (json.contains("antialiasing")) {
                 params.antialiasing = json["antialiasing"];
-            }
-            if (json.contains("skip_intermediate")) {
-                params.antialiasing = json["skip_intermediate"];
             }
             if (json.contains("sh_degree_interval")) {
                 params.sh_degree_interval = json["sh_degree_interval"];

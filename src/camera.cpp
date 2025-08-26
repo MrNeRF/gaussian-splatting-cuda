@@ -50,7 +50,28 @@ namespace gs {
         _FoVx = focal2fov(_focal_x, _camera_width);
         _FoVy = focal2fov(_focal_y, _camera_height);
     }
-
+    Camera::Camera(const Camera& other, const torch::Tensor& transform)
+        : _uid(other._uid),
+          _focal_x(other._focal_x),
+          _focal_y(other._focal_y),
+          _center_x(other._center_x),
+          _center_y(other._center_y),
+          _R(other._R),
+          _T(other._T),
+          _radial_distortion(other._radial_distortion),
+          _tangential_distortion(other._tangential_distortion),
+          _camera_model_type(other._camera_model_type),
+          _image_name(other._image_name),
+          _image_path(other._image_path),
+          _camera_width(other._camera_width),
+          _camera_height(other._camera_height),
+          _image_width(other._image_width),
+          _image_height(other._image_height),
+          _cam_position(other._cam_position),
+          _FoVx(other._FoVx),
+          _FoVy(other._FoVy) {
+        _world_view_transform = transform;
+    }
     torch::Tensor Camera::K() const {
         const auto K = torch::zeros({1, 3, 3}, _world_view_transform.options());
         float x_scale_factor = float(_image_width) / float(_camera_width);

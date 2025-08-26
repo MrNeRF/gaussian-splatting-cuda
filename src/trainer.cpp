@@ -1,4 +1,5 @@
 #include "core/trainer.hpp"
+#include "core/poseopt.hpp"
 #include "core/fast_rasterizer.hpp"
 #include "core/image_io.hpp"
 #include "core/rasterizer.hpp"
@@ -151,6 +152,28 @@ namespace gs {
         }
 
         background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+        if (params.optimization.pose_optimization != "none") {
+            if (params.optimization.enable_eval) {
+                throw std::runtime_error("Evaluating with pose optimization is not supported yet. "
+                                         "Please disable pose optimization or evaluation.");
+            }
+            if (params.optimization.pose_optimization == "direct") {
+                poseopt_module_ = std::make_unique<gs::DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
+            } else if (params.optimization.pose_optimization == "mlp") {
+                poseopt_module_ = std::make_unique<gs::MLPPoseOptimizationModule>(train_dataset_->get_cameras().size());
+            } else {
+                throw std::runtime_error("Invalid pose optimization type: " + params.optimization.pose_optimization);
+            }
+            poseopt_optimizer_ = std::make_unique<torch::optim::Adam>(
+                std::vector<torch::Tensor>{poseopt_module_->parameters()},
+                torch::optim::AdamOptions(1e-5)
+                    );
+        } else {
+            poseopt_module_ = std::make_unique<gs::PoseOptimizationModule>();
+        }
+
+        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
+        background_ = background_.to(torch::kCUDA);
 
         // Create progress bar based on headless flag
         if (params.optimization.headless) {
@@ -267,8 +290,11 @@ namespace gs {
                 return StepResult::Stop;
             }
 
+            auto adjusted_cam_pos = poseopt_module_->forward(cam->world_view_transform(), torch::tensor({cam->uid()}));
+            auto adjusted_cam = Camera(*cam, adjusted_cam_pos);
+
             // Use the render mode from parameters
-            RenderOutput r_output = fast_rasterize(*cam, strategy_->get_model(), background_);
+            RenderOutput r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), background_);
 
             // Apply bilateral grid if enabled
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
@@ -350,6 +376,10 @@ namespace gs {
                     if (params_.optimization.use_bilateral_grid) {
                         bilateral_grid_optimizer_->step();
                         bilateral_grid_optimizer_->zero_grad(true);
+                    }
+                    if (params_.optimization.pose_optimization != "none") {
+                        poseopt_optimizer_->step();
+                        poseopt_optimizer_->zero_grad(true);
                     }
 
                     // Queue event for emission after lock release

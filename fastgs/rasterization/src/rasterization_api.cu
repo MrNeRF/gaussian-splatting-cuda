@@ -84,7 +84,7 @@ fast_gs::rasterization::forward_wrapper(
         primitive_primitive_indices_selector, instance_primitive_indices_selector};
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fast_gs::rasterization::backward_wrapper(
     torch::Tensor& densification_info,
     const torch::Tensor& grad_image,
@@ -126,6 +126,10 @@ fast_gs::rasterization::backward_wrapper(
     torch::Tensor grad_sh_coefficients_rest = torch::zeros({n_primitives, total_bases_sh_rest, 3}, float_options);
     torch::Tensor grad_mean2d_helper = torch::zeros({n_primitives, 2}, float_options);
     torch::Tensor grad_conic_helper = torch::zeros({n_primitives, 3}, float_options);
+    torch::Tensor grad_w2c = torch::Tensor();
+    if (w2c.requires_grad()) {
+        grad_w2c = torch::zeros_like(w2c, float_options);
+    }
 
     const bool update_densification_info = densification_info.size(0) > 0;
 
@@ -152,6 +156,7 @@ fast_gs::rasterization::backward_wrapper(
         reinterpret_cast<float3*>(grad_sh_coefficients_rest.data_ptr<float>()),
         reinterpret_cast<float2*>(grad_mean2d_helper.data_ptr<float>()),
         grad_conic_helper.data_ptr<float>(),
+        w2c.requires_grad() ? reinterpret_cast<float4*>(grad_w2c.data_ptr<float>()) : nullptr,
         update_densification_info ? densification_info.data_ptr<float>() : nullptr,
         n_primitives,
         n_visible_primitives,
@@ -168,5 +173,5 @@ fast_gs::rasterization::backward_wrapper(
         center_x,
         center_y);
 
-    return {grad_means, grad_scales_raw, grad_rotations_raw, grad_opacities_raw, grad_sh_coefficients_0, grad_sh_coefficients_rest};
+    return {grad_means, grad_scales_raw, grad_rotations_raw, grad_opacities_raw, grad_sh_coefficients_0, grad_sh_coefficients_rest, grad_w2c};
 }

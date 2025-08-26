@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Janusch Patas.
-// All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
+
 #pragma once
 
 #include <expected>
@@ -38,7 +38,9 @@ namespace gs {
             bool enable_save_eval_images = true;              // Save during evaluation images
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
-            std::string strategy = "mcmc";                    // Optimization strategy: mcmc, default.
+            std::string strategy = "mcmc";                 // Optimization strategy: mcmc, default.
+            bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
+            std::string pose_optimization = "none";           // Pose optimization type: none, direct, mlp
 
             // Bilateral grid parameters
             bool use_bilateral_grid = false;
