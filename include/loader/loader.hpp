@@ -13,9 +13,12 @@
 // Forward declarations only - hide implementation details
 namespace gs {
     class SplatData;
-    class CameraDataset;
     struct PointCloud;
 } // namespace gs
+
+namespace gs::training {
+    class CameraDataset;
+} // namespace gs::training
 
 namespace gs::loader {
 
@@ -31,7 +34,7 @@ namespace gs::loader {
     };
 
     struct LoadedScene {
-        std::shared_ptr<CameraDataset> cameras;
+        std::shared_ptr<gs::training::CameraDataset> cameras;
         std::shared_ptr<PointCloud> point_cloud;
     };
 

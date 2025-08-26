@@ -18,7 +18,7 @@ namespace gs {
         }
     }
 
-    void TrainerManager::setTrainer(std::unique_ptr<Trainer> trainer) {
+    void TrainerManager::setTrainer(std::unique_ptr<gs::training::Trainer> trainer) {
         LOG_TIMER_TRACE("TrainerManager::setTrainer");
 
         // Clear any existing trainer first

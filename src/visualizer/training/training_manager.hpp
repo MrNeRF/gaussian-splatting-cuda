@@ -1,7 +1,6 @@
 #pragma once
 
-#include "core/events.hpp"
-#include "core/trainer.hpp"
+#include "trainer.hpp"
 #include <atomic>
 #include <deque>
 #include <memory>
@@ -40,7 +39,7 @@ namespace gs {
         TrainerManager& operator=(TrainerManager&&) = default;
 
         // Setup and teardown
-        void setTrainer(std::unique_ptr<Trainer> trainer);
+        void setTrainer(std::unique_ptr<gs::training::Trainer> trainer);
         void clearTrainer();
         bool hasTrainer() const;
 
@@ -78,8 +77,8 @@ namespace gs {
         void updateLoss(float loss);
 
         // Access to trainer (for rendering, etc.)
-        Trainer* getTrainer() { return trainer_.get(); }
-        const Trainer* getTrainer() const { return trainer_.get(); }
+        gs::training::Trainer* getTrainer() { return trainer_.get(); }
+        const gs::training::Trainer* getTrainer() const { return trainer_.get(); }
 
         // Wait for training to complete (blocking)
         void waitForCompletion();
@@ -103,7 +102,7 @@ namespace gs {
         void setupEventHandlers();
 
         // Member variables
-        std::unique_ptr<Trainer> trainer_;
+        std::unique_ptr<gs::training::Trainer> trainer_;
         std::unique_ptr<std::jthread> training_thread_;
         visualizer::VisualizerImpl* viewer_ = nullptr;
 

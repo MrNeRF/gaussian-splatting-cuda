@@ -143,7 +143,7 @@ namespace gs::visualizer {
         });
 
         // Render settings changes
-        ui::RenderSettingsChanged::when([this](const auto& event) {
+        ui::RenderSettingsChanged::when([this]([[maybe_unused]] const auto& event) {
             if (rendering_manager_) {
                 // The rendering manager handles this internally now
                 // Just need to mark dirty which happens in its event handler
@@ -181,7 +181,7 @@ namespace gs::visualizer {
         });
 
         // Training progress - don't mark dirty, let throttling handle it
-        state::TrainingProgress::when([this](const auto& event) {
+        state::TrainingProgress::when([this]([[maybe_unused]] const auto& event) {
             // Just update loss buffer, don't force render
             // The 1 FPS throttle will handle rendering
         });
@@ -584,7 +584,7 @@ namespace gs::visualizer {
         }
     }
 
-    void VisualizerImpl::handleTrainingCompleted(const events::state::TrainingCompleted& [[maybe_unused]] event) {
+    void VisualizerImpl::handleTrainingCompleted([[maybe_unused]] const events::state::TrainingCompleted& event) {
 
         if (!scene_manager_) {
             LOG_ERROR("scene manager is not initialized");

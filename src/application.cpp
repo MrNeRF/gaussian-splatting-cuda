@@ -1,8 +1,8 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
 #include "core/logger.hpp"
-#include "core/training_setup.hpp"
 #include "project/project.hpp"
+#include "training/training_setup.hpp"
 #include "visualizer/visualizer.hpp"
 #include <print>
 
@@ -22,7 +22,7 @@ namespace gs {
             return -1;
         }
 
-        auto setup_result = gs::setupTraining(*params);
+        auto setup_result = gs::training::setupTraining(*params);
         if (!setup_result) {
             std::println(stderr, "Error: {}", setup_result.error());
             return -1;
