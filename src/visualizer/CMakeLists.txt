@@ -36,6 +36,10 @@ add_library(gs_visualizer STATIC
 
         # Training integration
         training/training_manager.cpp
+        gui/windows/save_project_browser.cpp
+
+	    # Tools
+	    tools/translation_gizmo_tool.cpp
 )
 
 # Set include directories

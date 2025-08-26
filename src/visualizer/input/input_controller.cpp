@@ -1,29 +1,29 @@
+#include "input/input_controller.hpp"
+#include "core/logger.hpp"
+#include "tools/tool_base.hpp"
+#include "tools/translation_gizmo_tool.hpp"
+#include <GLFW/glfw3.h>
 #include <algorithm>
 #include <format>
 #include <imgui.h>
-#include <print>
-
-#include "core/logger.hpp"
-#include "input/input_controller.hpp"
 
 namespace gs::visualizer {
-
     InputController* InputController::instance_ = nullptr;
 
     InputController::InputController(GLFWwindow* window, Viewport& viewport)
         : window_(window),
           viewport_(viewport) {
-
         // Subscribe to GoToCamView events
         events::cmd::GoToCamView::when([this](const auto& e) {
             handleGoToCamView(e);
         });
-
         // Subscribe to WindowFocusLost to reset states
         events::internal::WindowFocusLost::when([this](const auto&) {
             drag_mode_ = DragMode::None;
             std::fill(std::begin(keys_wasd_), std::end(keys_wasd_), false);
         });
+
+        LOG_DEBUG("InputController created");
     }
 
     InputController::~InputController() {
@@ -34,7 +34,6 @@ namespace gs::visualizer {
 
     void InputController::initialize() {
         // CRITICAL: This must be called AFTER ImGui_ImplGlfw_InitForOpenGL
-
         instance_ = this;
 
         // Store ImGui's callbacks so we can chain to them
@@ -49,6 +48,11 @@ namespace gs::visualizer {
         double x, y;
         glfwGetCursorPos(window_, &x, &y);
         last_mouse_pos_ = {x, y};
+
+        // Initialize frame timer
+        last_frame_time_ = std::chrono::high_resolution_clock::now();
+
+        LOG_DEBUG("InputController initialized - callbacks set");
     }
 
     // Static callbacks - chain to ImGui then handle ourselves
@@ -129,18 +133,36 @@ namespace gs::visualizer {
                           std::end(instance_->keys_wasd_), false);
             }
             events::internal::WindowFocusLost{}.emit();
-            std::println("[InputController] Window lost focus");
+            LOG_DEBUG("Window lost focus - input states reset");
+        } else {
+            LOG_DEBUG("Window gained focus");
         }
     }
 
     // Core handlers
     void InputController::handleMouseButton(int button, int action, double x, double y) {
+        // CHECK GIZMO FIRST - before any other input handling
+        if (translation_gizmo_ && translation_gizmo_->isEnabled() && tool_context_) {
+            if (translation_gizmo_->handleMouseButton(button, action, x, y, *tool_context_)) {
+                // Gizmo consumed the event
+                if (action == GLFW_PRESS) {
+                    drag_mode_ = DragMode::Gizmo;
+                    LOG_TRACE("Started gizmo drag");
+                } else if (action == GLFW_RELEASE && drag_mode_ == DragMode::Gizmo) {
+                    drag_mode_ = DragMode::None;
+                    LOG_TRACE("Ended gizmo drag");
+                }
+                return; // Don't process camera controls
+            }
+        }
+
         if (action == GLFW_PRESS) {
             // Special handling for point cloud mode
             bool imgui_wants_mouse = ImGui::GetIO().WantCaptureMouse;
             if (point_cloud_mode_ && isInViewport(x, y) &&
                 !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
                 imgui_wants_mouse = false; // Override for point cloud mode
+                LOG_TRACE("Point cloud mode - overriding ImGui mouse capture");
             }
 
             // Check if we should handle this
@@ -153,24 +175,32 @@ namespace gs::visualizer {
 
             if (button == GLFW_MOUSE_BUTTON_LEFT) {
                 drag_mode_ = DragMode::Pan;
+                LOG_TRACE("Started camera pan");
             } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
                 drag_mode_ = DragMode::Rotate;
+                LOG_TRACE("Started camera rotate");
             } else if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
                 drag_mode_ = DragMode::Orbit;
+                float current_time = static_cast<float>(glfwGetTime());
+                viewport_.camera.startRotateAroundCenter(glm::vec2(x, y), current_time);
+                LOG_TRACE("Started camera orbit");
             }
         } else if (action == GLFW_RELEASE) {
             // Always handle our own releases if we were dragging
             bool was_dragging = false;
-
             if (button == GLFW_MOUSE_BUTTON_LEFT && drag_mode_ == DragMode::Pan) {
                 drag_mode_ = DragMode::None;
                 was_dragging = true;
+                LOG_TRACE("Ended camera pan");
             } else if (button == GLFW_MOUSE_BUTTON_RIGHT && drag_mode_ == DragMode::Rotate) {
                 drag_mode_ = DragMode::None;
                 was_dragging = true;
+                LOG_TRACE("Ended camera rotate");
             } else if (button == GLFW_MOUSE_BUTTON_MIDDLE && drag_mode_ == DragMode::Orbit) {
+                viewport_.camera.endRotateAroundCenter();
                 drag_mode_ = DragMode::None;
                 was_dragging = true;
+                LOG_TRACE("Ended camera orbit");
             }
 
             // Force publish on mouse release
@@ -184,6 +214,16 @@ namespace gs::visualizer {
     }
 
     void InputController::handleMouseMove(double x, double y) {
+        // Check gizmo first if not already in gizmo drag mode
+        if (translation_gizmo_ && translation_gizmo_->isEnabled() && tool_context_) {
+            if (drag_mode_ == DragMode::Gizmo ||
+                translation_gizmo_->handleMouseMove(x, y, *tool_context_)) {
+                // Gizmo is handling the mouse move
+                last_mouse_pos_ = {x, y};
+                return;
+            }
+        }
+
         glm::vec2 pos(x, y);
 
         // Always update last position
@@ -191,7 +231,7 @@ namespace gs::visualizer {
         last_mouse_pos_ = current_pos;
 
         // Handle camera dragging
-        if (drag_mode_ != DragMode::None) {
+        if (drag_mode_ != DragMode::None && drag_mode_ != DragMode::Gizmo) {
             switch (drag_mode_) {
             case DragMode::Pan:
                 viewport_.camera.translate(pos);
@@ -199,18 +239,24 @@ namespace gs::visualizer {
             case DragMode::Rotate:
                 viewport_.camera.rotate(pos);
                 break;
-            case DragMode::Orbit:
-                viewport_.camera.rotate_around_center(pos);
+            case DragMode::Orbit: {
+                float current_time = static_cast<float>(glfwGetTime());
+                viewport_.camera.updateRotateAroundCenter(pos, current_time);
                 break;
+            }
             default:
                 break;
             }
-
             publishCameraMove();
         }
     }
 
     void InputController::handleScroll([[maybe_unused]] double xoff, double yoff) {
+        // Don't scroll if gizmo is active
+        if (drag_mode_ == DragMode::Gizmo) {
+            return;
+        }
+
         if (!shouldCameraHandleInput())
             return;
 
@@ -220,8 +266,10 @@ namespace gs::visualizer {
 
         if (key_r_pressed_) {
             viewport_.camera.rotate_roll(delta);
+            LOG_TRACE("Camera roll: {}", delta);
         } else {
             viewport_.camera.zoom(delta);
+            LOG_TRACE("Camera zoom: {}", delta);
         }
 
         publishCameraMove();
@@ -234,6 +282,12 @@ namespace gs::visualizer {
         }
         if (key == GLFW_KEY_R) {
             key_r_pressed_ = (action != GLFW_RELEASE);
+            // Reset gizmo position if R is pressed and gizmo is enabled
+            if (action == GLFW_PRESS && translation_gizmo_ && translation_gizmo_->isEnabled()) {
+                LOG_DEBUG("Reset key pressed with gizmo enabled");
+                // This would need to be exposed by the gizmo tool
+                // For now, let the gizmo handle it internally
+            }
         }
 
         // Speed control works even when GUI has focus
@@ -248,8 +302,8 @@ namespace gs::visualizer {
             }
         }
 
-        // WASD only works when viewport has focus
-        if (!shouldCameraHandleInput())
+        // WASD only works when viewport has focus and gizmo isn't active
+        if (!shouldCameraHandleInput() || drag_mode_ == DragMode::Gizmo)
             return;
 
         bool pressed = (action != GLFW_RELEASE);
@@ -275,39 +329,118 @@ namespace gs::visualizer {
         }
 
         if (changed) {
-            // Apply movement
-            const float rate = 1.0f;
-            if (keys_wasd_[0])
-                viewport_.camera.advance_forward(rate);
-            if (keys_wasd_[1])
-                viewport_.camera.advance_left(rate);
-            if (keys_wasd_[2])
-                viewport_.camera.advance_backward(rate);
-            if (keys_wasd_[3])
-                viewport_.camera.advance_right(rate);
+            LOG_TRACE("WASD state changed - W:{} A:{} S:{} D:{}",
+                      keys_wasd_[0], keys_wasd_[1], keys_wasd_[2], keys_wasd_[3]);
+        }
+    }
 
-            if (keys_wasd_[0] || keys_wasd_[1] || keys_wasd_[2] || keys_wasd_[3]) {
-                publishCameraMove();
+    void InputController::processWASDMovement() {
+        // Calculate frame delta time
+        auto now = std::chrono::high_resolution_clock::now();
+        float delta_time = std::chrono::duration<float>(now - last_frame_time_).count();
+        last_frame_time_ = now;
+
+        // Clamp delta time to prevent huge jumps (60 FPS min)
+        delta_time = std::min(delta_time, 1.0f / 60.0f);
+
+        // Only process WASD if we should handle input and not dragging anything
+        if (!shouldCameraHandleInput() || drag_mode_ != DragMode::None) {
+            return;
+        }
+
+        bool any_movement = false;
+
+        // Process each WASD key with frame-time based movement
+        if (keys_wasd_[0]) { // W
+            viewport_.camera.advance_forward(delta_time);
+            any_movement = true;
+        }
+        if (keys_wasd_[1]) { // A
+            viewport_.camera.advance_left(delta_time);
+            any_movement = true;
+        }
+        if (keys_wasd_[2]) { // S
+            viewport_.camera.advance_backward(delta_time);
+            any_movement = true;
+        }
+        if (keys_wasd_[3]) { // D
+            viewport_.camera.advance_right(delta_time);
+            any_movement = true;
+        }
+
+        // Publish camera move if we moved
+        if (any_movement) {
+            publishCameraMove();
+            LOG_TRACE("WASD movement - W:{} A:{} S:{} D:{}",
+                      keys_wasd_[0], keys_wasd_[1], keys_wasd_[2], keys_wasd_[3]);
+        }
+    }
+
+    void InputController::update(float delta_time) {
+        // This catches cases where mouse release events are missed (e.g., outside window)
+        if (drag_mode_ == DragMode::Orbit &&
+            glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_MIDDLE) != GLFW_PRESS) {
+            viewport_.camera.endRotateAroundCenter();
+            drag_mode_ = DragMode::None;
+            LOG_TRACE("Orbit stopped - button released outside window");
+        }
+
+        if (drag_mode_ == DragMode::Rotate &&
+            glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS) {
+            drag_mode_ = DragMode::None;
+            LOG_TRACE("Rotate stopped - button released outside window");
+        }
+
+        if (drag_mode_ == DragMode::Pan &&
+            glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) {
+            drag_mode_ = DragMode::None;
+            LOG_TRACE("Pan stopped - button released outside window");
+        }
+
+        // Handle continuous WASD movement
+        if (shouldCameraHandleInput() && drag_mode_ != DragMode::Gizmo) {
+            if (keys_wasd_[0]) {
+                viewport_.camera.advance_forward(delta_time);
             }
+            if (keys_wasd_[1]) {
+                viewport_.camera.advance_left(delta_time);
+            }
+            if (keys_wasd_[2]) {
+                viewport_.camera.advance_backward(delta_time);
+            }
+            if (keys_wasd_[3]) {
+                viewport_.camera.advance_right(delta_time);
+            }
+        }
+
+        // Publish if moving (removed inertia check)
+        bool moving = keys_wasd_[0] || keys_wasd_[1] || keys_wasd_[2] || keys_wasd_[3];
+        if (moving) {
+            publishCameraMove();
         }
     }
 
     void InputController::handleFileDrop(const std::vector<std::string>& paths) {
+        LOG_DEBUG("Handling file drop with {} files", paths.size());
+
         std::vector<std::filesystem::path> ply_files;
         std::optional<std::filesystem::path> dataset_path;
 
         for (const auto& path_str : paths) {
             std::filesystem::path filepath(path_str);
+            LOG_TRACE("Processing dropped file: {}", filepath.string());
 
             if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
                 ply_files.push_back(filepath);
             } else if (!dataset_path && std::filesystem::is_directory(filepath)) {
                 // Check for dataset markers
+                LOG_TRACE("Checking directory for dataset markers: {}", filepath.string());
                 if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
                     std::filesystem::exists(filepath / "sparse" / "cameras.bin") ||
                     std::filesystem::exists(filepath / "transforms.json") ||
                     std::filesystem::exists(filepath / "transforms_train.json")) {
                     dataset_path = filepath;
+                    LOG_DEBUG("Dataset detected in dropped directory");
                 }
             }
         }
@@ -315,19 +448,13 @@ namespace gs::visualizer {
         // Load PLY files
         for (const auto& ply : ply_files) {
             events::cmd::LoadFile{.path = ply, .is_dataset = false}.emit();
-
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = std::format("Loaded PLY via drag-and-drop: {}",
-                                       ply.filename().string()),
-                .source = "InputController"}
-                .emit();
+            LOG_INFO("Loading PLY via drag-and-drop: {}", ply.filename().string());
         }
 
         // Load dataset if found
         if (dataset_path) {
             events::cmd::LoadFile{.path = *dataset_path, .is_dataset = true}.emit();
-            LOG_INFO("Loading dataset Project via drag-and-drop: {}", dataset_path->filename().string());
+            LOG_INFO("Loading dataset via drag-and-drop: {}", dataset_path->filename().string());
         }
 
         if (paths.size() == 1) {
@@ -340,16 +467,20 @@ namespace gs::visualizer {
     }
 
     void InputController::handleGoToCamView(const events::cmd::GoToCamView& event) {
+        LOG_TIMER_TRACE("HandleGoToCamView");
+
         if (!training_manager_) {
-            std::cerr << "handleGoToCamView: trainer_manager_ not initialized\n";
+            LOG_ERROR("GoToCamView: trainer_manager_ not initialized");
             return;
         }
 
         auto cam_data = training_manager_->getCamById(event.cam_id);
         if (!cam_data) {
-            std::cerr << "Camera ID " << event.cam_id << " not found\n";
+            LOG_ERROR("Camera ID {} not found", event.cam_id);
             return;
         }
+
+        LOG_DEBUG("Moving camera to view ID: {}", event.cam_id);
 
         // Transform from WorldToCam to CamToWorld
         glm::mat3 world_to_cam_R;
@@ -375,7 +506,7 @@ namespace gs::visualizer {
         if (focal_x > 0.0f && width > 0) {
             float fov_rad = 2.0f * std::atan(width / (2.0f * focal_x));
             float fov_deg = glm::degrees(fov_rad);
-
+            LOG_TRACE("Setting FOV to {:.2f} degrees", fov_deg);
             events::ui::RenderSettingsChanged{
                 .fov = fov_deg,
                 .scaling_modifier = std::nullopt,
@@ -390,12 +521,8 @@ namespace gs::visualizer {
             .translation = viewport_.getTranslation()}
             .emit();
 
-        events::notify::Log{
-            .level = events::notify::Log::Level::Info,
-            .message = std::format("Camera moved to view: {} (ID: {})",
-                                   cam_data->image_name(), cam_data->uid()),
-            .source = "CameraController"}
-            .emit();
+        LOG_INFO("Camera moved to view: {} (ID: {})",
+                 cam_data->image_name(), cam_data->uid());
     }
 
     // Helpers
@@ -407,6 +534,11 @@ namespace gs::visualizer {
     }
 
     bool InputController::shouldCameraHandleInput() const {
+        // Don't handle if gizmo is active
+        if (drag_mode_ == DragMode::Gizmo) {
+            return false;
+        }
+
         // Special handling for point cloud mode
         if (point_cloud_mode_) {
             double x, y;
@@ -427,9 +559,14 @@ namespace gs::visualizer {
             viewport_.camera.decreaseWasdSpeed();
         }
 
+        const float new_speed = viewport_.camera.getWasdSpeed();
+        const float max_speed = viewport_.camera.getMaxWasdSpeed();
+
+        LOG_DEBUG("Camera speed changed to: {:.3f} (max: {:.3f})", new_speed, max_speed);
+
         events::ui::SpeedChanged{
-            .current_speed = viewport_.camera.getWasdSpeed(),
-            .max_speed = viewport_.camera.getMaxWasdSpeed()}
+            .current_speed = new_speed,
+            .max_speed = max_speed}
             .emit();
     }
 
@@ -443,5 +580,4 @@ namespace gs::visualizer {
             last_camera_publish_ = now;
         }
     }
-
 } // namespace gs::visualizer

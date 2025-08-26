@@ -5,7 +5,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace gs {
 
@@ -39,6 +38,7 @@ namespace gs {
             EVENT(ResumeTraining, );
             EVENT(StopTraining, );
             EVENT(SaveCheckpoint, std::optional<int> iteration;);
+            EVENT(SaveProject, std::filesystem::path project_dir;);
             EVENT(LoadFile, std::filesystem::path path; bool is_dataset;);
             EVENT(LoadProject, std::filesystem::path path;);
             EVENT(ClearScene, );
@@ -59,6 +59,7 @@ namespace gs {
             EVENT(ToolDisabled, std::string tool_name;);
             EVENT(CropBoxSettingsChanged, bool show_box; bool use_box;);
             EVENT(AxesSettingsChanged, bool show_axes;);
+            EVENT(TranslationGizmoSettingsChanged, bool enabled; float scale;);
         } // namespace tools
 
         // ============================================================================
@@ -82,7 +83,7 @@ namespace gs {
             EVENT(SceneCleared, );
             EVENT(ModelUpdated, int iteration; size_t num_gaussians;);
             EVENT(SceneChanged, );
-            EVENT(PLYAdded, std::string name; size_t total_gaussians; bool is_visible;);
+            EVENT(PLYAdded, std::string name; size_t node_gaussians; size_t total_gaussians; bool is_visible;);
             EVENT(PLYRemoved, std::string name;);
 
             // Data loading
@@ -117,26 +118,6 @@ namespace gs {
                   float ram_percent;);
             EVENT(FrameRendered, float render_ms; float fps; int num_gaussians;);
         } // namespace state
-
-        // ============================================================================
-        // Notifications - Important messages for the user
-        // ============================================================================
-        namespace notify {
-            EVENT(Info, std::string message; int duration_ms = 3000;);
-            EVENT(Success, std::string message; int duration_ms = 3000;);
-            EVENT(Warning, std::string message; int duration_ms = 5000;);
-            EVENT(Error, std::string message; std::string details = ""; int duration_ms = 0;);
-
-            EVENT(MemoryWarning,
-                  enum class Type{GPU, RAM} type;
-                  float usage_percent;
-                  std::string message;);
-
-            EVENT(Log,
-                  enum class Level{Debug, Info, Warning, Error} level;
-                  std::string message;
-                  std::string source = "";);
-        } // namespace notify
 
         // ============================================================================
         // UI - User interface updates
@@ -176,7 +157,7 @@ namespace gs {
             EVENT(TrainingReadyToStart, );
             EVENT(WindowFocusLost, );
         } // namespace internal
-    }     // namespace events
+    } // namespace events
 
     // ============================================================================
     // Convenience functions

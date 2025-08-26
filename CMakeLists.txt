@@ -167,7 +167,7 @@ if(BUILD_CUDA_ALL_SM)
         # Per target CUDA architectures for CMake to be set after find_package(Torch)
         set(gaussian_splatting_cuda_CUDA_ARCH "${CUDA_SMS};${_max_sm}-virtual")
         message(STATUS "CUDA architectures (auto >=${BUILD_CUDA_ALL_MIN_SM}): ${gaussian_splatting_cuda_CUDA_ARCH}")
-        message(STATUS "TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST}")     
+        message(STATUS "TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST}")
     else()
         message(FATAL_ERROR "Failed to detect any CUDA architecture >= ${BUILD_CUDA_ALL_MIN_SM}. Please check your CUDA toolkit installation.")
     endif()
@@ -305,6 +305,7 @@ set(HOST_SOURCES
         src/training_setup.cpp
         src/geometry/bounding_box.cpp
         src/geometry/euclidean_transform.cpp
+        src/poseopt.cpp
         src/project/project.cpp
 )
 

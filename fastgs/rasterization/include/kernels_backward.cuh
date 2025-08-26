@@ -26,6 +26,7 @@ namespace fast_gs::rasterization::kernels::backward {
         float4* grad_raw_rotations,
         float3* grad_sh_coefficients_0,
         float3* grad_sh_coefficients_rest,
+        float4* grad_w2c,
         float* densification_info,
         const uint n_primitives,
         const uint active_sh_bases,
@@ -161,6 +162,21 @@ namespace fast_gs::rasterization::kernels::backward {
             j11 * (dL_dmean2d.x - dL_dj13 / depth),
             j22 * (dL_dmean2d.y - dL_dj23 / depth),
             -j11 * (x * dL_dmean2d.x + djwr1_dz_helper / depth) - j22 * (y * dL_dmean2d.y + djwr2_dz_helper / depth));
+
+        if (grad_w2c != nullptr) {
+            atomicAdd(&grad_w2c[0].w, dL_dmean3d_cam.x);
+            atomicAdd(&grad_w2c[1].w, dL_dmean3d_cam.y);
+            atomicAdd(&grad_w2c[2].w, dL_dmean3d_cam.z);
+            atomicAdd(&grad_w2c[0].x, dL_dmean3d_cam.x * mean3d.x);
+            atomicAdd(&grad_w2c[0].y, dL_dmean3d_cam.x * mean3d.y);
+            atomicAdd(&grad_w2c[0].z, dL_dmean3d_cam.x * mean3d.z);
+            atomicAdd(&grad_w2c[1].x, dL_dmean3d_cam.y * mean3d.x);
+            atomicAdd(&grad_w2c[1].y, dL_dmean3d_cam.y * mean3d.y);
+            atomicAdd(&grad_w2c[1].z, dL_dmean3d_cam.y * mean3d.z);
+            atomicAdd(&grad_w2c[2].x, dL_dmean3d_cam.z * mean3d.x);
+            atomicAdd(&grad_w2c[2].y, dL_dmean3d_cam.z * mean3d.y);
+            atomicAdd(&grad_w2c[2].z, dL_dmean3d_cam.z * mean3d.z);
+        }
 
         // 3d mean gradient from splatting
         const float3 dL_dmean3d_from_splatting = make_float3(

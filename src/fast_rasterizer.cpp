@@ -31,7 +31,7 @@ namespace gs {
         constexpr float far_plane = 1e10f;
 
         fast_gs::rasterization::FastGSSettings settings;
-        settings.w2c = viewpoint_camera.world_view_transform();
+        auto w2c = viewpoint_camera.world_view_transform();
         settings.cam_position = viewpoint_camera.cam_position();
         settings.active_sh_bases = active_sh_bases;
         settings.width = width;
@@ -50,6 +50,7 @@ namespace gs {
             raw_opacities,
             sh0,
             shN,
+            w2c,
             gaussian_model._densification_info,
             settings);
 

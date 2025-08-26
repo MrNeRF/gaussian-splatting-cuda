@@ -108,7 +108,11 @@ namespace gs::management {
     }
 
     DataSetInfo::DataSetInfo(const param::DatasetConfig& data_config) : DatasetConfig(data_config) {
-        data_type = IsColmapData(data_path) ? "Colmap" : "Blender";
+        if (data_path.empty()) {
+            data_type = "";
+        } else {
+            data_type = IsColmapData(data_path) ? "Colmap" : "Blender";
+        }
     }
 
     // LichtFeldProject implementation
@@ -173,6 +177,8 @@ namespace gs::management {
             }
 
             project_data_ = parseProjectData(processedDoc);
+            output_file_name_ = filepath;
+
             return true;
 
         } catch (const std::exception& e) {
@@ -363,13 +369,25 @@ namespace gs::management {
         }
     }
 
-    void Project::addPly(const PlyData& ply) {
-        project_data_.outputs.plys.push_back(ply);
+    bool Project::addPly(const PlyData& ply_to_be_added) {
+
+        for (const auto& ply : project_data_.outputs.plys) {
+            if (ply.ply_name == ply_to_be_added.ply_name) {
+                LOG_ERROR("can not insert two plys with the same name");
+                return false;
+            }
+        }
+
+        project_data_.outputs.plys.push_back(ply_to_be_added);
 
         if (update_file_on_change_ && !output_file_name_.empty()) {
-            writeToFile();
+            if (!writeToFile()) {
+                return false;
+            }
         }
+        return true;
     }
+
     std::vector<PlyData> Project::getPlys() const {
         return project_data_.outputs.plys;
     }
@@ -379,6 +397,13 @@ namespace gs::management {
             project_data_.outputs.plys.erase(project_data_.outputs.plys.begin() + index);
         }
 
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
+        }
+    }
+
+    void Project::clearPlys() {
+        project_data_.outputs.plys.clear();
         if (update_file_on_change_ && !output_file_name_.empty()) {
             writeToFile();
         }
@@ -394,10 +419,67 @@ namespace gs::management {
                !project_data_.data_set_info.data_type.empty();
     }
 
+    bool Project::portProjectToDir(const std::filesystem::path& dst_dir) {
+
+        namespace fs = std::filesystem;
+
+        if (!std::filesystem::is_directory(dst_dir)) {
+            LOG_ERROR("PortProjectToDir: Directory does not exists {}", dst_dir.string());
+            return false;
+        }
+
+        const fs::path src_project_dir = getProjectOutputFolder();
+
+        setProjectOutputFolder(dst_dir);
+        if (!fs::is_regular_file(output_file_name_)) {
+            LOG_ERROR("PortProjectToDir: {} orig path does not exists", output_file_name_.string());
+        }
+        const std::string proj_filename = output_file_name_.filename().string();
+        const fs::path dst_project_file_path = dst_dir / proj_filename;
+
+        setProjectFileName(dst_project_file_path);
+
+        // Copy all ply files into new directory
+        for (auto& ply : project_data_.outputs.plys) {
+            try {
+                if (!fs::exists(ply.ply_path)) {
+                    LOG_ERROR("PortProjectToDir: ply file does not exist: {}", ply.ply_path.string());
+                    return false;
+                }
+
+                // Keep same filename, copy to dst_dir
+                fs::path dst_ply_path = dst_dir / ply.ply_path.filename();
+
+                // Overwrite if already exists
+                fs::copy_file(ply.ply_path, dst_ply_path, fs::copy_options::overwrite_existing);
+
+                // Update metadata path
+                ply.ply_path = dst_ply_path;
+
+            } catch (const fs::filesystem_error& e) {
+                LOG_ERROR("PortProjectToDir: failed to copy ply {} -> {}. reason: {}",
+                          ply.ply_path.string(), (dst_dir / ply.ply_path.filename()).string(), e.what());
+                return false;
+            }
+        }
+
+        // Finally, write updated project file
+        if (!writeToFile()) {
+            LOG_ERROR("PortProjectToDir: failed to write updated project file to {}", dst_project_file_path.string());
+            return false;
+        }
+
+        LOG_INFO("Project was successfully ported to {}", dst_project_file_path.string());
+
+        return true;
+    }
+
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
                                               const param::OptimizationParameters& opt,
-                                              const std::string& project_name) {
-        auto project = std::make_shared<gs::management::Project>(true);
+                                              const std::string& project_name,
+                                              bool update_file_on_change) {
+
+        auto project = std::make_shared<gs::management::Project>(update_file_on_change);
 
         project->setProjectName(project_name);
         if (data.output_path.empty()) {
@@ -406,19 +488,20 @@ namespace gs::management {
         }
         std::filesystem::path project_path = data.project_path;
         if (project_path.empty()) {
-            project_path = data.output_path / "project.ls";
-            LOG_INFO("project_path is empty - creating new project.ls file");
+            project_path = data.output_path / ("project" + Project::EXTENSION);
+            LOG_INFO("project_path is empty - creating new project{} file", Project::EXTENSION);
         }
 
         if (project_path.extension() != Project::EXTENSION) {
             LOG_ERROR("project_path must be {} file: {}", Project::EXTENSION, project_path.string());
             return nullptr;
         }
+        if (project_path.parent_path().empty()) {
+            LOG_ERROR("project_path must have parent directory: project_path: {} ", project_path.string());
+            return nullptr;
+        }
+
         try {
-            if (project_path.parent_path().empty()) {
-                LOG_ERROR("project_path must have parent directory: project_path: {} ", project_path.string());
-                return nullptr;
-            }
             project->setProjectFileName(project_path);
             project->setProjectOutputFolder(data.output_path);
             project->setDataInfo(data);
@@ -455,6 +538,47 @@ namespace gs::management {
             return {};
         }
         return foundPath;
+    }
+
+    void clear_directory(const std::filesystem::path& path) {
+        namespace fs = std::filesystem;
+        for (const auto& entry : fs::directory_iterator(path)) {
+            fs::remove_all(entry);
+        }
+    }
+
+    std::shared_ptr<Project> CreateTempNewProject(const gs::param::DatasetConfig& data,
+                                                  const param::OptimizationParameters& opt,
+                                                  const std::string& project_name, bool udpdate_file_on_change) {
+        namespace fs = std::filesystem;
+        gs::param::DatasetConfig data_with_temp_output = data;
+
+        auto temp_path = fs::temp_directory_path() / "LichtFeldStudio";
+        if (fs::exists(temp_path)) {
+            clear_directory(temp_path);
+            LOG_INFO("Project temoprary directory exists removing its contenet {}", temp_path.string());
+        } else {
+            try {
+                bool success = fs::create_directories(temp_path);
+                if (!success) {
+                    LOG_ERROR("failed to create temporary directory {}", temp_path.string());
+                    return nullptr;
+                }
+                LOG_INFO("Project created temoprary directory successfuly: {}", temp_path.string());
+
+            } catch (const fs::filesystem_error& e) {
+                LOG_ERROR("failed to create temporary directory {}. reason: {}", temp_path.string(), e.what());
+                return nullptr;
+            }
+        }
+        data_with_temp_output.output_path = temp_path;
+        auto project = CreateNewProject(data_with_temp_output, opt, project_name, udpdate_file_on_change);
+
+        if (project) {
+            project->setIsTempProject(true);
+        }
+
+        return project;
     }
 
 } // namespace gs::management

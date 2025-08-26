@@ -55,6 +55,17 @@ namespace gs::rendering {
         }
         LOG_DEBUG("Viewport gizmo initialized");
 
+        // Initialize translation gizmo
+        if (auto result = translation_gizmo_.initialize(); !result) {
+            LOG_ERROR("Failed to initialize translation gizmo: {}", result.error());
+            shutdown();
+            return std::unexpected(result.error());
+        }
+        LOG_DEBUG("Translation gizmo initialized");
+
+        // Create gizmo interaction adapter
+        gizmo_interaction_ = std::make_shared<GizmoInteractionAdapter>(&translation_gizmo_);
+
         auto shader_result = initializeShaders();
         if (!shader_result) {
             LOG_ERROR("Failed to initialize shaders: {}", shader_result.error());
@@ -71,6 +82,9 @@ namespace gs::rendering {
         // Just reset/clean up - safe to call multiple times
         quad_shader_ = ManagedShader();
         screen_renderer_.reset();
+        translation_gizmo_.shutdown();
+        viewport_gizmo_.shutdown();
+        gizmo_interaction_.reset();
         // Other components clean up in their destructors
     }
 
@@ -122,7 +136,8 @@ namespace gs::rendering {
             .crop_box = nullptr,
             .background_color = request.background_color,
             .point_cloud_mode = request.point_cloud_mode,
-            .voxel_size = request.voxel_size};
+            .voxel_size = request.voxel_size,
+            .model_transform = request.model_transform};
 
         // Convert crop box if present
         std::unique_ptr<gs::geometry::BoundingBox> temp_crop_box;
@@ -265,6 +280,26 @@ namespace gs::rendering {
         }
 
         return viewport_gizmo_.render(camera_rotation, viewport_pos, viewport_size);
+    }
+
+    Result<void> RenderingEngineImpl::renderTranslationGizmo(
+        const glm::vec3& position,
+        const ViewportData& viewport,
+        float scale) {
+
+        if (!isInitialized()) {
+            LOG_ERROR("Rendering engine not initialized");
+            return std::unexpected("Rendering engine not initialized");
+        }
+
+        auto view = createViewMatrix(viewport);
+        auto proj = createProjectionMatrix(viewport);
+
+        return translation_gizmo_.render(view, proj, position, scale);
+    }
+
+    std::shared_ptr<GizmoInteraction> RenderingEngineImpl::getGizmoInteraction() {
+        return gizmo_interaction_;
     }
 
     RenderingPipelineResult RenderingEngineImpl::renderWithPipeline(

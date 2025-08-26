@@ -1,5 +1,6 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
+#include "core/logger.hpp"
 #include "core/training_setup.hpp"
 #include "project/project.hpp"
 #include "visualizer/visualizer.hpp"
@@ -69,6 +70,23 @@ namespace gs {
                 std::println(stderr, "cannot open new data_path and project from commandline");
                 return -1;
             }
+        } else { // create temporary project until user will save it in desired location
+            std::shared_ptr<gs::management::Project> project = nullptr;
+            if (params->dataset.output_path.empty()) {
+                project = gs::management::CreateTempNewProject(params->dataset, params->optimization);
+                if (!project) {
+                    LOG_ERROR("project creation failed");
+                    return -1;
+                }
+                params->dataset.output_path = project->getProjectOutputFolder();
+            } else {
+                project = gs::management::CreateNewProject(params->dataset, params->optimization);
+                if (!project) {
+                    LOG_ERROR("project creation failed");
+                    return -1;
+                }
+            }
+            viewer->attachProject(project);
         }
 
         // Set parameters

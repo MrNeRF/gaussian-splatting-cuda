@@ -286,7 +286,7 @@ void DefaultStrategy::post_backward(int iter, gs::RenderOutput& render_output) {
         grow_gs(iter);
         prune_gs(iter);
 
-        _splat_data._densification_info = torch::zeros({2, _splat_data.means().size(0)}, _splat_data.means().options());
+        _splat_data._densification_info = torch::zeros({2, _splat_data.means().size(0)}, _splat_data.means().options()).set_requires_grad(false);
     }
 
     if (iter % _params->reset_every == 0 && iter > 0) {

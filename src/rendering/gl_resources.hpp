@@ -112,7 +112,7 @@ namespace gs::rendering {
     template <GLenum Target>
     class BufferBinder {
         GLint prev_;
-        static constexpr GLenum query = []() constexpr->GLenum {
+        static constexpr GLenum query = []() constexpr -> GLenum {
             if (Target == GL_ARRAY_BUFFER)
                 return GL_ARRAY_BUFFER_BINDING;
             if (Target == GL_ELEMENT_ARRAY_BUFFER)
@@ -132,8 +132,7 @@ namespace gs::rendering {
             if (Target == GL_TRANSFORM_FEEDBACK_BUFFER)
                 return GL_TRANSFORM_FEEDBACK_BUFFER_BINDING;
             return 0;
-        }
-        ();
+        }();
 
     public:
         explicit BufferBinder(GLuint vbo) {

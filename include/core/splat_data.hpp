@@ -3,6 +3,7 @@
 #include "core/point_cloud.hpp"
 #include <expected>
 #include <filesystem>
+#include <glm/glm.hpp>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -46,6 +47,9 @@ namespace gs {
         torch::Tensor get_rotation() const;
         torch::Tensor get_scaling() const;
         torch::Tensor get_shs() const;
+
+        // that's really a stupid hack for now. This stuff must go into a CUDA kernel
+        SplatData& transform(const glm::mat4& transform_matrix);
 
         // Simple inline getters
         int get_active_sh_degree() const { return _active_sh_degree; }

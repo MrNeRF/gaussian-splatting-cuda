@@ -3,6 +3,8 @@
 #include "core/data_loading_service.hpp"
 #include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
+#include "tools/translation_gizmo_tool.hpp"
+#include <stdexcept>
 
 namespace gs::visualizer {
 
@@ -11,7 +13,8 @@ namespace gs::visualizer {
           viewport_(options.width, options.height),
           window_manager_(std::make_unique<WindowManager>(options.title, options.width, options.height)) {
 
-        LOG_DEBUG("Creating visualizer");
+        LOG_DEBUG("Creating visualizer with window size {}x{}", options.width, options.height);
+
         // Create scene manager - it creates its own Scene internally
         scene_manager_ = std::make_unique<SceneManager>();
 
@@ -22,9 +25,6 @@ namespace gs::visualizer {
 
         // Create support components
         gui_manager_ = std::make_unique<gui::GuiManager>(this);
-        error_handler_ = std::make_unique<ErrorHandler>();
-        memory_monitor_ = std::make_unique<MemoryMonitor>();
-        memory_monitor_->start();
 
         // Create rendering manager with initial antialiasing setting
         rendering_manager_ = std::make_unique<RenderingManager>();
@@ -37,7 +37,7 @@ namespace gs::visualizer {
         // Create command processor
         command_processor_ = std::make_unique<CommandProcessor>(scene_manager_.get());
 
-        // Create data loading service - no longer needs state_manager
+        // Create data loading service
         data_loader_ = std::make_unique<DataLoadingService>(scene_manager_.get());
 
         // Create main loop
@@ -50,10 +50,44 @@ namespace gs::visualizer {
 
     VisualizerImpl::~VisualizerImpl() {
         trainer_manager_.reset();
+        translation_gizmo_tool_.reset();
+        tool_context_.reset();
         if (gui_manager_) {
             gui_manager_->shutdown();
         }
-        LOG_INFO("Visualizer destroyed.");
+        LOG_INFO("Visualizer destroyed");
+    }
+
+    void VisualizerImpl::initializeTools() {
+        if (tools_initialized_) {
+            LOG_TRACE("Tools already initialized, skipping");
+            return;
+        }
+
+        // Create the tool context
+        tool_context_ = std::make_unique<ToolContext>(
+            rendering_manager_.get(),
+            scene_manager_.get(),
+            &viewport_,
+            window_manager_->getWindow());
+
+        // Create translation gizmo tool
+        translation_gizmo_tool_ = std::make_shared<tools::TranslationGizmoTool>();
+
+        // Initialize the tool with the context
+        if (!translation_gizmo_tool_->initialize(*tool_context_)) {
+            LOG_ERROR("Failed to initialize translation gizmo tool");
+            translation_gizmo_tool_.reset();
+        } else {
+            // Connect tool to input controller
+            if (input_controller_) {
+                input_controller_->setTranslationGizmoTool(translation_gizmo_tool_);
+                input_controller_->setToolContext(tool_context_.get());
+            }
+            LOG_DEBUG("Translation gizmo tool initialized successfully");
+        }
+
+        tools_initialized_ = true;
     }
 
     void VisualizerImpl::setupComponentConnections() {
@@ -142,22 +176,6 @@ namespace gs::visualizer {
             }
         });
 
-        // Notifications
-        notify::MemoryWarning::when([this](const auto& event) {
-            if (gui_manager_) {
-                gui_manager_->addConsoleLog("WARNING: %s", event.message.c_str());
-            }
-        });
-
-        notify::Error::when([this](const auto& event) {
-            if (gui_manager_) {
-                gui_manager_->addConsoleLog("ERROR: %s", event.message.c_str());
-                if (!event.details.empty()) {
-                    gui_manager_->addConsoleLog("Details: %s", event.details.c_str());
-                }
-            }
-        });
-
         internal::TrainerReady::when([this](const auto&) {
             internal::TrainingReadyToStart{}.emit();
         });
@@ -172,15 +190,56 @@ namespace gs::visualizer {
         cmd::LoadProject::when([this](const auto& cmd) {
             handleLoadProjectCommand(cmd);
         });
+
+        // Listen to TrainingCompleted
+        events::state::TrainingCompleted::when([this](const auto& event) {
+            handleTrainingCompleted(event);
+        });
+
+        // Listen to load file ( we need to update project)
+        cmd::LoadFile::when([this](const auto& cmd) {
+            handleLoadFileCommand(cmd);
+        });
+
+        // Listen to save project
+        cmd::SaveProject::when([this](const auto& cmd) {
+            handleSaveProject(cmd);
+        });
     }
 
     bool VisualizerImpl::initialize() {
-        // Initialize window first
+        // Track if we're fully initialized
+        static bool fully_initialized = false;
+        if (fully_initialized) {
+            LOG_TRACE("Already fully initialized");
+            return true;
+        }
+
+        // Initialize window first and ensure it has proper size
         if (!window_initialized_) {
             if (!window_manager_->init()) {
                 return false;
             }
             window_initialized_ = true;
+
+            // CRITICAL: Poll events once to get actual window dimensions from the OS
+            window_manager_->pollEvents();
+            window_manager_->updateWindowSize();
+
+            // Update viewport with actual window size
+            viewport_.windowSize = window_manager_->getWindowSize();
+            viewport_.frameBufferSize = window_manager_->getFramebufferSize();
+
+            // Validate we got reasonable dimensions
+            if (viewport_.windowSize.x <= 0 || viewport_.windowSize.y <= 0) {
+                LOG_WARN("Window manager returned invalid size, using options fallback: {}x{}",
+                         options_.width, options_.height);
+                viewport_.windowSize = glm::ivec2(options_.width, options_.height);
+                viewport_.frameBufferSize = glm::ivec2(options_.width, options_.height);
+            }
+
+            LOG_DEBUG("Window initialized with actual size: {}x{}",
+                      viewport_.windowSize.x, viewport_.windowSize.y);
         }
 
         // Initialize GUI (sets up ImGui callbacks)
@@ -197,11 +256,19 @@ namespace gs::visualizer {
             input_controller_->setTrainingManager(trainer_manager_);
         }
 
-        // Initialize rendering
+        // Initialize rendering with proper viewport dimensions
         if (!rendering_manager_->isInitialized()) {
+            // Pass viewport dimensions to rendering manager
+            rendering_manager_->setInitialViewportSize(viewport_.windowSize);
             rendering_manager_->initialize();
         }
 
+        // Initialize tools AFTER rendering is initialized (only once!)
+        if (!tools_initialized_) {
+            initializeTools();
+        }
+
+        fully_initialized = true;
         return true;
     }
 
@@ -211,9 +278,23 @@ namespace gs::visualizer {
         // Update the main viewport with window size
         viewport_.windowSize = window_manager_->getWindowSize();
         viewport_.frameBufferSize = window_manager_->getFramebufferSize();
+
+        // Update gizmo tool if active
+        if (translation_gizmo_tool_ && translation_gizmo_tool_->isEnabled() && tool_context_) {
+            translation_gizmo_tool_->update(*tool_context_);
+        }
     }
 
     void VisualizerImpl::render() {
+        // Calculate delta time for input updates
+        static auto last_frame_time = std::chrono::high_resolution_clock::now();
+        auto now = std::chrono::high_resolution_clock::now();
+        float delta_time = std::chrono::duration<float>(now - last_frame_time).count();
+        last_frame_time = now;
+
+        // Clamp delta time to prevent huge jumps (min 30 FPS)
+        delta_time = std::min(delta_time, 1.0f / 30.0f);
+
         // Update input controller with viewport bounds
         if (gui_manager_) {
             auto pos = gui_manager_->getViewportPos();
@@ -226,6 +307,10 @@ namespace gs::visualizer {
         if (rendering_manager) {
             const auto& settings = rendering_manager->getSettings();
             input_controller_->setPointCloudMode(settings.point_cloud_mode);
+        }
+
+        if (input_controller_) {
+            input_controller_->update(delta_time);
         }
 
         // Get viewport region from GUI
@@ -259,43 +344,42 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::shutdown() {
-        // Nothing to shutdown now that tools are gone
+        // Shutdown tools
+        if (translation_gizmo_tool_) {
+            translation_gizmo_tool_->shutdown();
+            translation_gizmo_tool_.reset();
+        }
+
+        // Clean up tool context
+        tool_context_.reset();
+
+        tools_initialized_ = false;
     }
 
     bool VisualizerImpl::LoadProject() {
         if (project_) {
             try {
+                LOG_TIMER("LoadProject");
+
                 // slicing intended
                 auto dataset = static_cast<const param::DatasetConfig&>(project_->getProjectData().data_set_info);
                 if (!dataset.data_path.empty()) {
-                    auto result = loadDataset(dataset.data_path);
+                    LOG_DEBUG("Loading dataset from project: {}", dataset.data_path.string());
+                    auto result = data_loader_->loadDataset(dataset.data_path);
                     if (!result) {
-                        LOG_ERROR("Error: {}", result.error());
-                        return false;
+                        LOG_ERROR("Failed to load dataset from project: {}", result.error());
+                        throw std::runtime_error(std::format("Failed to load dataset from project: {}", result.error()));
                     }
                 }
+
                 // load plys
+                LoadProjectPlys();
+
                 auto plys = project_->getPlys();
-                // sort according to iter numbers
-                std::sort(plys.begin(), plys.end(),
-                          [](const gs::management::PlyData& a, const gs::management::PlyData& b) {
-                              return a.ply_training_iter_number < b.ply_training_iter_number;
-                          });
-
-                if (!plys.empty()) {
-                    scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
-                }
-                // set all of the nodes to invisible except the last one
-                for (auto it = plys.begin(); it != plys.end(); ++it) {
-                    std::string ply_name = it->ply_name;
-
-                    bool is_last = (std::next(it) == plys.end());
-                    scene_manager_->addPLY(it->ply_path, ply_name, is_last);
-                    scene_manager_->setPLYVisibility(ply_name, is_last);
-                }
+                LOG_INFO("Project loaded successfully with {} PLY files", plys.size());
             } catch (const std::exception& e) {
                 LOG_ERROR("Failed to load project: {}", e.what());
-                return false;
+                throw std::runtime_error(std::format("Failed to load project: {}", e.what()));
             }
 
             return true;
@@ -303,21 +387,40 @@ namespace gs::visualizer {
         return false;
     }
 
+    void VisualizerImpl::LoadProjectPlys() {
+        if (!project_) {
+            LOG_ERROR("LoadProjectPlys: project is not initialized");
+            return;
+        }
+
+        auto plys = project_->getPlys();
+        LOG_DEBUG("Loading {} PLY files from project", plys.size());
+
+        // sort according to iter numbers
+        std::sort(plys.begin(), plys.end(),
+                  [](const gs::management::PlyData& a, const gs::management::PlyData& b) {
+                      return a.ply_training_iter_number < b.ply_training_iter_number;
+                  });
+
+        if (!plys.empty()) {
+            scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
+        }
+
+        // set all of the nodes to invisible except the last one
+        for (auto it = plys.begin(); it != plys.end(); ++it) {
+            std::string ply_name = it->ply_name;
+
+            bool is_last = (std::next(it) == plys.end());
+            LOG_TRACE("Adding PLY '{}' to scene (visible: {})", ply_name, is_last);
+            scene_manager_->addPLY(it->ply_path, ply_name, is_last);
+            scene_manager_->setPLYVisibility(ply_name, is_last);
+        }
+    }
+
     void VisualizerImpl::run() {
-        // Ensure basic initialization before running
-        if (!window_initialized_) {
-            if (!window_manager_->init()) {
-                throw std::runtime_error("Failed to initialize window manager");
-            }
-            window_initialized_ = true;
-        }
-
-        // Initialize rendering
-        if (!rendering_manager_->isInitialized()) {
-            rendering_manager_->initialize();
-        }
-
-        LoadProject(); // load a project if exists
+        // The main loop will call initialize() as its init callback
+        // Don't duplicate initialization here
+        LoadProject();
         main_loop_->run();
     }
 
@@ -326,38 +429,41 @@ namespace gs::visualizer {
     }
 
     std::expected<void, std::string> VisualizerImpl::loadPLY(const std::filesystem::path& path) {
-        // Ensure proper initialization order before loading PLY
-        // This handles command line PLY loading
-        if (!window_initialized_) {
-            if (!window_manager_->init()) {
-                return std::unexpected("Failed to initialize window manager");
-            }
-            window_initialized_ = true;
+        LOG_TIMER("LoadPLY");
+
+        // Ensure full initialization before loading PLY
+        // This will only initialize once due to the guard in initialize()
+        if (!initialize()) {
+            return std::unexpected("Failed to initialize visualizer");
         }
 
-        // Initialize rendering
-        if (!rendering_manager_->isInitialized()) {
-            rendering_manager_->initialize();
-        }
-
+        LOG_INFO("Loading PLY file: {}", path.string());
         return data_loader_->loadPLY(path);
     }
 
     std::expected<void, std::string> VisualizerImpl::loadDataset(const std::filesystem::path& path) {
-        // Ensure proper initialization order before loading dataset
-        if (!window_initialized_) {
-            if (!window_manager_->init()) {
-                return std::unexpected("Failed to initialize window manager");
+        LOG_TIMER("LoadDataset");
+
+        // Ensure full initialization before loading dataset
+        // This will only initialize once due to the guard in initialize()
+        if (!initialize()) {
+            return std::unexpected("Failed to initialize visualizer");
+        }
+
+        LOG_INFO("Loading dataset: {}", path.string());
+        auto result = data_loader_->loadDataset(path);
+        if (result && project_) {
+            auto data_config = project_->getProjectData().data_set_info;
+            if (data_config.data_path.empty() || data_config.data_path == path) { // empty project or same data
+                data_config.data_path = path;
+                project_->setDataInfo(data_config);
+            } else {
+                project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
+                updateProjectOnModules();
             }
-            window_initialized_ = true;
         }
 
-        // Initialize rendering
-        if (!rendering_manager_->isInitialized()) {
-            rendering_manager_->initialize();
-        }
-
-        return data_loader_->loadDataset(path);
+        return result;
     }
 
     void VisualizerImpl::clearScene() {
@@ -365,37 +471,54 @@ namespace gs::visualizer {
     }
 
     bool VisualizerImpl::openProject(const std::filesystem::path& path) {
+        LOG_TIMER("OpenProject");
 
         auto project = std::make_shared<gs::management::Project>();
 
         if (!project) {
-            LOG_ERROR("openProject: error creating project");
-            return false;
+            LOG_ERROR("Failed to create project object");
+            throw std::runtime_error("Failed to create project object");
         }
+
         if (!project->readFromFile(path)) {
-            LOG_ERROR("reading  project file failed {}", path.string());
-            return false;
+            LOG_ERROR("Failed to read project file: {}", path.string());
+            throw std::runtime_error(std::format("Failed to read project file: {}", path.string()));
         }
+
         if (!project->validateProjectData()) {
-            LOG_ERROR("failed to validate project");
-            return false;
+            LOG_ERROR("Failed to validate project data from: {}", path.string());
+            throw std::runtime_error(std::format("Failed to validate project data from: {}", path.string()));
         }
 
         project_ = project;
+        LOG_INFO("Project opened successfully: {}", path.string());
 
         return true;
     }
 
     bool VisualizerImpl::closeProject(const std::filesystem::path& path) {
-
         if (!project_) {
+            LOG_WARN("No project to close");
             return false;
         }
+
         if (!path.empty()) {
             project_->setProjectFileName(path);
         }
 
-        return project_->writeToFile();
+        bool success = project_->writeToFile();
+        if (success) {
+            LOG_INFO("Project saved successfully");
+        } else {
+            LOG_ERROR("Failed to save project");
+        }
+
+        return success;
+    }
+
+    void VisualizerImpl::attachProject(std::shared_ptr<gs::management::Project> _project) {
+        project_ = _project;
+        updateProjectOnModules();
     }
 
     std::shared_ptr<gs::management::Project> VisualizerImpl::getProject() {
@@ -403,23 +526,85 @@ namespace gs::visualizer {
     }
 
     void VisualizerImpl::handleLoadProjectCommand(const events::cmd::LoadProject& cmd) {
+        try {
+            bool success = openProject(cmd.path);
+            if (!success) {
+                throw std::runtime_error(std::format("Failed opening project: {}", cmd.path.string()));
+            }
 
-        bool success = openProject(cmd.path);
-        if (!success) {
-            std::string error_msg = std::format("Failed opening project: {}", cmd.path.string());
-            events::notify::Error{
-                .message = error_msg,
-                .details = std::format("Path: {}", cmd.path.string())}
-                .emit();
+            success = LoadProject();
+            if (!success) {
+                throw std::runtime_error(std::format("Failed to load project content: {}", cmd.path.string()));
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR("Error handling LoadProject command: {}", e.what());
+
+            if (gui_manager_) {
+                gui_manager_->addConsoleLog("ERROR: Failed to load project: %s", e.what());
+            }
+
+            // Re-throw to let higher level handle it
+            throw;
         }
+    }
 
-        success = LoadProject();
-        if (!success) {
-            std::string error_msg = std::format("Failed to load project: {}", cmd.path.string());
-            events::notify::Error{
-                .message = error_msg,
-                .details = std::format("Path: {}", cmd.path.string())}
-                .emit();
+    void VisualizerImpl::handleLoadFileCommand(const events::cmd::LoadFile& cmd) {
+        if (cmd.is_dataset && project_) {
+            auto data_config = project_->getProjectData().data_set_info;
+            data_config.data_path = cmd.path;
+            data_config.output_path.clear();
+
+            project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
+            updateProjectOnModules();
+        }
+    }
+
+    void VisualizerImpl::handleSaveProject(const events::cmd::SaveProject& cmd) {
+        if (project_) {
+            const auto& dst_dir = cmd.project_dir;
+            if (!std::filesystem::exists(dst_dir)) {
+                bool success = std::filesystem::create_directories(dst_dir);
+                if (!success) {
+                    LOG_ERROR("Directory creation failed {}", dst_dir.string());
+                    return;
+                }
+                LOG_INFO("created directory successfully {}", dst_dir.string());
+            }
+            if (project_->getIsTempProject()) {
+                if (!project_->portProjectToDir(dst_dir)) {
+                    LOG_ERROR("porting project failed. Dst dir {} ", project_->getProjectOutputFolder().string());
+                }
+                project_->setIsTempProject(false);
+            } else {
+                if (!project_->writeToFile()) {
+                    LOG_ERROR("save project failed {} ", project_->getProjectFileName().string());
+                }
+            }
+            LOG_INFO("Project was saved successfully to {}", project_->getProjectFileName().string());
+        }
+    }
+
+    void VisualizerImpl::handleTrainingCompleted(const events::state::TrainingCompleted& [[maybe_unused]] event) {
+
+        if (!scene_manager_) {
+            LOG_ERROR("scene manager is not initialized");
+            return;
+        }
+        if (!project_) {
+            LOG_ERROR("project is not initialized");
+            return;
+        }
+        // load plys
+        LoadProjectPlys();
+
+        if (scene_manager_) {
+            scene_manager_->changeContentType(SceneManager::ContentType::Dataset);
+        }
+    }
+
+    void VisualizerImpl::updateProjectOnModules() {
+        if (trainer_manager_) {
+            trainer_manager_->setProject(project_);
         }
     }
 } // namespace gs::visualizer

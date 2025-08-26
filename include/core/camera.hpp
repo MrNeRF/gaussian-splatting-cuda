@@ -25,6 +25,7 @@ namespace gs {
                const std::filesystem::path& mask_path,
                int camera_width, int camera_height,
                int uid);
+        Camera(const Camera&, const torch::Tensor& transform);
 
         // Delete copy, allow move
         Camera(const Camera&) = delete;
@@ -40,6 +41,9 @@ namespace gs {
         
         // Load mask from disk and return it
         torch::Tensor load_and_get_attention_weights(int resize_factor = -1);
+
+        // Load image from disk just to populate _image_width/_image_height
+        void load_image_size(int resize_factor = -1);
 
         // Get number of bytes in the image file
         size_t get_num_bytes_from_file() const;
@@ -69,6 +73,8 @@ namespace gs {
 
         int image_height() const noexcept { return _image_height; }
         int image_width() const noexcept { return _image_width; }
+        int camera_height() const noexcept { return _camera_height; }
+        int camera_width() const noexcept { return _camera_width; }
         float focal_x() const noexcept { return _focal_x; }
         float focal_y() const noexcept { return _focal_y; }
         torch::Tensor radial_distortion() const noexcept { return _radial_distortion; }

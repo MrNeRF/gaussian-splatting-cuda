@@ -1,6 +1,7 @@
 #include "gui/panels/world_transform_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "rendering/rendering_manager.hpp"
+#include "tools/translation_gizmo_tool.hpp"
 #include "visualizer_impl.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
@@ -18,6 +19,45 @@ namespace gs::gui::panels {
 
         auto settings = render_manager->getSettings();
         bool settings_changed = false;
+
+        /* COMMENTED OUT FOR NOW - WE NEED FIRST ORIENT THE WORLD CORRECTLY BEFORE WE ENABLE IT
+        // SINGLE CHECKBOX TO CONTROL GIZMO
+        if (ImGui::Checkbox("Show Translation Gizmo", &settings.show_translation_gizmo)) {
+            settings_changed = true;
+
+            // Sync tool interaction state with visibility
+            auto* gizmo_tool = ctx.viewer->getTranslationGizmoTool();
+            if (gizmo_tool) {
+                gizmo_tool->setEnabled(settings.show_translation_gizmo);
+
+                // When enabling, sync gizmo position with current world transform
+                if (settings.show_translation_gizmo) {
+                    // The gizmo tool already tracks current_transform_ internally
+                    // Just make sure it's in sync
+                    auto current_transform = gizmo_tool->getTransform();
+                    if (current_transform.isIdentity() && !settings.world_transform.isIdentity()) {
+                        // If gizmo is at identity but world transform isn't, sync them
+                        // This is handled internally by the tool
+                    }
+                }
+            }
+        }
+
+        if (settings.show_translation_gizmo) {
+            // Gizmo scale slider
+            if (ImGui::SliderFloat("Gizmo Scale", &settings.gizmo_scale, 0.5f, 3.0f)) {
+                settings_changed = true;
+            }
+
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Gizmo Controls:");
+            ImGui::BulletText("Drag arrows: Move along axis");
+            ImGui::BulletText("Drag planes: Move in 2D plane");
+            ImGui::BulletText("R: Reset position");
+        }
+        */
+
+        ImGui::Separator();
 
         // Store transform UI values statically
         static float rotation_degrees[3] = {0.0f, 0.0f, 0.0f};
@@ -38,6 +78,28 @@ namespace gs::gui::panels {
             translation[2] = trans.z;
             transform_initialized = true;
         }
+
+        /* COMMENTED OUT - PART OF GIZMO FUNCTIONALITY
+        // If gizmo is active and being dragged, update UI values from gizmo
+        auto* gizmo_tool = ctx.viewer->getTranslationGizmoTool();
+        if (settings.show_translation_gizmo && gizmo_tool) {
+            if (gizmo_tool->isInteracting()) {
+                // Get transform from gizmo tool
+                auto gizmo_transform = gizmo_tool->getTransform();
+                glm::vec3 trans = gizmo_transform.getTranslation();
+                translation[0] = trans.x;
+                translation[1] = trans.y;
+                translation[2] = trans.z;
+
+                // Update rotation if needed
+                glm::mat3 rot_mat = gizmo_transform.getRotationMat();
+                glm::vec3 euler = glm::eulerAngles(glm::quat_cast(rot_mat));
+                rotation_degrees[0] = glm::degrees(euler.x);
+                rotation_degrees[1] = glm::degrees(euler.y);
+                rotation_degrees[2] = glm::degrees(euler.z);
+            }
+        }
+        */
 
         // Transform status
         if (!settings.world_transform.isIdentity()) {
@@ -79,6 +141,15 @@ namespace gs::gui::panels {
             settings.world_transform = geometry::EuclideanTransform();
             rotation_degrees[0] = rotation_degrees[1] = rotation_degrees[2] = 0.0f;
             translation[0] = translation[1] = translation[2] = 0.0f;
+
+            /* COMMENTED OUT - GIZMO RESET
+            // Also reset gizmo position if it exists
+            auto* gizmo_tool = ctx.viewer->getTranslationGizmoTool();
+            if (gizmo_tool) {
+                // Tool will handle this internally via updateWorldTransform
+            }
+            */
+
             render_manager->updateSettings(settings);
         }
 
@@ -97,5 +168,4 @@ namespace gs::gui::panels {
             ImGui::TreePop();
         }
     }
-
 } // namespace gs::gui::panels

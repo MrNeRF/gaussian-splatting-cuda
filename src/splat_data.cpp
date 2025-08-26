@@ -1,4 +1,5 @@
 #include "core/splat_data.hpp"
+#include "core/logger.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
 
@@ -10,6 +11,8 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <print>
 #include <string>
 #include <thread>
@@ -235,8 +238,7 @@ namespace gs {
           _shN{std::move(shN)},
           _scaling{std::move(scaling)},
           _rotation{std::move(rotation)},
-          _opacity{std::move(opacity)},
-          _densification_info(std::move(_densification_info)) {}
+          _opacity{std::move(opacity)} {}
 
     // Computed getters
     torch::Tensor SplatData::get_means() const {
@@ -258,6 +260,104 @@ namespace gs {
 
     torch::Tensor SplatData::get_shs() const {
         return torch::cat({_sh0, _shN}, 1);
+    }
+
+    SplatData& SplatData::transform(const glm::mat4& transform_matrix) {
+        LOG_TIMER("SplatData::transform");
+
+        if (_means.size(0) == 0) {
+            return *this; // Nothing to transform
+        }
+
+        const int num_points = _means.size(0);
+
+        // Keep everything on GPU for efficiency
+        auto device = _means.device();
+
+        // 1. Transform positions (means)
+        // Convert transform matrix to tensor
+        auto transform_tensor = torch::tensor({transform_matrix[0][0], transform_matrix[0][1], transform_matrix[0][2], transform_matrix[0][3],
+                                               transform_matrix[1][0], transform_matrix[1][1], transform_matrix[1][2], transform_matrix[1][3],
+                                               transform_matrix[2][0], transform_matrix[2][1], transform_matrix[2][2], transform_matrix[2][3],
+                                               transform_matrix[3][0], transform_matrix[3][1], transform_matrix[3][2], transform_matrix[3][3]},
+                                              torch::TensorOptions().dtype(torch::kFloat32).device(device))
+                                    .reshape({4, 4});
+
+        // Add homogeneous coordinate
+        auto means_homo = torch::cat({_means, torch::ones({num_points, 1}, _means.options())}, 1);
+
+        // Apply transform: (4x4) @ (Nx4)^T = (4xN), then transpose back
+        auto transformed_means = torch::matmul(transform_tensor, means_homo.t()).t();
+
+        // Extract xyz and update in-place
+        _means.index_put_({torch::indexing::Slice(), torch::indexing::Slice(0, 3)},
+                          transformed_means.index({torch::indexing::Slice(), torch::indexing::Slice(0, 3)}));
+
+        // 2. Extract rotation from transform matrix (simple method without decompose)
+        glm::mat3 rot_mat(transform_matrix);
+
+        // Normalize columns to remove scale
+        glm::vec3 scale;
+        for (int i = 0; i < 3; ++i) {
+            scale[i] = glm::length(rot_mat[i]);
+            if (scale[i] > 0.0f) {
+                rot_mat[i] /= scale[i];
+            }
+        }
+
+        // Convert rotation matrix to quaternion
+        glm::quat rotation = glm::quat_cast(rot_mat);
+
+        // 3. Transform rotations (quaternions) if there's rotation
+        if (std::abs(rotation.w - 1.0f) > 1e-6f) {
+            auto rot_tensor = torch::tensor({rotation.w, rotation.x, rotation.y, rotation.z},
+                                            torch::TensorOptions().dtype(torch::kFloat32).device(device));
+
+            // Quaternion multiplication: q_new = q_transform * q_original
+            auto q = _rotation; // Shape: [N, 4] in [w, x, y, z] format
+
+            // Expand rotation quaternion to match batch size
+            auto q_rot = rot_tensor.unsqueeze(0).expand({num_points, 4});
+
+            // Quaternion multiplication formula
+            auto w1 = q_rot.index({torch::indexing::Slice(), 0});
+            auto x1 = q_rot.index({torch::indexing::Slice(), 1});
+            auto y1 = q_rot.index({torch::indexing::Slice(), 2});
+            auto z1 = q_rot.index({torch::indexing::Slice(), 3});
+
+            auto w2 = q.index({torch::indexing::Slice(), 0});
+            auto x2 = q.index({torch::indexing::Slice(), 1});
+            auto y2 = q.index({torch::indexing::Slice(), 2});
+            auto z2 = q.index({torch::indexing::Slice(), 3});
+
+            _rotation.index_put_({torch::indexing::Slice(), 0}, w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2);
+            _rotation.index_put_({torch::indexing::Slice(), 1}, w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2);
+            _rotation.index_put_({torch::indexing::Slice(), 2}, w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2);
+            _rotation.index_put_({torch::indexing::Slice(), 3}, w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2);
+        }
+
+        // 4. Transform scaling (if non-uniform scale is present)
+        if (std::abs(scale.x - 1.0f) > 1e-6f ||
+            std::abs(scale.y - 1.0f) > 1e-6f ||
+            std::abs(scale.z - 1.0f) > 1e-6f) {
+
+            // Average scale factor (for isotropic gaussian scaling)
+            float avg_scale = (scale.x + scale.y + scale.z) / 3.0f;
+
+            // Since _scaling is log(scale), we add log of the scale factor
+            _scaling = _scaling + std::log(avg_scale);
+        }
+
+        // 5. Update scene scale if significant change
+        torch::Tensor scene_center = _means.mean(0);
+        torch::Tensor dists = torch::norm(_means - scene_center, 2, 1);
+        float new_scene_scale = dists.median().item<float>();
+        if (std::abs(new_scene_scale - _scene_scale) > _scene_scale * 0.1f) {
+            _scene_scale = new_scene_scale;
+        }
+
+        LOG_DEBUG("Transformed {} gaussians", num_points);
+        return *this;
     }
 
     // Utility method

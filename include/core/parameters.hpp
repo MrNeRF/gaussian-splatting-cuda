@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Janusch Patas.
-// All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
+
 #pragma once
 
 #include <expected>
@@ -40,6 +40,8 @@ namespace gs {
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
             std::string strategy = "mcmc";                    // Optimization strategy: mcmc, default.
             bool use_attention_mask = false;                  // Skip saving intermediate results and only save final output
+            bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
+            std::string pose_optimization = "none";           // Pose optimization type: none, direct, mlp
 
             // Bilateral grid parameters
             bool use_bilateral_grid = false;
@@ -58,7 +60,7 @@ namespace gs {
             size_t reset_every = 3'000;
             size_t pause_refine_after_reset = 0;
             bool revised_opacity = false;
-
+            bool gut = false;
             float steps_scaler = 0.f;  // If < 0, step size scaling is disabled
             bool antialiasing = false; // Enable antialiasing in rendering
 
@@ -73,12 +75,14 @@ namespace gs {
 
         struct DatasetConfig {
             std::filesystem::path data_path = "";
-            std::filesystem::path output_path = "output";
+            std::filesystem::path output_path = "";
             std::filesystem::path project_path = ""; // if path is relative it will be saved to output_path/project_name.ls
             std::string images = "images";
             std::string attention_masks = "masks";
             int resize_factor = -1;
             int test_every = 8;
+            std::vector<std::string> timelapse_images = {};
+            int timelapse_every = 50;
         };
 
         struct TrainingParameters {

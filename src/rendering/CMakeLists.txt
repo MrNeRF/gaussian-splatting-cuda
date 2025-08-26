@@ -1,8 +1,13 @@
+# Add the internal CUDA subdirectory first
+add_subdirectory(cuda)
+
 set(RENDERING_SOURCES
         rendering_engine.cpp
         rendering_engine_impl.cpp
         rendering_pipeline.cpp
+        gs_rasterizer.cpp
         point_cloud_renderer.cpp
+        translation_gizmo.cpp
         grid_renderer.cpp
         bbox_renderer.cpp
         axes_renderer.cpp
@@ -21,12 +26,12 @@ endif()
 add_library(gs_rendering STATIC ${RENDERING_SOURCES})
 
 target_link_libraries(gs_rendering
-    PRIVATE  # ALL dependencies should be PRIVATE
+        PRIVATE  # ALL dependencies should be PRIVATE
         ${TORCH_LIBRARIES}
         glm::glm
         gaussian_host
         gaussian_kernels
-        gsplat_backend
+        rendering_cuda_backend
         glad::glad
         ${OPENGL_LIBRARIES}
         CUDA::cudart
@@ -41,13 +46,14 @@ target_include_directories(gs_rendering
         $<INSTALL_INTERFACE:include>
         PRIVATE
         # Internal paths for implementation only
-        ${CMAKE_CURRENT_SOURCE_DIR}                      # For internal includes within rendering
-        ${CMAKE_SOURCE_DIR}/include                       # For public headers
-        ${CMAKE_SOURCE_DIR}/src                          # For other internal modules
-        ${CMAKE_SOURCE_DIR}/gsplat                       # For gsplat headers
-        ${CUDAToolkit_INCLUDE_DIRS}                      # CUDA headers
-        ${OPENGL_INCLUDE_DIRS}                           # OpenGL headers
-        ${Python3_INCLUDE_DIRS}                          # Python headers
+        ${CMAKE_CURRENT_SOURCE_DIR}                           # For internal includes within rendering
+        ${CMAKE_CURRENT_SOURCE_DIR}/cuda/rasterization/include # For CUDA rasterization headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/cuda/utils                # For CUDA utils
+        ${CMAKE_SOURCE_DIR}/include                           # For public headers
+        ${CMAKE_SOURCE_DIR}/src                               # For other internal modules
+        ${CUDAToolkit_INCLUDE_DIRS}                           # CUDA headers
+        ${OPENGL_INCLUDE_DIRS}                                # OpenGL headers
+        ${Python3_INCLUDE_DIRS}                               # Python headers
 )
 
 # Handle shaders

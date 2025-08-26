@@ -11,6 +11,12 @@
 
 namespace gs::visualizer {
 
+    // Forward declarations
+    namespace tools {
+        class TranslationGizmoTool;
+    }
+    class ToolContext;
+
     class InputController {
     public:
         InputController(GLFWwindow* window, Viewport& viewport);
@@ -24,6 +30,16 @@ namespace gs::visualizer {
             training_manager_ = tm;
         }
 
+        // Set translation gizmo tool
+        void setTranslationGizmoTool(std::shared_ptr<tools::TranslationGizmoTool> tool) {
+            translation_gizmo_ = tool;
+        }
+
+        // Set tool context for gizmo
+        void setToolContext(ToolContext* context) {
+            tool_context_ = context;
+        }
+
         // Called every frame by GUI manager to update viewport bounds
         void updateViewportBounds(float x, float y, float w, float h) {
             viewport_bounds_ = {x, y, w, h};
@@ -33,6 +49,9 @@ namespace gs::visualizer {
         void setPointCloudMode(bool enabled) {
             point_cloud_mode_ = enabled;
         }
+
+        // Update function for continuous input (WASD movement and inertia)
+        void update(float delta_time);
 
     private:
         // Store original ImGui callbacks so we can chain
@@ -61,6 +80,9 @@ namespace gs::visualizer {
         void handleFileDrop(const std::vector<std::string>& paths);
         void handleGoToCamView(const events::cmd::GoToCamView& event);
 
+        // WASD processing with proper frame timing
+        void processWASDMovement();
+
         // Helpers
         bool isInViewport(double x, double y) const;
         bool shouldCameraHandleInput() const;
@@ -72,16 +94,23 @@ namespace gs::visualizer {
         Viewport& viewport_;
         std::shared_ptr<const TrainerManager> training_manager_;
 
+        // Tool support
+        std::shared_ptr<tools::TranslationGizmoTool> translation_gizmo_;
+        ToolContext* tool_context_ = nullptr;
+
         // Viewport bounds for focus detection
         struct {
             float x, y, width, height;
         } viewport_bounds_{0, 0, 1920, 1080};
 
         // Camera state
-        enum class DragMode { None,
-                              Pan,
-                              Rotate,
-                              Orbit };
+        enum class DragMode {
+            None,
+            Pan,
+            Rotate,
+            Orbit,
+            Gizmo
+        };
         DragMode drag_mode_ = DragMode::None;
         glm::dvec2 last_mouse_pos_{0, 0};
 
@@ -96,6 +125,9 @@ namespace gs::visualizer {
         // Throttling for camera events
         std::chrono::steady_clock::time_point last_camera_publish_;
         static constexpr auto camera_publish_interval_ = std::chrono::milliseconds(100);
+
+        // Frame timing for WASD movement
+        std::chrono::high_resolution_clock::time_point last_frame_time_;
 
         // Static instance for callbacks
         static InputController* instance_;

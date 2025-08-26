@@ -6,7 +6,6 @@
 namespace fast_gs::rasterization {
 
     struct FastGSSettings {
-        torch::Tensor w2c;
         torch::Tensor cam_position;
         int active_sh_bases;
         int width;
@@ -39,7 +38,7 @@ namespace fast_gs::rasterization {
         const float near_plane,
         const float far_plane);
 
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
     backward_wrapper(
         torch::Tensor& densification_info,
         const torch::Tensor& grad_image,

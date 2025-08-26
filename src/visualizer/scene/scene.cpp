@@ -131,9 +131,27 @@ namespace gs {
             visible_models.begin(), visible_models.end(), ModelStats{},
             [](ModelStats acc, const SplatData* model) {
                 acc.total_gaussians += model->size();
-                acc.max_sh_degree = std::max(acc.max_sh_degree, model->get_active_sh_degree());
+
+                // Calculate SH degree from the actual shN tensor dimensions
+                // Degree 0: shN is empty or has 0 coefficients
+                // Degree 1: shN has 3 coefficients (for l=1)
+                // Degree 2: shN has 8 coefficients (for l=1,2)
+                // Degree 3: shN has 15 coefficients (for l=1,2,3)
+                int sh_degree = 0;
+                if (model->shN().defined() && model->shN().dim() >= 2 && model->shN().size(1) > 0) {
+                    int shN_coeffs = model->shN().size(1);
+                    // shN contains (degree+1)^2 - 1 coefficients
+                    // Solve: shN_coeffs = (degree+1)^2 - 1
+                    // Therefore: degree = sqrt(shN_coeffs + 1) - 1
+                    sh_degree = static_cast<int>(std::round(std::sqrt(shN_coeffs + 1))) - 1;
+
+                    // Validate the degree is reasonable (0-3)
+                    sh_degree = std::clamp(sh_degree, 0, 3);
+                }
+
+                acc.max_sh_degree = std::max(acc.max_sh_degree, sh_degree);
                 acc.total_scene_scale += model->get_scene_scale();
-                acc.has_shN = acc.has_shN || (model->shN().numel() > 0);
+                acc.has_shN = acc.has_shN || (model->shN().numel() > 0 && model->shN().size(1) > 0);
                 return acc;
             });
 
@@ -147,12 +165,13 @@ namespace gs {
         }();
         auto opts = torch::TensorOptions().dtype(dtype).device(device);
 
-        // Calculate SH dimensions
-        constexpr auto sh_coefficients = [](int degree) -> std::pair<int, int> {
-            int total = (degree + 1) * (degree + 1);
-            return {1, total - 1}; // sh0 always 1, shN is the rest
-        };
-        auto [sh0_coeffs, shN_coeffs] = sh_coefficients(stats.max_sh_degree);
+        // Calculate SH dimensions based on max degree
+        // Degree 0: sh0=1, shN=0
+        // Degree 1: sh0=1, shN=3
+        // Degree 2: sh0=1, shN=8
+        // Degree 3: sh0=1, shN=15
+        int sh0_coeffs = 1; // Always 1 for l=0
+        int shN_coeffs = (stats.max_sh_degree > 0) ? ((stats.max_sh_degree + 1) * (stats.max_sh_degree + 1) - 1) : 0;
 
         // Pre-allocate all tensors at once
         struct CombinedTensors {
@@ -160,9 +179,7 @@ namespace gs {
         } combined{
             .means = torch::empty({static_cast<int64_t>(stats.total_gaussians), 3}, opts),
             .sh0 = torch::empty({static_cast<int64_t>(stats.total_gaussians), sh0_coeffs, 3}, opts),
-            .shN = torch::zeros({static_cast<int64_t>(stats.total_gaussians),
-                                 stats.has_shN ? shN_coeffs : 0, 3},
-                                opts),
+            .shN = (shN_coeffs > 0) ? torch::zeros({static_cast<int64_t>(stats.total_gaussians), shN_coeffs, 3}, opts) : torch::empty({static_cast<int64_t>(stats.total_gaussians), 0, 3}, opts),
             .opacity = torch::empty({static_cast<int64_t>(stats.total_gaussians), 1}, opts),
             .scaling = torch::empty({static_cast<int64_t>(stats.total_gaussians), 3}, opts),
             .rotation = torch::empty({static_cast<int64_t>(stats.total_gaussians), 4}, opts)};
@@ -184,14 +201,21 @@ namespace gs {
             combined.scaling.index({slice}) = model->scaling_raw();
             combined.rotation.index({slice}) = model->rotation_raw();
 
-            // Copy sh0 (should always match for valid PLYs)
+            // Copy sh0 (always present)
             combined.sh0.index({slice}) = model->sh0();
 
-            // Copy shN if present (leave zeros for degree 0 models)
-            if (shN_coeffs > 0 && model->shN().numel() > 0) {
-                const auto copy_coeffs = std::min<int64_t>(model->shN().size(1), shN_coeffs);
-                combined.shN.index({slice, torch::indexing::Slice(0, copy_coeffs)}) =
-                    model->shN().index({torch::indexing::Slice(), torch::indexing::Slice(0, copy_coeffs)});
+            // Copy shN if we have coefficients to copy
+            if (shN_coeffs > 0) {
+                // Check how many coefficients this model has
+                int model_shN_coeffs = (model->shN().defined() && model->shN().dim() >= 2) ? model->shN().size(1) : 0;
+
+                if (model_shN_coeffs > 0) {
+                    // Copy as many coefficients as the model has, up to our max
+                    int coeffs_to_copy = std::min(model_shN_coeffs, shN_coeffs);
+                    combined.shN.index({slice, torch::indexing::Slice(0, coeffs_to_copy)}) =
+                        model->shN().index({torch::indexing::Slice(), torch::indexing::Slice(0, coeffs_to_copy)});
+                }
+                // If model has fewer coefficients than max, the rest remain zero (already initialized)
             }
 
             offset += size;

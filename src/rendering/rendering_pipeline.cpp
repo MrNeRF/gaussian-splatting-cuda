@@ -1,6 +1,6 @@
 #include "rendering_pipeline.hpp"
-#include "core/logger.hpp"
-#include <format>
+#include "gs_rasterizer.hpp"
+#include <print>
 
 namespace gs::rendering {
 
@@ -23,10 +23,22 @@ namespace gs::rendering {
             return std::unexpected("Invalid viewport dimensions");
         }
 
+        // Apply transform to splat data if provided
+        const SplatData* data_to_render = &model;
+        std::unique_ptr<SplatData> transformed_data;
+
+        if (request.model_transform) {
+            LOG_TRACE("Applying model transform to splat data");
+            // Create a copy and transform it
+            transformed_data = std::make_unique<SplatData>(std::move(const_cast<SplatData&>(model)));
+            transformed_data->transform(*request.model_transform);
+            data_to_render = transformed_data.get();
+        }
+
         // Check if we should use point cloud rendering
         if (request.point_cloud_mode) {
             LOG_TRACE("Using point cloud rendering mode");
-            return renderPointCloud(model, request);
+            return renderPointCloud(*data_to_render, request);
         }
 
         // Regular gaussian splatting rendering
@@ -40,7 +52,6 @@ namespace gs::rendering {
         // Create camera for this frame
         auto cam_result = createCamera(request);
         if (!cam_result) {
-            LOG_ERROR("Failed to create camera: {}", cam_result.error());
             return std::unexpected(cam_result.error());
         }
         Camera cam = std::move(*cam_result);
@@ -59,20 +70,12 @@ namespace gs::rendering {
         }
 
         try {
-            // Perform rendering
-            auto output = gs::rasterize(
-                cam,
-                model,
-                background_,
-                request.scaling_modifier,
-                false, // train
-                request.antialiasing,
-                static_cast<gs::RenderMode>(request.render_mode),
-                geom_bbox);
+            // Perform rendering with fast_rasterize
+            SplatData& mutable_model = const_cast<SplatData&>(model);
 
             RenderResult result;
-            result.image = output.image;
-            result.depth = output.depth;
+            result.image = rasterize(cam, mutable_model, background_);
+            result.depth = torch::empty({0}, torch::kFloat32); // No depth support in fast_rasterize; set empty
             result.valid = true;
 
             LOG_TRACE("Rasterization completed successfully");
@@ -207,7 +210,7 @@ namespace gs::rendering {
         // Set viewport to match the request size
         glViewport(0, 0, request.viewport_size.x, request.viewport_size.y);
 
-        // Render point cloud to framebuffer
+        // Render point cloud to framebuffer (model already transformed if needed)
         if (auto result = point_cloud_renderer_->render(model, view, projection,
                                                         request.voxel_size, request.background_color);
             !result) {

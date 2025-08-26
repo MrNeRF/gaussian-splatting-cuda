@@ -22,6 +22,7 @@
   "strategy": "mcmc",
   "eval_steps": [7000, 30000],
   "save_steps": [7000, 30000],
+  "pose_optimization": "none",
   "enable_eval": false,
   "enable_save_eval_images": false,
   "use_bilateral_grid": false,
