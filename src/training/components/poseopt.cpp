@@ -1,9 +1,9 @@
 #include "poseopt.hpp"
 #include <torch/torch.h>
 
-namespace F = torch::nn::functional;
-
 namespace gs::training {
+    namespace F = torch::nn::functional;
+
     // Converts a 6D rotation representation to a 3x3 rotation matrix
     torch::Tensor rotation_6d_to_matrix(torch::Tensor rot_6d) {
         auto a1 = rot_6d.index({at::indexing::Ellipsis, at::indexing::Slice(at::indexing::None, 3)});

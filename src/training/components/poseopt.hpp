@@ -1,7 +1,7 @@
 #pragma once
-#include "torch/nn/module.h"
-#include "torch/nn/modules/container/sequential.h"
-#include "torch/nn/modules/embedding.h"
+#include <torch/nn/module.h>
+#include <torch/nn/modules/container/sequential.h>
+#include <torch/nn/modules/embedding.h>
 
 namespace gs::training {
     struct PoseOptimizationModule : torch::nn::Module {

@@ -157,7 +157,7 @@ namespace gs::training {
 
             // Handle the result
             return std::visit(
-                [&datasetConfig, &result](
+                [&result](
                     auto&& data) -> std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string> {
                     using T = std::decay_t<decltype(data)>;
 
