@@ -763,7 +763,7 @@ namespace gs {
         ctx->saved_data["tile_size"] = settings.tile_size;
         ctx->saved_data["camera_model"] = settings.camera_model;
         ctx->saved_data["ut_params"] = ut_params.to_tensor();
-        scales = (scales * settings.scaling_modifier);
+        scales = scales * settings.scaling_modifier;
         auto results = gsplat::rasterize_to_pixels_from_world_3dgs_fwd(
             means3D.contiguous(),
             quats.contiguous(),
