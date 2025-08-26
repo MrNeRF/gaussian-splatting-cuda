@@ -91,6 +91,15 @@ namespace gs {
             return total_bytes;
         }
 
+        [[nodiscard]] std::optional<Camera*> get_camera_by_filename(const std::string& filename) const {
+            for (const auto& cam : _cameras) {
+                if (cam->image_name() == filename) {
+                    return cam.get();
+                }
+            }
+            return std::nullopt;
+        }
+
     private:
         std::vector<std::shared_ptr<Camera>> _cameras;
         const gs::param::DatasetConfig _datasetConfig;

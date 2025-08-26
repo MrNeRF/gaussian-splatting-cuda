@@ -1,36 +1,57 @@
 #pragma once
 
-#include "core/events.hpp"
-#include "rendering/framerate_controller.hpp"
-#include "rendering/render_infinite_grid.hpp"
-#include "rendering/renderer.hpp"
-#include "rendering/rendering_pipeline.hpp"
-#include "rendering/shader.hpp"
-#include "scene/scene_manager.hpp"
+#include "framerate_controller.hpp"
+#include "internal/viewport.hpp"
+#include "rendering/rendering.hpp"
+#include <atomic>
+#include <chrono>
 #include <memory>
+#include <mutex>
 
 namespace gs {
-    class RenderCoordinateAxes;
-}
+    class SceneManager;
+} // namespace gs
 
 namespace gs::visualizer {
 
-    // Forward declaration
-    class BackgroundTool;
-
     struct RenderSettings {
+        // Core rendering settings
         float fov = 60.0f;
         float scaling_modifier = 1.0f;
         bool antialiasing = false;
+
+        // Crop box
         bool show_crop_box = false;
         bool use_crop_box = false;
+        glm::vec3 crop_min = glm::vec3(-1.0f, -1.0f, -1.0f);
+        glm::vec3 crop_max = glm::vec3(1.0f, 1.0f, 1.0f);
+        glm::vec3 crop_color = glm::vec3(1.0f, 1.0f, 0.0f);
+        float crop_line_width = 2.0f;
+        geometry::EuclideanTransform crop_transform;
+
+        // Background
+        glm::vec3 background_color = glm::vec3(0.0f, 0.0f, 0.0f);
+
+        // Coordinate axes
         bool show_coord_axes = false;
+        float axes_size = 2.0f;
+        std::array<bool, 3> axes_visibility = {true, true, true};
+
+        // World transform
+        geometry::EuclideanTransform world_transform;
+
+        // Grid
         bool show_grid = true;
-        int grid_plane = 1; // Default to XZ plane
+        int grid_plane = 1;
         float grid_opacity = 0.5f;
-        bool adaptive_frame_rate = true;
+
+        // Point cloud
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
+
+        // Translation gizmo
+        bool show_translation_gizmo = false;
+        float gizmo_scale = 1.0f;
     };
 
     struct ViewportRegion {
@@ -42,12 +63,8 @@ namespace gs::visualizer {
         struct RenderContext {
             const Viewport& viewport;
             const RenderSettings& settings;
-            const RenderBoundingBox* crop_box;
-            const RenderCoordinateAxes* coord_axes;
-            const geometry::EuclideanTransform* world_to_user;
             const ViewportRegion* viewport_region = nullptr;
-            bool has_focus = false;                          // Indicates if the viewport has focus for input handling
-            const BackgroundTool* background_tool = nullptr; // NEW
+            bool has_focus = false;
         };
 
         RenderingManager();
@@ -55,58 +72,58 @@ namespace gs::visualizer {
 
         // Initialize rendering resources
         void initialize();
+        bool isInitialized() const { return initialized_; }
+
+        // Set initial viewport size (must be called before initialize())
+        void setInitialViewportSize(const glm::ivec2& size) {
+            initial_viewport_size_ = size;
+        }
 
         // Main render function
         void renderFrame(const RenderContext& context, SceneManager* scene_manager);
 
-        // Settings
-        void updateSettings(const RenderSettings& settings) { settings_ = settings; }
-        const RenderSettings& getSettings() const { return settings_; }
+        // Mark that rendering is needed
+        void markDirty();
 
-        // Framerate control
-        void updateFramerateSettings(const FramerateSettings& settings) { framerate_controller_.updateSettings(settings); }
-        const FramerateSettings& getFramerateSettings() const { return framerate_controller_.getSettings(); }
+        // Settings management
+        void updateSettings(const RenderSettings& settings);
+        RenderSettings getSettings() const;
+
+        // Direct accessors
+        float getFovDegrees() const;
+        float getScalingModifier() const;
+        void setFov(float f);
+        void setScalingModifier(float s);
+
+        // FPS monitoring
         float getCurrentFPS() const { return framerate_controller_.getCurrentFPS(); }
         float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
-        bool isPerformanceCritical() const { return framerate_controller_.isPerformanceCritical(); }
-        void resetFramerateController() { framerate_controller_.reset(); }
 
-        // Get shader for external use (crop box rendering)
-        std::shared_ptr<Shader> getQuadShader() const { return quad_shader_; }
+        // Access to rendering engine (for initialization only)
+        gs::rendering::RenderingEngine* getRenderingEngine();
 
     private:
-        void initializeShaders();
-        void drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render);
-        void drawFocusIndicator(const RenderContext& context);
-        void drawCropBox(const RenderContext& context);
-        void drawCoordAxes(const RenderContext& context);
-        void drawGrid(const RenderContext& context);
-        bool hasCamChanged(const Viewport& current_viewport);
-        bool hasSceneChanged(const RenderContext& context);
+        void doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model);
+        void renderOverlays(const RenderContext& context);
         void setupEventHandlers();
 
-        RenderSettings settings_;
-        std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
-        std::shared_ptr<Shader> quad_shader_;
-        std::unique_ptr<RenderInfiniteGrid> infinite_grid_;
-        bool initialized_ = false;
-
-        // Framerate control
+        // Core components
+        std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         FramerateController framerate_controller_;
-        Viewport prev_viewport_state_;
-        float prev_fov_ = 0;
-        geometry::EuclideanTransform prev_world_to_usr_inv_;
-        glm::vec3 prev_background_color_;
-        glm::ivec2 prev_render_size_;
-        RenderingPipeline::RenderResult prev_result_;
 
-        bool prev_point_cloud_mode_ = false;
-        float prev_voxel_size_ = 0.01f;
+        // State tracking
+        std::atomic<bool> needs_render_{true};
+        gs::rendering::RenderResult cached_result_;
+        size_t last_model_ptr_ = 0;
+        glm::ivec2 last_render_size_{0, 0};
+        std::chrono::steady_clock::time_point last_training_render_;
 
-        // Scene loading tracking - for frame control
-        bool scene_just_loaded_ = false;
-        event::HandlerId scene_loaded_handler_id_ = 0;
-        event::HandlerId grid_settings_handler_id_ = 0;
+        // Settings
+        RenderSettings settings_;
+        mutable std::mutex settings_mutex_;
+
+        bool initialized_ = false;
+        glm::ivec2 initial_viewport_size_{1280, 720}; // Default fallback
     };
 
 } // namespace gs::visualizer

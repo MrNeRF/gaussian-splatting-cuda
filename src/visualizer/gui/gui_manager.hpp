@@ -2,7 +2,6 @@
 
 #include "core/events.hpp"
 #include "gui/ui_context.hpp"
-#include "gui/viewport_gizmo.hpp"
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
@@ -32,8 +31,6 @@ namespace gs {
             // State queries
             bool wantsInput() const;
             bool isAnyWindowActive() const;
-            bool showCropBox() const;
-            bool useCropBox() const;
 
             // Window visibility
             void showWindow(const std::string& name, bool show = true);
@@ -67,7 +64,6 @@ namespace gs {
             std::unique_ptr<ScriptingConsole> console_;
             std::unique_ptr<FileBrowser> file_browser_;
             std::unique_ptr<ScenePanel> scene_panel_;
-            std::unique_ptr<ViewportGizmo> viewport_gizmo_;
 
             // UI state only
             std::unordered_map<std::string, bool> window_states_;

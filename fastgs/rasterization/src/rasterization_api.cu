@@ -1,11 +1,11 @@
-#include "rasterization_api.h"
-#include "forward.h"
 #include "backward.h"
-#include "torch_utils.h"
-#include "rasterization_config.h"
+#include "forward.h"
 #include "helper_math.h"
-#include <stdexcept>
+#include "rasterization_api.h"
+#include "rasterization_config.h"
+#include "torch_utils.h"
 #include <functional>
+#include <stdexcept>
 #include <tuple>
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, int, int, int, int, int>
@@ -26,8 +26,7 @@ fast_gs::rasterization::forward_wrapper(
     const float center_x,
     const float center_y,
     const float near_plane,
-    const float far_plane)
-{
+    const float far_plane) {
     // all optimizable tensors must be contiguous CUDA float tensors
     CHECK_INPUT(config::debug, means, "means");
     CHECK_INPUT(config::debug, scales_raw, "scales_raw");
@@ -76,15 +75,13 @@ fast_gs::rasterization::forward_wrapper(
         center_x,
         center_y,
         near_plane,
-        far_plane
-    );
-    
+        far_plane);
+
     return {
         image, alpha,
         per_primitive_buffers, per_tile_buffers, per_instance_buffers, per_bucket_buffers,
         n_visible_primitives, n_instances, n_buckets,
-        primitive_primitive_indices_selector, instance_primitive_indices_selector
-    };
+        primitive_primitive_indices_selector, instance_primitive_indices_selector};
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
@@ -117,8 +114,7 @@ fast_gs::rasterization::backward_wrapper(
     const int n_instances,
     const int n_buckets,
     const int primitive_primitive_indices_selector,
-    const int instance_primitive_indices_selector)
-{
+    const int instance_primitive_indices_selector) {
     const int n_primitives = means.size(0);
     const int total_bases_sh_rest = sh_coefficients_rest.size(1);
     const torch::TensorOptions float_options = torch::TensorOptions().dtype(torch::kFloat).device(torch::kCUDA);
@@ -175,8 +171,7 @@ fast_gs::rasterization::backward_wrapper(
         focal_x,
         focal_y,
         center_x,
-        center_y
-    );
+        center_y);
 
     return {grad_means, grad_scales_raw, grad_rotations_raw, grad_opacities_raw, grad_sh_coefficients_0, grad_sh_coefficients_rest, grad_w2c};
 }

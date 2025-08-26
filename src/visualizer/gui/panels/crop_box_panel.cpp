@@ -1,69 +1,73 @@
 #include "gui/panels/crop_box_panel.hpp"
 #include "gui/ui_widgets.hpp"
-#include "rendering/render_bounding_box.hpp"
+#include "rendering/rendering_manager.hpp"
 #include "visualizer_impl.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
 
 namespace gs::gui::panels {
 
-    // Apply rotation to crop box
-    static void updateRotationMatrix(RenderBoundingBox* crop_box,
+    // Apply rotation to crop box transform
+    static void updateRotationMatrix(geometry::EuclideanTransform& transform,
+                                     const glm::vec3& min_bounds,
+                                     const glm::vec3& max_bounds,
                                      float delta_rot_x, float delta_rot_y, float delta_rot_z) {
-        if (!crop_box)
-            return;
-
         float rad_x = glm::radians(delta_rot_x);
         float rad_y = glm::radians(delta_rot_y);
         float rad_z = glm::radians(delta_rot_z);
 
         geometry::EuclideanTransform rotate(rad_x, rad_y, rad_z, 0.0f, 0.0f, 0.0f);
 
-        glm::vec3 center = crop_box->getLocalCenter();
+        glm::vec3 center = (min_bounds + max_bounds) * 0.5f;
 
         geometry::EuclideanTransform translate_to_origin(-center);
         geometry::EuclideanTransform translate_back = translate_to_origin.inv();
 
-        geometry::EuclideanTransform current_transform = crop_box->getworld2BBox();
-        auto rotation_transform = translate_back * rotate * translate_to_origin * current_transform;
-
-        crop_box->setworld2BBox(rotation_transform);
+        transform = translate_back * rotate * translate_to_origin * transform;
     }
 
     void DrawCropBoxControls(const UIContext& ctx) {
-        auto& state = CropBoxState::getInstance();
+        auto render_manager = ctx.viewer->getRenderingManager();
+        if (!render_manager)
+            return;
 
         if (!ImGui::CollapsingHeader("Crop Box")) {
             return;
         }
 
-        auto crop_box = ctx.viewer->getCropBox();
-        if (!crop_box)
-            return;
+        auto settings = render_manager->getSettings();
+        bool settings_changed = false;
 
-        ImGui::Checkbox("Show Crop Box", &state.show_crop_box);
-        ImGui::Checkbox("Use Crop Box", &state.use_crop_box);
+        if (ImGui::Checkbox("Show Crop Box", &settings.show_crop_box)) {
+            settings_changed = true;
+        }
 
-        if (state.show_crop_box && crop_box->isInitialized()) {
+        if (ImGui::Checkbox("Use Crop Box", &settings.use_crop_box)) {
+            settings_changed = true;
+        }
+
+        if (settings.show_crop_box) {
             // Appearance controls
-            static float bbox_color[3] = {1.0f, 1.0f, 0.0f};
+            float bbox_color[3] = {settings.crop_color.x, settings.crop_color.y, settings.crop_color.z};
             if (ImGui::ColorEdit3("Box Color", bbox_color)) {
-                crop_box->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
+                settings.crop_color = glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]);
+                settings_changed = true;
             }
 
-            static float line_width = 2.0f;
             float available_width = ImGui::GetContentRegionAvail().x;
             float button_width = 120.0f;
             float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
 
             ImGui::SetNextItemWidth(slider_width);
-            if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
-                crop_box->setLineWidth(line_width);
+            if (ImGui::SliderFloat("Line Width", &settings.crop_line_width, 0.5f, 10.0f)) {
+                settings_changed = true;
             }
 
             if (ImGui::Button("Reset to Default")) {
-                crop_box->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
-                crop_box->setworld2BBox(geometry::EuclideanTransform());
+                settings.crop_min = glm::vec3(-1.0f, -1.0f, -1.0f);
+                settings.crop_max = glm::vec3(1.0f, 1.0f, 1.0f);
+                settings.crop_transform = geometry::EuclideanTransform();
+                settings_changed = true;
             }
 
             // Rotation controls
@@ -174,7 +178,9 @@ namespace gs::gui::panels {
                 }
 
                 if (diff_x != 0 || diff_y != 0 || diff_z != 0) {
-                    updateRotationMatrix(crop_box.get(), diff_x, diff_y, diff_z);
+                    updateRotationMatrix(settings.crop_transform, settings.crop_min, settings.crop_max,
+                                         diff_x, diff_y, diff_z);
+                    settings_changed = true;
                 }
 
                 ImGui::TreePop();
@@ -182,11 +188,8 @@ namespace gs::gui::panels {
 
             // Bounds controls
             if (ImGui::TreeNode("Bounds")) {
-                glm::vec3 current_min = crop_box->getMinBounds();
-                glm::vec3 current_max = crop_box->getMaxBounds();
-
-                float min_bounds[3] = {current_min.x, current_min.y, current_min.z};
-                float max_bounds[3] = {current_max.x, current_max.y, current_max.z};
+                float min_bounds[3] = {settings.crop_min.x, settings.crop_min.y, settings.crop_min.z};
+                float max_bounds[3] = {settings.crop_max.x, settings.crop_max.y, settings.crop_max.z};
 
                 bool bounds_changed = false;
 
@@ -246,20 +249,31 @@ namespace gs::gui::panels {
                 max_bounds[2] = std::max(max_bounds[2], min_bounds[2]);
 
                 if (bounds_changed) {
-                    crop_box->setBounds(
-                        glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]),
-                        glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]));
+                    settings.crop_min = glm::vec3(min_bounds[0], min_bounds[1], min_bounds[2]);
+                    settings.crop_max = glm::vec3(max_bounds[0], max_bounds[1], max_bounds[2]);
+                    settings_changed = true;
+
+                    // Emit event for bounds change
+                    events::ui::CropBoxChanged{
+                        .min_bounds = settings.crop_min,
+                        .max_bounds = settings.crop_max,
+                        .enabled = settings.use_crop_box}
+                        .emit();
                 }
 
                 // Display info
-                glm::vec3 center = crop_box->getCenter();
-                glm::vec3 size = crop_box->getSize();
+                glm::vec3 center = (settings.crop_min + settings.crop_max) * 0.5f;
+                glm::vec3 size = settings.crop_max - settings.crop_min;
 
                 ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
                 ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
 
                 ImGui::TreePop();
             }
+        }
+
+        if (settings_changed) {
+            render_manager->updateSettings(settings);
         }
     }
 

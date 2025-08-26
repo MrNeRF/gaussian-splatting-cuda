@@ -1,45 +1,36 @@
 #include "gui/ui_widgets.hpp"
-#include "core/events.hpp"
+#include "scene/scene_manager.hpp"
+#include "training/training_manager.hpp"
 #include "visualizer_impl.hpp"
-#include <format>
+#include <cstdarg>
 #include <imgui.h>
 
 namespace gs::gui::widgets {
 
     bool SliderWithReset(const char* label, float* v, float min, float max, float reset_value) {
-        bool changed = false;
-
-        ImGui::PushItemWidth(200);
-        std::string slider_label = std::format("##{}_slider", label);
-        std::string display = std::format("{}={:.2f}", label, *v);
-        changed |= ImGui::SliderFloat(slider_label.c_str(), v, min, max, display.c_str());
-        ImGui::PopItemWidth();
+        bool changed = ImGui::SliderFloat(label, v, min, max);
 
         ImGui::SameLine();
-        std::string reset_label = std::format("Reset##{}", label);
-        if (ImGui::Button(reset_label.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+        ImGui::PushID(label);
+        if (ImGui::Button("Reset")) {
             *v = reset_value;
             changed = true;
         }
+        ImGui::PopID();
 
         return changed;
     }
 
     bool DragFloat3WithReset(const char* label, float* v, float speed, float reset_value) {
-        bool changed = false;
-
-        ImGui::Text("%s:", label);
-        ImGui::SameLine();
-
-        std::string drag_label = std::format("##{}_drag", label);
-        changed |= ImGui::DragFloat3(drag_label.c_str(), v, speed);
+        bool changed = ImGui::DragFloat3(label, v, speed);
 
         ImGui::SameLine();
-        std::string reset_label = std::format("Reset##{}", label);
-        if (ImGui::Button(reset_label.c_str())) {
+        ImGui::PushID(label);
+        if (ImGui::Button("Reset")) {
             v[0] = v[1] = v[2] = reset_value;
             changed = true;
         }
+        ImGui::PopID();
 
         return changed;
     }
@@ -68,70 +59,149 @@ namespace gs::gui::widgets {
     }
 
     void DrawProgressBar(float fraction, const char* overlay_text) {
-        ImGui::ProgressBar(fraction, ImVec2(-1, 20), overlay_text);
+        ImGui::ProgressBar(fraction, ImVec2(-1, 0), overlay_text);
     }
 
     void DrawLossPlot(const float* values, int count, float min_val, float max_val, const char* label) {
-        ImGui::PlotLines("##Loss", values, count, 0, label, min_val, max_val, ImVec2(-1, 50));
+        if (count <= 0)
+            return;
+
+        // Simple line plot using ImGui
+        ImGui::PlotLines(
+            label,
+            values,
+            count,
+            0,
+            nullptr,
+            min_val,
+            max_val,
+            ImVec2(0, 80));
     }
 
     void DrawModeStatus(const UIContext& ctx) {
-        // Query scene info using the new event system
-        events::query::SceneInfo response;
-        bool has_response = false;
-
-        // Set up a one-time handler for the response
-        [[maybe_unused]] auto handler = events::query::SceneInfo::when([&response, &has_response](const auto& r) {
-            response = r;
-            has_response = true;
-        });
-
-        // Send the query
-        events::query::GetSceneInfo{}.emit();
-
-        if (!has_response || response.type == events::query::SceneInfo::Type::None) {
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No data loaded");
-            ImGui::Text("Use File Browser to load:");
-            ImGui::BulletText("PLY file for viewing");
-            ImGui::BulletText("Dataset for training");
+        auto* scene_manager = ctx.viewer->getSceneManager();
+        if (!scene_manager) {
+            ImGui::Text("Mode: Unknown");
             return;
         }
 
-        switch (response.type) {
-        case events::query::SceneInfo::Type::PLY:
-            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "PLY Viewer Mode");
-            if (ctx.viewer->getCurrentPLYPath().has_filename()) {
-                ImGui::Text("File: %s", ctx.viewer->getCurrentPLYPath().filename().string().c_str());
-            }
+        const char* mode_str = "Unknown";
+        ImVec4 mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+
+        // Content determines base mode
+        SceneManager::ContentType content = scene_manager->getContentType();
+
+        switch (content) {
+        case SceneManager::ContentType::Empty:
+            mode_str = "Empty";
+            mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
             break;
 
-        case events::query::SceneInfo::Type::Dataset:
-            ImGui::TextColored(ImVec4(0.2f, 0.5f, 0.8f, 1.0f), "Training Mode");
-            if (ctx.viewer->getCurrentDatasetPath().has_filename()) {
-                ImGui::Text("Dataset: %s", ctx.viewer->getCurrentDatasetPath().filename().string().c_str());
-            }
+        case SceneManager::ContentType::PLYFiles:
+            mode_str = "PLY Viewer";
+            mode_color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);
             break;
 
-        default:
+        case SceneManager::ContentType::Dataset: {
+            // For dataset, check training state from TrainerManager
+            auto* trainer_manager = scene_manager->getTrainerManager();
+            if (!trainer_manager || !trainer_manager->hasTrainer()) {
+                mode_str = "Dataset (No Trainer)";
+                mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+            } else {
+                // Use trainer state for specific mode
+                auto state = trainer_manager->getState();
+                switch (state) {
+                case TrainerManager::State::Ready:
+                    mode_str = "Dataset (Ready)";
+                    mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+                    break;
+                case TrainerManager::State::Running:
+                    mode_str = "Training";
+                    mode_color = ImVec4(1.0f, 0.6f, 0.2f, 1.0f);
+                    break;
+                case TrainerManager::State::Paused:
+                    mode_str = "Training (Paused)";
+                    mode_color = ImVec4(0.7f, 0.7f, 0.2f, 1.0f);
+                    break;
+                case TrainerManager::State::Completed:
+                    mode_str = "Training Complete";
+                    mode_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+                    break;
+                case TrainerManager::State::Error:
+                    mode_str = "Training Error";
+                    mode_color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+                    break;
+                case TrainerManager::State::Stopping:
+                    mode_str = "Stopping...";
+                    mode_color = ImVec4(0.7f, 0.5f, 0.5f, 1.0f);
+                    break;
+                default:
+                    mode_str = "Dataset";
+                    mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                }
+            }
             break;
+        }
+        }
+
+        ImGui::TextColored(mode_color, "Mode: %s", mode_str);
+
+        // Display scene info
+        auto info = scene_manager->getSceneInfo();
+        if (info.num_gaussians > 0) {
+            ImGui::Text("Gaussians: %zu", info.num_gaussians);
+        }
+
+        if (info.source_type == "PLY" && info.num_nodes > 0) {
+            ImGui::Text("PLY Models: %zu", info.num_nodes);
+        }
+
+        // Display training iteration if actively training
+        if (content == SceneManager::ContentType::Dataset) {
+            auto* trainer_manager = scene_manager->getTrainerManager();
+            if (trainer_manager && trainer_manager->isRunning()) {
+                int iteration = trainer_manager->getCurrentIteration();
+                if (iteration > 0) {
+                    ImGui::Text("Iteration: %d", iteration);
+                }
+            }
         }
     }
 
-    const char* GetTrainerStateString(int state) {
-        switch (state) {
-        case 0: return "Idle";
-        case 1: return "Ready";
-        case 2: return "Running";
-        case 3: return "Paused";
-        case 4: return "Completed";
-        case 5: return "Error";
-        default: return "Unknown";
-        }
-    }
+    void DrawModeStatusWithContentSwitch(const UIContext& ctx) {
 
-    std::string executeConsoleCommand([[maybe_unused]] const std::string& command,
-                                      [[maybe_unused]] visualizer::VisualizerImpl* viewer) {
-        // This is now handled in visualizer_impl.cpp
-        return "Command execution moved to visualizer";
+        // Get scene manager for content type checking
+        auto scene_manager = ctx.viewer->getSceneManager();
+        if (!scene_manager) {
+            return;
+        }
+        auto content_type = scene_manager->getContentType();
+
+        // Only show button if content type is not Empty
+        if (content_type != gs::SceneManager::ContentType::Empty) {
+
+            ImGui::SameLine();
+
+            // Determine button label based on current content type
+            const char* button_label = "";
+            SceneManager::ContentType change_to;
+            if (content_type == gs::SceneManager::ContentType::PLYFiles) {
+                button_label = "Go to Dataset Mode";
+                change_to = SceneManager::ContentType::Dataset;
+            } else if (content_type == gs::SceneManager::ContentType::Dataset) {
+                button_label = "Go to PLY Mode";
+                change_to = SceneManager::ContentType::PLYFiles;
+            }
+
+            // Draw the button
+            if (ImGui::Button(button_label)) {
+                // Call the changeContentType method
+                scene_manager->changeContentType(change_to);
+            }
+        }
+
+        // draw the mode status
+        widgets::DrawModeStatus(ctx);
     }
 } // namespace gs::gui::widgets

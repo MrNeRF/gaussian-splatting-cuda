@@ -1,13 +1,12 @@
-#include "rendering/rendering_manager.hpp"
-#include "rendering/render_coordinate_axes.hpp"
-
-#include "internal/resource_paths.hpp"
-#include "tools/background_tool.hpp"
+#include "rendering_manager.hpp"
+#include "core/logger.hpp"
+#include "core/splat_data.hpp"
+#include "geometry/euclidean_transform.hpp"
+#include "rendering/rendering.hpp"
+#include "scene/scene_manager.hpp"
 #include "training/training_manager.hpp"
-
-#ifdef CUDA_GL_INTEROP_ENABLED
-#include "rendering/cuda_gl_interop.hpp"
-#endif
+#include <glad/glad.h>
+#include <stdexcept>
 
 namespace gs::visualizer {
 
@@ -15,92 +14,238 @@ namespace gs::visualizer {
         setupEventHandlers();
     }
 
-    RenderingManager::~RenderingManager() {
-        // Unsubscribe from events
-        event::bus().remove<events::state::SceneLoaded>(scene_loaded_handler_id_);
-        event::bus().remove<events::ui::GridSettingsChanged>(grid_settings_handler_id_);
-    }
+    RenderingManager::~RenderingManager() = default;
 
     void RenderingManager::initialize() {
         if (initialized_)
             return;
 
-        initializeShaders();
+        LOG_TIMER("RenderingEngine initialization");
 
-        // Initialize screen renderer with interop support if available
-#ifdef CUDA_GL_INTEROP_ENABLED
-        screen_renderer_ = std::make_shared<ScreenQuadRendererInterop>(true);
-        std::cout << "CUDA-OpenGL interop enabled for rendering" << std::endl;
-#else
-        screen_renderer_ = std::make_shared<ScreenQuadRenderer>();
-        std::cout << "Using CPU copy for rendering (interop not available)" << std::endl;
-#endif
-
-        // Initialize infinite grid
-        infinite_grid_ = std::make_unique<RenderInfiniteGrid>();
-        infinite_grid_->init();
+        engine_ = gs::rendering::RenderingEngine::create();
+        auto init_result = engine_->initialize();
+        if (!init_result) {
+            LOG_ERROR("Failed to initialize rendering engine: {}", init_result.error());
+            throw std::runtime_error("Failed to initialize rendering engine: " + init_result.error());
+        }
 
         initialized_ = true;
-    }
-
-    void RenderingManager::initializeShaders() {
-        quad_shader_ = std::make_shared<Shader>(
-            (gs::visualizer::getShaderPath("screen_quad.vert")).string().c_str(),
-            (gs::visualizer::getShaderPath("screen_quad.frag")).string().c_str(),
-            true);
+        LOG_INFO("Rendering engine initialized successfully");
     }
 
     void RenderingManager::setupEventHandlers() {
-        // Subscribe to SceneLoaded events
-        scene_loaded_handler_id_ = events::state::SceneLoaded::when([this]([[maybe_unused]] const auto& event) {
-            scene_just_loaded_ = true;
+        // Listen for settings changes
+        events::ui::RenderSettingsChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
+            if (event.fov) {
+                settings_.fov = *event.fov;
+                LOG_TRACE("FOV changed to: {}", settings_.fov);
+            }
+            if (event.scaling_modifier) {
+                settings_.scaling_modifier = *event.scaling_modifier;
+                LOG_TRACE("Scaling modifier changed to: {}", settings_.scaling_modifier);
+            }
+            if (event.antialiasing) {
+                settings_.antialiasing = *event.antialiasing;
+                LOG_TRACE("Antialiasing: {}", settings_.antialiasing ? "enabled" : "disabled");
+            }
+            if (event.background_color) {
+                settings_.background_color = *event.background_color;
+                LOG_TRACE("Background color changed");
+            }
+            markDirty();
         });
 
-        // Subscribe to GridSettingsChanged events
-        grid_settings_handler_id_ = events::ui::GridSettingsChanged::when([this](const auto& event) {
+        // Window resize
+        events::ui::WindowResized::when([this](const auto&) {
+            LOG_DEBUG("Window resized, clearing render cache");
+            markDirty();
+            cached_result_ = {}; // Clear cache on resize since dimensions changed
+        });
+
+        // Grid settings
+        events::ui::GridSettingsChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
             settings_.show_grid = event.enabled;
             settings_.grid_plane = event.plane;
             settings_.grid_opacity = event.opacity;
+            LOG_TRACE("Grid settings updated - enabled: {}, plane: {}, opacity: {}",
+                      event.enabled, event.plane, event.opacity);
+            markDirty();
+        });
 
-            if (infinite_grid_) {
-                infinite_grid_->setPlane(static_cast<RenderInfiniteGrid::GridPlane>(event.plane));
-                infinite_grid_->setOpacity(event.opacity);
-            }
+        // Scene changes
+        events::state::SceneLoaded::when([this](const auto&) {
+            LOG_DEBUG("Scene loaded, marking render dirty");
+            markDirty();
+        });
+
+        events::state::SceneChanged::when([this](const auto&) {
+            markDirty();
+        });
+
+        // PLY visibility changes
+        events::cmd::SetPLYVisibility::when([this](const auto&) {
+            markDirty();
+        });
+
+        // PLY added/removed
+        events::state::PLYAdded::when([this](const auto&) {
+            LOG_DEBUG("PLY added, marking render dirty");
+            markDirty();
+        });
+
+        events::state::PLYRemoved::when([this](const auto&) {
+            LOG_DEBUG("PLY removed, marking render dirty");
+            markDirty();
+        });
+
+        // Crop box changes
+        events::ui::CropBoxChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
+            settings_.crop_min = event.min_bounds;
+            settings_.crop_max = event.max_bounds;
+            settings_.use_crop_box = event.enabled;
+            LOG_TRACE("Crop box updated - enabled: {}", event.enabled);
+            markDirty();
+        });
+
+        // Point cloud mode changes
+        events::ui::PointCloudModeChanged::when([this](const auto& event) {
+            std::lock_guard<std::mutex> lock(settings_mutex_);
+            settings_.point_cloud_mode = event.enabled;
+            settings_.voxel_size = event.voxel_size;
+            LOG_DEBUG("Point cloud mode: {}, voxel size: {}",
+                      event.enabled ? "enabled" : "disabled", event.voxel_size);
+            markDirty();
         });
     }
 
+    void RenderingManager::markDirty() {
+        needs_render_ = true;
+    }
+
+    void RenderingManager::updateSettings(const RenderSettings& new_settings) {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        settings_ = new_settings;
+        markDirty();
+    }
+
+    RenderSettings RenderingManager::getSettings() const {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        return settings_;
+    }
+
+    float RenderingManager::getFovDegrees() const {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        return settings_.fov;
+    }
+
+    float RenderingManager::getScalingModifier() const {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        return settings_.scaling_modifier;
+    }
+
+    void RenderingManager::setFov(float f) {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        settings_.fov = f;
+        markDirty();
+    }
+
+    void RenderingManager::setScalingModifier(float s) {
+        std::lock_guard<std::mutex> lock(settings_mutex_);
+        settings_.scaling_modifier = s;
+        markDirty();
+    }
+
+    gs::rendering::RenderingEngine* RenderingManager::getRenderingEngine() {
+        if (!initialized_) {
+            initialize();
+        }
+        return engine_.get();
+    }
+
     void RenderingManager::renderFrame(const RenderContext& context, SceneManager* scene_manager) {
-        // Begin framerate tracking
         framerate_controller_.beginFrame();
 
         if (!initialized_) {
             initialize();
         }
 
-        bool scene_changed = hasSceneChanged(context);
-
-        // Check if we should skip scene rendering
-        auto state = scene_manager->getCurrentState();
-        bool skip_scene_render = false;
-        if (settings_.adaptive_frame_rate && not settings_.use_crop_box) {
-            // at the moment - I dont want to track the crop box too - so if
-            // it is enabled - render every frame
-            skip_scene_render = framerate_controller_.shouldSkipSceneRender(
-                state.is_training, scene_changed);
+        // Calculate current render size
+        glm::ivec2 current_size = context.viewport.windowSize;
+        if (context.viewport_region) {
+            current_size = glm::ivec2(
+                static_cast<int>(context.viewport_region->width),
+                static_cast<int>(context.viewport_region->height));
         }
 
-        // Don't skip rendering if scene was just loaded
-        if (scene_just_loaded_) {
-            skip_scene_render = false;
-            scene_just_loaded_ = false; // Reset the flag after using it
+        // SAFETY CHECK: Don't render with invalid viewport dimensions
+        if (current_size.x <= 0 || current_size.y <= 0) {
+            LOG_TRACE("Skipping render - invalid viewport size: {}x{}", current_size.x, current_size.y);
+            // Keep needs_render flag set so we render on next valid frame
+            framerate_controller_.endFrame();
+            return;
         }
 
-        // Always clear and setup viewport (this is fast)
+        // Detect viewport size change and invalidate cache
+        if (current_size != last_render_size_) {
+            LOG_TRACE("Viewport size changed from {}x{} to {}x{}",
+                      last_render_size_.x, last_render_size_.y,
+                      current_size.x, current_size.y);
+            needs_render_ = true;
+            cached_result_ = {}; // Clear cache - it's the wrong resolution!
+            last_render_size_ = current_size;
+        }
+
+        // Get current model
+        const SplatData* model = scene_manager ? scene_manager->getModelForRendering() : nullptr;
+        size_t model_ptr = reinterpret_cast<size_t>(model);
+
+        // Detect model switch (PLY -> Training, invisible, etc)
+        if (model_ptr != last_model_ptr_) {
+            LOG_TRACE("Model pointer changed, clearing cache");
+            needs_render_ = true;
+            last_model_ptr_ = model_ptr;
+            cached_result_ = {}; // Always clear cache on model change
+        }
+
+        // Simplified render decision logic for immediate rendering
+        bool should_render = false;
+
+        // Store needs_render value before clearing it
+        bool needs_render_now = needs_render_.load();
+
+        // ALWAYS render if:
+        // 1. We don't have a cached result (first render or cache cleared)
+        // 2. We need to render (scene changed, settings changed, etc.)
+        // 3. Viewport has focus (for interactivity)
+        if (!cached_result_.image || needs_render_now) {
+            should_render = true;
+            needs_render_ = false; // Clear the flag after deciding to render
+            LOG_TRACE("Forcing render: no cache={}, needs_render={}",
+                      !cached_result_.image, needs_render_now);
+        } else if (context.has_focus) {
+            // Always render when viewport has focus for smooth interaction
+            should_render = true;
+        } else if (scene_manager && scene_manager->hasDataset()) {
+            // Throttle training renders only when we have a cache and don't need immediate render
+            const auto* trainer_manager = scene_manager->getTrainerManager();
+            if (trainer_manager && trainer_manager->isRunning()) {
+                auto now = std::chrono::steady_clock::now();
+                if (now - last_training_render_ > std::chrono::seconds(1)) {
+                    should_render = true;
+                    last_training_render_ = now;
+                }
+            }
+        }
+
+        // Clear and set viewport
         glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Set viewport region for all subsequent rendering
+        // Set viewport region for rendering
         if (context.viewport_region) {
             glViewport(
                 static_cast<GLint>(context.viewport_region->x),
@@ -109,208 +254,110 @@ namespace gs::visualizer {
                 static_cast<GLsizei>(context.viewport_region->height));
         }
 
-        // Render scene first (if we have one)
-        if (scene_manager->hasScene()) {
-            drawSceneFrame(context, scene_manager, skip_scene_render);
+        if (should_render || !model) {
+            // ALWAYS render when we should OR when there's no model (to clear the view)
+            doFullRender(context, scene_manager, model);
+        } else if (cached_result_.image) {
+            // Only use cache if we have a model and a cached result
+            glm::ivec2 viewport_pos(0, 0);
+            glm::ivec2 render_size = current_size;
+
+            if (context.viewport_region) {
+                viewport_pos = glm::ivec2(
+                    static_cast<int>(context.viewport_region->x),
+                    static_cast<int>(context.viewport_region->y));
+            }
+
+            engine_->presentToScreen(cached_result_, viewport_pos, render_size);
+            renderOverlays(context);
         }
 
-        // Render grid on top of scene (with proper blending)
-        if (settings_.show_grid && infinite_grid_) {
-            drawGrid(context);
-        }
-
-        // Update last viewport state
-        prev_viewport_state_ = context.viewport;
-
-        // Always render UI overlays (these are typically fast)
-        if (settings_.show_crop_box && context.crop_box) {
-            drawCropBox(context);
-        }
-        if (settings_.show_coord_axes && context.coord_axes) {
-            drawCoordAxes(context);
-        }
-
-        // Draw focus indicator if viewport has focus
-        if (context.has_focus && context.viewport_region) {
-            drawFocusIndicator(context);
-        }
-
-        // End framerate tracking
         framerate_controller_.endFrame();
     }
 
-    // case world to user is defined - we shift view matrix and crop box
-    // this is a trick so we dont have to transform the actual gaussians
-    void TransformViewAndCropBox(glm::mat3& rot, glm::vec3& trans, geometry::BoundingBox& bb,
-                                 const geometry::BoundingBox* render_crop_box, const geometry::EuclideanTransform& world_to_user) {
-        glm::mat4 T = glm::mat4(1.0f); // identity
-        T[0] = glm::vec4(rot[0], 0.0f);
-        T[1] = glm::vec4(rot[1], 0.0f);
-        T[2] = glm::vec4(rot[2], 0.0f);
-        T[3] = glm::vec4(trans, 1.0f); // translation
-        geometry::EuclideanTransform view_cam_to_world(T);
+    void RenderingManager::doFullRender(const RenderContext& context, [[maybe_unused]] SceneManager* scene_manager, const SplatData* model) {
+        LOG_TIMER_TRACE("Full render pass");
 
-        view_cam_to_world = world_to_user * view_cam_to_world;
-
-        rot = view_cam_to_world.getRotationMat();
-        trans = view_cam_to_world.getTranslation();
-
-        if (render_crop_box) {
-            bb = *render_crop_box;
-            auto world_2_box = bb.getworld2BBox();
-            bb.setworld2BBox(world_2_box * world_to_user.inv());
-            render_crop_box = &bb;
-        }
-    }
-
-    void RenderingManager::drawFocusIndicator(const RenderContext& context) {
-        // Save current OpenGL state
-        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
-
-        // Setup for 2D overlay rendering
-        glDisable(GL_DEPTH_TEST);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        // Set viewport to full window for overlay
-        glViewport(0, 0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y);
-
-        // Use immediate mode for simple border (or you could use a shader)
-        glMatrixMode(GL_PROJECTION);
-        glPushMatrix();
-        glLoadIdentity();
-        glOrtho(0, context.viewport.frameBufferSize.x, context.viewport.frameBufferSize.y, 0, -1, 1);
-
-        glMatrixMode(GL_MODELVIEW);
-        glPushMatrix();
-        glLoadIdentity();
-
-        // Draw border
-        float x = context.viewport_region->x;
-        float y = context.viewport_region->y;
-        float w = context.viewport_region->width;
-        float h = context.viewport_region->height;
-
-        // Animated glow effect
-        float time = static_cast<float>(glfwGetTime());
-        float glow = (sin(time * 3.0f) + 1.0f) * 0.5f;
-
-        glLineWidth(3.0f);
-        glBegin(GL_LINE_LOOP);
-        glColor4f(0.2f, 0.6f, 1.0f, 0.5f + glow * 0.3f); // Blue glow
-        glVertex2f(x, y);
-        glVertex2f(x + w, y);
-        glVertex2f(x + w, y + h);
-        glVertex2f(x, y + h);
-        glEnd();
-
-        // Inner glow
-        glLineWidth(1.0f);
-        float inset = 1.0f;
-        glBegin(GL_LINE_LOOP);
-        glColor4f(0.4f, 0.8f, 1.0f, 0.3f + glow * 0.2f);
-        glVertex2f(x + inset, y + inset);
-        glVertex2f(x + w - inset, y + inset);
-        glVertex2f(x + w - inset, y + h - inset);
-        glVertex2f(x + inset, y + h - inset);
-        glEnd();
-
-        // Restore matrices
-        glPopMatrix();
-        glMatrixMode(GL_PROJECTION);
-        glPopMatrix();
-        glMatrixMode(GL_MODELVIEW);
-
-        // Restore OpenGL state
-        if (depth_test_enabled)
-            glEnable(GL_DEPTH_TEST);
-        if (!blend_enabled)
-            glDisable(GL_BLEND);
-    }
-
-    void RenderingManager::drawSceneFrame(const RenderContext& context, SceneManager* scene_manager, bool skip_render) {
-        if (!scene_manager->hasScene()) {
-            return;
-        }
-
-        const Viewport& render_viewport = context.viewport;
-        const geometry::BoundingBox* render_crop_box = nullptr;
-        if (settings_.use_crop_box && context.crop_box) {
-            render_crop_box = const_cast<RenderBoundingBox*>(context.crop_box);
-        }
-
-        auto rot = render_viewport.getRotationMatrix();
-        auto trans = render_viewport.getTranslation();
-        geometry::BoundingBox bb;
-
-        // shift view matrix and cropbox in case world to user is defined
-        if (context.world_to_user) {
-            TransformViewAndCropBox(rot, trans, bb, render_crop_box, *context.world_to_user);
-            if (render_crop_box) {
-                render_crop_box = &bb;
-            }
-        }
-
-        // Build render request with the viewport region dimensions if available
-        glm::ivec2 render_size = render_viewport.windowSize;
+        glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
             render_size = glm::ivec2(
                 static_cast<int>(context.viewport_region->width),
                 static_cast<int>(context.viewport_region->height));
         }
 
-        // Don't skip render if we're in point cloud mode or if settings changed
-        if (prev_result_.valid && skip_render && !settings_.point_cloud_mode) {
-            RenderingPipeline::uploadToScreen(prev_result_, *screen_renderer_, render_size);
-            screen_renderer_->render(quad_shader_);
-            return;
-        }
+        // Render model if available
+        if (model && model->size() > 0) {
+            // Use background color from settings
+            glm::vec3 bg_color = settings_.background_color;
 
-        // Get background color
-        glm::vec3 background_color(0.0f, 0.0f, 0.0f); // Default black
-        if (context.background_tool) {
-            background_color = context.background_tool->getBackgroundColor();
-        }
+            // Create viewport data
+            gs::rendering::ViewportData viewport_data{
+                .rotation = context.viewport.getRotationMatrix(),
+                .translation = context.viewport.getTranslation(),
+                .size = render_size,
+                .fov = settings_.fov};
 
-        RenderingPipeline::RenderRequest request{
-            .view_rotation = rot,
-            .view_translation = trans,
-            .viewport_size = render_size,
-            .fov = settings_.fov,
-            .scaling_modifier = settings_.scaling_modifier,
-            .antialiasing = settings_.antialiasing,
-            .render_mode = RenderMode::RGB,
-            .crop_box = render_crop_box,
-            .background_color = background_color,
-            .point_cloud_mode = settings_.point_cloud_mode,
-            .voxel_size = settings_.voxel_size};
+            gs::rendering::RenderRequest request{
+                .viewport = viewport_data,
+                .scaling_modifier = settings_.scaling_modifier,
+                .antialiasing = settings_.antialiasing,
+                .background_color = bg_color,
+                .crop_box = std::nullopt,
+                .point_cloud_mode = settings_.point_cloud_mode,
+                .voxel_size = settings_.voxel_size,
+                .model_transform = std::nullopt // Initialize this field
+            };
 
-        // Get trainer for potential mutex locking
-        auto state = scene_manager->getCurrentState();
-        RenderingPipeline::RenderResult result;
+            // IMPORTANT: Apply world transform to MODEL, not view!
+            if (!settings_.world_transform.isIdentity()) {
+                // Apply transform to the model instead of the camera
+                request.model_transform = settings_.world_transform.toMat4();
+                // DON'T transform the viewport data anymore!
+            }
 
-        if (state.is_training && scene_manager->getTrainerManager()) {
-            auto trainer = scene_manager->getTrainerManager()->getTrainer();
-            if (trainer && trainer->is_running()) {
-                std::shared_lock<std::shared_mutex> lock(trainer->getRenderMutex());
-                result = scene_manager->render(request);
+            // Add crop box if enabled
+            if (settings_.use_crop_box) {
+                auto transform = settings_.crop_transform;
+                request.crop_box = gs::rendering::BoundingBox{
+                    .min = settings_.crop_min,
+                    .max = settings_.crop_max,
+                    .transform = transform.inv().toMat4()};
+            }
+
+            // Render the gaussians
+            auto render_result = engine_->renderGaussians(*model, request);
+            if (render_result) {
+                // Cache the result
+                cached_result_ = *render_result;
+
+                // Present to screen
+                glm::ivec2 viewport_pos(0, 0);
+                if (context.viewport_region) {
+                    viewport_pos = glm::ivec2(
+                        static_cast<int>(context.viewport_region->x),
+                        static_cast<int>(context.viewport_region->y));
+                }
+
+                auto present_result = engine_->presentToScreen(
+                    cached_result_,
+                    viewport_pos,
+                    render_size);
+
+                if (!present_result) {
+                    LOG_ERROR("Failed to present render result: {}", present_result.error());
+                    // throw std::runtime_error("Failed to present render result: " + present_result.error());
+                }
             } else {
-                result = scene_manager->render(request);
+                LOG_ERROR("Failed to render gaussians: {}", render_result.error());
+                // throw std::runtime_error("Failed to render gaussians: " + render_result.error());
             }
-        } else {
-            result = scene_manager->render(request);
         }
 
-        if (result.valid) {
-            RenderingPipeline::uploadToScreen(result, *screen_renderer_, render_size);
-            screen_renderer_->render(quad_shader_);
-            prev_result_ = result;
-        }
+        // Always render overlays
+        renderOverlays(context);
     }
 
-    void RenderingManager::drawCropBox(const RenderContext& context) {
-
+    void RenderingManager::renderOverlays(const RenderContext& context) {
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
             render_size = glm::ivec2(
@@ -322,180 +369,54 @@ namespace gs::visualizer {
             return;
         }
 
-        auto crop_box = const_cast<RenderBoundingBox*>(context.crop_box);
+        gs::rendering::ViewportData viewport{
+            .rotation = context.viewport.getRotationMatrix(),
+            .translation = context.viewport.getTranslation(),
+            .size = render_size,
+            .fov = settings_.fov};
 
-        if (!crop_box->isInitilized()) {
-            crop_box->init();
+        // Grid
+        if (settings_.show_grid && engine_) {
+            auto grid_result = engine_->renderGrid(
+                viewport,
+                static_cast<gs::rendering::GridPlane>(settings_.grid_plane),
+                settings_.grid_opacity);
+
+            if (!grid_result) {
+                LOG_WARN("Failed to render grid: {}", grid_result.error());
+            }
         }
 
-        if (crop_box->isInitialized()) {
-            auto fov_rad = glm::radians(settings_.fov);
-            auto projection = glm::perspective(
-                static_cast<float>(fov_rad),
-                static_cast<float>(render_size.x) / render_size.y,
-                0.1f,
-                1000.0f);
+        // Crop box wireframe
+        if (settings_.show_crop_box && engine_) {
+            auto transform = settings_.crop_transform;
 
-            glm::mat4 view = context.viewport.getViewMatrix();
-            crop_box->render(view, projection);
+            gs::rendering::BoundingBox box{
+                .min = settings_.crop_min,
+                .max = settings_.crop_max,
+                .transform = transform.inv().toMat4()};
+
+            auto bbox_result = engine_->renderBoundingBox(box, viewport, settings_.crop_color, settings_.crop_line_width);
+            if (!bbox_result) {
+                LOG_WARN("Failed to render bounding box: {}", bbox_result.error());
+            }
+        }
+
+        // Coordinate axes
+        if (settings_.show_coord_axes && engine_) {
+            auto axes_result = engine_->renderCoordinateAxes(viewport, settings_.axes_size, settings_.axes_visibility);
+            if (!axes_result) {
+                LOG_WARN("Failed to render coordinate axes: {}", axes_result.error());
+            }
+        }
+
+        // Translation gizmo (render last so it's on top)
+        if (settings_.show_translation_gizmo && engine_) {
+            glm::vec3 gizmo_pos = settings_.world_transform.getTranslation();
+            auto gizmo_result = engine_->renderTranslationGizmo(gizmo_pos, viewport, settings_.gizmo_scale);
+            if (!gizmo_result) {
+                LOG_WARN("Failed to render translation gizmo: {}", gizmo_result.error());
+            }
         }
     }
-
-    void RenderingManager::drawGrid(const RenderContext& context) {
-        glm::ivec2 render_size = context.viewport.windowSize;
-        if (context.viewport_region) {
-            render_size = glm::ivec2(
-                static_cast<int>(context.viewport_region->width),
-                static_cast<int>(context.viewport_region->height));
-        }
-
-        if (render_size.x <= 0 || render_size.y <= 0) {
-            std::cout << "ERROR: Invalid render size!" << std::endl;
-            return;
-        }
-
-        if (!infinite_grid_) {
-            std::cout << "ERROR: Grid object is null in drawGrid!" << std::endl;
-            return;
-        }
-
-        if (!infinite_grid_->isInitialized()) {
-            std::cout << "ERROR: Grid not initialized!" << std::endl;
-            return;
-        }
-
-        // Save OpenGL state
-        GLboolean depth_test_enabled = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean blend_enabled = glIsEnabled(GL_BLEND);
-
-        // Enable blending for grid
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        auto fov_rad = glm::radians(settings_.fov);
-        auto projection = glm::perspective(
-            static_cast<float>(fov_rad),
-            static_cast<float>(render_size.x) / render_size.y,
-            0.1f,
-            1000.0f);
-
-        glm::mat4 view = context.viewport.getViewMatrix();
-
-        infinite_grid_->render(view, projection);
-
-        // Restore state
-        if (!blend_enabled)
-            glDisable(GL_BLEND);
-        if (depth_test_enabled)
-            glEnable(GL_DEPTH_TEST);
-    }
-
-    void RenderingManager::drawCoordAxes(const RenderContext& context) {
-
-        glm::ivec2 render_size = context.viewport.windowSize;
-        if (context.viewport_region) {
-            render_size = glm::ivec2(
-                static_cast<int>(context.viewport_region->width),
-                static_cast<int>(context.viewport_region->height));
-        }
-
-        if (render_size.x <= 0 || render_size.y <= 0) {
-            return;
-        }
-
-        auto coord_axes = const_cast<RenderCoordinateAxes*>(context.coord_axes);
-
-        if (!coord_axes->isInitialized()) {
-            coord_axes->init();
-        }
-
-        if (coord_axes->isInitialized()) {
-
-            auto fov_rad = glm::radians(settings_.fov);
-            auto projection = glm::perspective(
-                static_cast<float>(fov_rad),
-                static_cast<float>(render_size.x) / render_size.y,
-                0.1f,
-                1000.0f);
-            glm::mat4 view = context.viewport.getViewMatrix();
-
-            coord_axes->render(view, projection);
-        }
-    }
-
-    bool RenderingManager::hasCamChanged(const Viewport& current_viewport) {
-        // Compare current viewport with last known state
-        const float epsilon = 1e-6f;
-
-        bool has_changed = false;
-        // Compare viewport parameters that affect rendering
-        if (glm::length(current_viewport.getTranslation() - prev_viewport_state_.getTranslation()) > epsilon) {
-            has_changed = true;
-        }
-
-        if (!has_changed) {
-            auto current_rot = current_viewport.getRotationMatrix();
-            auto last_rot = prev_viewport_state_.getRotationMatrix();
-            auto diff = last_rot - current_rot;
-
-            if (glm::length(diff[0]) + glm::length(diff[1]) + glm::length(diff[2]) > epsilon) {
-                has_changed = true;
-            }
-        }
-
-        if (!has_changed) {
-            // Check window size changes
-            if (current_viewport.windowSize != prev_viewport_state_.windowSize) {
-                has_changed = true;
-            }
-            if (std::abs(prev_fov_ - settings_.fov) > epsilon) {
-                has_changed = true;
-            }
-        }
-
-        prev_viewport_state_ = current_viewport;
-        prev_fov_ = settings_.fov;
-
-        return has_changed;
-    }
-
-    bool RenderingManager::hasSceneChanged(const RenderContext& context) {
-        // Check if viewport has changed since last frame
-        bool scene_changed = hasCamChanged(context.viewport);
-
-        if (!scene_changed && context.world_to_user) {
-            const auto& w2u = *context.world_to_user;
-            if (!(w2u * prev_world_to_usr_inv_).isIdentity()) {
-                scene_changed = true;
-                prev_world_to_usr_inv_ = (*context.world_to_user).inv();
-            }
-        }
-        // check is user increased window size
-        if (!scene_changed && context.viewport_region) {
-            glm::ivec2 render_size = context.viewport.windowSize;
-            if (render_size != prev_render_size_) {
-                scene_changed = true;
-                prev_render_size_ = render_size;
-            }
-        }
-
-        if (!scene_changed && context.background_tool) {
-            auto background_color = context.background_tool->getBackgroundColor();
-            if (glm::length(background_color - prev_background_color_) > 0) {
-                scene_changed = true;
-                prev_background_color_ = background_color;
-            }
-        }
-
-        // Check if point cloud mode or voxel size changed
-        if (settings_.point_cloud_mode != prev_point_cloud_mode_ ||
-            std::abs(settings_.voxel_size - prev_voxel_size_) > 1e-6f) {
-            scene_changed = true;
-            prev_point_cloud_mode_ = settings_.point_cloud_mode;
-            prev_voxel_size_ = settings_.voxel_size;
-        }
-
-        return scene_changed;
-    }
-
 } // namespace gs::visualizer

@@ -1,14 +1,12 @@
 #include "core/data_loading_service.hpp"
-#include "core/viewer_state_manager.hpp"
+#include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
-#include <print>
+#include <stdexcept>
 
 namespace gs::visualizer {
 
-    DataLoadingService::DataLoadingService(SceneManager* scene_manager,
-                                           ViewerStateManager* state_manager)
-        : scene_manager_(scene_manager),
-          state_manager_(state_manager) {
+    DataLoadingService::DataLoadingService(SceneManager* scene_manager)
+        : scene_manager_(scene_manager) {
         setupEventHandlers();
     }
 
@@ -27,90 +25,92 @@ namespace gs::visualizer {
         if (cmd.is_dataset) {
             loadDataset(cmd.path);
         } else {
-            loadPLY(cmd.path);
+            // Check if we should add or replace
+            if (scene_manager_->hasPLYFiles()) {
+                // In PLY viewing mode, add to existing
+                scene_manager_->addPLY(cmd.path);
+            } else {
+                // Not in viewing mode - load as new scene
+                scene_manager_->loadPLY(cmd.path);
+            }
         }
     }
 
     std::expected<void, std::string> DataLoadingService::loadPLY(const std::filesystem::path& path) {
+        LOG_TIMER("LoadPLY");
+
         try {
-            std::println("Loading PLY file: {}", path.string());
+            LOG_INFO("Loading PLY file: {}", path.string());
 
             // Load through scene manager
             scene_manager_->loadPLY(path);
 
-            // Update state
-            state_manager_->setPLYPath(path);
-
-            // Emit success event
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = std::format("Successfully loaded PLY: {}", path.filename().string()),
-                .source = "DataLoadingService"}
-                .emit();
+            LOG_INFO("Successfully loaded PLY: {} (from: {})",
+                     path.filename().string(),
+                     path.parent_path().string());
 
             return {};
         } catch (const std::exception& e) {
             std::string error_msg = std::format("Failed to load PLY: {}", e.what());
+            LOG_ERROR("{} (Path: {})", error_msg, path.string());
+            throw std::runtime_error(error_msg);
+        }
+    }
 
-            events::notify::Error{
-                .message = error_msg,
-                .details = std::format("Path: {}", path.string())}
-                .emit();
+    void DataLoadingService::addPLYToScene(const std::filesystem::path& path) {
+        LOG_TIMER_TRACE("AddPLYToScene");
 
-            return std::unexpected(error_msg);
+        try {
+            LOG_DEBUG("Adding PLY to scene: {}", path.string());
+
+            // Extract name from path
+            std::string name = path.stem().string();
+            LOG_TRACE("Extracted PLY name: {}", name);
+
+            // Add through scene manager
+            scene_manager_->addPLY(path, name);
+
+            LOG_INFO("Added PLY '{}' to scene", name);
+
+        } catch (const std::exception& e) {
+            std::string error_msg = std::format("Failed to add PLY: {}", e.what());
+            LOG_ERROR("{} (Path: {})", error_msg, path.string());
+            throw std::runtime_error(error_msg);
         }
     }
 
     std::expected<void, std::string> DataLoadingService::loadDataset(const std::filesystem::path& path) {
+        LOG_TIMER("LoadDataset");
+
         try {
-            std::println("Loading dataset from: {}", path.string());
+            LOG_INFO("Loading dataset from: {}", path.string());
 
             // Validate parameters
             if (params_.dataset.data_path.empty() && path.empty()) {
+                LOG_ERROR("No dataset path specified");
                 throw std::runtime_error("No dataset path specified");
             }
 
             // Load through scene manager
+            LOG_DEBUG("Passing dataset to scene manager with parameters");
             scene_manager_->loadDataset(path, params_);
-
-            // Update state
-            state_manager_->setDatasetPath(path);
-
-            // Emit success event
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = std::format("Successfully loaded dataset: {}", path.filename().string()),
-                .source = "DataLoadingService"}
-                .emit();
 
             return {};
         } catch (const std::exception& e) {
             std::string error_msg = std::format("Failed to load dataset: {}", e.what());
-
-            events::notify::Error{
-                .message = error_msg,
-                .details = std::format("Path: {}", path.string())}
-                .emit();
-
-            return std::unexpected(error_msg);
+            LOG_ERROR("{} (Path: {})", error_msg, path.string());
+            throw std::runtime_error(error_msg);
         }
     }
 
     void DataLoadingService::clearScene() {
         try {
-            scene_manager_->clearScene();
-            state_manager_->reset();
-
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = "Scene cleared",
-                .source = "DataLoadingService"}
-                .emit();
+            LOG_DEBUG("Clearing scene");
+            scene_manager_->clear();
+            LOG_INFO("Scene cleared");
         } catch (const std::exception& e) {
-            events::notify::Error{
-                .message = "Failed to clear scene",
-                .details = e.what()}
-                .emit();
+            LOG_ERROR("Failed to clear scene: {}", e.what());
+            throw std::runtime_error(std::format("Failed to clear scene: {}", e.what()));
         }
     }
 

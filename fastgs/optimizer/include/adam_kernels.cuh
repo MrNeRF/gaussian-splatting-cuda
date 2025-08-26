@@ -17,10 +17,10 @@ namespace fast_gs::optimizer::kernels::adam {
         const float beta2,
         const float eps,
         const float bias_correction1_rcp,
-        const float bias_correction2_sqrt_rcp)
-    {
+        const float bias_correction2_sqrt_rcp) {
         auto idx = cg::this_grid().thread_rank();
-        if (idx >= n_elements) return;
+        if (idx >= n_elements)
+            return;
         const float grad = param_grad[idx];
         const float moment1 = beta1 * exp_avg[idx] + (1.0f - beta1) * grad;
         const float moment2 = beta2 * exp_avg_sq[idx] + (1.0f - beta2) * grad * grad;
@@ -31,4 +31,4 @@ namespace fast_gs::optimizer::kernels::adam {
         exp_avg_sq[idx] = moment2;
     }
 
-}
+} // namespace fast_gs::optimizer::kernels::adam

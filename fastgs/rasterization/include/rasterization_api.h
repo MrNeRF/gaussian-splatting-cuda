@@ -37,7 +37,7 @@ namespace fast_gs::rasterization {
         const float center_y,
         const float near_plane,
         const float far_plane);
-    
+
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
     backward_wrapper(
         torch::Tensor& densification_info,
@@ -70,4 +70,4 @@ namespace fast_gs::rasterization {
         const int primitive_primitive_indices_selector,
         const int instance_primitive_indices_selector);
 
-}
+} // namespace fast_gs::rasterization

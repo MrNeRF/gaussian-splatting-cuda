@@ -1,11 +1,12 @@
 #include "gui/panels/scene_panel.hpp"
+#include "core/logger.hpp"
 #include "gui/windows/image_preview.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <format>
 #include <imgui.h>
-#include <print>
 #include <ranges>
+#include <stdexcept>
 
 namespace gs::gui {
 
@@ -14,6 +15,7 @@ namespace gs::gui {
         // Create image preview window
         m_imagePreview = std::make_unique<ImagePreview>();
         setupEventHandlers();
+        LOG_DEBUG("ScenePanel created");
     }
 
     ScenePanel::~ScenePanel() {
@@ -29,19 +31,134 @@ namespace gs::gui {
         events::state::SceneCleared::when([this](const auto&) {
             handleSceneCleared();
         });
+
+        events::state::PLYAdded::when([this](const auto& event) {
+            handlePLYAdded(event);
+        });
+
+        events::state::PLYRemoved::when([this](const auto& event) {
+            handlePLYRemoved(event);
+        });
     }
 
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
-        // Load the image list from the dataset
-        if (!event.path.empty()) {
-            loadImageCams(event.path);
+        LOG_DEBUG("Scene loaded event - type: {}",
+                  event.type == events::state::SceneLoaded::Type::PLY ? "PLY" : "Dataset");
+
+        if (event.type == events::state::SceneLoaded::Type::PLY) {
+            m_currentMode = DisplayMode::PLYSceneGraph;
+            m_plyNodes.clear();
+            m_selectedPLYIndex = -1;
+            m_activeTab = TabType::PLYs; // Switch to PLY tab
+            LOG_TRACE("Switched to PLY scene graph mode");
+        } else if (event.type == events::state::SceneLoaded::Type::Dataset) {
+            m_currentMode = DisplayMode::DatasetImages;
+            m_plyNodes.clear();
+            m_selectedPLYIndex = -1;
+            m_activeTab = TabType::Images; // Switch to Images tab
+            LOG_TRACE("Switched to dataset images mode");
+            if (!event.path.empty()) {
+                loadImageCams(event.path);
+            }
         }
     }
 
     void ScenePanel::handleSceneCleared() {
-        // Clear the image list
+        LOG_DEBUG("Clearing scene panel data");
+        // Clear all data
         m_imagePaths.clear();
         m_selectedImageIndex = -1;
+        m_plyNodes.clear();
+        m_selectedPLYIndex = -1;
+        m_currentMode = DisplayMode::Empty;
+        // Keep the active tab as is - user might want to stay on the same tab
+    }
+
+    void ScenePanel::handlePLYAdded(const events::state::PLYAdded& event) {
+        LOG_DEBUG("PLY added to scene panel: '{}' ({} gaussians, {} total)",
+                  event.name, event.node_gaussians, event.total_gaussians);
+
+        // Add or update the PLY node
+        auto it = std::find_if(m_plyNodes.begin(), m_plyNodes.end(),
+                               [&event](const PLYNode& node) { return node.name == event.name; });
+
+        if (it != m_plyNodes.end()) {
+            // Update existing node with its individual gaussian count
+            it->gaussian_count = event.node_gaussians;
+            LOG_TRACE("Updated existing PLY node '{}'", event.name);
+        } else {
+            // Add new node with its individual gaussian count
+            PLYNode node;
+            node.name = event.name;
+            node.visible = event.is_visible;
+            node.selected = false;
+            node.gaussian_count = event.node_gaussians; // Use node-specific count
+            m_plyNodes.push_back(node);
+            LOG_TRACE("Added new PLY node '{}'", event.name);
+        }
+
+        // Update current mode based on active tab
+        updateModeFromTab();
+    }
+
+    void ScenePanel::handlePLYRemoved(const events::state::PLYRemoved& event) {
+        LOG_DEBUG("PLY removed from scene panel: '{}'", event.name);
+
+        // Remove the node from our list
+        auto it = std::find_if(m_plyNodes.begin(), m_plyNodes.end(),
+                               [&event](const PLYNode& node) { return node.name == event.name; });
+
+        if (it != m_plyNodes.end()) {
+            m_plyNodes.erase(it);
+
+            // Reset selection if necessary
+            if (m_selectedPLYIndex >= static_cast<int>(m_plyNodes.size())) {
+                m_selectedPLYIndex = -1;
+                LOG_TRACE("Reset PLY selection index");
+            }
+        }
+
+        // Update current mode based on active tab
+        updateModeFromTab();
+    }
+
+    void ScenePanel::updatePLYNodes() {
+        LOG_TRACE("Updating PLY nodes");
+        // For now, we'll rebuild the node list when we get events
+        // In a more sophisticated implementation, we'd query the scene directly
+    }
+
+    void ScenePanel::updateModeFromTab() {
+        // Update display mode based on active tab and available data
+        // Prioritize PLYs if available and active tab is PLYs
+        if (m_activeTab == TabType::PLYs && !m_plyNodes.empty()) {
+            m_currentMode = DisplayMode::PLYSceneGraph;
+            LOG_TRACE("Display mode set to PLYSceneGraph");
+        } else if (m_activeTab == TabType::Images && !m_imagePaths.empty()) {
+            m_currentMode = DisplayMode::DatasetImages;
+            LOG_TRACE("Display mode set to DatasetImages");
+        } else if (!m_plyNodes.empty()) {
+            // Fall back to PLYs if available (even if Images tab was selected but no images)
+            m_currentMode = DisplayMode::PLYSceneGraph;
+            m_activeTab = TabType::PLYs;
+            LOG_TRACE("Fallback to PLYSceneGraph mode");
+        } else if (!m_imagePaths.empty()) {
+            // Fall back to Images if PLYs not available
+            m_currentMode = DisplayMode::DatasetImages;
+            m_activeTab = TabType::Images;
+            LOG_TRACE("Fallback to DatasetImages mode");
+        } else {
+            m_currentMode = DisplayMode::Empty;
+            LOG_TRACE("Display mode set to Empty");
+        }
+    }
+
+    bool ScenePanel::hasImages() const {
+        return !m_imagePaths.empty();
+    }
+
+    bool ScenePanel::hasPLYs() const {
+        return !m_plyNodes.empty();
     }
 
     void ScenePanel::render(bool* p_open) {
@@ -56,13 +173,10 @@ namespace gs::gui {
         // Make buttons smaller to fit the narrow panel
         float button_width = ImGui::GetContentRegionAvail().x;
 
+        // Common controls
         if (ImGui::Button("Open File Browser", ImVec2(button_width, 0))) {
             // Request to show file browser
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = "Opening file browser...",
-                .source = "ScenePanel"}
-                .emit();
+            LOG_DEBUG("Opening file browser from scene panel");
 
             // Fire the callback to open file browser with empty path
             if (m_onDatasetLoad) {
@@ -71,32 +185,197 @@ namespace gs::gui {
         }
 
         if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
-            if (!m_currentDatasetPath.empty()) {
+            if (m_currentMode == DisplayMode::DatasetImages && !m_currentDatasetPath.empty()) {
+                LOG_DEBUG("Refreshing dataset images");
                 loadImageCams(m_currentDatasetPath);
+            } else if (m_currentMode == DisplayMode::PLYSceneGraph) {
+                LOG_DEBUG("Refreshing PLY nodes");
+                updatePLYNodes();
             }
         }
 
         ImGui::SameLine();
 
         if (ImGui::Button("Clear", ImVec2(button_width * 0.48f, 0))) {
-            // Clear the image list
-            m_imagePaths.clear();
-            m_selectedImageIndex = -1;
-            m_currentDatasetPath.clear();
+            LOG_INFO("Clearing scene from panel");
+            // Clear everything
+            handleSceneCleared();
 
             // Also clear the actual scene data
             events::cmd::ClearScene{}.emit();
-
-            // Log the action
-            events::notify::Log{
-                .level = events::notify::Log::Level::Info,
-                .message = "Scene cleared",
-                .source = "ScenePanel"}
-                .emit();
         }
 
         ImGui::Separator();
 
+        // Render tabs if we have any data
+        if (hasImages() || hasPLYs()) {
+            if (ImGui::BeginTabBar("SceneTabs", ImGuiTabBarFlags_None)) {
+
+                // PLYs tab - show first if we have PLYs (prioritize PLYs)
+                if (hasPLYs()) {
+                    bool plys_tab_selected = ImGui::BeginTabItem("PLYs");
+                    if (plys_tab_selected) {
+                        if (m_activeTab != TabType::PLYs) {
+                            m_activeTab = TabType::PLYs;
+                            m_currentMode = DisplayMode::PLYSceneGraph;
+                            LOG_TRACE("Switched to PLYs tab");
+                        }
+                        renderPLYSceneGraph();
+                        ImGui::EndTabItem();
+                    }
+                }
+
+                // Images tab - show second
+                if (hasImages()) {
+                    bool images_tab_selected = ImGui::BeginTabItem("Images");
+                    if (images_tab_selected) {
+                        if (m_activeTab != TabType::Images) {
+                            m_activeTab = TabType::Images;
+                            m_currentMode = DisplayMode::DatasetImages;
+                            LOG_TRACE("Switched to Images tab");
+                        }
+                        renderImageList();
+                        ImGui::EndTabItem();
+                    }
+                }
+
+                ImGui::EndTabBar();
+            }
+        } else {
+            // No data loaded - show empty state
+            ImGui::Text("No data loaded.");
+            ImGui::Text("Use 'Open File Browser' to load:");
+            ImGui::BulletText("PLY file(s) for viewing");
+            ImGui::BulletText("Dataset for training");
+        }
+
+        ImGui::End();
+        ImGui::PopStyleColor();
+
+        // Render image preview window if open
+        if (m_showImagePreview && m_imagePreview) {
+            m_imagePreview->render(&m_showImagePreview);
+        }
+    }
+
+    void ScenePanel::renderPLYSceneGraph() {
+        ImGui::Text("Scene Graph (PLY Mode)");
+        ImGui::Separator();
+
+        // Add PLY button
+        if (ImGui::Button("Add PLY", ImVec2(-1, 0))) {
+            // Open file browser for adding PLY
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = true}.emit();
+            LOG_DEBUG("Opening file browser to add PLY");
+        }
+
+        ImGui::Separator();
+
+        // Scene graph tree
+        ImGui::BeginChild("SceneGraph", ImVec2(0, 0), true);
+
+        if (!m_plyNodes.empty()) {
+            ImGui::Text("Models (%zu):", m_plyNodes.size());
+            ImGui::Separator();
+
+            for (size_t i = 0; i < m_plyNodes.size(); ++i) {
+                auto& node = m_plyNodes[i];
+
+                // Create unique ID
+                std::string node_id = std::format("{}##{}", node.name, i);
+                std::string popup_id = std::format("popup_{}", i); // Unique popup ID
+
+                // Node flags
+                ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf |
+                                           ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                                           ImGuiTreeNodeFlags_SpanAvailWidth;
+                if (node.selected) {
+                    flags |= ImGuiTreeNodeFlags_Selected;
+                }
+
+                // Visibility checkbox
+                ImGui::PushID(static_cast<int>(i));
+                bool visible = node.visible;
+                if (ImGui::Checkbox("##vis", &visible)) {
+                    node.visible = visible;
+                    events::cmd::SetPLYVisibility{
+                        .name = node.name,
+                        .visible = visible}
+                        .emit();
+                    LOG_TRACE("PLY '{}' visibility changed to: {}", node.name, visible);
+                }
+                ImGui::PopID();
+
+                ImGui::SameLine();
+
+                // Tree node
+                ImGui::TreeNodeEx(node_id.c_str(), flags);
+
+                // Show gaussian count
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%zu)", node.gaussian_count);
+
+                // Selection
+                if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                    m_selectedPLYIndex = static_cast<int>(i);
+                    // Update selection
+                    for (auto& n : m_plyNodes) {
+                        n.selected = false;
+                    }
+                    node.selected = true;
+
+                    LOG_DEBUG("PLY '{}' selected", node.name);
+
+                    // Emit selection event
+                    events::ui::NodeSelected{
+                        .path = node.name,
+                        .type = "PLY",
+                        .metadata = {
+                            {"name", node.name},
+                            {"gaussians", std::to_string(node.gaussian_count)},
+                            {"visible", node.visible ? "true" : "false"}}}
+                        .emit();
+                }
+
+                // Right-click context menu - provide explicit popup ID
+                if (ImGui::BeginPopupContextItem(popup_id.c_str())) {
+                    if (ImGui::MenuItem("Remove")) {
+                        events::cmd::RemovePLY{.name = node.name}.emit();
+                        LOG_INFO("Removing PLY '{}' via context menu", node.name);
+                    }
+                    ImGui::Separator();
+                    bool menu_visible = node.visible;
+                    if (ImGui::MenuItem("Visible", nullptr, &menu_visible)) {
+                        node.visible = menu_visible;
+                        events::cmd::SetPLYVisibility{
+                            .name = node.name,
+                            .visible = menu_visible}
+                            .emit();
+                        LOG_TRACE("PLY '{}' visibility toggled via menu to: {}", node.name, menu_visible);
+                    }
+                    ImGui::EndPopup();
+                }
+            }
+
+            // Show total gaussian count
+            size_t total_gaussians = 0;
+            for (const auto& node : m_plyNodes) {
+                if (node.visible) {
+                    total_gaussians += node.gaussian_count;
+                }
+            }
+            ImGui::Separator();
+            ImGui::Text("Total visible: %zu gaussians", total_gaussians);
+
+        } else {
+            ImGui::Text("No PLY models loaded.");
+            ImGui::Text("Click 'Add PLY' to load models.");
+        }
+
+        ImGui::EndChild();
+    }
+
+    void ScenePanel::renderImageList() {
         // Image list view
         ImGui::BeginChild("ImageList", ImVec2(0, 0), true);
 
@@ -136,32 +415,16 @@ namespace gs::gui {
                                 .cam_id = cam_data_it->second}
                                 .emit();
 
-                            // Log the action
-                            events::notify::Log{
-                                .level = events::notify::Log::Level::Info,
-                                .message = std::format("Going to camera view for: {} (Camera ID: {})",
-                                                       imagePath.filename().string(),
-                                                       cam_data_it->second),
-                                .source = "ScenePanel"}
-                                .emit();
+                            LOG_INFO("Going to camera view for: {} (Camera ID: {})",
+                                     imagePath.filename().string(),
+                                     cam_data_it->second);
                         } else {
                             // Log warning if camera data not found
-                            events::notify::Log{
-                                .level = events::notify::Log::Level::Warning,
-                                .message = std::format("Camera data not found for: {}", imagePath.filename().string()),
-                                .source = "ScenePanel"}
-                                .emit();
+                            LOG_WARN("Camera data not found for: {}", imagePath.filename().string());
                         }
                     }
                     ImGui::EndPopup();
                 }
-
-                // Tooltip with full path
-                // if (ImGui::IsItemHovered()) {
-                //     ImGui::BeginTooltip();
-                //     ImGui::Text("Path: %s", imagePath.string().c_str());
-                //     ImGui::EndTooltip();
-                // }
             }
         } else {
             ImGui::Text("No images loaded.");
@@ -169,17 +432,10 @@ namespace gs::gui {
         }
 
         ImGui::EndChild();
-
-        ImGui::End();
-        ImGui::PopStyleColor();
-
-        // Render image preview window if open
-        if (m_showImagePreview && m_imagePreview) {
-            m_imagePreview->render(&m_showImagePreview);
-        }
     }
 
     void ScenePanel::loadImageCams(const std::filesystem::path& path) {
+        LOG_TIMER_TRACE("ScenePanel::loadImageCams");
 
         m_currentDatasetPath = path;
         m_imagePaths.clear();
@@ -187,15 +443,18 @@ namespace gs::gui {
         m_selectedImageIndex = -1;
 
         if (!m_trainer_manager) {
-            std::cerr << "m_trainer_manager was not set" << std::endl;
+            LOG_ERROR("m_trainer_manager was not set");
             return;
         }
 
+        LOG_DEBUG("Loading camera list from dataset: {}", path.string());
         auto cams = m_trainer_manager->getCamList();
+        LOG_DEBUG("Found {} cameras", cams.size());
 
         for (const auto& cam : cams) {
             m_imagePaths.emplace_back(cam->image_path());
             m_PathToCamId[cam->image_path()] = cam->uid();
+            LOG_TRACE("Added camera: {} (ID: {})", cam->image_path().filename().string(), cam->uid());
         }
 
         // Sort paths for consistent ordering
@@ -203,12 +462,7 @@ namespace gs::gui {
             return a.filename() < b.filename();
         });
 
-        // Log the action
-        events::notify::Log{
-            .level = events::notify::Log::Level::Info,
-            .message = std::format("Loaded {} images from dataset: {}", m_imagePaths.size(), path.string()),
-            .source = "ScenePanel"}
-            .emit();
+        LOG_INFO("Loaded {} images from dataset: {}", m_imagePaths.size(), path.string());
     }
 
     void ScenePanel::setOnDatasetLoad(std::function<void(const std::filesystem::path&)> callback) {
@@ -216,12 +470,7 @@ namespace gs::gui {
     }
 
     void ScenePanel::onImageSelected(const std::filesystem::path& imagePath) {
-        // Log selection
-        events::notify::Log{
-            .level = events::notify::Log::Level::Debug,
-            .message = std::format("Selected image: {}", imagePath.filename().string()),
-            .source = "ScenePanel"}
-            .emit();
+        LOG_DEBUG("Selected image: {}", imagePath.filename().string());
 
         // Publish NodeSelectedEvent for other components to react
         events::ui::NodeSelected{
@@ -233,6 +482,7 @@ namespace gs::gui {
 
     void ScenePanel::onImageDoubleClicked(size_t imageIndex) {
         if (imageIndex >= m_imagePaths.size()) {
+            LOG_WARN("Invalid image index for double-click: {}", imageIndex);
             return;
         }
 
@@ -242,14 +492,9 @@ namespace gs::gui {
         if (m_imagePreview) {
             m_imagePreview->open(m_imagePaths, imageIndex);
             m_showImagePreview = true;
+            LOG_INFO("Opening image preview: {} (index {})",
+                     imagePath.filename().string(), imageIndex);
         }
-
-        // Log the action
-        events::notify::Log{
-            .level = events::notify::Log::Level::Info,
-            .message = std::format("Opening image preview: {}", imagePath.filename().string()),
-            .source = "ScenePanel"}
-            .emit();
     }
 
 } // namespace gs::gui

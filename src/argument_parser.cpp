@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Janusch Patas.
 
 #include "core/argument_parser.hpp"
+#include "core/logger.hpp"
 #include "core/parameters.hpp"
 #include <args.hxx>
 #include <expected>
@@ -8,6 +9,7 @@
 #include <format>
 #include <print>
 #include <set>
+#include <unordered_map>
 
 namespace {
 
@@ -30,6 +32,25 @@ namespace {
         steps.assign(unique_steps.begin(), unique_steps.end());
     }
 
+    // Parse log level from string
+    gs::core::LogLevel parse_log_level(const std::string& level_str) {
+        if (level_str == "trace")
+            return gs::core::LogLevel::Trace;
+        if (level_str == "debug")
+            return gs::core::LogLevel::Debug;
+        if (level_str == "info")
+            return gs::core::LogLevel::Info;
+        if (level_str == "warn" || level_str == "warning")
+            return gs::core::LogLevel::Warn;
+        if (level_str == "error")
+            return gs::core::LogLevel::Error;
+        if (level_str == "critical")
+            return gs::core::LogLevel::Critical;
+        if (level_str == "off")
+            return gs::core::LogLevel::Off;
+        return gs::core::LogLevel::Info; // Default
+    }
+
     std::expected<std::tuple<ParseResult, std::function<void()>>, std::string> parse_arguments(
         const std::vector<std::string>& args,
         gs::param::TrainingParameters& params) {
@@ -49,6 +70,9 @@ namespace {
             // PLY viewing mode
             ::args::ValueFlag<std::string> view_ply(parser, "ply_file", "View a PLY file", {'v', "view"});
 
+            // LichtFeldStudio project arguments
+            ::args::ValueFlag<std::string> project_name(parser, "proj_path", "LichtFeldStudio project path. Path must end with .ls", {"proj_path"});
+
             // Training mode arguments
             ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to training data", {'d', "data-path"});
             ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to output", {'o', "output-path"});
@@ -67,6 +91,12 @@ namespace {
             ::args::ValueFlag<std::string> strategy(parser, "strategy", "Optimization strategy: mcmc, default", {"strategy"});
             ::args::ValueFlag<int> init_num_pts(parser, "init_num_pts", "Number of random initialization points", {"init-num-pts"});
             ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
+            ::args::ValueFlagList<std::string> timelapse_images(parser, "timelapse_images", "Image filenames to render timelapse images for", {"timelapse-images"});
+            ::args::ValueFlag<int> timelapse_every(parser, "timelapse_every", "Render timelapse image every N iterations (default: 50)", {"timelapse-every"});
+
+            // Logging options
+            ::args::ValueFlag<std::string> log_level(parser, "level", "Log level: trace, debug, info, warn, error, critical, off (default: info)", {"log-level"});
+            ::args::ValueFlag<std::string> log_file(parser, "file", "Optional log file path", {"log-file"});
 
             // Optional flag arguments
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
@@ -101,6 +131,29 @@ namespace {
                 return std::make_tuple(ParseResult::Help, std::function<void()>{});
             } catch (const ::args::ParseError& e) {
                 return std::unexpected(std::format("Parse error: {}\n{}", e.what(), parser.Help()));
+            }
+
+            // Initialize logger based on command line arguments
+            {
+                auto level = gs::core::LogLevel::Info; // Default level
+                std::string log_file_path;
+
+                if (log_level) {
+                    level = parse_log_level(::args::get(log_level));
+                }
+
+                if (log_file) {
+                    log_file_path = ::args::get(log_file);
+                }
+
+                // Initialize the logger with the specified level and optional file
+                gs::core::Logger::get().init(level, log_file_path);
+
+                // Log that the logger was initialized (without gs:: prefix)
+                LOG_DEBUG("Logger initialized with level: {}", static_cast<int>(level));
+                if (!log_file_path.empty()) {
+                    LOG_DEBUG("Logging to file: {}", log_file_path);
+                }
             }
 
             // Check if explicitly displaying help
@@ -196,6 +249,7 @@ namespace {
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
                                         resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
+                                        project_name_val = project_name ? std::optional<std::string>(::args::get(project_name)) : std::optional<std::string>(),
                                         images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
                                         test_every_val = test_every ? std::optional<int>(::args::get(test_every)) : std::optional<int>(),
                                         steps_scaler_val = steps_scaler ? std::optional<float>(::args::get(steps_scaler)) : std::optional<float>(),
@@ -207,6 +261,8 @@ namespace {
                                         init_extent_val = init_extent ? std::optional<float>(::args::get(init_extent)) : std::optional<float>(),
                                         pose_opt_val = pose_opt ? std::optional<std::string>(::args::get(pose_opt)) : std::optional<std::string>(),
                                         strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
+                                        timelapse_images_val = timelapse_images ? std::optional<std::vector<std::string>>(::args::get(timelapse_images)) : std::optional<std::vector<std::string>>(),
+                                        timelapse_every_val = timelapse_every ? std::optional<int>(::args::get(timelapse_every)) : std::optional<int>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
@@ -233,6 +289,7 @@ namespace {
                 setVal(iterations_val, opt.iterations);
                 setVal(resize_factor_val, ds.resize_factor);
                 setVal(max_cap_val, opt.max_cap);
+                setVal(project_name_val, ds.project_path);
                 setVal(images_folder_val, ds.images);
                 setVal(test_every_val, ds.test_every);
                 setVal(steps_scaler_val, opt.steps_scaler);
@@ -244,6 +301,8 @@ namespace {
                 setVal(init_extent_val, opt.init_extent);
                 setVal(pose_opt_val, opt.pose_optimization);
                 setVal(strategy_val, opt.strategy);
+                setVal(timelapse_images_val, ds.timelapse_images);
+                setVal(timelapse_every_val, ds.timelapse_every);
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
@@ -266,10 +325,11 @@ namespace {
         const float scaler = opt.steps_scaler;
 
         if (scaler > 0) {
-            std::println("Scaling training steps by factor: {}", scaler);
+            LOG_INFO("Scaling training steps by factor: {}", scaler);
 
             opt.iterations *= scaler;
             opt.start_refine *= scaler;
+            opt.reset_every *= scaler;
             opt.stop_refine *= scaler;
             opt.refine_every *= scaler;
             opt.sh_degree_interval *= scaler;

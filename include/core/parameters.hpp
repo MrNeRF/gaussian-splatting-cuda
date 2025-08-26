@@ -1,11 +1,13 @@
 // Copyright (c) 2023 Janusch Patas.
-// All rights reserved. Derived from 3D Gaussian Splatting for Real-Time Radiance Field Rendering software by Inria and MPII.
+
 #pragma once
 
 #include <expected>
 #include <filesystem>
 #include <string>
 #include <vector>
+
+#include <nlohmann/json_fwd.hpp>
 
 namespace gs {
     namespace param {
@@ -65,14 +67,20 @@ namespace gs {
             bool random = false;        // Use random initialization instead of SfM
             int init_num_pts = 100'000; // Number of random points to initialize
             float init_extent = 3.0f;   // Extent of random point cloud
+
+            nlohmann::json to_json() const;
+            static OptimizationParameters from_json(const nlohmann::json& j);
         };
 
         struct DatasetConfig {
             std::filesystem::path data_path = "";
-            std::filesystem::path output_path = "output";
+            std::filesystem::path output_path = "";
+            std::filesystem::path project_path = ""; // if path is relative it will be saved to output_path/project_name.ls
             std::string images = "images";
             int resize_factor = -1;
             int test_every = 8;
+            std::vector<std::string> timelapse_images = {};
+            int timelapse_every = 50;
         };
 
         struct TrainingParameters {

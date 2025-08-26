@@ -829,7 +829,8 @@ struct OpenCVFisheyeCameraModel
 
     __host__ __device__ OpenCVFisheyeCameraModel(
         Parameters const& parameters, float min_2d_norm = 1e-6f)
-        : parameters(parameters), min_2d_norm(min_2d_norm) {
+        : parameters(parameters),
+          min_2d_norm(min_2d_norm) {
         // initialize ninth-degree odd-only forward polynomial (mapping angles
         // to normalized distances) theta + k1*theta^3 + k2*theta^5 + k3*theta^7
         // + k4*theta^9

@@ -1,6 +1,7 @@
 #include "core/trainer.hpp"
 #include "core/poseopt.hpp"
 #include "core/fast_rasterizer.hpp"
+#include "core/image_io.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <ATen/cuda/CUDAEvent.h>
@@ -203,8 +204,6 @@ namespace gs {
         if (callback_busy_.load()) {
             callback_stream_.synchronize();
         }
-        // unsubscribe - because when the event emits while class destroyed we get crash
-        gs::event::bus().remove<gs::events::internal::TrainingReadyToStart>(train_started_handle_);
     }
 
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
@@ -234,7 +233,8 @@ namespace gs {
         if (save_requested_.exchange(false)) {
             std::println("\nSaving checkpoint at iteration {}...", iter);
             auto checkpoint_path = params_.dataset.output_path / "checkpoints";
-            strategy_->get_model().save_ply(checkpoint_path, iter, /*join=*/true);
+            save_ply(checkpoint_path, iter, /*join=*/true);
+
             std::println("Checkpoint saved to {}", checkpoint_path.string());
 
             // Emit checkpoint saved event
@@ -248,7 +248,7 @@ namespace gs {
         if (stop_requested_.load()) {
             std::println("\nStopping training permanently at iteration {}...", iter);
             std::println("Saving final model...");
-            strategy_->get_model().save_ply(params_.dataset.output_path, iter, /*join=*/true);
+            save_ply(params_.dataset.output_path, iter, /*join=*/true);
             is_running_ = false;
         }
     }
@@ -301,7 +301,7 @@ namespace gs {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
             }
 
-            // Compute losses using the factored-out functions
+            // Compute losses
             auto loss_result = compute_photometric_loss(r_output,
                                                         gt_image,
                                                         strategy_->get_model(),
@@ -364,7 +364,8 @@ namespace gs {
             {
                 torch::NoGradGuard no_grad;
 
-                // Lock for writing during parameter updates
+                DeferredEvents deferred;
+
                 {
                     std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
@@ -381,12 +382,13 @@ namespace gs {
                         poseopt_optimizer_->zero_grad(true);
                     }
 
-                    // Emit model updated event
-                    events::state::ModelUpdated{
+                    // Queue event for emission after lock release
+                    deferred.add(events::state::ModelUpdated{
                         .iteration = iter,
-                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())}
-                        .emit();
-                }
+                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())});
+                } // Lock released here
+
+                // Events automatically emitted here when deferred destructs
 
                 // Clean evaluation - let the evaluator handle everything
                 if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
@@ -404,13 +406,46 @@ namespace gs {
                         if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
                             const bool join_threads = (iter == params_.optimization.save_steps.back());
                             auto save_path = params_.dataset.output_path;
-                            strategy_->get_model().save_ply(save_path, iter, /*join=*/join_threads);
-
+                            save_ply(save_path, iter, /*join=*/join_threads);
                             // Emit checkpoint saved event
                             events::state::CheckpointSaved{
                                 .iteration = iter,
                                 .path = save_path}
                                 .emit();
+                        }
+                    }
+                }
+
+                if (!params_.dataset.timelapse_images.empty() && iter % params_.dataset.timelapse_every == 0) {
+                    for (const auto& img_name : params_.dataset.timelapse_images) {
+                        auto train_cam = train_dataset_->get_camera_by_filename(img_name);
+                        auto val_cam = val_dataset_ ? val_dataset_->get_camera_by_filename(img_name) : std::nullopt;
+                        if (train_cam.has_value() || val_cam.has_value()) {
+                            Camera* cam_to_use = train_cam.has_value() ? train_cam.value() : val_cam.value();
+
+                            // Image size isn't correct until the image has been loaded once
+                            // If we use the camera before it's loaded, it will render images at the non-scaled size
+                            if (cam_to_use->camera_height() == cam_to_use->image_height() && params_.dataset.resize_factor != 1) {
+                                cam_to_use->load_image_size(params_.dataset.resize_factor);
+                            }
+
+                            RenderOutput rendered_timelapse_output = fast_rasterize(*cam_to_use, strategy_->get_model(), background_);
+
+                            // Get folder name to save in by stripping file extension
+                            std::string folder_name = img_name;
+                            auto last_dot = folder_name.find_last_of('.');
+                            if (last_dot != std::string::npos) {
+                                folder_name = folder_name.substr(0, last_dot);
+                            }
+
+                            auto output_path = params_.dataset.output_path / "timelapse" / folder_name;
+                            std::filesystem::create_directories(output_path);
+
+                            image_io::save_image_async(output_path / std::format("{:06d}.jpg", iter),
+                                                       rendered_timelapse_output.image);
+
+                        } else {
+                            std::println("Warning: Timelapse image '{}' not found in dataset.", img_name);
                         }
                     }
                 }
@@ -431,21 +466,20 @@ namespace gs {
     std::expected<void, std::string> Trainer::train(std::stop_token stop_token) {
         is_running_ = false;
         training_complete_ = false;
+        ready_to_start_ = false; // Reset the flag
 
         // Event-based ready signaling
         if (!params_.optimization.headless) {
-            std::atomic<bool> ready{false};
-
-            // Subscribe temporarily to start signal
-            train_started_handle_ = events::internal::TrainingReadyToStart::when([&ready](const auto&) {
-                ready = true;
+            // Subscribe to start signal (no need to store handle)
+            events::internal::TrainingReadyToStart::when([this](const auto&) {
+                ready_to_start_ = true;
             });
 
             // Signal we're ready
             events::internal::TrainerReady{}.emit();
 
             // Wait for start signal
-            while (!ready.load() && !stop_token.stop_requested()) {
+            while (!ready_to_start_.load() && !stop_token.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
         }
@@ -523,18 +557,11 @@ namespace gs {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                strategy_->get_model().save_ply(final_path, iter - 1, /*join=*/true);
-
+                save_ply(final_path, iter - 1, /*join=*/true);
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
                     .iteration = iter - 1,
                     .path = final_path}
-                    .emit();
-
-                events::notify::Log{
-                    .level = events::notify::Log::Level::Info,
-                    .message = std::format("Training completed. Final model saved at iteration {}", iter - 1),
-                    .source = "Trainer"}
                     .emit();
             }
 
@@ -575,6 +602,15 @@ namespace gs {
         }
 
         return cams;
+    }
+
+    void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
+        strategy_->get_model().save_ply(save_path, iter_num + 1, /*join=*/join_threads);
+        if (lf_project_) {
+            const std::string ply_name = "splat_" + std::to_string(iter_num + 1);
+            const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
+            lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
+        }
     }
 
 } // namespace gs

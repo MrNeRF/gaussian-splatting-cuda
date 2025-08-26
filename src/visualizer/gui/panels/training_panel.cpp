@@ -1,53 +1,63 @@
 #include "gui/panels/training_panel.hpp"
 #include "core/events.hpp"
 #include "gui/ui_widgets.hpp"
+#include "visualizer_impl.hpp"
 #include <imgui.h>
 
 namespace gs::gui::panels {
 
-    void DrawTrainingControls([[maybe_unused]] const UIContext& ctx) {
+    void SaveProjectButton(const UIContext& ctx, TrainingPanelState& state) {
+        // Add Save Project button
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.9f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+        if (ImGui::Button("Save Project", ImVec2(-1, 0))) {
+            auto project = ctx.viewer->getProject();
+            if (project) {
+                if (project->getIsTempProject()) {
+                    state.show_save_browser = true;
+                } else {
+                    events::cmd::SaveProject{project->getProjectOutputFolder().string()}.emit();
+                }
+            }
+        }
+        ImGui::PopStyleColor(2);
+    }
+
+    void DrawTrainingControls(const UIContext& ctx) {
         ImGui::Text("Training Control");
         ImGui::Separator();
 
         auto& state = TrainingPanelState::getInstance();
 
-        // Query trainer state using the new event system
-        events::query::TrainerState response;
-        bool has_response = false;
-
-        // Set up a one-time handler for the response
-        [[maybe_unused]] auto handler = events::query::TrainerState::when([&response, &has_response](const auto& r) {
-            response = r;
-            has_response = true;
-        });
-
-        // Send the query
-        events::query::GetTrainerState{}.emit();
-
-        // Wait a bit for response (in a real app, this would be async)
-        // For now, we'll assume the response is immediate
-
-        if (!has_response) {
+        // Direct call to TrainerManager - no state duplication
+        auto* trainer_manager = ctx.viewer->getTrainerManager();
+        if (!trainer_manager || !trainer_manager->hasTrainer()) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
             return;
         }
 
-        // Render controls based on state
-        switch (response.state) {
-        case events::query::TrainerState::State::Idle:
+        // Get state directly from the single source of truth
+        auto trainer_state = trainer_manager->getState();
+        int current_iteration = trainer_manager->getCurrentIteration();
+        float current_loss = trainer_manager->getCurrentLoss();
+
+        // Render controls based on trainer state
+        switch (trainer_state) {
+        case TrainerManager::State::Idle:
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
             break;
 
-        case events::query::TrainerState::State::Ready:
+        case TrainerManager::State::Ready:
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             if (ImGui::Button("Start Training", ImVec2(-1, 0))) {
                 events::cmd::StartTraining{}.emit();
             }
             ImGui::PopStyleColor(2);
+            SaveProjectButton(ctx, state);
             break;
 
-        case events::query::TrainerState::State::Running:
+        case TrainerManager::State::Running:
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));
             if (ImGui::Button("Pause", ImVec2(-1, 0))) {
@@ -56,7 +66,7 @@ namespace gs::gui::panels {
             ImGui::PopStyleColor(2);
             break;
 
-        case events::query::TrainerState::State::Paused:
+        case TrainerManager::State::Paused:
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             if (ImGui::Button("Resume", ImVec2(-1, 0))) {
@@ -72,21 +82,29 @@ namespace gs::gui::panels {
             ImGui::PopStyleColor(2);
             break;
 
-        case events::query::TrainerState::State::Completed:
+        case TrainerManager::State::Completed:
             ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
+            SaveProjectButton(ctx, state);
             break;
 
-        case events::query::TrainerState::State::Error:
+        case TrainerManager::State::Error:
             ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Training Error!");
-            if (response.error_message) {
-                ImGui::TextWrapped("%s", response.error_message->c_str());
+            {
+                auto error_msg = trainer_manager->getLastError();
+                if (!error_msg.empty()) {
+                    ImGui::TextWrapped("%s", error_msg.c_str());
+                }
             }
+            break;
+
+        case TrainerManager::State::Stopping:
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Stopping...");
             break;
         }
 
         // Save checkpoint button (available during training)
-        if (response.state == events::query::TrainerState::State::Running ||
-            response.state == events::query::TrainerState::State::Paused) {
+        if (trainer_state == TrainerManager::State::Running ||
+            trainer_state == TrainerManager::State::Paused) {
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
@@ -111,10 +129,29 @@ namespace gs::gui::panels {
             }
         }
 
+        // Render save project file browser
+        if (state.show_save_browser) {
+            state.save_browser.render(&state.show_save_browser);
+        }
+
         // Status display
         ImGui::Separator();
-        ImGui::Text("Status: %s", widgets::GetTrainerStateString(static_cast<int>(response.state)));
-        ImGui::Text("Iteration: %d", response.current_iteration);
-        ImGui::Text("Loss: %.6f", response.current_loss);
+
+        // Helper to convert state to string
+        const char* state_str = "Unknown";
+        switch (trainer_state) {
+        case TrainerManager::State::Idle: state_str = "Idle"; break;
+        case TrainerManager::State::Ready: state_str = "Ready"; break;
+        case TrainerManager::State::Running: state_str = "Running"; break;
+        case TrainerManager::State::Paused: state_str = "Paused"; break;
+        case TrainerManager::State::Stopping: state_str = "Stopping"; break;
+        case TrainerManager::State::Completed: state_str = "Completed"; break;
+        case TrainerManager::State::Error: state_str = "Error"; break;
+        }
+
+        ImGui::Text("Status: %s", state_str);
+        ImGui::Text("Iteration: %d", current_iteration);
+        ImGui::Text("Loss: %.6f", current_loss);
     }
+
 } // namespace gs::gui::panels

@@ -125,6 +125,16 @@ namespace gs {
         return image;
     }
 
+    void Camera::load_image_size(int resize_factor) {
+        // Load image synchronously
+        auto result = load_image(_image_path, resize_factor);
+        int w = std::get<1>(result);
+        int h = std::get<2>(result);
+
+        _image_width = w;
+        _image_height = h;
+    }
+
     size_t Camera::get_num_bytes_from_file() const {
         auto [w, h, c] = get_image_info(_image_path);
         size_t num_bytes = w * h * c * sizeof(float);

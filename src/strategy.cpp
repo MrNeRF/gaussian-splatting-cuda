@@ -10,7 +10,7 @@ namespace strategy {
         splat_data.opacity_raw() = splat_data.opacity_raw().to(dev).set_requires_grad(true);
         splat_data.sh0() = splat_data.sh0().to(dev).set_requires_grad(true);
         splat_data.shN() = splat_data.shN().to(dev).set_requires_grad(true);
-        splat_data._densification_info = torch::zeros({2, splat_data.means().size(0)}, splat_data.means().options());
+        splat_data._densification_info = torch::zeros({2, splat_data.means().size(0)}, splat_data.means().options()).set_requires_grad(false);
     }
 
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(

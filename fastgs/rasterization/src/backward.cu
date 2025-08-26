@@ -1,12 +1,11 @@
 #include "backward.h"
-#include "kernels_backward.cuh"
 #include "buffer_utils.h"
+#include "helper_math.h"
+#include "kernels_backward.cuh"
 #include "rasterization_config.h"
 #include "utils.h"
-#include "helper_math.h"
 #include <cub/cub.cuh>
 #include <functional>
-
 
 void fast_gs::rasterization::backward(
     const float* grad_image,
@@ -46,8 +45,7 @@ void fast_gs::rasterization::backward(
     const float fx,
     const float fy,
     const float cx,
-    const float cy)
-{
+    const float cy) {
     const dim3 grid(div_round_up(width, config::tile_width), div_round_up(height, config::tile_height), 1);
     const int n_tiles = grid.x * grid.y;
 
@@ -81,8 +79,7 @@ void fast_gs::rasterization::backward(
         n_primitives,
         width,
         height,
-        grid.x
-    );
+        grid.x);
     CHECK_CUDA(config::debug, "blend_backward")
 
     kernels::backward::preprocess_backward_cu<<<div_round_up(n_primitives, config::block_size_preprocess_backward), config::block_size_preprocess_backward>>>(
@@ -110,8 +107,6 @@ void fast_gs::rasterization::backward(
         fx,
         fy,
         cx,
-        cy
-    );
+        cy);
     CHECK_CUDA(config::debug, "preprocess_backward")
-
 }
