@@ -292,8 +292,14 @@ namespace gs {
             auto adjusted_cam_pos = poseopt_module_->forward(cam->world_view_transform(), torch::tensor({cam->uid()}));
             auto adjusted_cam = Camera(*cam, adjusted_cam_pos);
 
+            RenderOutput r_output;
             // Use the render mode from parameters
-            RenderOutput r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), background_);
+            if (!params_.optimization.gut) {
+                r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), background_);
+            } else {
+                r_output = rasterize(adjusted_cam, strategy_->get_model(), background_, 1.0f, false, false, render_mode, nullptr, true);
+            }
+
 
             // Apply bilateral grid if enabled
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
