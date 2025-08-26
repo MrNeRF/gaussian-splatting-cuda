@@ -1,7 +1,50 @@
-#include "core/fast_rasterizer.hpp"
-#include "core/fast_rasterizer_autograd.hpp"
+#include "fast_rasterizer.hpp"
 
 namespace gs::rendering {
+
+    static std::tuple<torch::Tensor, torch::Tensor> forward(
+        const torch::Tensor& means,                               // [N, 3]
+        const torch::Tensor& scales_raw,                          // [N, 3]
+        const torch::Tensor& rotations_raw,                       // [N, 4]
+        const torch::Tensor& opacities_raw,                       // [N, 1]
+        const torch::Tensor& sh_coefficients_0,                   // [N, 1, 3]
+        const torch::Tensor& sh_coefficients_rest,                // [C, B-1, 3]
+        torch::Tensor& densification_info,                        // [2, N] or empty tensor
+        const FastGSSettings& settings) { // rasterizer settings
+
+        auto outputs = forward_wrapper(
+            means,
+            scales_raw,
+            rotations_raw,
+            opacities_raw,
+            sh_coefficients_0,
+            sh_coefficients_rest,
+            settings.w2c,
+            settings.cam_position,
+            settings.active_sh_bases,
+            settings.width,
+            settings.height,
+            settings.focal_x,
+            settings.focal_y,
+            settings.center_x,
+            settings.center_y,
+            settings.near_plane,
+            settings.far_plane);
+
+        auto image = std::get<0>(outputs);
+        auto alpha = std::get<1>(outputs);
+        auto per_primitive_buffers = std::get<2>(outputs);
+        auto per_tile_buffers = std::get<3>(outputs);
+        auto per_instance_buffers = std::get<4>(outputs);
+        auto per_bucket_buffers = std::get<5>(outputs);
+        int n_visible_primitives = std::get<6>(outputs);
+        int n_instances = std::get<7>(outputs);
+        int n_buckets = std::get<8>(outputs);
+        int primitive_primitive_indices_selector = std::get<9>(outputs);
+        int instance_primitive_indices_selector = std::get<10>(outputs);
+
+        return {image, alpha};
+    }
 
     using torch::indexing::None;
     using torch::indexing::Slice;
@@ -30,7 +73,7 @@ namespace gs::rendering {
         constexpr float near_plane = 0.01f;
         constexpr float far_plane = 1e10f;
 
-        fast_gs::rasterization::FastGSSettings settings;
+        FastGSSettings settings;
         settings.w2c = viewpoint_camera.world_view_transform();
         settings.cam_position = viewpoint_camera.cam_position();
         settings.active_sh_bases = active_sh_bases;
@@ -43,7 +86,7 @@ namespace gs::rendering {
         settings.near_plane = near_plane;
         settings.far_plane = far_plane;
 
-        auto raster_outputs = FastGSRasterize::apply(
+        auto [image, alpha]= forward(
             means,
             raw_scales,
             raw_rotations,
@@ -54,8 +97,8 @@ namespace gs::rendering {
             settings);
 
         RenderOutput output;
-        output.image = raster_outputs[0];
-        output.alpha = raster_outputs[1];
+        output.image = image;
+        output.alpha = alpha;
 
         // output.image = image + (1.0f - alpha) * bg_color.unsqueeze(-1).unsqueeze(-1);
 

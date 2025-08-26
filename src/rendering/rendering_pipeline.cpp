@@ -1,5 +1,5 @@
 #include "rendering_pipeline.hpp"
-#include "core/fast_rasterizer.hpp"
+#include "fast_rasterizer.hpp"
 #include <print>
 
 namespace gs::rendering {
@@ -72,7 +72,7 @@ namespace gs::rendering {
         try {
             // Perform rendering with fast_rasterize
             SplatData& mutable_model = const_cast<SplatData&>(model);
-            auto output = gs::fast_rasterize(cam, mutable_model, background_);
+            auto output = fast_rasterize(cam, mutable_model, background_);
 
             // Manually blend the background since fast_rasterize does not do it
             torch::Tensor bg = background_.unsqueeze(1).unsqueeze(2); // [3, 1, 1]
