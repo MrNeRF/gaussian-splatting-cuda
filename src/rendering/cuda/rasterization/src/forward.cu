@@ -8,7 +8,7 @@
 #include <functional>
 
 // sorting is done separately for depth and tile as proposed in https://github.com/m-schuetz/Splatshop
-std::tuple<int, int, int, int, int> gs::rendering::forward(
+void gs::rendering::forward(
     std::function<char*(size_t)> per_primitive_buffers_func,
     std::function<char*(size_t)> per_tile_buffers_func,
     std::function<char*(size_t)> per_instance_buffers_func,
@@ -153,43 +153,16 @@ std::tuple<int, int, int, int, int> gs::rendering::forward(
         CHECK_CUDA(config::debug, "extract_instance_ranges")
     }
 
-    kernels::forward::extract_bucket_counts<<<div_round_up(n_tiles, config::block_size_extract_bucket_counts), config::block_size_extract_bucket_counts>>>(
-        per_tile_buffers.instance_ranges,
-        per_tile_buffers.n_buckets,
-        n_tiles);
-    CHECK_CUDA(config::debug, "extract_bucket_counts")
-
-    cub::DeviceScan::InclusiveSum(
-        per_tile_buffers.cub_workspace,
-        per_tile_buffers.cub_workspace_size,
-        per_tile_buffers.n_buckets,
-        per_tile_buffers.bucket_offsets,
-        n_tiles);
-    CHECK_CUDA(config::debug, "cub::DeviceScan::InclusiveSum (Bucket Counts)")
-
-    int n_buckets;
-    cudaMemcpy(&n_buckets, per_tile_buffers.bucket_offsets + n_tiles - 1, sizeof(uint), cudaMemcpyDeviceToHost);
-
-    char* per_bucket_buffers_blob = per_bucket_buffers_func(required<PerBucketBuffers>(n_buckets));
-    PerBucketBuffers per_bucket_buffers = PerBucketBuffers::from_blob(per_bucket_buffers_blob, n_buckets);
-
     kernels::forward::blend_cu<<<grid, block>>>(
         per_tile_buffers.instance_ranges,
-        per_tile_buffers.bucket_offsets,
         per_instance_buffers.primitive_indices.Current(),
         per_primitive_buffers.mean2d,
         per_primitive_buffers.conic_opacity,
         per_primitive_buffers.color,
         image,
         alpha,
-        per_tile_buffers.max_n_contributions,
-        per_tile_buffers.n_contributions,
-        per_bucket_buffers.tile_index,
-        per_bucket_buffers.color_transmittance,
         width,
         height,
         grid.x);
     CHECK_CUDA(config::debug, "blend")
-
-    return {n_visible_primitives, n_instances, n_buckets, per_primitive_buffers.primitive_indices.selector, per_instance_buffers.primitive_indices.selector};
 }

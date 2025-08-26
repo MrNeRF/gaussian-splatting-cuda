@@ -6,7 +6,7 @@
 #include "rasterization_config.h"
 #include "utils.h"
 #include <cooperative_groups.h>
-#include <cstdint>
+
 namespace cg = cooperative_groups;
 
 namespace gs::rendering::kernels::forward {
@@ -351,17 +351,12 @@ namespace gs::rendering::kernels::forward {
 
     __global__ void __launch_bounds__(config::block_size_blend) blend_cu(
         const uint2* tile_instance_ranges,
-        const uint* tile_bucket_offsets,
         const uint* instance_primitive_indices,
         const float2* primitive_mean2d,
         const float4* primitive_conic_opacity,
         const float3* primitive_color,
         float* image,
         float* alpha_map,
-        uint* tile_max_n_contributions,
-        uint* tile_n_contributions,
-        uint* bucket_tile_index,
-        float4* bucket_color_transmittance,
         const uint width,
         const uint height,
         const uint grid_width) {
@@ -377,13 +372,6 @@ namespace gs::rendering::kernels::forward {
         const uint2 tile_range = tile_instance_ranges[tile_idx];
         const int n_points_total = tile_range.y - tile_range.x;
 
-        uint bucket_offset = tile_idx == 0 ? 0 : tile_bucket_offsets[tile_idx - 1];
-        const int n_buckets = div_round_up(n_points_total, 32); // re-computing is faster than reading from tile_n_buckets
-        for (int n_buckets_remaining = n_buckets, current_bucket_idx = thread_rank; n_buckets_remaining > 0; n_buckets_remaining -= config::block_size_blend, current_bucket_idx += config::block_size_blend) {
-            if (current_bucket_idx < n_buckets)
-                bucket_tile_index[bucket_offset + current_bucket_idx] = tile_idx;
-        }
-
         // setup shared memory
         __shared__ float2 collected_mean2d[config::block_size_blend];
         __shared__ float4 collected_conic_opacity[config::block_size_blend];
@@ -391,8 +379,6 @@ namespace gs::rendering::kernels::forward {
         // initialize local storage
         float3 color_pixel = make_float3(0.0f);
         float transmittance = 1.0f;
-        uint n_possible_contributions = 0;
-        uint n_contributions = 0;
         bool done = !inside;
         // collaborative loading and processing
         for (int n_points_remaining = n_points_total, current_fetch_idx = tile_range.x + thread_rank; n_points_remaining > 0; n_points_remaining -= config::block_size_blend, current_fetch_idx += config::block_size_blend) {
@@ -408,12 +394,6 @@ namespace gs::rendering::kernels::forward {
             block.sync();
             const int current_batch_size = min(config::block_size_blend, n_points_remaining);
             for (int j = 0; !done && j < current_batch_size; ++j) {
-                if (j % 32 == 0) {
-                    const float4 current_color_transmittance = make_float4(color_pixel, transmittance);
-                    bucket_color_transmittance[bucket_offset * config::block_size_blend + thread_rank] = current_color_transmittance;
-                    bucket_offset++;
-                }
-                n_possible_contributions++;
                 const float4 conic_opacity = collected_conic_opacity[j];
                 const float3 conic = make_float3(conic_opacity);
                 const float2 delta = collected_mean2d[j] - pixel;
@@ -432,7 +412,6 @@ namespace gs::rendering::kernels::forward {
                 }
                 color_pixel += transmittance * alpha * collected_color[j];
                 transmittance = next_transmittance;
-                n_contributions = n_possible_contributions;
             }
         }
         if (inside) {
@@ -443,15 +422,7 @@ namespace gs::rendering::kernels::forward {
             image[pixel_idx + n_pixels] = color_pixel.y;
             image[pixel_idx + n_pixels * 2] = color_pixel.z;
             alpha_map[pixel_idx] = 1.0f - transmittance;
-            tile_n_contributions[pixel_idx] = n_contributions;
         }
-
-        // max reduce the number of contributions
-        typedef cub::BlockReduce<uint, config::tile_width, cub::BLOCK_REDUCE_WARP_REDUCTIONS, config::tile_height> BlockReduce;
-        __shared__ typename BlockReduce::TempStorage temp_storage;
-        n_contributions = BlockReduce(temp_storage).Reduce(n_contributions, cub::Max());
-        if (thread_rank == 0)
-            tile_max_n_contributions[tile_idx] = n_contributions;
     }
 
 } // namespace gs::rendering::kernels::forward

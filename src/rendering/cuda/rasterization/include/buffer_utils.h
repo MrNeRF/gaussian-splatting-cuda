@@ -113,33 +113,17 @@ namespace gs::rendering {
         uint2* instance_ranges;
         uint* n_buckets;
         uint* bucket_offsets;
-        uint* max_n_contributions;
-        uint* n_contributions;
 
         static PerTileBuffers from_blob(char*& blob, size_t n_tiles) {
             PerTileBuffers buffers;
             obtain(blob, buffers.instance_ranges, n_tiles, 128);
             obtain(blob, buffers.n_buckets, n_tiles, 128);
             obtain(blob, buffers.bucket_offsets, n_tiles, 128);
-            obtain(blob, buffers.max_n_contributions, n_tiles, 128);
-            obtain(blob, buffers.n_contributions, n_tiles * config::block_size_blend, 128);
             cub::DeviceScan::InclusiveSum(
                 nullptr, buffers.cub_workspace_size,
                 buffers.n_buckets, buffers.bucket_offsets,
                 n_tiles);
             obtain(blob, buffers.cub_workspace, buffers.cub_workspace_size, 128);
-            return buffers;
-        }
-    };
-
-    struct PerBucketBuffers {
-        uint* tile_index;
-        float4* color_transmittance;
-
-        static PerBucketBuffers from_blob(char*& blob, size_t n_buckets) {
-            PerBucketBuffers buffers;
-            obtain(blob, buffers.tile_index, n_buckets * config::block_size_blend, 128);
-            obtain(blob, buffers.color_transmittance, n_buckets * config::block_size_blend, 128);
             return buffers;
         }
     };

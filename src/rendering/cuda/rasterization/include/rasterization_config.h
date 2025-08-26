@@ -23,7 +23,7 @@ namespace gs::rendering::config {
     DEF int tile_height = 16;
     DEF int block_size_blend = tile_width * tile_height;
     DEF int n_sequential_threshold = 4;
-} // namespace ges::rendering::config
+} // namespace gs::rendering::config
 
 namespace config = gs::rendering::config;
 

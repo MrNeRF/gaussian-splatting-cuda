@@ -11,4 +11,4 @@ namespace gs::rendering {
         SplatData& gaussian_model,
         torch::Tensor& bg_color);
 
-} // namespace gs
+} // namespace gs::rendering

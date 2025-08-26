@@ -5,7 +5,7 @@
 
 namespace gs::rendering {
 
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, int, int, int, int, int>
+    std::tuple<torch::Tensor, torch::Tensor>
     forward_wrapper(
         const torch::Tensor& means,
         const torch::Tensor& scales_raw,

@@ -2,11 +2,10 @@
 
 #include "helper_math.h"
 #include <functional>
-#include <tuple>
 
 namespace gs::rendering {
 
-    std::tuple<int, int, int, int, int> forward(
+    void forward(
         std::function<char*(size_t)> per_primitive_buffers_func,
         std::function<char*(size_t)> per_tile_buffers_func,
         std::function<char*(size_t)> per_instance_buffers_func,
