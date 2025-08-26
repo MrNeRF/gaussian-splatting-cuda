@@ -254,12 +254,18 @@ namespace gs::training {
         RenderMode render_mode,
         std::stop_token stop_token) {
         try {
-            if (cam->radial_distortion().numel() != 0 ||
-                cam->tangential_distortion().numel() != 0) {
-                return std::unexpected("Training on cameras with distortion is not supported yet.");
-            }
-            if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
-                return std::unexpected("Training on cameras with non-pinhole model is not supported yet.");
+            if (params_.optimization.gut) {
+                if (cam->camera_model_type() == gsplat::CameraModelType::ORTHO) {
+                    return std::unexpected("Training on cameras with ortho model is not supported yet.");
+                }
+            } else {
+                if (cam->radial_distortion().numel() != 0 ||
+                    cam->tangential_distortion().numel() != 0) {
+                    return std::unexpected("You must use --gut option to train on cameras with distortion.");
+                    }
+                if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
+                    return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
+                }
             }
 
             current_iteration_ = iter;
