@@ -1,7 +1,6 @@
 #pragma once
 
 #include "core/parameters.hpp"
-#include "core/scheduler.hpp"
 #include "core/splat_data.hpp"
 
 namespace gs {

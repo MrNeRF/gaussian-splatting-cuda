@@ -1,7 +1,6 @@
 #pragma once
 
-#include "core/events.hpp"
-#include "core/trainer.hpp"
+#include "trainer.hpp"
 #include <atomic>
 #include <deque>
 #include <memory>

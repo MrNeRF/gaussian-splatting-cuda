@@ -1,9 +1,9 @@
 #pragma once
 
 #include "core/camera.hpp"
-#include "core/rasterizer.hpp"
 #include "core/splat_data.hpp"
 #include "rasterization_api.h"
+#include "rasterizer.hpp"
 
 namespace gs {
 

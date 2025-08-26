@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/istrategy.hpp"
+#include "istrategy.hpp"
 #include <memory>
 #include <torch/torch.h>
 

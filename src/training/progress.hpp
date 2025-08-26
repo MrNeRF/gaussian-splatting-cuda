@@ -7,7 +7,6 @@
 #include <sstream>
 
 class TrainingProgress {
-private:
     std::unique_ptr<indicators::ProgressBar> progress_bar_;
     std::chrono::steady_clock::time_point start_time_;
     int total_iterations_;

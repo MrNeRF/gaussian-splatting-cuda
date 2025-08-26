@@ -1,6 +1,6 @@
-#include "core/rasterizer.hpp"
+#include "rasterizer.hpp"
 #include "Ops.h"
-#include "core/rasterizer_autograd.hpp"
+#include "rasterizer_autograd.hpp"
 #include <torch/torch.h>
 
 namespace gs {

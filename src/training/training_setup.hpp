@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/parameters.hpp"
-#include "core/trainer.hpp"
+#include "dataset.hpp"
+#include "trainer.hpp"
 #include <expected>
 #include <memory>
 

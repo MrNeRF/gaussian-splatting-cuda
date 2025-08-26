@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/dataset.hpp"
+#include "../dataset.hpp"
 #include "core/parameters.hpp"
-#include "core/rasterizer.hpp"
+#include "core/splat_data.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iomanip>

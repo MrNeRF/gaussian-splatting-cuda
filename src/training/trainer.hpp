@@ -1,15 +1,15 @@
 #pragma once
 
-#include "core/bilateral_grid.hpp"
-#include "core/dataset.hpp"
+#include "components/bilateral_grid.hpp"
+#include "components/poseopt.hpp"
 #include "core/events.hpp"
-#include "core/istrategy.hpp"
-#include "core/metrics.hpp"
 #include "core/parameters.hpp"
-#include "core/training_progress.hpp"
+#include "dataset.hpp"
+#include "metrics/metrics.hpp"
+#include "progress.hpp"
 #include "project/project.hpp"
-
-#include "core/poseopt.hpp"
+#include "rasterization/rasterizer.hpp"
+#include "strategies/istrategy.hpp"
 #include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <expected>

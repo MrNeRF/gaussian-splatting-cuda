@@ -1,4 +1,4 @@
-#include "core/fast_rasterizer_autograd.hpp"
+#include "fast_rasterizer_autograd.hpp"
 
 namespace gs {
 

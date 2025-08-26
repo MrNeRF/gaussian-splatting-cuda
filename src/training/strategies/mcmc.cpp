@@ -1,8 +1,8 @@
-#include "core/mcmc.hpp"
+#include "mcmc.hpp"
 #include "Ops.h"
-#include "core/fused_adam.hpp"
 #include "core/parameters.hpp"
-#include "core/rasterizer.hpp"
+#include "optimizers/fused_adam.hpp"
+#include "rasterization/rasterizer.hpp"
 #include <iostream>
 #include <random>
 

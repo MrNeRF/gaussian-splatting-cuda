@@ -1,7 +1,7 @@
 #include "core/camera.hpp"
-#include "core/mcmc.hpp"
+#include "strategies/mcmc.hpp"
 #include "core/parameters.hpp"
-#include "core/rasterizer.hpp"
+#include "rasterization/rasterizer.hpp"
 #include "core/splat_data.hpp"
 #include <gtest/gtest.h>
 #include <memory>

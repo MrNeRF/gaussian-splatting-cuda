@@ -1,7 +1,5 @@
-#include "core/rasterizer_autograd.hpp"
-
+#include "rasterization/rasterizer_autograd.hpp"
 #include "Projection.h"
-#include "core/debug_utils.hpp"
 
 namespace gs {
 

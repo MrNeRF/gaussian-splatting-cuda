@@ -1,6 +1,7 @@
 #pragma once
 
-#include "core/istrategy.hpp"
+#include "istrategy.hpp"
+#include "optimizers/scheduler.hpp"
 #include <memory>
 #include <torch/torch.h>
 

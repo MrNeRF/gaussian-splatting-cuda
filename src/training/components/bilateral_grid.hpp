@@ -1,6 +1,4 @@
 #pragma once
-#include "core/torch_shapes.hpp"
-#include <memory>
 #include <torch/torch.h>
 
 namespace gs {

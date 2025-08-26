@@ -1,9 +1,9 @@
 #include "loader/loaders/blender_loader.hpp"
 #include "core/camera.hpp"
-#include "core/dataset.hpp"
 #include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "formats/transforms.hpp"
+#include "training/dataset.hpp"
 #include <chrono>
 #include <filesystem>
 #include <format>

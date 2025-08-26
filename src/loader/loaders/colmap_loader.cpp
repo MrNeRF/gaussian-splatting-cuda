@@ -1,9 +1,9 @@
 #include "loader/loaders/colmap_loader.hpp"
 #include "core/camera.hpp"
-#include "core/dataset.hpp"
 #include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "formats/colmap.hpp"
+#include "training/dataset.hpp"
 #include <algorithm>
 #include <cctype>
 #include <chrono>

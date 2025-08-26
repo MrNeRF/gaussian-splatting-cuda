@@ -1,9 +1,9 @@
 #pragma once
 
-#include "core/istrategy.hpp"
+#include "istrategy.hpp"
+#include "optimizers/scheduler.hpp"
 #include <memory>
 #include <torch/torch.h>
-// Add this include for OptimizerParamState
 
 namespace strategy {
     void initialize_gaussians(gs::SplatData& splat_data);

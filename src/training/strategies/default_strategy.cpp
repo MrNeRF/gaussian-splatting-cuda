@@ -1,9 +1,9 @@
-#include "core/default_strategy.hpp"
+#include "default_strategy.hpp"
 #include "Ops.h"
-#include "core/fused_adam.hpp"
 #include "core/parameters.hpp"
-#include "core/rasterizer.hpp"
-#include "core/strategy.hpp"
+#include "optimizers/fused_adam.hpp"
+#include "rasterization/rasterizer.hpp"
+#include "strategy_utils.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
 
 DefaultStrategy::DefaultStrategy(gs::SplatData&& splat_data)

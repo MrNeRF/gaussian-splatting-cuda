@@ -1,16 +1,16 @@
-#include "core/trainer.hpp"
-#include "core/fast_rasterizer.hpp"
+#include "trainer.hpp"
+#include "components/bilateral_grid.hpp"
+#include "components/poseopt.hpp"
 #include "core/image_io.hpp"
-#include "core/poseopt.hpp"
-#include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
+#include "rasterization/fast_rasterizer.hpp"
+#include "rasterization/rasterizer.hpp"
 #include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <chrono>
 #include <cuda_runtime.h>
 #include <expected>
 #include <memory>
-#include <numeric>
 #include <print>
 
 namespace gs {

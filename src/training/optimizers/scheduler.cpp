@@ -1,5 +1,5 @@
-#include "core/scheduler.hpp"
-#include "core/fused_adam.hpp"
+#include "scheduler.hpp"
+#include "fused_adam.hpp"
 
 void ExponentialLR::step() {
     if (param_group_index_ >= 0) {

@@ -1,8 +1,8 @@
-#include "core/training_setup.hpp"
-#include "core/default_strategy.hpp"
-#include "core/mcmc.hpp"
+#include "training_setup.hpp"
 #include "core/point_cloud.hpp"
 #include "loader/loader.hpp"
+#include "strategies/default_strategy.hpp"
+#include "strategies/mcmc.hpp"
 #include <format>
 #include <print>
 

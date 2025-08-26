@@ -1,8 +1,8 @@
 #pragma once
 
 #include "core/camera.hpp"
-#include "core/rasterizer.hpp"
 #include "core/splat_data.hpp"
+#include "geometry/bounding_box.hpp"
 #include "point_cloud_renderer.hpp"
 #include "rendering/rendering.hpp"
 #include "screen_renderer.hpp"

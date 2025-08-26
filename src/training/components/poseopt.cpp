@@ -2,7 +2,7 @@
 
 namespace F = torch::nn::functional;
 
-#include <core/poseopt.hpp>
+#include <components/poseopt.hpp>
 
 // Converts a 6D rotation representation to a 3x3 rotation matrix
 torch::Tensor rotation_6d_to_matrix(torch::Tensor rot_6d) {

@@ -1,4 +1,4 @@
-#include "core/bilateral_grid.hpp"
+#include "bilateral_grid.hpp"
 #include "kernels/bilateral_grid.cuh"
 
 namespace gs {

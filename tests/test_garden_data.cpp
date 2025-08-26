@@ -1,5 +1,5 @@
 #include "Ops.h"
-#include "core/rasterizer_autograd.hpp"
+#include "rasterization/rasterizer_autograd.hpp"
 #include "test_data_loader.hpp"
 #include "torch_impl.hpp"
 #include <cuda_runtime.h>

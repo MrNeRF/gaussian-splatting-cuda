@@ -1,5 +1,5 @@
-#include "core/strategy.hpp"
-#include "core/fused_adam.hpp"
+#include "strategy_utils.hpp"
+#include "optimizers/fused_adam.hpp"
 
 namespace strategy {
     void initialize_gaussians(gs::SplatData& splat_data) {

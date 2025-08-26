@@ -1,8 +1,8 @@
 #include "scene/scene_manager.hpp"
 #include "core/logger.hpp"
-#include "core/training_setup.hpp"
 #include "loader/loader.hpp"
 #include "training/training_manager.hpp"
+#include "training_setup.hpp"
 #include <stdexcept>
 
 namespace gs {

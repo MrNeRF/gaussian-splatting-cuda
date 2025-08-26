@@ -1,8 +1,8 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
 #include "core/logger.hpp"
-#include "core/training_setup.hpp"
 #include "project/project.hpp"
+#include "training/training_setup.hpp"
 #include "visualizer/visualizer.hpp"
 #include <print>
 

@@ -1,7 +1,8 @@
-#include "core/metrics.hpp"
-#include "core/fast_rasterizer.hpp"
+#include "metrics.hpp"
 #include "core/image_io.hpp"
 #include "core/splat_data.hpp"
+#include "rasterization/fast_rasterizer.hpp"
+#include "rasterization/rasterizer.hpp"
 #include <chrono>
 #include <cmath>
 #include <iostream>
