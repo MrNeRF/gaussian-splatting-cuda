@@ -32,7 +32,6 @@ target_link_libraries(gs_rendering
         gaussian_host
         gaussian_kernels
         rendering_cuda_backend
-        gsplat_backend
         glad::glad
         ${OPENGL_LIBRARIES}
         CUDA::cudart
@@ -52,7 +51,6 @@ target_include_directories(gs_rendering
         ${CMAKE_CURRENT_SOURCE_DIR}/cuda/utils                # For CUDA utils
         ${CMAKE_SOURCE_DIR}/include                           # For public headers
         ${CMAKE_SOURCE_DIR}/src                               # For other internal modules
-        ${CMAKE_SOURCE_DIR}/gsplat                            # For gsplat headers
         ${CUDAToolkit_INCLUDE_DIRS}                           # CUDA headers
         ${OPENGL_INCLUDE_DIRS}                                # OpenGL headers
         ${Python3_INCLUDE_DIRS}                               # Python headers
