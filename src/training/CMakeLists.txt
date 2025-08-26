@@ -1,0 +1,144 @@
+# =============================================================================
+# TRAINING MODULE
+# =============================================================================
+
+# Collect all training sources
+set(TRAINING_HOST_SOURCES
+    trainer.cpp
+    training_setup.cpp
+    
+    # Rasterization
+    rasterization/rasterizer.cpp
+    rasterization/fast_rasterizer.cpp
+    rasterization/rasterizer_autograd.cpp
+    rasterization/fast_rasterizer_autograd.cpp
+    
+    # Strategies
+    strategies/strategy_utils.cpp
+    strategies/default_strategy.cpp
+    strategies/mcmc.cpp
+    
+    # Optimizers
+    optimizers/scheduler.cpp
+    optimizers/fused_adam.cpp
+    
+    # Metrics
+    metrics/metrics.cpp
+    
+    # Components
+    components/bilateral_grid.cpp
+    components/poseopt.cpp
+)
+
+# CUDA kernel sources
+set(TRAINING_KERNEL_SOURCES
+    kernels/bilateral_grid_forward.cu
+    kernels/bilateral_grid_backward.cu
+    kernels/bilateral_grid_tv.cu
+    kernels/ssim.cu
+)
+
+# Create training kernels library
+add_library(gs_training_kernels STATIC ${TRAINING_KERNEL_SOURCES})
+
+set_target_properties(gs_training_kernels PROPERTIES
+    CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
+    CUDA_SEPARABLE_COMPILATION ON
+    POSITION_INDEPENDENT_CODE ON
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
+
+target_include_directories(gs_training_kernels
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/kernels
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_BINARY_DIR}/include
+        ${CMAKE_SOURCE_DIR}/gsplat
+        ${CMAKE_SOURCE_DIR}/fastgs
+        ${CUDAToolkit_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
+)
+
+target_link_libraries(gs_training_kernels
+    PUBLIC
+        CUDA::cudart
+        CUDA::curand
+        CUDA::cublas
+        ${TORCH_LIBRARIES}
+        glm::glm
+        spdlog::spdlog
+)
+
+target_compile_options(gs_training_kernels PRIVATE
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
+    $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
+)
+
+# Create training host library
+add_library(gs_training STATIC ${TRAINING_HOST_SOURCES})
+
+target_include_directories(gs_training
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_BINARY_DIR}/include
+        ${CMAKE_SOURCE_DIR}/gsplat
+        ${CMAKE_SOURCE_DIR}/fastgs
+        ${CUDAToolkit_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
+        ${OPENGL_INCLUDE_DIRS}
+)
+
+target_link_libraries(gs_training
+    PUBLIC
+        gaussian_host        # Core data structures
+        gs_training_kernels  # Training-specific kernels
+        gaussian_kernels     # Base kernels
+        gs_loader           # For loading datasets
+        gsplat_backend
+        fastgs_backend
+        ${TORCH_LIBRARIES}
+        TBB::tbb
+        nlohmann_json::nlohmann_json
+        glm::glm
+        Threads::Threads
+        Python3::Python
+        CUDA::cudart
+        spdlog::spdlog
+    PRIVATE
+        ${OPENGL_LIBRARIES}
+)
+
+# Compiler options
+if(MSVC)
+    target_compile_options(gs_training PRIVATE
+        $<$<CONFIG:Debug>:/Od /Z7>
+        $<$<CONFIG:Release>:/O2 /DNDEBUG>)
+else()
+    target_compile_options(gs_training PRIVATE
+        $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer -DDEBUG>
+        $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>)
+endif()
+
+# AVX2 support
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+    
+    if(COMPILER_SUPPORTS_AVX2)
+        target_compile_options(gs_training PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma>
+        )
+        target_compile_definitions(gs_training PRIVATE HAS_AVX2_SUPPORT)
+    endif()
+endif()
+
+# Set properties
+set_target_properties(gs_training PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
+    DEBUG_POSTFIX d
+)

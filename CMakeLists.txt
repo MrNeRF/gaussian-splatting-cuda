@@ -286,26 +286,12 @@ set(HOST_SOURCES
         src/external/tinyply.cpp
         src/application.cpp
         src/argument_parser.cpp
-        src/scheduler.cpp
-        src/strategy.cpp
-        src/default_strategy.cpp
-        src/mcmc.cpp
         src/camera.cpp
         src/image_io.cpp
         src/parameters.cpp
         src/splat_data.cpp
-        src/trainer.cpp
-        src/rasterizer.cpp
-        src/fast_rasterizer.cpp
-        src/metrics.cpp
-        src/rasterizer_autograd.cpp
-        src/fast_rasterizer_autograd.cpp
-        src/bilateral_grid.cpp
-        src/fused_adam.cpp
-        src/training_setup.cpp
         src/geometry/bounding_box.cpp
         src/geometry/euclidean_transform.cpp
-        src/poseopt.cpp
         src/project/project.cpp
 )
 
@@ -380,60 +366,62 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # =============================================================================
-# KERNEL LIBRARY
+# KERNEL LIBRARY (only non-training kernels)
 # =============================================================================
-set(KERNEL_SOURCES
-        kernels/ssim.cu
-        kernels/bilateral_grid_forward.cu
-        kernels/bilateral_grid_backward.cu
-        kernels/bilateral_grid_tv.cu
-)
+set(KERNEL_SOURCES)
 
 # Add CUDA-OpenGL interop kernels if supported
 if(CUDA_GL_INTEROP_FOUND)
     list(APPEND KERNEL_SOURCES kernels/cuda_gl_interop.cu)
 endif()
 
-add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
+# Only create gaussian_kernels if there are kernels
+if(KERNEL_SOURCES)
+    add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
 
-set_target_properties(gaussian_kernels PROPERTIES
-        CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
-        CUDA_SEPARABLE_COMPILATION ON
-        POSITION_INDEPENDENT_CODE ON
-        CUDA_RESOLVE_DEVICE_SYMBOLS ON
-)
+    set_target_properties(gaussian_kernels PROPERTIES
+            CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
+            CUDA_SEPARABLE_COMPILATION ON
+            POSITION_INDEPENDENT_CODE ON
+            CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    )
 
-target_include_directories(gaussian_kernels
-        PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
-        ${CUDAToolkit_INCLUDE_DIRS}
-        ${OPENGL_INCLUDE_DIRS}
-        PRIVATE
-        ${Python3_INCLUDE_DIRS}
-)
+    target_include_directories(gaussian_kernels
+            PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
+            ${CUDAToolkit_INCLUDE_DIRS}
+            ${OPENGL_INCLUDE_DIRS}
+            PRIVATE
+            ${Python3_INCLUDE_DIRS}
+    )
 
-target_link_libraries(gaussian_kernels
-        PUBLIC
-        CUDA::cudart
-        CUDA::curand
-        CUDA::cublas
-        ${TORCH_LIBRARIES}
-        glm::glm
-        ${OPENGL_LIBRARIES}
-        spdlog::spdlog
-)
+    target_link_libraries(gaussian_kernels
+            PUBLIC
+            CUDA::cudart
+            CUDA::curand
+            CUDA::cublas
+            ${TORCH_LIBRARIES}
+            glm::glm
+            ${OPENGL_LIBRARIES}
+            spdlog::spdlog
+    )
 
-target_compile_options(gaussian_kernels PRIVATE
-        $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
-)
+    target_compile_options(gaussian_kernels PRIVATE
+            $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
+            $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
+    )
+else()
+    # Create empty interface library if no kernels
+    add_library(gaussian_kernels INTERFACE)
+endif()
 
 # =============================================================================
 # MODULES
 # =============================================================================
 add_subdirectory(src/loader)
+add_subdirectory(src/training)
 add_subdirectory(src/visualizer)
 add_subdirectory(src/rendering)
 
@@ -464,6 +452,7 @@ target_link_libraries(${PROJECT_NAME}
         gaussian_host
         gaussian_kernels
         gs_loader        # Loader module
+        gs_training      # Training module
         gs_visualizer    # Visualizer module
         gsplat_backend
         fastgs_backend
@@ -526,6 +515,7 @@ configure_build_type(gaussian_host)
 configure_build_type(gaussian_kernels)
 configure_build_type(gsplat_backend)
 configure_build_type(fastgs_backend)
+configure_build_type(gs_training)
 configure_build_type(${PROJECT_NAME})
 
 # =============================================================================
@@ -572,6 +562,7 @@ if(BUILD_TESTS)
             gaussian_host
             gaussian_kernels
             gs_loader
+            gs_training
             gs_visualizer
             gsplat_backend
             GTest::gtest
