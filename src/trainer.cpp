@@ -1,7 +1,7 @@
 #include "core/trainer.hpp"
-#include "core/poseopt.hpp"
 #include "core/fast_rasterizer.hpp"
 #include "core/image_io.hpp"
+#include "core/poseopt.hpp"
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <ATen/cuda/CUDAEvent.h>
@@ -166,8 +166,7 @@ namespace gs {
             }
             poseopt_optimizer_ = std::make_unique<torch::optim::Adam>(
                 std::vector<torch::Tensor>{poseopt_module_->parameters()},
-                torch::optim::AdamOptions(1e-5)
-                    );
+                torch::optim::AdamOptions(1e-5));
         } else {
             poseopt_module_ = std::make_unique<gs::PoseOptimizationModule>();
         }

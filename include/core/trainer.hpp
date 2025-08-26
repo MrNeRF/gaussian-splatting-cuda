@@ -9,8 +9,8 @@
 #include "core/training_progress.hpp"
 #include "project/project.hpp"
 
-#include <ATen/cuda/CUDAEvent.h>
 #include "core/poseopt.hpp"
+#include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <expected>
 #include <memory>
@@ -143,7 +143,7 @@ namespace gs {
         std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
 
         std::unique_ptr<gs::PoseOptimizationModule> poseopt_module_; // Pose optimization module
-        std::unique_ptr<torch::optim::Adam> poseopt_optimizer_; // Optimizer for pose optimization
+        std::unique_ptr<torch::optim::Adam> poseopt_optimizer_;      // Optimizer for pose optimization
 
         // Metrics evaluator - handles all evaluation logic
         std::unique_ptr<metrics::MetricsEvaluator> evaluator_;

@@ -18,9 +18,10 @@ torch::Tensor rotation_6d_to_matrix(torch::Tensor rot_6d) {
 namespace gs {
     DirectPoseOptimizationModule::DirectPoseOptimizationModule(int number_of_cameras)
         : camera_embeddings(register_module("camera_embeddings",
-                                            torch::nn::Embedding(number_of_cameras, 9))), rot_identity(register_buffer(
-                                                "rot_identity",
-                                                torch::tensor({1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f}))) {
+                                            torch::nn::Embedding(number_of_cameras, 9))),
+          rot_identity(register_buffer(
+              "rot_identity",
+              torch::tensor({1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f}))) {
         torch::nn::init::zeros_(camera_embeddings->weight);
     }
     // Only supports 1d batch size
@@ -38,10 +39,12 @@ namespace gs {
                              delta_translation);
         return torch::matmul(camera_transforms, transform);
     }
-    MLPPoseOptimizationModule::MLPPoseOptimizationModule(int number_of_cameras, int width, int depth)  : camera_embeddings(register_module("camera_embeddings",
-                                            torch::nn::Embedding(number_of_cameras, width))), rot_identity(register_buffer(
-                                                "rot_identity",
-                                                torch::tensor({1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f}))), mlp(register_module("mlp", torch::nn::Sequential())) {
+    MLPPoseOptimizationModule::MLPPoseOptimizationModule(int number_of_cameras, int width, int depth) : camera_embeddings(register_module("camera_embeddings",
+                                                                                                                                          torch::nn::Embedding(number_of_cameras, width))),
+                                                                                                        rot_identity(register_buffer(
+                                                                                                            "rot_identity",
+                                                                                                            torch::tensor({1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f}))),
+                                                                                                        mlp(register_module("mlp", torch::nn::Sequential())) {
         torch::nn::init::zeros_(camera_embeddings->weight);
         for (int i = 0; i < depth; ++i) {
             mlp->push_back(torch::nn::Linear(width, width));
@@ -51,7 +54,6 @@ namespace gs {
         torch::nn::init::zeros_(last_layer->weight);
         torch::nn::init::zeros_(last_layer->bias);
         mlp->push_back(last_layer);
-
     }
 
     torch::Tensor MLPPoseOptimizationModule::forward(torch::Tensor camera_transforms, torch::Tensor embedding_ids) {
