@@ -922,17 +922,20 @@ namespace gs {
             const int image_width = static_cast<int>(cam->image_width());
             const int image_height = static_cast<int>(cam->image_height());
 
-            // 3.c) Projection-only (no rendering)
-            auto proj_settings = torch::tensor(
-                {static_cast<float>(image_width),
-                 static_cast<float>(image_height),
-                 eps2d, near_plane, far_plane, radius_clip, scaling_mod},
-                torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
-
-            // NOTE: This lives in the same namespace (gs) – call without "gs::" prefix,
-            // exactly like in rasterizer.cpp.
-            auto proj_out = ProjectionFunction::apply(
-                means3D, rotations, scales, opacities, viewmat, K, proj_settings);
+            // 3.c) Projection-only (no rendering) - master uses ProjectionSettings (struct)
+            gs::ProjectionSettings st;
+            st.width = image_width;
+            st.height = image_height;
+            st.eps2d = eps2d;
+            st.near_plane = near_plane;
+            st.far_plane = far_plane;
+            st.radius_clip = radius_clip;
+            st.scaling_modifier = scaling_mod;
+            // Ensure view/K are batched as [1,...] if needed
+            if (viewmat.dim() == 2) viewmat = viewmat.unsqueeze(0);
+            if (K.dim() == 2) K = K.unsqueeze(0);
+            auto proj_out = gs::ProjectionFunction::apply(
+                means3D, rotations, scales, opacities, viewmat, K, st);
 
             torch::Tensor radii2 = proj_out[0];  // [1,N,2] or [N,2]
             torch::Tensor means2d = proj_out[1]; // [1,N,2] or [N,2]
