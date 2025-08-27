@@ -26,6 +26,7 @@ add_library(gs_visualizer STATIC
         gui/windows/file_browser.cpp
         gui/windows/camera_controls.cpp
         gui/windows/image_preview.cpp
+        gui/windows/save_project_browser.cpp
 
         # Scene management
         scene/scene.cpp
@@ -36,7 +37,6 @@ add_library(gs_visualizer STATIC
 
         # Training integration
         training/training_manager.cpp
-        gui/windows/save_project_browser.cpp
 
         # Tools
         tools/translation_gizmo_tool.cpp
@@ -45,23 +45,25 @@ add_library(gs_visualizer STATIC
 # Set include directories
 target_include_directories(gs_visualizer
         PUBLIC
-        # ONLY expose the include directory for public headers
         $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
         PRIVATE
-        # Internal paths for implementation only
-        ${CMAKE_CURRENT_SOURCE_DIR}                      # For internal includes
-        ${CMAKE_SOURCE_DIR}/include                       # For core headers
-        ${CMAKE_SOURCE_DIR}/src/training                 # For training module headers
-        ${CMAKE_SOURCE_DIR}/gsplat                       # For gsplat headers
-        ${CUDAToolkit_INCLUDE_DIRS}                      # CUDA headers
-        ${OPENGL_INCLUDE_DIRS}                           # OpenGL headers
-        ${Python3_INCLUDE_DIRS}                          # Python headers
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
+        ${OPENGL_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
 )
 
-# Link dependencies - ALL PRIVATE to hide from consumers
+# Link dependencies
 target_link_libraries(gs_visualizer
         PRIVATE
+        gs_core            # CHANGED: Use modular core library
+        gs_geometry        # ADD: If needed for geometry operations
+        gs_project         # ADD: For project management
+        gs_kernels         # CHANGED: Use modular kernels library
+        gs_loader
+        gs_rendering
+        gs_training
         ${TORCH_LIBRARIES}
         glad::glad
         glfw
@@ -73,11 +75,6 @@ target_link_libraries(gs_visualizer
         Python3::Python
         CUDA::cudart
         ${OPENGL_LIBRARIES}
-        gs_loader
-        gs_rendering       # For visualization rendering
-        gs_training        # For training functionality
-        gaussian_host      # For access to core functionality
-        gaussian_kernels   # For CUDA kernels if needed
 )
 
 # Set C++ standard
@@ -91,7 +88,7 @@ target_compile_options(gs_visualizer PRIVATE
         $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O3>
 )
 
-## Handle resources (shaders and assets)
+# Handle resources (shaders and assets)
 set(VISUALIZER_BUILD_RESOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/resources")
 set(VISUALIZER_SOURCE_RESOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources")
 
@@ -122,19 +119,12 @@ endforeach ()
 
 # Compile definitions
 target_compile_definitions(gs_visualizer PRIVATE
-        # CUDA interop
         $<$<BOOL:${CUDA_GL_INTEROP_ENABLED}>:CUDA_GL_INTEROP_ENABLED>
-
-        # Project root for fallback paths
         PROJECT_ROOT_PATH="${PROJECT_SOURCE_DIR}"
-
-        # Resource paths
         VISUALIZER_SHADER_PATH="${VISUALIZER_BUILD_RESOURCE_DIR}/shaders"
         VISUALIZER_ASSET_PATH="${VISUALIZER_BUILD_RESOURCE_DIR}/assets"
         VISUALIZER_SOURCE_SHADER_PATH="${VISUALIZER_SOURCE_RESOURCE_DIR}/shaders"
         VISUALIZER_SOURCE_ASSET_PATH="${VISUALIZER_SOURCE_RESOURCE_DIR}/assets"
-
-        # Build configuration
         $<$<CONFIG:Debug>:DEBUG_BUILD>
         $<$<CONFIG:Release>:RELEASE_BUILD>
 )

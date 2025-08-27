@@ -1,4 +1,4 @@
-﻿# windows/linux platform independent
+# windows/linux platform independent
 set(RAW_VCPKG_PATH $ENV{VCPKG_ROOT})
 file(TO_CMAKE_PATH "${RAW_VCPKG_PATH}" VCPKG_ROOT)
 set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
@@ -74,9 +74,9 @@ endif()
 # We cannot use all or all-major since 5x and 6x versions are not supported
 # in the CUDA code.
 function(gs_detect_supported_sms OUT_VAR)
-  set(options)
-  set(oneValueArgs MIN_SM)
-  cmake_parse_arguments(GS "${options}" "${oneValueArgs}" "" ${ARGN})
+    set(options)
+    set(oneValueArgs MIN_SM)
+    cmake_parse_arguments(GS "${options}" "${oneValueArgs}" "" ${ARGN})
 
   # Use 'ptxas --help' to get the valid families
   set(_sms_list "")
@@ -85,48 +85,47 @@ function(gs_detect_supported_sms OUT_VAR)
                HINTS "${_cuda_bin}" "${_cuda_bin}/.." "${CUDAToolkit_BIN_DIR}"
                PATHS ENV PATH)
 
-  if(PTXAS_EXECUTABLE)
-    execute_process(COMMAND "${PTXAS_EXECUTABLE}" --help
-      OUTPUT_VARIABLE _ptxas_help
-      ERROR_VARIABLE  _ptxas_err
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_STRIP_TRAILING_WHITESPACE)
-    set(_help "${_ptxas_help}\n${_ptxas_err}")
+    if(PTXAS_EXECUTABLE)
+        execute_process(COMMAND "${PTXAS_EXECUTABLE}" --help
+            OUTPUT_VARIABLE _ptxas_help
+            ERROR_VARIABLE  _ptxas_err
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_STRIP_TRAILING_WHITESPACE)
+        set(_help "${_ptxas_help}\n${_ptxas_err}")
 
-    string(REGEX MATCHALL "sm_[0-9]+" _matches "${_help}")
-    if(_matches)
-      string(REPLACE "sm_" "" _nums "${_matches}")
-      string(REPLACE " "  ";" _nums "${_nums}")
-      separate_arguments(_nums)
-      list(REMOVE_DUPLICATES _nums)
-      list(SORT _nums COMPARE NATURAL)
-      foreach(n IN LISTS _nums)
+        string(REGEX MATCHALL "sm_[0-9]+" _matches "${_help}")
+        if(_matches)
+            string(REPLACE "sm_" "" _nums "${_matches}")
+            string(REPLACE " "  ";" _nums "${_nums}")
+            separate_arguments(_nums)
+            list(REMOVE_DUPLICATES _nums)
+            list(SORT _nums COMPARE NATURAL)
+            foreach(n IN LISTS _nums)
+                if(GS_MIN_SM)
+                    if(n GREATER_EQUAL ${GS_MIN_SM})
+                        list(APPEND _sms_list ${n})
+                    endif()
+                else()
+                    list(APPEND _sms_list ${n})
+                endif()
+            endforeach()
+        endif()
+    endif()
+
+    if(NOT _sms_list)
+        set(_sms_list 75 80 86 87 89 90 100 101 120)
         if(GS_MIN_SM)
-          if(n GREATER_EQUAL ${GS_MIN_SM})
-            list(APPEND _sms_list ${n})
-          endif()
-        else()
-          list(APPEND _sms_list ${n})
+            set(_filtered "")
+            foreach(n IN LISTS _sms_list)
+                if(n GREATER_EQUAL ${GS_MIN_SM})
+                    list(APPEND _filtered ${n})
+                endif()
+            endforeach()
+            set(_sms_list "${_filtered}")
         endif()
-      endforeach()
     endif()
-  endif()
 
-  # Fallback
-  if(NOT _sms_list)
-    set(_sms_list 75 80 86 87 89 90 100 101 120)
-    if(GS_MIN_SM)
-      set(_filtered "")
-      foreach(n IN LISTS _sms_list)
-        if(n GREATER_EQUAL ${GS_MIN_SM})
-          list(APPEND _filtered ${n})
-        endif()
-      endforeach()
-      set(_sms_list "${_filtered}")
-    endif()
-  endif()
-
-  set(${OUT_VAR} "${_sms_list}" PARENT_SCOPE)
+    set(${OUT_VAR} "${_sms_list}" PARENT_SCOPE)
 endfunction()
 
 if(DEFINED TORCH_CUDA_ARCH_LIST)
@@ -210,7 +209,7 @@ endif()
 
 message(STATUS "CUDA Toolkit ${CUDAToolkit_VERSION} found at ${CUDAToolkit_TARGET_DIR}")
 
-# Other packages
+# Find packages
 find_package(Torch REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Threads REQUIRED)
@@ -272,92 +271,7 @@ configure_file(
         @ONLY
 )
 
-# Add gsplat subdirectory
-add_subdirectory(gsplat)
-add_subdirectory(fastgs)
-
-set_target_properties(gsplat_backend  PROPERTIES CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
-set_target_properties(fastgs_backend PROPERTIES CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
-
-# =============================================================================
-# HOST LIBRARY - Core functionality
-# =============================================================================
-set(HOST_SOURCES
-        src/external/tinyply.cpp
-        src/application.cpp
-        src/argument_parser.cpp
-        src/camera.cpp
-        src/image_io.cpp
-        src/parameters.cpp
-        src/splat_data.cpp
-        src/geometry/bounding_box.cpp
-        src/geometry/euclidean_transform.cpp
-        src/project/project.cpp
-)
-
-add_library(gaussian_host STATIC ${HOST_SOURCES})
-
-target_include_directories(gaussian_host
-        PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
-        ${CMAKE_CURRENT_SOURCE_DIR}/fastgs  # Add fastgs headers
-        ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
-        PRIVATE
-        ${Python3_INCLUDE_DIRS}
-        ${OPENGL_INCLUDE_DIRS}
-)
-
-target_link_libraries(gaussian_host
-        PUBLIC
-        ${TORCH_LIBRARIES}
-        TBB::tbb
-        nlohmann_json::nlohmann_json
-        glm::glm
-        Threads::Threads
-        Python3::Python
-        gsplat_backend  # Link to gsplat
-        fastgs_backend  # Link to fastgs
-        CUDA::cudart    # Add CUDA runtime for interop
-        spdlog::spdlog
-)
-
-if(UNIX)
-    target_link_libraries(gaussian_host PUBLIC dl)
-endif()
-
-# Fast C++ compilation with proper debug symbols
-if(MSVC)
-  target_compile_options(gaussian_host PRIVATE
-    $<$<CONFIG:Debug>:/Od /Z7>
-    $<$<CONFIG:Release>:/O2 /DNDEBUG>)
-else()
-  target_compile_options(gaussian_host PRIVATE
-    $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer -DDEBUG>
-    $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>)
-endif()
-
-
-# AVX2 support
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    include(CheckCXXCompilerFlag)
-    check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
-
-    if(COMPILER_SUPPORTS_AVX2)
-        target_compile_options(gaussian_host PRIVATE
-                $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma>
-        )
-        target_compile_definitions(gaussian_host PRIVATE HAS_AVX2_SUPPORT)
-        message(STATUS "✓ AVX2 support enabled for gaussian_host")
-    else()
-        message(WARNING "✗ Compiler does not support AVX2")
-    endif()
-endif()
-
-# Ensure debug symbols in debug builds
-set_target_properties(gaussian_host PROPERTIES DEBUG_POSTFIX d)
-
+# Project-wide definitions
 add_definitions(-DPROJECT_ROOT_PATH="${PROJ_ROOT_DIR}")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -366,30 +280,37 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # =============================================================================
-# KERNEL LIBRARY (only non-training kernels)
+# Kernel libs
+# =============================================================================
+add_subdirectory(gsplat)
+add_subdirectory(fastgs)
+
+set_target_properties(gsplat_backend PROPERTIES CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
+set_target_properties(fastgs_backend PROPERTIES CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
+
+# =============================================================================
+# SHARED CUDA KERNELS (only if needed)
 # =============================================================================
 set(KERNEL_SOURCES)
-
-# Add CUDA-OpenGL interop kernels if supported
 if(CUDA_GL_INTEROP_FOUND)
     list(APPEND KERNEL_SOURCES kernels/cuda_gl_interop.cu)
 endif()
 
 # Only create gaussian_kernels if there are kernels
 if(KERNEL_SOURCES)
-    add_library(gaussian_kernels STATIC ${KERNEL_SOURCES})
+    add_library(gs_kernels STATIC ${KERNEL_SOURCES})
 
-    set_target_properties(gaussian_kernels PROPERTIES
+    set_target_properties(gs_kernels PROPERTIES
             CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
             CUDA_SEPARABLE_COMPILATION ON
             POSITION_INDEPENDENT_CODE ON
             CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
 
-    target_include_directories(gaussian_kernels
+    target_include_directories(gs_kernels
             PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include
-            ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
+            ${CMAKE_CURRENT_BINARY_DIR}/include
             ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
             ${CUDAToolkit_INCLUDE_DIRS}
             ${OPENGL_INCLUDE_DIRS}
@@ -397,7 +318,7 @@ if(KERNEL_SOURCES)
             ${Python3_INCLUDE_DIRS}
     )
 
-    target_link_libraries(gaussian_kernels
+    target_link_libraries(gs_kernels
             PUBLIC
             CUDA::cudart
             CUDA::curand
@@ -408,22 +329,25 @@ if(KERNEL_SOURCES)
             spdlog::spdlog
     )
 
-    target_compile_options(gaussian_kernels PRIVATE
+    target_compile_options(gs_kernels PRIVATE
             $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-O0 -g -G -lineinfo>
             $<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-O3 -use_fast_math --ptxas-options=-v>
     )
 else()
     # Create empty interface library if no kernels
-    add_library(gaussian_kernels INTERFACE)
+    add_library(gs_kernels INTERFACE)
 endif()
 
 # =============================================================================
-# MODULES
+# LIBRARY MODULES
 # =============================================================================
-add_subdirectory(src/loader)
-add_subdirectory(src/training)
-add_subdirectory(src/visualizer)
-add_subdirectory(src/rendering)
+add_subdirectory(src/core)        # Foundation module
+add_subdirectory(src/geometry)    # Geometry utilities  
+add_subdirectory(src/project)     # Project management
+add_subdirectory(src/loader)      # Data loading
+add_subdirectory(src/training)    # Training functionality
+add_subdirectory(src/rendering)   # Rendering pipeline
+add_subdirectory(src/visualizer)  # GUI and visualization
 
 # =============================================================================
 # MAIN EXECUTABLE
@@ -440,8 +364,6 @@ target_include_directories(${PROJECT_NAME}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
-        ${CMAKE_CURRENT_SOURCE_DIR}/fastgs
         ${Python3_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
@@ -449,11 +371,14 @@ target_include_directories(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME}
         PRIVATE
-        gaussian_host
-        gaussian_kernels
-        gs_loader        # Loader module
-        gs_training      # Training module
-        gs_visualizer    # Visualizer module
+        gs_core
+        gs_geometry
+        gs_project
+        gs_loader
+        gs_training
+        gs_rendering
+        gs_visualizer
+        gs_kernels
         gsplat_backend
         fastgs_backend
         Python3::Python
@@ -492,7 +417,7 @@ elseif(UNIX)
     endif()
 endif()
 
-# Build type configuration
+# Build type configuration function
 function(configure_build_type target)
     get_target_property(target_type ${target} TYPE)
 
@@ -511,11 +436,11 @@ function(configure_build_type target)
     endif()
 endfunction()
 
-configure_build_type(gaussian_host)
-configure_build_type(gaussian_kernels)
+# Apply build configuration to all targets
+configure_build_type(gs_core)
+configure_build_type(gs_kernels)
 configure_build_type(gsplat_backend)
 configure_build_type(fastgs_backend)
-configure_build_type(gs_training)
 configure_build_type(${PROJECT_NAME})
 
 # =============================================================================
@@ -551,7 +476,6 @@ if(BUILD_TESTS)
     target_include_directories(gaussian_tests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${CMAKE_CURRENT_BINARY_DIR}/include
-            ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
             ${Python3_INCLUDE_DIRS}
             ${CUDAToolkit_INCLUDE_DIRS}
@@ -559,12 +483,16 @@ if(BUILD_TESTS)
     )
 
     target_link_libraries(gaussian_tests PRIVATE
-            gaussian_host
-            gaussian_kernels
+            gs_core
+            gs_geometry
+            gs_project
+            gs_kernels
             gs_loader
             gs_training
+            gs_rendering
             gs_visualizer
             gsplat_backend
+            fastgs_backend
             GTest::gtest
             GTest::gtest_main
             Python3::Python

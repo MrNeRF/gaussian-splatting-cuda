@@ -1,7 +1,3 @@
-# =============================================================================
-# TRAINING MODULE
-# =============================================================================
-
 # Collect all training sources
 set(TRAINING_HOST_SOURCES
         trainer.cpp
@@ -94,9 +90,9 @@ target_include_directories(gs_training
 
 target_link_libraries(gs_training
         PUBLIC
-        gaussian_host        # Core data structures
+        gs_core              # CHANGED: Use modular core library instead of gaussian_host
         gs_training_kernels  # Training-specific kernels
-        gaussian_kernels     # Base kernels
+        gs_kernels           # CHANGED: Use modular kernels instead of gaussian_kernels
         gs_loader           # For loading datasets
         gsplat_backend
         fastgs_backend
