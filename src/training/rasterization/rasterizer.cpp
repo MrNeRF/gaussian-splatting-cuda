@@ -177,7 +177,7 @@ namespace gs::training {
         const int tile_size = 16;
         const bool calc_compensations = antialiased;
 
-        std::optional<torch::Tensor> radial_distortion = std::nullopt;
+        std::optional<torch::Tensor> radial_distortion;
         if (viewpoint_camera.radial_distortion().numel() > 0) {
             radial_distortion = viewpoint_camera.radial_distortion().to(torch::kCUDA);
             TORCH_CHECK(radial_distortion->dim() == 1, "radial_distortion must be 1D, got ", radial_distortion->sizes());
