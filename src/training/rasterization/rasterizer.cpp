@@ -182,7 +182,7 @@ namespace gs::training {
             radial_distortion = viewpoint_camera.radial_distortion().to(torch::kCUDA);
             TORCH_CHECK(radial_distortion->dim() == 1, "radial_distortion must be 1D, got ", radial_distortion->sizes());
         }
-        std::optional<torch::Tensor> tangential_distortion = std::nullopt;
+        std::optional<torch::Tensor> tangential_distortion;
         if (viewpoint_camera.tangential_distortion().numel() > 0) {
             tangential_distortion = viewpoint_camera.tangential_distortion().to(torch::kCUDA);
             TORCH_CHECK(tangential_distortion->dim() == 1, "tangential_distortion must be 1D, got ", tangential_distortion->sizes());
