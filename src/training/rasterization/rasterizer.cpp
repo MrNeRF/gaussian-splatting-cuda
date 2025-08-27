@@ -177,6 +177,17 @@ namespace gs::training {
         const int tile_size = 16;
         const bool calc_compensations = antialiased;
 
+        std::optional<torch::Tensor> radial_distortion;
+        if (viewpoint_camera.radial_distortion().numel() > 0) {
+            radial_distortion = viewpoint_camera.radial_distortion().to(torch::kCUDA);
+            TORCH_CHECK(radial_distortion->dim() == 1, "radial_distortion must be 1D, got ", radial_distortion->sizes());
+        }
+        std::optional<torch::Tensor> tangential_distortion;
+        if (viewpoint_camera.tangential_distortion().numel() > 0) {
+            tangential_distortion = viewpoint_camera.tangential_distortion().to(torch::kCUDA);
+            TORCH_CHECK(tangential_distortion->dim() == 1, "tangential_distortion must be 1D, got ", tangential_distortion->sizes());
+        }
+
         // Step 1: Projection
         torch::Tensor radii;
         torch::Tensor means2d;
@@ -200,8 +211,8 @@ namespace gs::training {
                 opacities,
                 viewmat,
                 K,
-                std::nullopt,
-                std::nullopt,
+                radial_distortion,
+                tangential_distortion,
                 std::nullopt,
                 proj_settings,
                 UnscentedTransformParameters());
@@ -333,7 +344,7 @@ namespace gs::training {
                 image_height,
                 tile_size,
                 scaling_modifier,
-                gsplat::PINHOLE};
+                viewpoint_camera.camera_model_type()};
             auto ut_params = UnscentedTransformParameters{};
             auto raster_outputs = GUTRasterizationFunction::apply(
                 means3D,
@@ -345,8 +356,8 @@ namespace gs::training {
                 std::nullopt,
                 viewmat,
                 K,
-                std::nullopt, // radial_coeffs
-                std::nullopt, // tangential_coeffs
+                radial_distortion,
+                tangential_distortion,
                 std::nullopt, // thin_prism_coeffs
                 isect_offsets,
                 flatten_ids,

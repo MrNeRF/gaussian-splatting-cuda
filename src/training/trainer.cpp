@@ -152,6 +152,10 @@ namespace gs::training {
                 throw std::runtime_error("Evaluating with pose optimization is not supported yet. "
                                          "Please disable pose optimization or evaluation.");
             }
+            if (params.optimization.gut) {
+                throw std::runtime_error("The 3DGUT rasterizer doesn't have camera gradients yet. "
+                                         "Please disable pose optimization or disable gut.");
+            }
             if (params.optimization.pose_optimization == "direct") {
                 poseopt_module_ = std::make_unique<DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
             } else if (params.optimization.pose_optimization == "mlp") {
@@ -254,12 +258,18 @@ namespace gs::training {
         RenderMode render_mode,
         std::stop_token stop_token) {
         try {
-            if (cam->radial_distortion().numel() != 0 ||
-                cam->tangential_distortion().numel() != 0) {
-                return std::unexpected("Training on cameras with distortion is not supported yet.");
-            }
-            if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
-                return std::unexpected("Training on cameras with non-pinhole model is not supported yet.");
+            if (params_.optimization.gut) {
+                if (cam->camera_model_type() == gsplat::CameraModelType::ORTHO) {
+                    return std::unexpected("Training on cameras with ortho model is not supported yet.");
+                }
+            } else {
+                if (cam->radial_distortion().numel() != 0 ||
+                    cam->tangential_distortion().numel() != 0) {
+                    return std::unexpected("You must use --gut option to train on cameras with distortion.");
+                    }
+                if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
+                    return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
+                }
             }
 
             current_iteration_ = iter;
