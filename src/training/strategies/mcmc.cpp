@@ -1,6 +1,7 @@
 #include "mcmc.hpp"
 #include "Ops.h"
 #include "core/parameters.hpp"
+#include "core/logger.hpp"
 #include "optimizers/fused_adam.hpp"
 #include "rasterization/rasterizer.hpp"
 #include <iostream>
@@ -393,6 +394,21 @@ namespace gs::training {
             fused_adam->zero_grad(true, iter);
             _scheduler->step();
         }
+    }
+
+    void MCMC::remove_gaussians(const torch::Tensor& mask) {
+        torch::NoGradGuard no_grad;
+
+        if (mask.sum().item<int>() == 0) {
+            LOG_DEBUG("No Gaussians to remove");
+            return;
+        }
+
+        LOG_DEBUG("MCMC: Removing {} Gaussians", mask.sum().item<int>());
+
+        // For MCMC, we just mark them as dead and let relocate handle it
+        auto opacities = _splat_data.opacity_raw();
+        opacities.index_put_({mask}, torch::logit(torch::tensor(1e-7f)));
     }
 
     void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {

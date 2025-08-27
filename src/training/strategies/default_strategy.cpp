@@ -1,6 +1,7 @@
 #include "default_strategy.hpp"
 #include "Ops.h"
 #include "core/parameters.hpp"
+#include "core/logger.hpp"
 #include "optimizers/fused_adam.hpp"
 #include "rasterization/rasterizer.hpp"
 #include "strategy_utils.hpp"
@@ -27,6 +28,19 @@ namespace gs::training {
         return (iter > _params->start_refine &&
                 iter % _params->refine_every == 0 &&
                 iter % _params->reset_every >= _params->pause_refine_after_reset);
+    }
+
+
+    void DefaultStrategy::remove_gaussians(const torch::Tensor& mask) {
+        torch::NoGradGuard no_grad;
+
+        if (mask.sum().item<int>() == 0) {
+            LOG_DEBUG("No Gaussians to remove");
+            return;
+        }
+
+        LOG_DEBUG("Removing {} Gaussians", mask.sum().item<int>());
+        remove(mask);
     }
 
     void DefaultStrategy::duplicate(const torch::Tensor& is_duplicated) {

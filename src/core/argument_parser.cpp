@@ -94,6 +94,11 @@ namespace {
             ::args::ValueFlagList<std::string> timelapse_images(parser, "timelapse_images", "Image filenames to render timelapse images for", {"timelapse-images"});
             ::args::ValueFlag<int> timelapse_every(parser, "timelapse_every", "Render timelapse image every N iterations (default: 50)", {"timelapse-every"});
 
+            // Sparsity optimization arguments
+            ::args::ValueFlag<int> sparsify_steps(parser, "sparsify_steps", "Number of steps for sparsification (default: 15000)", {"sparsify-steps"});
+            ::args::ValueFlag<float> init_rho(parser, "init_rho", "Initial ADMM penalty parameter (default: 0.0005)", {"init-rho"});
+            ::args::ValueFlag<float> prune_ratio(parser, "prune_ratio", "Final pruning ratio for sparsity (default: 0.8)", {"prune-ratio"});
+
             // Logging options
             ::args::ValueFlag<std::string> log_level(parser, "level", "Log level: trace, debug, info, warn, error, critical, off (default: info)", {"log-level"});
             ::args::ValueFlag<std::string> log_file(parser, "file", "Optional log file path", {"log-file"});
@@ -108,6 +113,7 @@ namespace {
             ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
             ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
             ::args::Flag gut(parser, "gut", "Enable GUT mode", {"gut"});
+            ::args::Flag enable_sparsity(parser, "enable_sparsity", "Enable sparsity optimization", {"enable-sparsity"});
 
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
                                                             "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
@@ -264,6 +270,10 @@ namespace {
                                         strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
                                         timelapse_images_val = timelapse_images ? std::optional<std::vector<std::string>>(::args::get(timelapse_images)) : std::optional<std::vector<std::string>>(),
                                         timelapse_every_val = timelapse_every ? std::optional<int>(::args::get(timelapse_every)) : std::optional<int>(),
+                                        // Sparsity parameters
+                                        sparsify_steps_val = sparsify_steps ? std::optional<int>(::args::get(sparsify_steps)) : std::optional<int>(),
+                                        init_rho_val = init_rho ? std::optional<float>(::args::get(init_rho)) : std::optional<float>(),
+                                        prune_ratio_val = prune_ratio ? std::optional<float>(::args::get(prune_ratio)) : std::optional<float>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
@@ -272,7 +282,8 @@ namespace {
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
                                         skip_intermediate_saving_flag = bool(skip_intermediate_saving),
                                         random_flag = bool(random),
-                                        gut_flag = bool(gut)]() {
+                                        gut_flag = bool(gut),
+                                        enable_sparsity_flag = bool(enable_sparsity)]() {
                 auto& opt = params.optimization;
                 auto& ds = params.dataset;
 
@@ -306,6 +317,11 @@ namespace {
                 setVal(timelapse_images_val, ds.timelapse_images);
                 setVal(timelapse_every_val, ds.timelapse_every);
 
+                // Sparsity parameters
+                setVal(sparsify_steps_val, opt.sparsify_steps);
+                setVal(init_rho_val, opt.init_rho);
+                setVal(prune_ratio_val, opt.prune_ratio);
+
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
                 setFlag(headless_flag, opt.headless);
@@ -314,6 +330,7 @@ namespace {
                 setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
                 setFlag(random_flag, opt.random);
                 setFlag(gut_flag, opt.gut);
+                setFlag(enable_sparsity_flag, opt.enable_sparsity);
             };
 
             return std::make_tuple(ParseResult::Success, apply_cmd_overrides);
@@ -336,6 +353,11 @@ namespace {
             opt.stop_refine *= scaler;
             opt.refine_every *= scaler;
             opt.sh_degree_interval *= scaler;
+
+            // Also scale sparsity steps if enabled
+            if (opt.enable_sparsity) {
+                opt.sparsify_steps *= scaler;
+            }
 
             scale_steps_vector(opt.eval_steps, scaler);
             scale_steps_vector(opt.save_steps, scaler);

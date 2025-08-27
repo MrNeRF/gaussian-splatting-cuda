@@ -68,6 +68,12 @@ namespace gs {
             int init_num_pts = 100'000; // Number of random points to initialize
             float init_extent = 3.0f;   // Extent of random point cloud
 
+            // Sparsity optimization parameters
+            bool enable_sparsity = false;
+            int sparsify_steps = 15000;
+            float init_rho = 0.0005f;
+            float prune_ratio = 0.8f;
+
             nlohmann::json to_json() const;
             static OptimizationParameters from_json(const nlohmann::json& j);
         };
