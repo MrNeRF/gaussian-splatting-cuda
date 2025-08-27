@@ -27,9 +27,9 @@ add_library(gs_rendering STATIC ${RENDERING_SOURCES})
 
 target_link_libraries(gs_rendering
         PUBLIC
-        gs_core                # Use the new modular core library
-        gs_geometry            # ADD: Link geometry for BoundingBox and EuclideanTransform
-        gs_kernels            # Use modular kernels library
+        gs_core                # Link core module
+        gs_geometry            # Link geometry module for BoundingBox and EuclideanTransform
+        gs_kernels             # Link kernels module
         PRIVATE
         rendering_cuda_backend
         ${TORCH_LIBRARIES}
