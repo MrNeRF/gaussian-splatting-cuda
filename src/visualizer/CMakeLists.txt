@@ -57,10 +57,10 @@ target_include_directories(gs_visualizer
 # Link dependencies
 target_link_libraries(gs_visualizer
         PRIVATE
-        gs_core            # CHANGED: Use modular core library
-        gs_geometry        # ADD: If needed for geometry operations
-        gs_project         # ADD: For project management
-        gs_kernels         # CHANGED: Use modular kernels library
+        gs_core            # Use modular core library
+        gs_geometry        # If needed for geometry operations
+        gs_project         # For project management
+        gs_kernels         # Use modular kernels library
         gs_loader
         gs_rendering
         gs_training
