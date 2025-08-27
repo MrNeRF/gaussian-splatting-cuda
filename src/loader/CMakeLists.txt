@@ -39,7 +39,7 @@ target_include_directories(gs_loader
 # Link dependencies
 target_link_libraries(gs_loader
         PUBLIC
-        gs_core            # ADD: Link to modular core library for SplatData, Camera, etc.
+        gs_core            # Link to modular core library for SplatData, Camera, etc.
         PRIVATE
         TBB::tbb
         spdlog::spdlog
