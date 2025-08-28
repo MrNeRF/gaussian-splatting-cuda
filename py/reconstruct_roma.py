@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 EDGS-like Dense COLMAP Initializer (concise & faithful)
 
@@ -21,6 +19,8 @@ Main ideas transplanted from EDGS:
 
 import os, argparse, struct, time
 from typing import Dict, Tuple, List, Optional
+import math
+from collections import deque
 
 import numpy as np
 from PIL import Image
@@ -132,6 +132,59 @@ def skew(v: np.ndarray) -> np.ndarray:
 # ==========================
 # Neighbor selection
 # ==========================
+
+def select_cameras_by_visibility(rec: pycolmap.Reconstruction, K: int) -> List[int]:
+    """
+    Selects K reference cameras by greedily picking the one that sees the most
+    not-yet-covered 3D points from the sparse reconstruction. This generally
+    gives better spatial coverage than clustering poses alone.
+
+    Args:
+        rec: A pycolmap.Reconstruction object.
+        K: The number of reference cameras to select.
+
+    Returns:
+        A sorted list of image_id's for the selected reference views.
+    """
+    if not rec.points3D:
+        raise ValueError("Visibility-based selection requires a sparse point cloud.")
+
+    # Map point3D_id -> list of observing image_ids
+    pt_to_imgs = {pid: [el.image_id for el in p.track.elements] for pid, p in rec.points3D.items()}
+    # Map image_id -> list of observed point3D_ids
+    img_to_pts = {
+        img.image_id: [p.point3D_id for p in img.points2D if p.has_point3D()]
+        for img in rec.images.values()
+    }
+    img_to_pts = {iid: [p for p in pids if p != -1] for iid, pids in img_to_pts.items()}
+
+    K = min(K, len(img_to_pts))
+    
+    # Greedily select cameras
+    selected_cams = []
+    covered_pts = set()
+
+    # Score is the number of new points a camera would cover
+    scores = {iid: len(pids) for iid, pids in img_to_pts.items()}
+
+    for _ in range(K):
+        if not scores: break
+        # Pick camera that sees the most uncovered points
+        best_cam = max(scores, key=scores.get)
+        
+        # Add to selected set and update covered points
+        selected_cams.append(best_cam)
+        newly_covered = set(img_to_pts[best_cam]) - covered_pts
+        covered_pts.update(newly_covered)
+        
+        # Update scores for remaining cameras
+        del scores[best_cam]
+        for cam_id, cam_pts in img_to_pts.items():
+            if cam_id in scores:
+                # Penalize already covered points by removing them from consideration
+                scores[cam_id] = len(set(cam_pts) - covered_pts)
+
+    return sorted(selected_cams)
 
 def select_cameras_kmeans(flat_poses: np.ndarray, K: int) -> List[int]:
     """
@@ -259,6 +312,97 @@ class RomaMatcher:
 # Geometry & filters
 # ==========================
 
+def get_camera_axes(R: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Returns the camera's principal axes in world coordinates."""
+    x_axis = R.T[:, 0]  # Right vector
+    y_axis = R.T[:, 1]  # Up vector
+    z_axis = R.T[:, 2]  # Forward (viewing) vector
+    return x_axis, y_axis, z_axis
+
+def parallax_angle_for_cameras(R1: np.ndarray, R2: np.ndarray) -> float:
+    """Computes the angle between the viewing axes of two cameras."""
+    _, _, z1 = get_camera_axes(R1)
+    _, _, z2 = get_camera_axes(R2)
+    dot_product = np.clip(np.dot(z1, z2), -1.0, 1.0)
+    return np.arccos(dot_product) # radians
+
+@torch.inference_mode()
+def match_and_filter_pair(
+    matcher: "RomaMatcher",
+    imA: Image.Image,
+    imB: Image.Image,
+    parallax_rad: float,
+    cycle_thresh_px: float = 1.5,
+) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+    """
+    Performs robust, cycle-consistent matching between two images.
+
+    Args:
+        matcher: The RomaMatcher instance.
+        imA: Reference image.
+        imB: Neighbor image.
+        parallax_rad: Parallax angle in radians, used for weighting.
+        cycle_thresh_px: Maximum allowed cycle consistency error in pixels.
+
+    Returns:
+        A tuple of (warp, weight), where warp is a [H, W, 4] tensor of
+        valid matches and weight is a [H, W] tensor of their scores.
+        Returns (None, None) if matching fails.
+    """
+    device = matcher.device
+    w_match, h_match = matcher.model.w_resized, matcher.model.h_resized
+
+    # Forward and backward matching
+    try:
+        warp_AB, cert_AB = matcher.match_grids(imA, imB)
+        warp_BA, _ = matcher.match_grids(imB, imA)
+    except Exception:
+        return None, None
+
+    # --- Cycle consistency check ---
+    # `warp_AB` maps grid points in A to locations in B.
+    # We need to sample `warp_BA` at these locations in B to get back to A.
+    coords_B_normalized = warp_AB[..., 2:].clone()  # [H, W, 2] in [-1, 1]
+
+    # `grid_sample` requires input grid of shape [N, H_in, W_in, 2]
+    # and samples from a tensor of shape [N, C, H_out, W_out].
+    # Here, we sample the "return map" of warp_BA using the destination
+    # coordinates from warp_AB.
+    warp_BA_return_map = warp_BA[..., 2:].permute(2, 0, 1).unsqueeze(0) # [1, 2, H, W]
+    coords_B_grid = coords_B_normalized.unsqueeze(0) # [1, H, W, 2]
+
+    # Sample the backward warp field at the forward-warped locations
+    coords_A_reprojected = F.grid_sample(
+        warp_BA_return_map,
+        coords_B_grid,
+        mode='bilinear',
+        padding_mode='border',
+        align_corners=False
+    ) # Result is [1, 2, H, W]
+    coords_A_reprojected = coords_A_reprojected.squeeze(0).permute(1, 2, 0) # [H, W, 2]
+
+    # Original coordinates in A are just the base grid
+    yy = torch.linspace(-1 + 1/h_match, 1 - 1/h_match, h_match, device=device)
+    xx = torch.linspace(-1 + 1/w_match, 1 - 1/w_match, w_match, device=device)
+    coords_A_original = torch.stack(torch.meshgrid(yy, xx, indexing="ij"), dim=-1).flip(-1) # to XY
+
+    # Calculate cycle error in pixels
+    # Difference is in [-2, 2] range, scale to pixels
+    cycle_dist_normalized = torch.linalg.norm(coords_A_original - coords_A_reprojected, dim=-1)
+    scale_factor = torch.tensor([w_match, h_match], device=device).max() / 2.0
+    cycle_dist_px = cycle_dist_normalized * scale_factor
+
+    # --- Create mask and weights ---
+    valid_mask = cycle_dist_px < cycle_thresh_px
+
+    # Weight: combine RoMa certainty and parallax
+    # Use sin(parallax) to favor larger baselines, discouraging collinear views.
+    weight = cert_AB * torch.sin(torch.tensor(parallax_rad, device=device))
+    weight[~valid_mask] = 0.0
+
+    return warp_AB, weight
+
+
 def dlt_triangulate_batch(P1: np.ndarray, P2: np.ndarray, uv1: np.ndarray, uv2: np.ndarray) -> np.ndarray:
     N = uv1.shape[0]
     X = np.zeros((N,4), dtype=np.float64)
@@ -358,6 +502,189 @@ def write_points3D_bin(path_out: str, xyz: np.ndarray, rgb_uint8: np.ndarray, er
             f.write(struct.pack("<Q", 0))  # empty track
 
 
+def choose_diverse_views(img_ids, flat_poses, K=6, seed=0):
+    """
+    Farthest-point sampling in pose space to get diverse views for density checks.
+    Returns a list of image_ids.
+    """
+    rng = np.random.default_rng(seed)
+    X = flat_poses.astype(np.float32)
+    N = X.shape[0]
+    first = int(np.argmax(np.linalg.norm(X - X.mean(0, keepdims=True), axis=1)))
+    sel = [first]
+    dist = np.linalg.norm(X - X[first], axis=1)
+    for _ in range(1, min(K, N)):
+        nxt = int(np.argmax(dist))
+        sel.append(nxt)
+        dist = np.minimum(dist, np.linalg.norm(X - X[nxt], axis=1))
+    return [img_ids[i] for i in sel]
+
+def project_points(P, xyz):
+    """
+    P: 3x4; xyz: [N,3] float64
+    returns uv: [N,2] float64, mask: [N] bool (z>0)
+    """
+    Xh = np.concatenate([xyz, np.ones((xyz.shape[0],1), dtype=np.float64)], axis=1)
+    proj = (P @ Xh.T).T
+    z = proj[:,2]
+    mask = z > 1e-6
+    proj[mask, :2] /= z[mask, None]
+    uv = proj[:,:2]
+    return uv, mask
+
+def pixel_footprint_world(K, z):
+    """
+    Approximate size in world units that 1 pixel covers at depth z.
+    Uses fx,fy from K; returns scalar (geometric mean of x/y footprints).
+    """
+    fx, fy = K[0,0], K[1,1]
+    # footprint ~ z/f
+    fx = max(fx, 1e-6); fy = max(fy, 1e-6)
+    sx = z / fx; sy = z / fy
+    return np.sqrt(max(sx*sy, 1e-12))
+
+def thin_by_screenspace_density(
+    xyz, rgb, cams_by_id, P_by, view_ids, target_ppp=0.75, image_sizes=None, seed=0
+):
+    """
+    Blue-noise-ish thinning: ensure avg density across 'view_ids' is <= target_ppp.
+    We compute per-pixel load via hashing and do probabilistic keep/drop.
+
+    Returns keep_mask [N] bool.
+    """
+    if target_ppp <= 0 or len(view_ids) == 0:
+        return np.ones((xyz.shape[0],), dtype=bool)
+
+    rng = np.random.default_rng(seed)
+    N = xyz.shape[0]
+    keep = np.ones((N,), dtype=bool)
+
+    # Accumulate per-point pressure across views
+    pressure = np.zeros((N,), dtype=np.float32)
+    counts   = np.zeros((N,), dtype=np.int32)
+
+    # A small jittered hash for pixel bins to avoid aliasing
+    def hash2(u, v, W, H):
+        ui = np.clip(np.floor(u).astype(np.int64), 0, W-1)
+        vi = np.clip(np.floor(v).astype(np.int64), 0, H-1)
+        return (ui * 73856093) ^ (vi * 19349663)
+
+    # Estimate per-view pixel density with stable hashing
+    for vid in view_ids:
+        cam = cams_by_id[vid]
+        W, H = cam.width, cam.height if image_sizes is None else image_sizes.get(vid, (cam.width, cam.height))
+        P = P_by[vid]
+        uv, mask = project_points(P, xyz)
+        u, v = uv[mask,0], uv[mask,1]
+        inimg = (u>=0) & (u<W-1) & (v>=0) & (v<H-1)
+        idx = np.nonzero(mask)[0][inimg]
+        if idx.size == 0: 
+            continue
+
+        u, v = u[inimg], v[inimg]
+        keys = hash2(u, v, W, H)
+        order = np.argsort(keys)
+        keys_sorted = keys[order]
+        idx_sorted  = idx[order]
+
+        # run-length segments per hashed pixel
+        edge = np.nonzero(np.diff(keys_sorted))[0] + 1
+        seg_starts = np.concatenate([[0], edge])
+        seg_ends   = np.concatenate([edge, [keys_sorted.size]])
+
+        # each segment -> points that land in same pixel bin
+        for s, e in zip(seg_starts, seg_ends):
+            pts = idx_sorted[s:e]
+            k = e - s
+            # desired count per pixel ~ target_ppp
+            if k <= target_ppp:
+                pressure[pts] += 0.0
+            else:
+                # excess load
+                excess = k - target_ppp
+                # assign higher pressure to low-gradient neighbors first? (not available here)
+                pressure[pts] += excess / max(k, 1)
+            counts[pts] += 1
+
+    counts = np.maximum(counts, 1)
+    avg_pressure = pressure / counts
+
+    # Convert pressure to drop probability (smoothstep)
+    # pressure=0 -> p_drop=0; pressure>=1 -> ~heavy drop
+    p_drop = np.clip(0.5 * avg_pressure, 0.0, 0.95)
+    draw = rng.random(N)
+    keep = draw > p_drop
+    # Always keep a minimal random subset if we got too aggressive
+    return keep
+
+def merge_covariance_aware(
+    xyz, rgb, K_ref, R_ref, radius_mult=0.75, min_cluster=1, seed=0
+):
+    """
+    Merge near-duplicate points using a radius derived from pixel footprint at depth.
+    Keeps edges: we compute a per-point radius, then do grid hashing with that local radius.
+
+    Returns merged_xyz, merged_rgb
+    """
+    if radius_mult <= 0:
+        return xyz, rgb
+    N = xyz.shape[0]
+    rng = np.random.default_rng(seed)
+
+    # Per-point adaptive radius
+    # estimate depth along camera forward axis ~ R_ref[2] dotted with (X - C)
+    # If R_ref is world->cam, camera forward in world is R_ref.T[:,2] *(-1) depending on convention.
+    # Use z = |X| as crude proxy if pose not provided.
+    if R_ref is None:
+        z = np.linalg.norm(xyz, axis=1)
+    else:
+        # approximate z by projecting onto some canonical forward dir
+        forward = R_ref.T[:,2]
+        z = np.abs(xyz @ forward)
+
+    base = np.array([[K_ref[0,0], 0, K_ref[0,2]],
+                     [0, K_ref[1,1], K_ref[1,2]],
+                     [0, 0, 1]], dtype=np.float64)
+    px = np.array([1.0, 1.0, 1.0], dtype=np.float64)  # 1px
+    # footprint at depth z
+    fpt = np.array([pixel_footprint_world(K_ref, zi) for zi in z], dtype=np.float64)
+    radii = np.clip(radius_mult * fpt, 1e-4, np.percentile(fpt, 90))  # clamp extremes
+
+    # Hash into an adaptive grid by normalizing with radii
+    keyx = np.floor(xyz[:,0] / radii).astype(np.int64)
+    keyy = np.floor(xyz[:,1] / radii).astype(np.int64)
+    keyz = np.floor(xyz[:,2] / radii).astype(np.int64)
+    keys = keyx * 73856093 ^ keyy * 19349663 ^ keyz * 83492791
+    order = np.argsort(keys)
+    keys_sorted = keys[order]
+    xyz_s = xyz[order]; rgb_s = rgb[order]; r_s = radii[order]
+
+    edge = np.nonzero(np.diff(keys_sorted))[0] + 1
+    boundaries = np.concatenate([[0], edge, [len(keys_sorted)]])
+
+    out_xyz, out_rgb = [], []
+    for s, e in zip(boundaries[:-1], boundaries[1:]):
+        seg_xyz = xyz_s[s:e]; seg_rgb = rgb_s[s:e]; seg_r = r_s[s:e]
+        if e - s <= min_cluster:
+            out_xyz.append(seg_xyz.mean(0))
+            out_rgb.append(seg_rgb.mean(0))
+            continue
+        # Within the bin, do a small-radius mean-shift style merge:
+        # greedy: pop a seed, absorb neighbors within max(seg_r)
+        taken = np.zeros((e - s,), dtype=bool)
+        for i in range(e - s):
+            if taken[i]: continue
+            center = seg_xyz[i]
+            rad = seg_r[i]
+            d2 = np.sum((seg_xyz - center)**2, axis=1)
+            group = d2 <= (rad*rad)
+            taken |= group
+            out_xyz.append(seg_xyz[group].mean(0))
+            out_rgb.append(seg_rgb[group].mean(0))
+
+    return np.asarray(out_xyz), np.asarray(out_rgb)
+
+
 # ==========================
 # Main pipeline
 # ==========================
@@ -400,9 +727,18 @@ def dense_init(args):
 
     flat_poses = np.stack(flat_poses, axis=0)
     # Reference selection + neighbors
-    num_refs = int(len(img_ids) * 0.8) # 40% of images 
-    refs_local = select_cameras_kmeans(flat_poses, num_refs)
-    refs = [img_ids[i] for i in refs_local]
+    num_refs = int(round(args.num_refs * len(img_ids)))
+    try:
+        log("Selecting reference views by sparse point visibility...")
+        refs = select_cameras_by_visibility(rec, num_refs)
+        # Get local indices for the nn_table
+        img_id_to_local_idx = {iid: i for i, iid in enumerate(img_ids)}
+        refs_local = [img_id_to_local_idx[i] for i in refs]
+    except (ValueError, KeyError) as e:
+        log(f"Visibility selection failed ({e}), falling back to k-means on poses.")
+        refs_local = select_cameras_kmeans(flat_poses, num_refs)
+        refs = [img_ids[i] for i in refs_local]
+
     nn_table = nearest_neighbors(flat_poses, max(1, args.nns_per_ref))  # local indices
 
     # Matcher
@@ -441,49 +777,69 @@ def dense_init(args):
         ref_name = name_by[ref_id]
         ref_path = find_image(images_dir, ref_name)
         imA = Image.open(ref_path).convert("RGB")
-        wA_match, hA_match = imA.size
+        wA_img, hA_img = imA.size
         wA_cam, hA_cam = size_by[ref_id]
+        w_match, h_match = matcher.model.w_resized, matcher.model.h_resized
 
-        # Collect K-NN flows for argmax aggregation
+        # Collect K-NN flows for multi-view aggregation
         local_nns = nn_table[ref_local][:args.nns_per_ref]
         if len(local_nns) == 0: continue
 
-        warp_list, cert_list, nn_ids = [], [], []
+        warp_list, weight_list, nn_ids = [], [], []
         for nn_local in local_nns:
             nbr_id = img_ids[nn_local]
             if nbr_id == ref_id: continue
             imB = Image.open(find_image(images_dir, name_by[nbr_id])).convert("RGB")
-            warp_hw4, cert_hw = matcher.match_grids(imA, imB)  # [H,W,4], [H,W]
-            warp_list.append(warp_hw4)
-            cert_list.append(cert_hw)
-            nn_ids.append(nbr_id)
+            
+            # Calculate parallax for weighting
+            parallax_rad = parallax_angle_for_cameras(R_by[ref_id], R_by[nbr_id])
 
-        # Stack neighbors and take per-pixel argmax certainty
-        # Shapes: list K x [H,W,4] / K x [H,W]
-        H, W = cert_list[0].shape
-        cert_stack = torch.stack(cert_list, dim=0)            # [K,H,W]
-        best_cert, best_k = torch.max(cert_stack, dim=0)      # [H,W], [H,W] (indices)
-        warp_stack = torch.stack(warp_list, dim=0)            # [K,H,W,4]
-        agg = warp_stack[best_k, torch.arange(H, device=device).unsqueeze(1), torch.arange(W, device=device)]  # [H,W,4]
-        # Flatten for sampling
-        agg = agg.reshape(-1, 4)                               # (H*W,4)
-        best_cert = best_cert.reshape(-1)                      # (H*W,)
-        best_k = best_k.reshape(-1)                            # (H*W,)
+            # Perform robust, cycle-consistent matching
+            warp_hw4, weight_hw = match_and_filter_pair(
+                matcher, imA, imB, parallax_rad, cycle_thresh_px=1.5
+            )
+            
+            if warp_hw4 is not None:
+                warp_list.append(warp_hw4)
+                weight_list.append(weight_hw)
+                nn_ids.append(nbr_id)
+
+        if not weight_list:
+            continue
+
+        # --- Multi-view aggregation and sampling ---
+        TOP_K_TRACKS = 3 # Triangulate with top 3 valid neighbors per pixel
+        H, W = weight_list[0].shape
+        
+        weight_stack = torch.stack(weight_list, dim=0) # [Num_Neighbors, H, W]
+        warp_stack = torch.stack(warp_list, dim=0)     # [Num_Neighbors, H, W, 4]
+
+        # Get top-k weights and their indices (which correspond to the neighbor)
+        top_weights, top_k_indices = torch.topk(
+            weight_stack, k=min(TOP_K_TRACKS, len(nn_ids)), dim=0
+        ) # [K, H, W]
+
+        # Use the best weight for each pixel as the basis for sampling
+        best_weight_map, _ = torch.max(weight_stack, dim=0) # [H, W]
+        best_weight_flat = best_weight_map.reshape(-1)      # [H*W]
 
         # EDGS certainty cap then multinomial sampling + coverage
-        cert_np = best_cert.detach().cpu().numpy()
-        cap = getattr(matcher, "sample_thresh", 0.9)
-        cert_np = np.minimum(cert_np, cap)                     # cap to 1 after normalization below
-        # Avoid zero-sum
+        cert_np = best_weight_flat.detach().cpu().numpy()
+        # Cap is not strictly needed as weights are parallax-aware, but can help
+        # cap = getattr(matcher, "sample_thresh", 0.9)
+        # cert_np = np.minimum(cert_np, cap)
+        if cert_np.max() < 1e-6: continue
         cert_np = cert_np / (cert_np.max() + 1e-12)
 
-        # coverage-aware grid bins on A (normalized -> pixel @ match size)
-        xA = (agg[:,0].cpu().numpy() + 1.0) * 0.5 * (wA_match - 1)
-        yA = (agg[:,1].cpu().numpy() + 1.0) * 0.5 * (hA_match - 1)
+        # Get coordinates in reference image A for all potential pixels
+        # Note: all warps in the stack share the same reference coordinates (xA, yA)
+        coords_A_flat = warp_stack[0, ..., :2].reshape(-1, 2) # [H*W, 2]
+        xA = (coords_A_flat[:,0].cpu().numpy() + 1.0) * 0.5 * (w_match - 1)
+        yA = (coords_A_flat[:,1].cpu().numpy() + 1.0) * 0.5 * (h_match - 1)
 
         # keep inside safe border (avoid ~2px border)
         border = 2.0
-        inside = (xA >= border) & (xA <= wA_match-1-border) & (yA >= border) & (yA <= hA_match-1-border)
+        inside = (xA >= border) & (xA <= w_match-1-border) & (yA >= border) & (yA <= h_match-1-border)
 
         # certainty-weighted multinomial
         keep_weights = cert_np.copy()
@@ -491,11 +847,21 @@ def dense_init(args):
         if keep_weights.sum() == 0:
             continue
         m_main = int(args.matches_per_ref * 0.7)
-        idx_main = rng.choice(keep_weights.size, size=min(m_main, keep_weights.size), replace=False, p=keep_weights/keep_weights.sum())
+        # Ensure we don't request more samples than available valid pixels
+        num_valid_pixels = np.count_nonzero(keep_weights)
+        if num_valid_pixels == 0: continue
+        
+        p_norm = keep_weights/keep_weights.sum()
+        idx_main = rng.choice(
+            keep_weights.size, 
+            size=min(m_main, num_valid_pixels), 
+            replace=False, 
+            p=p_norm
+        )
 
         # coverage fill: per-tile top-1 by certainty
-        gx = np.floor(xA / max(1, wA_match // 24)).astype(np.int32)
-        gy = np.floor(yA / max(1, hA_match // 24)).astype(np.int32)
+        gx = np.floor(xA / max(1, w_match // 24)).astype(np.int32)
+        gy = np.floor(yA / max(1, h_match // 24)).astype(np.int32)
         bins = gx * 100000 + gy
         order = np.argsort(-cert_np)  # descending
         seen = set(); idx_cov = []
@@ -511,95 +877,115 @@ def dense_init(args):
         if sel_idx.size == 0:
             continue
 
-        # Build per-sample neighbor id
-        nn_idx_flat = best_k.detach().cpu().numpy()[sel_idx]   # [S]
-        # Selected warps
-        sel = agg.detach().cpu().numpy()[sel_idx]              # [S,4]
-        # Convert to pixel coords (match sizes)
-        xA = (sel[:,0] + 1.0)*0.5*(wA_match-1)
-        yA = (sel[:,1] + 1.0)*0.5*(hA_match-1)
-        xB_norm = sel[:,2]; yB_norm = sel[:,3]  # in [-1,1], but B size depends on neighbor
-
+        # --- Triangulation from Top-K Tracks ---
+        
+        # Get ref image coords (uvA) and colors for all S selected pixels
+        xA_sel, yA_sel = xA[sel_idx], yA[sel_idx]
+        
         # Colors from reference
         imA_np = np.asarray(imA, dtype=np.uint8)
+        sxA_img, syA_img = wA_img / float(w_match), hA_img / float(h_match)
+        xA_img, yA_img = xA_sel * sxA_img, yA_sel * syA_img
         # Bilinear sample
-        xa0 = np.clip(np.floor(xA).astype(np.int32), 0, wA_match-1)
-        ya0 = np.clip(np.floor(yA).astype(np.int32), 0, hA_match-1)
-        xa1 = np.clip(xa0+1, 0, wA_match-1)
-        ya1 = np.clip(ya0+1, 0, hA_match-1)
-        wa = (xa1 - xA)*(ya1 - yA)
-        wb = (xA - xa0)*(ya1 - yA)
-        wc = (xa1 - xA)*(yA - ya0)
-        wd = (xA - xa0)*(yA - ya0)
-        Ia = imA_np[ya0, xa0].astype(np.float32)
-        Ib = imA_np[ya0, xa1].astype(np.float32)
-        Ic = imA_np[ya1, xa0].astype(np.float32)
-        Id = imA_np[ya1, xa1].astype(np.float32)
-        rgb_ref = (Ia*wa[:,None] + Ib*wb[:,None] + Ic*wc[:,None] + Id*wd[:,None]) / 255.0  # [S,3]
+        xa0, ya0 = np.floor(xA_img).astype(np.int32), np.floor(yA_img).astype(np.int32)
+        xa1, ya1 = xa0 + 1, ya0 + 1
+        wa = (xa1 - xA_img)*(ya1 - yA_img)
+        wb = (xA_img - xa0)*(ya1 - yA_img)
+        wc = (xa1 - xA_img)*(yA_img - ya0)
+        wd = (xA_img - xa0)*(yA_img - ya0)
+        
+        # Clip to prevent out-of-bounds access
+        xa0, ya0 = np.clip(xa0, 0, wA_img-1), np.clip(ya0, 0, hA_img-1)
+        xa1, ya1 = np.clip(xa1, 0, wA_img-1), np.clip(ya1, 0, hA_img-1)
 
-        # Scale to camera-sized pixels for triangulation (if match res != camera intrinsics res)
-        sxA = wA_cam / float(wA_match)
-        syA = hA_cam / float(hA_match)
-        uvA = np.stack([xA * sxA, yA * syA], axis=1)  # [S,2]
+        Ia, Ib = imA_np[ya0, xa0], imA_np[ya0, xa1]
+        Ic, Id = imA_np[ya1, xa0], imA_np[ya1, xa1]
+        rgb_ref = (Ia.astype(np.float32)*wa[:,None] + Ib.astype(np.float32)*wb[:,None] + Ic.astype(np.float32)*wc[:,None] + Id.astype(np.float32)*wd[:,None]) / 255.0
 
-        # Group samples by neighbor to triangulate with correct P2 / K2 sizes
-        groups: Dict[int, List[int]] = {}
-        for i,(kidx) in enumerate(nn_idx_flat):
-            nbr_id = nn_ids[kidx]
-            groups.setdefault(nbr_id, []).append(i)
+        # Scale to camera-sized pixels for triangulation
+        sxA, syA = wA_cam / float(w_match), hA_cam / float(h_match)
+        uvA = np.stack([xA_sel * sxA, yA_sel * syA], axis=1)  # [S, 2]
 
-        for nbr_id, idxs in groups.items():
-            idxs = np.asarray(idxs, dtype=np.int64)
-            # B image geometry
-            nbr_name = name_by[nbr_id]
-            imB = Image.open(find_image(images_dir, nbr_name)).convert("RGB")
-            wB_match, hB_match = imB.size
-            wB_cam, hB_cam = size_by[nbr_id]
-            sxB = wB_cam / float(wB_match)
-            syB = hB_cam / float(hB_match)
+        # Now, iterate through the K tracks and triangulate for each
+        for k_track in range(top_k_indices.shape[0]):
+            # Get neighbor and warp data for this track level (k) for all selected pixels
+            neighbor_indices_k = top_k_indices[k_track].reshape(-1)[sel_idx].cpu().numpy() # [S]
+            
+            # Gather the warps for this track level.
+            # This requires selecting from warp_stack based on neighbor_indices_k.
+            # `warp_stack` is [Num_Neighbors, H, W, 4]
+            flat_warps = warp_stack.permute(1, 2, 0, 3).reshape(-1, len(nn_ids), 4) # [H*W, N, 4]
+            sel_warps_all_neighbors = flat_warps[sel_idx] # [S, N, 4]
+            
+            # Use numpy to perform the advanced integer indexing
+            # This selects the correct neighbor's warp for each of the S pixels
+            row_indices = np.arange(sel_idx.shape[0])
+            sel_warps_k = sel_warps_all_neighbors[row_indices, neighbor_indices_k].cpu().numpy() # [S, 4]
 
-            # Build uvB for just this neighbor (from normalized xB/yB of the selected warps)
-            xB = (xB_norm[idxs] + 1.0)*0.5*(wB_match-1)
-            yB = (yB_norm[idxs] + 1.0)*0.5*(hB_match-1)
-            uvB = np.stack([xB * sxB, yB * syB], axis=1)
+            # Extract B coordinates (normalized)
+            xB_norm, yB_norm = sel_warps_k[:, 2], sel_warps_k[:, 3]
 
-            # Pre-triangulation Sampson gating (fast and effective)
-            if args.sampson_thresh > 0:
-                F = fundamental_from_world2cam(K_by[ref_id], R_by[ref_id], t_by[ref_id],
-                                               K_by[nbr_id], R_by[nbr_id], t_by[nbr_id])
-                se = sampson_error(F, uvA[idxs], uvB)
-                good = (se < float(args.sampson_thresh))
-                if not np.any(good):
-                    continue
-                idxs = idxs[good]
-                xB = xB[good]; yB = yB[good]
-                uvB = uvB[good]
-                # also update colors subset if anything changed
-            if idxs.size == 0:
-                continue
+            # Group samples by neighbor to triangulate with correct P2 / K2 sizes
+            groups: Dict[int, List[int]] = {}
+            for i, neighbor_k_idx in enumerate(neighbor_indices_k):
+                nbr_id = nn_ids[neighbor_k_idx]
+                groups.setdefault(nbr_id, []).append(i)
 
-            P1, P2 = P_by[ref_id], P_by[nbr_id]
-            Xi = dlt_triangulate_batch(P1, P2, uvA[idxs], uvB)     # [Mi,4]
+            for nbr_id, idxs_in_group in groups.items():
+                if not idxs_in_group: continue
+                idxs = np.asarray(idxs_in_group, dtype=np.int64)
+                
+                # B image geometry
+                wB_cam, hB_cam = size_by[nbr_id]
+                sxB, syB = wB_cam / float(w_match), hB_cam / float(h_match)
 
-            err1 = reprojection_errors(P1, Xi, uvA[idxs])
-            err2 = reprojection_errors(P2, Xi, uvB)
-            err  = np.maximum(err1, err2)
-            keep = (err <= float(args.reproj_thresh))
-            # cheirality + optional parallax
-            keep &= cheirality_mask(P1, Xi)
-            keep &= cheirality_mask(P2, Xi)
-            if args.min_parallax_deg > 0:
-                keep &= parallax_mask(C_by[ref_id], C_by[nbr_id], Xi, min_deg=args.min_parallax_deg)
-            if not np.any(keep):
-                continue
+                # Build uvB for just this neighbor group
+                xB = (xB_norm[idxs] + 1.0) * 0.5 * (w_match - 1)
+                yB = (yB_norm[idxs] + 1.0) * 0.5 * (h_match - 1)
+                uvB = np.stack([xB * sxB, yB * syB], axis=1)
 
-            Xw = Xi[keep][:,:3].astype(np.float64)
-            col = rgb_ref[idxs][keep].astype(np.float32)
-            e   = err[keep].astype(np.float64)
+                # Pre-triangulation Sampson gating is not strictly necessary with
+                # cycle consistency but can be kept as an extra check.
+                if args.sampson_thresh > 0:
+                    F = fundamental_from_world2cam(K_by[ref_id], R_by[ref_id], t_by[ref_id],
+                                                   K_by[nbr_id], R_by[nbr_id], t_by[nbr_id])
+                    se = sampson_error(F, uvA[idxs], uvB)
+                    good = (se < float(args.sampson_thresh))
+                    if not np.any(good): continue
+                    
+                    idxs = idxs[good]
+                    uvB = uvB[good]
+                
+                if idxs.size == 0: continue
 
-            all_xyz.append(Xw)
-            all_rgb.append(col)
-            all_err.append(e)
+                P1, P2 = P_by[ref_id], P_by[nbr_id]
+                Xi = dlt_triangulate_batch(P1, P2, uvA[idxs], uvB)
+
+                err1 = reprojection_errors(P1, Xi, uvA[idxs])
+                err2 = reprojection_errors(P2, Xi, uvB)
+                err  = np.maximum(err1, err2)
+                keep = (err <= float(args.reproj_thresh))
+                
+                keep &= cheirality_mask(P1, Xi)
+                keep &= cheirality_mask(P2, Xi)
+                if args.min_parallax_deg > 0:
+                    keep &= parallax_mask(C_by[ref_id], C_by[nbr_id], Xi, min_deg=args.min_parallax_deg)
+                
+                if not np.any(keep): continue
+
+                Xw = Xi[keep][:,:3].astype(np.float64)
+                col = rgb_ref[idxs][keep].astype(np.float32)
+                e   = err[keep].astype(np.float64)
+
+                all_xyz.append(Xw)
+                all_rgb.append(col)
+                all_err.append(e)
+
+    if not all_xyz:
+        raise RuntimeError("No points triangulated. Try increasing --num_refs / --nns_per_ref / --matches_per_ref or lowering thresholds.")
+
+    xyz = np.concatenate(all_xyz, axis=0)
+    rgb = np.concatenate(all_rgb, axis=0)
 
     if not all_xyz:
         raise RuntimeError("No points triangulated. Try increasing --num_refs / --nns_per_ref / --matches_per_ref or lowering thresholds.")
@@ -609,10 +995,54 @@ def dense_init(args):
     err = np.concatenate(all_err, axis=0)
     log(f"Triangulated points: {xyz.shape[0]} in {time.time()-t0:.1f}s.")
 
+    # === New: density-aware thinning / merging ===
+    if args.thin_ppp > 0 or args.merge_radius_mult > 0:
+        # Pick diverse views to evaluate screen-space density
+        diverse_views = choose_diverse_views(
+            img_ids, flat_poses, K=max(1, args.thin_views), seed=args.seed
+        )
+        log(f"Density check over {len(diverse_views)} views.")
+
+        # Build camera dict for the views
+        cams_by_id = {iid: cams[imgs[iid].camera_id] for iid in diverse_views}
+
+        # Screen-space thinning
+        if args.thin_ppp > 0:
+            keep_mask = thin_by_screenspace_density(
+                xyz, rgb, cams_by_id, P_by, diverse_views,
+                target_ppp=float(args.thin_ppp), image_sizes=None, seed=args.seed
+            )
+            # Enforce min_keep
+            if keep_mask.sum() < args.min_keep:
+                # keep best by error (lowest)
+                order = np.argsort(err)
+                keep_mask[:] = False
+                keep_mask[order[:args.min_keep]] = True
+            xyz, rgb, err = xyz[keep_mask], rgb[keep_mask], err[keep_mask]
+            log(f"Screen-space thinning ⇒ {xyz.shape[0]} points.")
+
+        # Covariance-aware merge (uses reference intrinsics)
+        if args.merge_radius_mult > 0:
+            # Use the first diverse view as reference for K_ref/R_ref
+            ref_id_merge = diverse_views[0]
+            K_ref = K_by[ref_id_merge]
+            R_ref = R_by[ref_id_merge]
+            xyz, rgb = merge_covariance_aware(
+                xyz, rgb, K_ref, R_ref,
+                radius_mult=float(args.merge_radius_mult),
+                min_cluster=1, seed=args.seed
+            )
+            err = np.zeros((xyz.shape[0],), dtype=np.float64)  # reset (conservative)
+            log(f"Covariance-aware merge ⇒ {xyz.shape[0]} points.")
+
+        # Ensure floor
+        if args.min_keep > 0 and xyz.shape[0] < args.min_keep:
+            log(f"Padding back up to min_keep={args.min_keep} by random re-adds (no-op here).")
+
     # Optional voxel DS (keep small if used)
     if args.voxel_size > 0:
         xyz, rgb = voxel_downsample(xyz, rgb, args.voxel_size)
-        err = np.zeros((xyz.shape[0],), dtype=np.float64)  # reset errors conservatively
+        err = np.zeros((xyz.shape[0],), dtype=np.float64)
         log(f"Voxel downsampled to {xyz.shape[0]} (voxel={args.voxel_size}).")
 
     # (Optional) clamp count
@@ -640,21 +1070,30 @@ def dense_init(args):
 def build_argparser():
     ap = argparse.ArgumentParser("EDGS-like Dense Initialization (RoMa + triangulation)")
     ap.add_argument("--scene_root", type=str, required=True, help="Path containing images*/ and sparse/0/")
-    ap.add_argument("--images_subdir", type=str, default="images_4", help="Which images dir to read")
+    ap.add_argument("--images_subdir", type=str, default="images_2", help="Which images dir to read")
     ap.add_argument("--out_name", type=str, default="points3D_dense.bin", help="Output filename under sparse/0/")
     ap.add_argument("--roma_model", type=str, default="outdoor", choices=["outdoor","indoor"], help="RoMa model variant")
     ap.add_argument("--cpu", action="store_true", help="Force CPU for RoMa (slow)")
     # EDGS knobs
-    ap.add_argument("--num_refs", type=int, default=150, help="Reference frames (k-means over poses)")
-    ap.add_argument("--nns_per_ref", type=int, default=3, help="Nearest neighbors per ref (use 3–5 for robustness)")
-    ap.add_argument("--matches_per_ref", type=int, default=20000, help="Samples per ref after aggregation & threshold")
+    ap.add_argument("--num_refs", type=float, default=0.8, help="Fraction of frames to use as references (e.g., 0.8 for 80%%)")
+    ap.add_argument("--nns_per_ref", type=int, default=3, help="Nearest neighbors per ref (use 3-5 for robustness)")
+    ap.add_argument("--matches_per_ref", type=int, default=15000, help="Samples per ref after aggregation & threshold")
     ap.add_argument("--certainty_thresh", type=float, default=0.2, help="Min certainty to consider a pixel")
     ap.add_argument("--reproj_thresh", type=float, default=3.0, help="Max reprojection error (px)")
     ap.add_argument("--sampson_thresh", type=float, default=6.0, help="Max Sampson error (px^2) before triangulation (<=0 to disable)")
     ap.add_argument("--min_parallax_deg", type=float, default=0.1, help="Min parallax (deg); set 0 to disable")
+    # Density-aware pruning/merging
+    ap.add_argument("--thin_ppp", type=float, default=0.75,
+                    help="Target avg points-per-pixel across sampled views (0 disables).")
+    ap.add_argument("--thin_views", type=int, default=6,
+                    help="Number of diverse views for screen-space density estimation.")
+    ap.add_argument("--merge_radius_mult", type=float, default=0.75,
+                    help="Multiplier converting 1px footprint at depth to 3D merge radius (0 disables).")
+    ap.add_argument("--min_keep", type=int, default=200000,
+                    help="Never prune below this many points (safety).")
     # Output shaping
     ap.add_argument("--voxel_size", type=float, default=0.0, help="Optional voxel size (scene units); keep small or 0")
-    ap.add_argument("--max_points", type=int, default=0, help="Optional cap on total points (0 = unlimited)")
+    ap.add_argument("--max_points", type=int, default=3500000, help="Optional cap on total points (0 = unlimited)")
     ap.add_argument("--viz", action="store_true", help="Visualize input/output point clouds (Open3D)")
     ap.add_argument("--seed", type=int, default=0, help="Random seed for sampling")
     return ap
