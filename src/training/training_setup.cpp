@@ -1,10 +1,10 @@
 #include "training_setup.hpp"
+#include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "loader/loader.hpp"
 #include "strategies/default_strategy.hpp"
 #include "strategies/mcmc.hpp"
 #include <format>
-#include <print>
 
 namespace gs::training {
     std::expected<TrainingSetup, std::string> setupTraining(const param::TrainingParameters& params) {
@@ -17,16 +17,17 @@ namespace gs::training {
             .images_folder = params.dataset.images,
             .validate_only = false,
             .progress = [](float percentage, const std::string& message) {
-                std::println("[{:5.1f}%] {}", percentage, message);
+                LOG_DEBUG("[{:5.1f}%] {}", percentage, message);
             }};
 
         // 3. Load the dataset
+        LOG_INFO("Loading dataset from: {}", params.dataset.data_path.string());
         auto load_result = loader->load(params.dataset.data_path, load_options);
         if (!load_result) {
             return std::unexpected(std::format("Failed to load dataset: {}", load_result.error()));
         }
 
-        std::println("Dataset loaded successfully using {} loader", load_result->loader_used);
+        LOG_INFO("Dataset loaded successfully using {} loader", load_result->loader_used);
 
         // 4. Handle the loaded data based on type
         return std::visit([&params, &load_result](auto&& data) -> std::expected<TrainingSetup, std::string> {
@@ -43,10 +44,10 @@ namespace gs::training {
                 PointCloud point_cloud_to_use;
                 if (data.point_cloud && data.point_cloud->size() > 0) {
                     point_cloud_to_use = *data.point_cloud;
-                    std::println("Using point cloud with {} points", point_cloud_to_use.size());
+                    LOG_INFO("Using point cloud with {} points", point_cloud_to_use.size());
                 } else {
                     // Generate random point cloud if needed
-                    std::println("No point cloud provided, using random initialization");
+                    LOG_INFO("No point cloud provided, using random initialization");
                     // Need to generate random point cloud - this should be provided by the loader or a utility
                     int numInitGaussian = 10000;
                     uint64_t seed = 8128;
@@ -75,15 +76,16 @@ namespace gs::training {
                 std::unique_ptr<IStrategy> strategy;
                 if (params.optimization.strategy == "mcmc") {
                     strategy = std::make_unique<MCMC>(std::move(*splat_result));
+                    LOG_DEBUG("Created MCMC strategy");
                 } else {
                     strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
+                    LOG_DEBUG("Created default strategy");
                 }
 
-                // Create trainer
+                // Create trainer (without parameters)
                 auto trainer = std::make_unique<Trainer>(
                     data.cameras,
-                    std::move(strategy),
-                    params);
+                    std::move(strategy));
 
                 return TrainingSetup{
                     .trainer = std::move(trainer),

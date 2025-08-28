@@ -26,8 +26,7 @@ namespace gs::training {
     public:
         // Constructor that takes ownership of strategy and shares datasets
         Trainer(std::shared_ptr<CameraDataset> dataset,
-                std::unique_ptr<IStrategy> strategy,
-                const param::TrainingParameters& params);
+                std::unique_ptr<IStrategy> strategy);
 
         // Delete copy operations
         Trainer(const Trainer&) = delete;
@@ -40,6 +39,12 @@ namespace gs::training {
         Trainer& operator=(Trainer&&) = default;
 
         ~Trainer();
+
+        // Initialize trainer - must be called before training
+        std::expected<void, std::string> initialize(const param::TrainingParameters& params);
+
+        // Check if trainer is initialized
+        bool isInitialized() const { return initialized_.load(); }
 
         // Main training method with stop token support
         std::expected<void, std::string> train(std::stop_token stop_token = {});
@@ -131,6 +136,7 @@ namespace gs::training {
         void save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads = true);
 
         // Member variables
+        std::shared_ptr<CameraDataset> base_dataset_;
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;
         std::unique_ptr<IStrategy> strategy_;
@@ -138,7 +144,7 @@ namespace gs::training {
 
         torch::Tensor background_{};
         std::unique_ptr<TrainingProgress> progress_;
-        size_t train_dataset_size_;
+        size_t train_dataset_size_ = 0;
 
         // Bilateral grid components
         std::unique_ptr<BilateralGrid> bilateral_grid_;
@@ -161,6 +167,7 @@ namespace gs::training {
         std::atomic<bool> is_running_{false};
         std::atomic<bool> training_complete_{false};
         std::atomic<bool> ready_to_start_{false};
+        std::atomic<bool> initialized_{false};
 
         // Current training state
         std::atomic<int> current_iteration_{0};

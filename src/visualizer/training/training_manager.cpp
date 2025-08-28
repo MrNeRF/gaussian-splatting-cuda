@@ -97,6 +97,32 @@ namespace gs {
             return false;
         }
 
+        // Get project from this TrainerManager instance
+        if (!project_) {
+            LOG_ERROR("No project available for training");
+            setState(State::Error);
+            last_error_ = "No project available";
+            return false;
+        }
+
+        // Create training parameters from project
+        param::TrainingParameters params;
+        params.dataset = project_->getProjectData().data_set_info;
+        params.optimization = project_->getOptimizationParams();
+        params.dataset.output_path = project_->getProjectOutputFolder();
+
+        // Initialize trainer if not already initialized
+        if (!trainer_->isInitialized()) {
+            LOG_INFO("Initializing trainer before starting training");
+            auto init_result = trainer_->initialize(params);
+            if (!init_result) {
+                LOG_ERROR("Failed to initialize trainer: {}", init_result.error());
+                last_error_ = init_result.error();
+                setState(State::Error);
+                return false;
+            }
+        }
+
         // Reset completion state
         {
             std::lock_guard<std::mutex> lock(completion_mutex_);
