@@ -14,6 +14,48 @@
 #include <memory>
 
 namespace gs::training {
+
+    void Trainer::cleanup() {
+        LOG_DEBUG("Cleaning up trainer for re-initialization");
+
+        // Stop any ongoing operations
+        stop_requested_ = true;
+
+        // Wait for callback to finish if busy
+        if (callback_busy_.load()) {
+            callback_stream_.synchronize();
+            callback_busy_ = false;
+        }
+
+        // Reset all components
+        progress_.reset();
+        bilateral_grid_.reset();
+        bilateral_grid_optimizer_.reset();
+        poseopt_module_.reset();
+        poseopt_optimizer_.reset();
+        evaluator_.reset();
+
+        // Clear datasets (will be recreated)
+        train_dataset_.reset();
+        val_dataset_.reset();
+
+        // Clear camera cache
+        m_cam_id_to_cam.clear();
+
+        // Reset flags
+        pause_requested_ = false;
+        save_requested_ = false;
+        stop_requested_ = false;
+        is_paused_ = false;
+        is_running_ = false;
+        training_complete_ = false;
+        ready_to_start_ = false;
+        current_iteration_ = 0;
+        current_loss_ = 0.0f;
+
+        LOG_DEBUG("Trainer cleanup complete");
+    }
+
     std::expected<void, std::string> Trainer::initialize_bilateral_grid() {
         if (!params_.optimization.use_bilateral_grid) {
             return {};
@@ -123,8 +165,9 @@ namespace gs::training {
 
     std::expected<void, std::string> Trainer::initialize(const param::TrainingParameters& params) {
         if (initialized_.load()) {
-            LOG_WARN("Trainer already initialized, skipping");
-            return {};  // Already initialized
+            LOG_INFO("Re-initializing trainer with new parameters");
+            // Clean up existing state for re-initialization
+            cleanup();
         }
 
         LOG_INFO("Initializing trainer with {} iterations", params.optimization.iterations);
@@ -160,6 +203,7 @@ namespace gs::training {
             }
             LOG_DEBUG("Camera cache initialized with {} cameras", m_cam_id_to_cam.size());
 
+            // Re-initialize strategy with new parameters
             strategy_->initialize(params.optimization);
             LOG_DEBUG("Strategy initialized");
 

@@ -128,6 +128,8 @@ namespace gs::training {
             const std::unique_ptr<BilateralGrid>& bilateral_grid,
             const param::OptimizationParameters& opt_params);
 
+        void cleanup();
+
         std::expected<void, std::string> initialize_bilateral_grid();
 
         // Handle control requests
