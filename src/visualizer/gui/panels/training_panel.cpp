@@ -29,16 +29,40 @@ namespace gs::gui::panels {
             return;
         }
 
-        const auto* trainer = trainer_manager->getTrainer();
-        if (!trainer) {
+        // Get current state to determine if we can edit
+        auto trainer_state = trainer_manager->getState();
+        bool can_edit = (trainer_state == TrainerManager::State::Ready);
+
+        // Get project to modify parameters if we're in edit mode
+        auto project = ctx.viewer->getProject();
+        if (!project) {
             return;
         }
 
-        const auto& params = trainer->getParams();
+        // Get parameters - either from project (if Ready) or from trainer (if training/completed)
+        param::OptimizationParameters opt_params;
+        param::DatasetConfig dataset_params;
+
+        if (trainer_state == TrainerManager::State::Ready) {
+            // Before training - get from project (editable)
+            opt_params = project->getOptimizationParams();
+            dataset_params = project->getProjectData().data_set_info;
+        } else {
+            // During/after training - get from trainer (read-only)
+            const auto* trainer = trainer_manager->getTrainer();
+            if (!trainer) {
+                return;
+            }
+            const auto& params = trainer->getParams();
+            opt_params = params.optimization;
+            dataset_params = params.dataset;
+        }
+
+        bool params_changed = false;
 
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 12.0f);
 
-        // Dataset Parameters
+        // Dataset Parameters (always read-only)
         if (ImGui::TreeNode("Dataset")) {
             if (ImGui::BeginTable("DatasetTable", 2, ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
@@ -48,37 +72,36 @@ namespace gs::gui::panels {
                 ImGui::TableNextColumn();
                 ImGui::Text("Path:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%s", params.dataset.data_path.filename().string().c_str());
+                ImGui::Text("%s", dataset_params.data_path.filename().string().c_str());
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("Images:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%s", params.dataset.images.c_str());
+                ImGui::Text("%s", dataset_params.images.c_str());
 
-                if (params.dataset.resize_factor != -1) {
+                if (dataset_params.resize_factor != -1) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Resize Factor:");
                     ImGui::TableNextColumn();
-                    ImGui::Text("%d", params.dataset.resize_factor);
+                    ImGui::Text("%d", dataset_params.resize_factor);
                 }
 
-                // Only show test_every if evaluation is enabled
-                if (params.optimization.enable_eval) {
+                if (opt_params.enable_eval) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Test Every:");
                     ImGui::TableNextColumn();
-                    ImGui::Text("%d", params.dataset.test_every);
+                    ImGui::Text("%d", dataset_params.test_every);
                 }
 
-                if (!params.dataset.output_path.empty()) {
+                if (!dataset_params.output_path.empty()) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Output:");
                     ImGui::TableNextColumn();
-                    ImGui::Text("%s", params.dataset.output_path.filename().string().c_str());
+                    ImGui::Text("%s", dataset_params.output_path.filename().string().c_str());
                 }
 
                 ImGui::EndTable();
@@ -86,23 +109,36 @@ namespace gs::gui::panels {
             ImGui::TreePop();
         }
 
-        // Optimization Parameters
+        // Optimization Parameters (editable when Ready)
         if (ImGui::TreeNode("Optimization")) {
             if (ImGui::BeginTable("OptimizationTable", 2, ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
+                // Iterations - EDITABLE
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("Iterations:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%zu", params.optimization.iterations);
+                if (can_edit) {
+                    ImGui::PushItemWidth(-1);
+                    int iterations = static_cast<int>(opt_params.iterations);
+                    if (ImGui::InputInt("##iterations", &iterations, 1000, 5000)) {
+                        if (iterations > 0 && iterations <= 1000000) {
+                            opt_params.iterations = static_cast<size_t>(iterations);
+                            params_changed = true;
+                        }
+                    }
+                    ImGui::PopItemWidth();
+                } else {
+                    ImGui::Text("%zu", opt_params.iterations);
+                }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("Strategy:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%s", params.optimization.strategy.c_str());
+                ImGui::Text("%s", opt_params.strategy.c_str());
 
                 // Learning Rates section
                 ImGui::TableNextRow();
@@ -114,31 +150,31 @@ namespace gs::gui::panels {
                 ImGui::TableNextColumn();
                 ImGui::Text("  Position:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%.6f", params.optimization.means_lr);
+                ImGui::Text("%.6f", opt_params.means_lr);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("  SH Coeff:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%.4f", params.optimization.shs_lr);
+                ImGui::Text("%.4f", opt_params.shs_lr);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("  Opacity:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%.4f", params.optimization.opacity_lr);
+                ImGui::Text("%.4f", opt_params.opacity_lr);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("  Scaling:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%.4f", params.optimization.scaling_lr);
+                ImGui::Text("%.4f", opt_params.scaling_lr);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("  Rotation:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%.4f", params.optimization.rotation_lr);
+                ImGui::Text("%.4f", opt_params.rotation_lr);
 
                 // Refinement section
                 ImGui::TableNextRow();
@@ -150,41 +186,41 @@ namespace gs::gui::panels {
                 ImGui::TableNextColumn();
                 ImGui::Text("  Refine Every:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%zu", params.optimization.refine_every);
+                ImGui::Text("%zu", opt_params.refine_every);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("  Start Refine:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%zu", params.optimization.start_refine);
+                ImGui::Text("%zu", opt_params.start_refine);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("  Stop Refine:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%zu", params.optimization.stop_refine);
+                ImGui::Text("%zu", opt_params.stop_refine);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("  Gradient Thr:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%.6f", params.optimization.grad_threshold);
+                ImGui::Text("%.6f", opt_params.grad_threshold);
 
-                if (params.optimization.reset_every > 0) {
+                if (opt_params.reset_every > 0) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("  Reset Every:");
                     ImGui::TableNextColumn();
-                    ImGui::Text("%zu", params.optimization.reset_every);
+                    ImGui::Text("%zu", opt_params.reset_every);
                 }
 
                 // Strategy-specific parameters
-                if (params.optimization.strategy == "mcmc") {
+                if (opt_params.strategy == "mcmc") {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Max Gaussians:");
                     ImGui::TableNextColumn();
-                    ImGui::Text("%d", params.optimization.max_cap);
+                    ImGui::Text("%d", opt_params.max_cap);
                 }
 
                 ImGui::EndTable();
@@ -193,48 +229,48 @@ namespace gs::gui::panels {
         }
 
         // Active Features - only show if any are enabled
-        bool has_active_features = params.optimization.use_bilateral_grid ||
-                                   params.optimization.pose_optimization != "none" ||
-                                   params.optimization.enable_eval ||
-                                   params.optimization.antialiasing ||
-                                   params.optimization.gut;
+        bool has_active_features = opt_params.use_bilateral_grid ||
+                                   opt_params.pose_optimization != "none" ||
+                                   opt_params.enable_eval ||
+                                   opt_params.antialiasing ||
+                                   opt_params.gut;
 
         if (has_active_features && ImGui::TreeNode("Active Features")) {
             if (ImGui::BeginTable("FeaturesTable", 2, ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Feature", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                 ImGui::TableSetupColumn("Configuration", ImGuiTableColumnFlags_WidthStretch);
 
-                if (params.optimization.use_bilateral_grid) {
+                if (opt_params.use_bilateral_grid) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Bilateral Grid:");
                     ImGui::TableNextColumn();
                     ImGui::Text("%dx%dx%d (LR: %.4f)",
-                                params.optimization.bilateral_grid_X,
-                                params.optimization.bilateral_grid_Y,
-                                params.optimization.bilateral_grid_W,
-                                params.optimization.bilateral_grid_lr);
+                                opt_params.bilateral_grid_X,
+                                opt_params.bilateral_grid_Y,
+                                opt_params.bilateral_grid_W,
+                                opt_params.bilateral_grid_lr);
                 }
 
-                if (params.optimization.pose_optimization != "none") {
+                if (opt_params.pose_optimization != "none") {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Pose Optimization:");
                     ImGui::TableNextColumn();
-                    ImGui::Text("%s", params.optimization.pose_optimization.c_str());
+                    ImGui::Text("%s", opt_params.pose_optimization.c_str());
                 }
 
-                if (params.optimization.enable_eval) {
+                if (opt_params.enable_eval) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Evaluation:");
                     ImGui::TableNextColumn();
-                    if (!params.optimization.eval_steps.empty()) {
+                    if (!opt_params.eval_steps.empty()) {
                         std::string steps_str = "Steps: ";
-                        for (size_t i = 0; i < params.optimization.eval_steps.size(); ++i) {
+                        for (size_t i = 0; i < opt_params.eval_steps.size(); ++i) {
                             if (i > 0)
                                 steps_str += ", ";
-                            steps_str += std::to_string(params.optimization.eval_steps[i]);
+                            steps_str += std::to_string(opt_params.eval_steps[i]);
                         }
                         ImGui::Text("%s", steps_str.c_str());
                     } else {
@@ -242,7 +278,7 @@ namespace gs::gui::panels {
                     }
                 }
 
-                if (params.optimization.antialiasing) {
+                if (opt_params.antialiasing) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Antialiasing:");
@@ -250,7 +286,7 @@ namespace gs::gui::panels {
                     ImGui::Text("Enabled");
                 }
 
-                if (params.optimization.gut) {
+                if (opt_params.gut) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("GUT Rasterizer:");
@@ -273,24 +309,24 @@ namespace gs::gui::panels {
                 ImGui::TableNextColumn();
                 ImGui::Text("Render Mode:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%s", params.optimization.render_mode.c_str());
+                ImGui::Text("%s", opt_params.render_mode.c_str());
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("SH Degree:");
                 ImGui::TableNextColumn();
-                ImGui::Text("%d", params.optimization.sh_degree);
+                ImGui::Text("%d", opt_params.sh_degree);
 
-                if (!params.optimization.save_steps.empty()) {
+                if (!opt_params.save_steps.empty()) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Save Steps:");
                     ImGui::TableNextColumn();
                     std::string steps_str;
-                    for (size_t i = 0; i < params.optimization.save_steps.size(); ++i) {
+                    for (size_t i = 0; i < opt_params.save_steps.size(); ++i) {
                         if (i > 0)
                             steps_str += ", ";
-                        steps_str += std::to_string(params.optimization.save_steps[i]);
+                        steps_str += std::to_string(opt_params.save_steps[i]);
                     }
                     ImGui::Text("%s", steps_str.c_str());
                 }
@@ -298,6 +334,14 @@ namespace gs::gui::panels {
                 ImGui::EndTable();
             }
             ImGui::TreePop();
+        }
+
+        // Apply changes if any were made and we can edit
+        if (params_changed && can_edit) {
+            project->setOptimizationParams(opt_params);
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
+                "Parameters updated - will be applied when training starts");
         }
 
         ImGui::PopStyleVar();
@@ -396,13 +440,9 @@ namespace gs::gui::panels {
             ImGui::PopStyleColor(2);
         }
 
-        // TRAINING PARAMETERS - NOW DIRECTLY BELOW SAVE PROJECT BUTTON
-        if (trainer_state == TrainerManager::State::Ready ||
-            trainer_state == TrainerManager::State::Completed) {
-            ImGui::Separator();
-            if (ImGui::CollapsingHeader("Training Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
-                DrawTrainingParameters(ctx);
-            }
+        ImGui::Separator();
+        if (ImGui::CollapsingHeader("Training Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+            DrawTrainingParameters(ctx);
         }
 
         // Save feedback
