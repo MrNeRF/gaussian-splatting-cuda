@@ -7,7 +7,6 @@
 #include <imgui.h>
 
 namespace gs::gui::panels {
-
     void DrawWorldTransformControls(const UIContext& ctx) {
         auto render_manager = ctx.viewer->getRenderingManager();
         if (!render_manager)
@@ -109,16 +108,36 @@ namespace gs::gui::panels {
         }
 
         ImGui::Separator();
+        // Step values for input controls
+        static const float ROTATION_STEP = 1.0f;
+        static const float ROTATION_FAST_STEP = 5.0f;
+        static const float TRANSLATION_STEP = 0.01f;
+        static const float TRANSLATION_FAST_STEP = 0.1f;
+
+        // User hint for faster steps
+        ImGui::TextColored(ImVec4(0.1f, 0.1f, 0.1f, 1.0f), "(Ctrl+click for faster steps)");
 
         // Rotation controls
         ImGui::Text("Rotation (degrees):");
-        if (ImGui::DragFloat3("##world_rotation", rotation_degrees, 0.1f, -360.0f, 360.0f, "%.1f")) {
+        if (ImGui::InputFloat("X##rot_x", &rotation_degrees[0], ROTATION_STEP, ROTATION_FAST_STEP, "%.1f")) {
+            settings_changed = true;
+        }
+        if (ImGui::InputFloat("Y##rot_y", &rotation_degrees[1], ROTATION_STEP, ROTATION_FAST_STEP, "%.1f")) {
+            settings_changed = true;
+        }
+        if (ImGui::InputFloat("Z##rot_z", &rotation_degrees[2], ROTATION_STEP, ROTATION_FAST_STEP, "%.1f")) {
             settings_changed = true;
         }
 
         // Translation controls
         ImGui::Text("Translation:");
-        if (ImGui::DragFloat3("##world_translation", translation, 0.01f, -100.0f, 100.0f, "%.3f")) {
+        if (ImGui::InputFloat("X##trans_x", &translation[0], TRANSLATION_STEP, TRANSLATION_FAST_STEP, "%.3f")) {
+            settings_changed = true;
+        }
+        if (ImGui::InputFloat("Y##trans_y", &translation[1], TRANSLATION_STEP, TRANSLATION_FAST_STEP, "%.3f")) {
+            settings_changed = true;
+        }
+        if (ImGui::InputFloat("Z##trans_z", &translation[2], TRANSLATION_STEP, TRANSLATION_FAST_STEP, "%.3f")) {
             settings_changed = true;
         }
 
