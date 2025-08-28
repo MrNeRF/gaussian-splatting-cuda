@@ -179,13 +179,27 @@ namespace gs::training {
 
         std::optional<torch::Tensor> radial_distortion;
         if (viewpoint_camera.radial_distortion().numel() > 0) {
-            radial_distortion = viewpoint_camera.radial_distortion().to(torch::kCUDA);
-            TORCH_CHECK(radial_distortion->dim() == 1, "radial_distortion must be 1D, got ", radial_distortion->sizes());
+            auto radial_distortion_val = viewpoint_camera.radial_distortion().to(torch::kCUDA);
+            TORCH_CHECK(radial_distortion_val.dim() == 1, "radial_distortion must be 1D, got ", radial_distortion_val.sizes());
+            if (radial_distortion_val.size(-1) < 4) {
+                // Pad to 4 coefficients if less are provided
+                radial_distortion_val = torch::nn::functional::pad(
+                    radial_distortion_val,
+                    torch::nn::functional::PadFuncOptions({0, 4 - radial_distortion_val.size(-1)}).mode(torch::kConstant).value(0));
+            }
+            radial_distortion = radial_distortion_val;
         }
         std::optional<torch::Tensor> tangential_distortion;
         if (viewpoint_camera.tangential_distortion().numel() > 0) {
-            tangential_distortion = viewpoint_camera.tangential_distortion().to(torch::kCUDA);
-            TORCH_CHECK(tangential_distortion->dim() == 1, "tangential_distortion must be 1D, got ", tangential_distortion->sizes());
+            auto tangential_distortion_val = viewpoint_camera.tangential_distortion().to(torch::kCUDA);
+            TORCH_CHECK(tangential_distortion_val.dim() == 1, "tangential_distortion must be 1D, got ", tangential_distortion_val.sizes());
+            if (tangential_distortion_val.size(-1) < 2) {
+                // Pad to 2 coefficients if less are provided
+                tangential_distortion_val = torch::nn::functional::pad(
+                    tangential_distortion_val,
+                    torch::nn::functional::PadFuncOptions({0, 2 - tangential_distortion_val.size(-1)}).mode(torch::kConstant).value(0));
+            }
+            tangential_distortion = tangential_distortion_val;
         }
 
         // Step 1: Projection
