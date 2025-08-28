@@ -41,7 +41,6 @@ namespace gs::rendering {
         std::optional<BoundingBox> crop_box;
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
-        std::optional<glm::mat4> model_transform;
     };
 
     struct RenderResult {
