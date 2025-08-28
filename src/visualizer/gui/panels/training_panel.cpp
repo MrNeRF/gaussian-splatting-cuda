@@ -23,6 +23,286 @@ namespace gs::gui::panels {
         ImGui::PopStyleColor(2);
     }
 
+    void DrawTrainingParameters(const UIContext& ctx) {
+        auto* trainer_manager = ctx.viewer->getTrainerManager();
+        if (!trainer_manager || !trainer_manager->hasTrainer()) {
+            return;
+        }
+
+        const auto* trainer = trainer_manager->getTrainer();
+        if (!trainer) {
+            return;
+        }
+
+        const auto& params = trainer->getParams();
+
+        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 12.0f);
+
+        // Dataset Parameters
+        if (ImGui::TreeNode("Dataset")) {
+            if (ImGui::BeginTable("DatasetTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Path:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", params.dataset.data_path.filename().string().c_str());
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Images:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", params.dataset.images.c_str());
+
+                if (params.dataset.resize_factor != -1) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Resize Factor:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", params.dataset.resize_factor);
+                }
+
+                // Only show test_every if evaluation is enabled
+                if (params.optimization.enable_eval) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Test Every:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", params.dataset.test_every);
+                }
+
+                if (!params.dataset.output_path.empty()) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Output:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", params.dataset.output_path.filename().string().c_str());
+                }
+
+                ImGui::EndTable();
+            }
+            ImGui::TreePop();
+        }
+
+        // Optimization Parameters
+        if (ImGui::TreeNode("Optimization")) {
+            if (ImGui::BeginTable("OptimizationTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Iterations:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%zu", params.optimization.iterations);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Strategy:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", params.optimization.strategy.c_str());
+
+                // Learning Rates section
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Learning Rates:");
+                ImGui::TableNextColumn();
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  Position:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%.6f", params.optimization.means_lr);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  SH Coeff:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%.4f", params.optimization.shs_lr);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  Opacity:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%.4f", params.optimization.opacity_lr);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  Scaling:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%.4f", params.optimization.scaling_lr);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  Rotation:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%.4f", params.optimization.rotation_lr);
+
+                // Refinement section
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Refinement:");
+                ImGui::TableNextColumn();
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  Refine Every:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%zu", params.optimization.refine_every);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  Start Refine:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%zu", params.optimization.start_refine);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  Stop Refine:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%zu", params.optimization.stop_refine);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("  Gradient Thr:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%.6f", params.optimization.grad_threshold);
+
+                if (params.optimization.reset_every > 0) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("  Reset Every:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%zu", params.optimization.reset_every);
+                }
+
+                // Strategy-specific parameters
+                if (params.optimization.strategy == "mcmc") {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Max Gaussians:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", params.optimization.max_cap);
+                }
+
+                ImGui::EndTable();
+            }
+            ImGui::TreePop();
+        }
+
+        // Active Features - only show if any are enabled
+        bool has_active_features = params.optimization.use_bilateral_grid ||
+                                   params.optimization.pose_optimization != "none" ||
+                                   params.optimization.enable_eval ||
+                                   params.optimization.antialiasing ||
+                                   params.optimization.gut;
+
+        if (has_active_features && ImGui::TreeNode("Active Features")) {
+            if (ImGui::BeginTable("FeaturesTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Feature", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                ImGui::TableSetupColumn("Configuration", ImGuiTableColumnFlags_WidthStretch);
+
+                if (params.optimization.use_bilateral_grid) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Bilateral Grid:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%dx%dx%d (LR: %.4f)",
+                                params.optimization.bilateral_grid_X,
+                                params.optimization.bilateral_grid_Y,
+                                params.optimization.bilateral_grid_W,
+                                params.optimization.bilateral_grid_lr);
+                }
+
+                if (params.optimization.pose_optimization != "none") {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Pose Optimization:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", params.optimization.pose_optimization.c_str());
+                }
+
+                if (params.optimization.enable_eval) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Evaluation:");
+                    ImGui::TableNextColumn();
+                    if (!params.optimization.eval_steps.empty()) {
+                        std::string steps_str = "Steps: ";
+                        for (size_t i = 0; i < params.optimization.eval_steps.size(); ++i) {
+                            if (i > 0)
+                                steps_str += ", ";
+                            steps_str += std::to_string(params.optimization.eval_steps[i]);
+                        }
+                        ImGui::Text("%s", steps_str.c_str());
+                    } else {
+                        ImGui::Text("Enabled");
+                    }
+                }
+
+                if (params.optimization.antialiasing) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Antialiasing:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Enabled");
+                }
+
+                if (params.optimization.gut) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("GUT Rasterizer:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Enabled");
+                }
+
+                ImGui::EndTable();
+            }
+            ImGui::TreePop();
+        }
+
+        // Render Settings
+        if (ImGui::TreeNode("Render Settings")) {
+            if (ImGui::BeginTable("RenderTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Render Mode:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", params.optimization.render_mode.c_str());
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("SH Degree:");
+                ImGui::TableNextColumn();
+                ImGui::Text("%d", params.optimization.sh_degree);
+
+                if (!params.optimization.save_steps.empty()) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Save Steps:");
+                    ImGui::TableNextColumn();
+                    std::string steps_str;
+                    for (size_t i = 0; i < params.optimization.save_steps.size(); ++i) {
+                        if (i > 0)
+                            steps_str += ", ";
+                        steps_str += std::to_string(params.optimization.save_steps[i]);
+                    }
+                    ImGui::Text("%s", steps_str.c_str());
+                }
+
+                ImGui::EndTable();
+            }
+            ImGui::TreePop();
+        }
+
+        ImGui::PopStyleVar();
+    }
+
     void DrawTrainingControls(const UIContext& ctx) {
         ImGui::Text("Training Control");
         ImGui::Separator();
@@ -116,6 +396,15 @@ namespace gs::gui::panels {
             ImGui::PopStyleColor(2);
         }
 
+        // TRAINING PARAMETERS - NOW DIRECTLY BELOW SAVE PROJECT BUTTON
+        if (trainer_state == TrainerManager::State::Ready ||
+            trainer_state == TrainerManager::State::Completed) {
+            ImGui::Separator();
+            if (ImGui::CollapsingHeader("Training Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+                DrawTrainingParameters(ctx);
+            }
+        }
+
         // Save feedback
         if (state.save_in_progress) {
             auto now = std::chrono::steady_clock::now();
@@ -127,11 +416,6 @@ namespace gs::gui::panels {
             } else {
                 state.save_in_progress = false;
             }
-        }
-
-        // Render save project file browser
-        if (state.show_save_browser) {
-            state.save_browser.render(&state.show_save_browser);
         }
 
         // Status display
@@ -152,6 +436,11 @@ namespace gs::gui::panels {
         ImGui::Text("Status: %s", state_str);
         ImGui::Text("Iteration: %d", current_iteration);
         ImGui::Text("Loss: %.6f", current_loss);
+
+        // Render save project file browser
+        if (state.show_save_browser) {
+            state.save_browser.render(&state.show_save_browser);
+        }
     }
 
 } // namespace gs::gui::panels
