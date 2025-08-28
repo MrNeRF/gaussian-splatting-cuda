@@ -630,6 +630,7 @@ namespace gs::loader {
             }
             // fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1
             case CAMERA_MODEL::THIN_PRISM_FISHEYE: {
+                throw std::runtime_error("THIN_PRISM_FISHEYE camera model is not supported but could be implemented in 3DGUT pretty easily");
                 out[i]._focal_x = out[i]._params[0].item<float>();
                 out[i]._focal_y = out[i]._params[1].item<float>();
                 out[i]._center_x = out[i]._params[2].item<float>();
@@ -649,13 +650,13 @@ namespace gs::loader {
             }
             // fx, fy, cx, cy, omega
             case CAMERA_MODEL::FOV: {
+                throw std::runtime_error("FOV camera model is not supported.");
                 out[i]._focal_x = out[i]._params[0].item<float>();
                 out[i]._focal_y = out[i]._params[1].item<float>();
                 out[i]._center_x = out[i]._params[2].item<float>();
                 out[i]._center_y = out[i]._params[3].item<float>();
                 float omega = out[i]._params[4].item<float>();
-                out[i]._radial_distortion = torch::tensor({omega}, torch::kFloat32);
-                out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
+                // out[i]._camera_model_type = ;
                 break;
             }
             default:
