@@ -302,7 +302,7 @@ namespace gs::training {
                 r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), background_);
             } else {
                 r_output = rasterize(adjusted_cam, strategy_->get_model(), background_, 1.0f, false, false, render_mode,
-                                     nullptr, true);
+                                     nullptr);
             }
 
             // Apply bilateral grid if enabled
