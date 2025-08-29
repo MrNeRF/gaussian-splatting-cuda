@@ -94,9 +94,13 @@ namespace gs {
         std::shared_ptr<const Camera> getCamById(int camId) const;
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
-        void setProject(std::shared_ptr<gs::management::Project> project);
+        void setProject(std::shared_ptr<gs::management::Project> project) { project_ = project; }
+        std::shared_ptr<gs::management::Project> getProject() const { return project_; }
 
     private:
+        // Helper method to avoid duplicated initialization logic
+        std::expected<bool, std::string> initializeTrainerFromProject();
+
         // Training thread function
         void trainingThreadFunc(std::stop_token stop_token);
 
