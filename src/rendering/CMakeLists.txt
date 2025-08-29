@@ -26,34 +26,36 @@ endif()
 add_library(gs_rendering STATIC ${RENDERING_SOURCES})
 
 target_link_libraries(gs_rendering
-        PRIVATE  # ALL dependencies should be PRIVATE
+        PUBLIC
+        gs_core                # Link core module
+        gs_geometry            # Link geometry module for BoundingBox and EuclideanTransform
+        gs_kernels             # Link kernels module
+        PRIVATE
+        rendering_cuda_backend
         ${TORCH_LIBRARIES}
         glm::glm
-        gaussian_host
-        gaussian_kernels
-        rendering_cuda_backend
         glad::glad
+        glfw
         ${OPENGL_LIBRARIES}
         CUDA::cudart
         spdlog::spdlog
         Freetype::Freetype
 )
 
+# Since we're linking to gs_core PUBLIC, we inherit its include directories
+# which include: ${CMAKE_BINARY_DIR}/include (for config.h)
+#                ${CMAKE_SOURCE_DIR}/gsplat (for Common.h)
 target_include_directories(gs_rendering
         PUBLIC
-        # ONLY expose the include directory for public headers
         $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
         PRIVATE
-        # Internal paths for implementation only
-        ${CMAKE_CURRENT_SOURCE_DIR}                           # For internal includes within rendering
-        ${CMAKE_CURRENT_SOURCE_DIR}/cuda/rasterization/include # For CUDA rasterization headers
-        ${CMAKE_CURRENT_SOURCE_DIR}/cuda/utils                # For CUDA utils
-        ${CMAKE_SOURCE_DIR}/include                           # For public headers
-        ${CMAKE_SOURCE_DIR}/src                               # For other internal modules
-        ${CUDAToolkit_INCLUDE_DIRS}                           # CUDA headers
-        ${OPENGL_INCLUDE_DIRS}                                # OpenGL headers
-        ${Python3_INCLUDE_DIRS}                               # Python headers
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/cuda/rasterization/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/cuda/utils
+        ${CMAKE_SOURCE_DIR}/src
+        ${OPENGL_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
 )
 
 # Handle shaders
@@ -71,7 +73,6 @@ endforeach()
 target_compile_definitions(gs_rendering PRIVATE
         SHADER_PATH="${RENDERING_BUILD_RESOURCE_DIR}/shaders"
         RENDERING_SOURCE_SHADER_PATH="${RENDERING_SOURCE_RESOURCE_DIR}/shaders"
-        PROJECT_ROOT_PATH="${PROJECT_SOURCE_DIR}"
         $<$<BOOL:${CUDA_GL_INTEROP_ENABLED}>:CUDA_GL_INTEROP_ENABLED>
 )
 

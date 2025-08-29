@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "rendering_manager.hpp"
 #include "core/logger.hpp"
 #include "core/splat_data.hpp"
@@ -297,6 +301,16 @@ namespace gs::visualizer {
                 .size = render_size,
                 .fov = settings_.fov};
 
+            // Apply world transform to camera (inverse of model transform)
+            if (!settings_.world_transform.isIdentity()) {
+                glm::mat3 world_rot = settings_.world_transform.getRotationMat();
+                glm::vec3 world_trans = settings_.world_transform.getTranslation();
+
+                // Transform the camera position and rotation (inverse of model transform)
+                viewport_data.rotation = glm::transpose(world_rot) * viewport_data.rotation;
+                viewport_data.translation = glm::transpose(world_rot) * (viewport_data.translation - world_trans);
+            }
+
             gs::rendering::RenderRequest request{
                 .viewport = viewport_data,
                 .scaling_modifier = settings_.scaling_modifier,
@@ -304,16 +318,7 @@ namespace gs::visualizer {
                 .background_color = bg_color,
                 .crop_box = std::nullopt,
                 .point_cloud_mode = settings_.point_cloud_mode,
-                .voxel_size = settings_.voxel_size,
-                .model_transform = std::nullopt // Initialize this field
-            };
-
-            // IMPORTANT: Apply world transform to MODEL, not view!
-            if (!settings_.world_transform.isIdentity()) {
-                // Apply transform to the model instead of the camera
-                request.model_transform = settings_.world_transform.toMat4();
-                // DON'T transform the viewport data anymore!
-            }
+                .voxel_size = settings_.voxel_size};
 
             // Add crop box if enabled
             if (settings_.use_crop_box) {

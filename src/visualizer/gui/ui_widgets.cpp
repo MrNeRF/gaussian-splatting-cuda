@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gui/ui_widgets.hpp"
 #include "scene/scene_manager.hpp"
 #include "training/training_manager.hpp"
@@ -47,10 +51,8 @@ namespace gs::gui::widgets {
     }
 
     void TableRow(const char* label, const char* format, ...) {
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("%s", label);
-        ImGui::TableNextColumn();
+        ImGui::Text("%s:", label);
+        ImGui::SameLine(120); // Align values at column 120
 
         va_list args;
         va_start(args, format);

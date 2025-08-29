@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "rendering_engine_impl.hpp"
 #include "core/logger.hpp"
 #include "framebuffer_factory.hpp"
@@ -136,8 +140,7 @@ namespace gs::rendering {
             .crop_box = nullptr,
             .background_color = request.background_color,
             .point_cloud_mode = request.point_cloud_mode,
-            .voxel_size = request.voxel_size,
-            .model_transform = request.model_transform};
+            .voxel_size = request.voxel_size};
 
         // Convert crop box if present
         std::unique_ptr<gs::geometry::BoundingBox> temp_crop_box;

@@ -1,9 +1,13 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "loader/loaders/blender_loader.hpp"
 #include "core/camera.hpp"
-#include "core/dataset.hpp"
 #include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "formats/transforms.hpp"
+#include "training/dataset.hpp"
 #include <chrono>
 #include <filesystem>
 #include <format>
@@ -149,8 +153,8 @@ namespace gs::loader {
             dataset_config.resize_factor = options.resize_factor;
 
             // Create dataset with ALL images
-            auto dataset = std::make_shared<gs::CameraDataset>(
-                std::move(cameras), dataset_config, gs::CameraDataset::Split::ALL);
+            auto dataset = std::make_shared<gs::training::CameraDataset>(
+                std::move(cameras), dataset_config, gs::training::CameraDataset::Split::ALL);
 
             if (options.progress) {
                 options.progress(60.0f, "Generating random point cloud...");

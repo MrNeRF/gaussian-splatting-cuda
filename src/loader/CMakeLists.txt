@@ -29,21 +29,17 @@ add_library(gs_loader STATIC
 # Set include directories
 target_include_directories(gs_loader
         PUBLIC
-        # ONLY expose the include directory for public headers
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../include>
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
         PRIVATE
-        # Internal paths for implementation only
-        ${CMAKE_CURRENT_SOURCE_DIR}  # For internal includes like "loader_service.hpp"
-        ${CMAKE_CURRENT_SOURCE_DIR}/..  # For includes like "loader/..."
-        ${CMAKE_CURRENT_SOURCE_DIR}/../..  # For "core/..." includes
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../gsplat  # For Common.h
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
 )
 
 # Link dependencies
 target_link_libraries(gs_loader
         PUBLIC
-        ${TORCH_LIBRARIES}  # Only because LoadResult uses torch::Tensor
+        gs_core            # Link to modular core library for SplatData, Camera, etc.
         PRIVATE
         TBB::tbb
         spdlog::spdlog
@@ -73,5 +69,5 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif ()
 
 # Export only the public header
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../include/loader/loader.hpp
+install(FILES ${CMAKE_SOURCE_DIR}/include/loader/loader.hpp
         DESTINATION include/loader)

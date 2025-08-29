@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "point_cloud_renderer.hpp"
 #include "core/logger.hpp"
 #include "gl_state_guard.hpp"

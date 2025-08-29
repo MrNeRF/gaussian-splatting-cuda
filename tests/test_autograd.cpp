@@ -1,6 +1,6 @@
 #include "Ops.h"
 #include "core/debug_utils.hpp"
-#include "core/rasterizer_autograd.hpp"
+#include "rasterization/rasterizer_autograd.hpp"
 #include <cuda_runtime.h>
 #include <gtest/gtest.h>
 #include <memory>

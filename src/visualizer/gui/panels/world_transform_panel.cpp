@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gui/panels/world_transform_panel.hpp"
 #include "gui/ui_widgets.hpp"
 #include "rendering/rendering_manager.hpp"
@@ -7,6 +11,16 @@
 #include <imgui.h>
 
 namespace gs::gui::panels {
+    // Helper function to wrap angles to 0-360 range
+    static float wrapAngle(float angle) {
+        while (angle < 0.0f) {
+            angle += 360.0f;
+        }
+        while (angle >= 360.0f) {
+            angle -= 360.0f;
+        }
+        return angle;
+    }
 
     void DrawWorldTransformControls(const UIContext& ctx) {
         auto render_manager = ctx.viewer->getRenderingManager();
@@ -110,15 +124,44 @@ namespace gs::gui::panels {
 
         ImGui::Separator();
 
+        // User hint for faster steps
+        ImGui::TextColored(ImVec4(0.1f, 0.1f, 0.1f, 1.0f), "(Ctrl+click for faster steps)");
+
+        // Step values for input controls
+        static const float ROTATION_STEP = 1.0f;
+        static const float ROTATION_FAST_STEP = 5.0f;
+        static const float TRANSLATION_STEP = 0.01f;
+        static const float TRANSLATION_FAST_STEP = 0.1f;
+        static const float MIN_TRANSLATION = -1000.0f;
+        static const float MAX_TRANSLATION = 1000.0f;
+
         // Rotation controls
         ImGui::Text("Rotation (degrees):");
-        if (ImGui::DragFloat3("##world_rotation", rotation_degrees, 0.1f, -360.0f, 360.0f, "%.1f")) {
+        if (ImGui::InputFloat("X##rot_x", &rotation_degrees[0], ROTATION_STEP, ROTATION_FAST_STEP, "%.1f")) {
+            rotation_degrees[0] = wrapAngle(rotation_degrees[0]);
+            settings_changed = true;
+        }
+        if (ImGui::InputFloat("Y##rot_y", &rotation_degrees[1], ROTATION_STEP, ROTATION_FAST_STEP, "%.1f")) {
+            rotation_degrees[1] = wrapAngle(rotation_degrees[1]);
+            settings_changed = true;
+        }
+        if (ImGui::InputFloat("Z##rot_z", &rotation_degrees[2], ROTATION_STEP, ROTATION_FAST_STEP, "%.1f")) {
+            rotation_degrees[2] = wrapAngle(rotation_degrees[2]);
             settings_changed = true;
         }
 
         // Translation controls
         ImGui::Text("Translation:");
-        if (ImGui::DragFloat3("##world_translation", translation, 0.01f, -100.0f, 100.0f, "%.3f")) {
+        if (ImGui::InputFloat("X##trans_x", &translation[0], TRANSLATION_STEP, TRANSLATION_FAST_STEP, "%.3f")) {
+            translation[0] = std::clamp(translation[0], MIN_TRANSLATION, MAX_TRANSLATION);
+            settings_changed = true;
+        }
+        if (ImGui::InputFloat("Y##trans_y", &translation[1], TRANSLATION_STEP, TRANSLATION_FAST_STEP, "%.3f")) {
+            translation[1] = std::clamp(translation[1], MIN_TRANSLATION, MAX_TRANSLATION);
+            settings_changed = true;
+        }
+        if (ImGui::InputFloat("Z##trans_z", &translation[2], TRANSLATION_STEP, TRANSLATION_FAST_STEP, "%.3f")) {
+            translation[2] = std::clamp(translation[2], MIN_TRANSLATION, MAX_TRANSLATION);
             settings_changed = true;
         }
 

@@ -1,8 +1,12 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "core/camera.hpp"
-#include "core/rasterizer.hpp"
 #include "core/splat_data.hpp"
+#include "geometry/bounding_box.hpp"
 #include "point_cloud_renderer.hpp"
 #include "rendering/rendering.hpp"
 #include "screen_renderer.hpp"
@@ -25,7 +29,6 @@ namespace gs::rendering {
             glm::vec3 background_color = glm::vec3(0.0f, 0.0f, 0.0f);
             bool point_cloud_mode = false;
             float voxel_size = 0.01f;
-            std::optional<glm::mat4> model_transform;
         };
 
         struct RenderResult {

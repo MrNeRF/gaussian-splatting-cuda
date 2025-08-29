@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "core/main_loop.hpp"
@@ -52,7 +56,7 @@ namespace gs::visualizer {
         void LoadProjectPlys();
 
         // Getters for GUI (delegating to state manager)
-        Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
+        gs::training::Trainer* getTrainer() const { return trainer_manager_->getTrainer(); }
 
         // Component access
         TrainerManager* getTrainerManager() { return trainer_manager_.get(); }

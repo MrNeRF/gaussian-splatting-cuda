@@ -1,9 +1,13 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "loader/loaders/colmap_loader.hpp"
 #include "core/camera.hpp"
-#include "core/dataset.hpp"
 #include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "formats/colmap.hpp"
+#include "training/dataset.hpp"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -178,9 +182,9 @@ namespace gs::loader {
             dataset_config.images = options.images_folder;
             dataset_config.resize_factor = options.resize_factor;
 
-            // Create dataset with ALL images
-            auto dataset = std::make_shared<gs::CameraDataset>(
-                std::move(cameras), dataset_config, gs::CameraDataset::Split::ALL);
+            // Create dataset with ALL images - use correct namespace
+            auto dataset = std::make_shared<gs::training::CameraDataset>(
+                std::move(cameras), dataset_config, gs::training::CameraDataset::Split::ALL);
 
             if (options.progress) {
                 options.progress(60.0f, "Loading point cloud...");

@@ -1,8 +1,8 @@
 #include "Ops.h"
 #include "core/camera.hpp"
-#include "core/rasterizer.hpp"
-#include "core/rasterizer_autograd.hpp"
 #include "core/splat_data.hpp"
+#include "rasterization/rasterizer.hpp"
+#include "rasterization/rasterizer_autograd.hpp"
 #include "torch_impl.hpp"
 #include <cmath>
 #include <gtest/gtest.h>

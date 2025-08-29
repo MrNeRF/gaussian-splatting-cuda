@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "rendering_pipeline.hpp"
 #include "gs_rasterizer.hpp"
 #include <print>
@@ -23,22 +27,10 @@ namespace gs::rendering {
             return std::unexpected("Invalid viewport dimensions");
         }
 
-        // Apply transform to splat data if provided
-        const SplatData* data_to_render = &model;
-        std::unique_ptr<SplatData> transformed_data;
-
-        if (request.model_transform) {
-            LOG_TRACE("Applying model transform to splat data");
-            // Create a copy and transform it
-            transformed_data = std::make_unique<SplatData>(std::move(const_cast<SplatData&>(model)));
-            transformed_data->transform(*request.model_transform);
-            data_to_render = transformed_data.get();
-        }
-
         // Check if we should use point cloud rendering
         if (request.point_cloud_mode) {
             LOG_TRACE("Using point cloud rendering mode");
-            return renderPointCloud(*data_to_render, request);
+            return renderPointCloud(model, request);
         }
 
         // Regular gaussian splatting rendering
@@ -210,7 +202,7 @@ namespace gs::rendering {
         // Set viewport to match the request size
         glViewport(0, 0, request.viewport_size.x, request.viewport_size.y);
 
-        // Render point cloud to framebuffer (model already transformed if needed)
+        // Render point cloud to framebuffer
         if (auto result = point_cloud_renderer_->render(model, view, projection,
                                                         request.voxel_size, request.background_color);
             !result) {

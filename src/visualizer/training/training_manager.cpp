@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "training/training_manager.hpp"
 #include "core/logger.hpp"
 #include <stdexcept>
@@ -18,7 +22,7 @@ namespace gs {
         }
     }
 
-    void TrainerManager::setTrainer(std::unique_ptr<Trainer> trainer) {
+    void TrainerManager::setTrainer(std::unique_ptr<gs::training::Trainer> trainer) {
         LOG_TIMER_TRACE("TrainerManager::setTrainer");
 
         // Clear any existing trainer first

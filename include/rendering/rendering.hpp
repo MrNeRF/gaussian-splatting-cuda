@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "geometry/euclidean_transform.hpp"
@@ -41,7 +45,6 @@ namespace gs::rendering {
         std::optional<BoundingBox> crop_box;
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
-        std::optional<glm::mat4> model_transform;
     };
 
     struct RenderResult {

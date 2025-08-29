@@ -22,9 +22,7 @@ endif()
 set(GSPLAT_SOURCES
         # C++ files
         Intersect.cpp
-        Null.cpp
         Projection.cpp
-        QuatScaleToCovar.cpp
         QuatToRotmat.cpp
         Rasterization.cpp
         Relocation.cpp
@@ -32,16 +30,8 @@ set(GSPLAT_SOURCES
 
         # CUDA files
         IntersectTile.cu
-        NullCUDA.cu
-        ProjectionEWA3DGSFused.cu
-        ProjectionEWA3DGSPacked.cu
-        ProjectionEWASimple.cu
         ProjectionUT3DGSFused.cu
-        QuatScaleToCovarCUDA.cu
         QuatToRotmatCUDA.cu
-        RasterizeToIndices3DGS.cu
-        RasterizeToPixels3DGSBwd.cu
-        RasterizeToPixels3DGSFwd.cu
         RasterizeToPixelsFromWorld3DGSBwd.cu
         RasterizeToPixelsFromWorld3DGSFwd.cu
         RelocationCUDA.cu
