@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "trainer.hpp"
 #include "components/bilateral_grid.hpp"
 #include "components/poseopt.hpp"
@@ -335,12 +339,15 @@ namespace gs::training {
                     return std::unexpected("Training on cameras with ortho model is not supported yet.");
                 }
             } else {
-                if (cam->radial_distortion().numel() != 0 ||
-                    cam->tangential_distortion().numel() != 0) {
-                    return std::unexpected("You must use --gut option to train on cameras with distortion.");
-                }
-                if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
-                    return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
+                // Flag is workaround for non-RC datasets with distortion. By default it is off.
+                if (!params_.optimization.rc) {
+                    if (cam->radial_distortion().numel() != 0 ||
+                        cam->tangential_distortion().numel() != 0) {
+                        return std::unexpected("You must use --gut option to train on cameras with distortion.");
+                    }
+                    if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
+                        return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
+                    }
                 }
             }
 
@@ -374,7 +381,7 @@ namespace gs::training {
                 r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), background_);
             } else {
                 r_output = rasterize(adjusted_cam, strategy_->get_model(), background_, 1.0f, false, false, render_mode,
-                                     nullptr, true);
+                                     nullptr);
             }
 
             // Apply bilateral grid if enabled

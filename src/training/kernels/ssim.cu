@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include <algorithm>
 #include <c10/cuda/CUDAGuard.h>
 #include <cooperative_groups.h>

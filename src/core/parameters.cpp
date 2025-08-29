@@ -1,4 +1,6 @@
-// Copyright (c) 2023 Janusch Patas.
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "core/parameters.hpp"
 #include <chrono>
