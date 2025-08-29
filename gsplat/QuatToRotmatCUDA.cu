@@ -4,7 +4,6 @@
 #include <cooperative_groups.h>
 
 #include "Common.h"
-#include "QuatScaleToCovar.h"
 #include "Utils.cuh"
 
 namespace gsplat {

@@ -6,33 +6,6 @@
 #include <torch/torch.h>
 
 namespace gs::training {
-    struct ProjectionSettings {
-        int width;
-        int height;
-        float eps2d;
-        float near_plane;
-        float far_plane;
-        float radius_clip;
-        float scaling_modifier;
-    };
-
-    // Autograd function for projection
-    class ProjectionFunction : public torch::autograd::Function<ProjectionFunction> {
-    public:
-        static torch::autograd::tensor_list forward(
-            torch::autograd::AutogradContext* ctx,
-            torch::Tensor means3D,   // [N, 3]
-            torch::Tensor quats,     // [N, 4]
-            torch::Tensor scales,    // [N, 3]
-            torch::Tensor opacities, // [N]
-            torch::Tensor viewmat,   // [C, 4, 4]
-            torch::Tensor K,         // [C, 3, 3]
-            ProjectionSettings settings);
-
-        static torch::autograd::tensor_list backward(
-            torch::autograd::AutogradContext* ctx,
-            torch::autograd::tensor_list grad_outputs);
-    };
 
     // Autograd function for spherical harmonics
     class SphericalHarmonicsFunction : public torch::autograd::Function<SphericalHarmonicsFunction> {
@@ -43,51 +16,6 @@ namespace gs::training {
             torch::Tensor dirs,             // [N, 3]
             torch::Tensor coeffs,           // [N, K, 3]
             torch::Tensor masks);           // [N] optional boolean masks
-
-        static torch::autograd::tensor_list backward(
-            torch::autograd::AutogradContext* ctx,
-            torch::autograd::tensor_list grad_outputs);
-    };
-
-    struct RasterizationSettings {
-        int width;
-        int height;
-        int tile_size;
-    };
-
-    // Autograd function for rasterization
-    class RasterizationFunction : public torch::autograd::Function<RasterizationFunction> {
-    public:
-        static torch::autograd::tensor_list forward(
-            torch::autograd::AutogradContext* ctx,
-            torch::Tensor means2d,       // [C, N, 2]
-            torch::Tensor conics,        // [C, N, 3]
-            torch::Tensor colors,        // [C, N, channels] - may include depth
-            torch::Tensor opacities,     // [C, N]
-            torch::Tensor bg_color,      // [C, channels] - may include depth
-            torch::Tensor isect_offsets, // [C, tile_height, tile_width]
-            torch::Tensor flatten_ids,   // [nnz]
-            RasterizationSettings settings);
-
-        static torch::autograd::tensor_list backward(
-            torch::autograd::AutogradContext* ctx,
-            torch::autograd::tensor_list grad_outputs);
-    };
-
-    struct QuatScaleToCovarPreciSettings {
-        bool compute_covar;
-        bool compute_preci;
-        bool triu;
-    };
-
-    // Autograd function for quat_scale_to_covar_preci - shared between rasterizer and tests
-    class QuatScaleToCovarPreciFunction : public torch::autograd::Function<QuatScaleToCovarPreciFunction> {
-    public:
-        static torch::autograd::tensor_list forward(
-            torch::autograd::AutogradContext* ctx,
-            torch::Tensor quats,
-            torch::Tensor scales,
-            QuatScaleToCovarPreciSettings settings);
 
         static torch::autograd::tensor_list backward(
             torch::autograd::AutogradContext* ctx,

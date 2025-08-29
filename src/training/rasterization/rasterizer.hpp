@@ -63,6 +63,5 @@ namespace gs::training {
         bool packed = false,
         bool antialiased = false,
         RenderMode render_mode = RenderMode::RGB,
-        const gs::geometry::BoundingBox* = nullptr,
-        bool gut = false);
+        const gs::geometry::BoundingBox* = nullptr);
 } // namespace gs::training

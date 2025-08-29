@@ -47,8 +47,7 @@ namespace gs::training {
         bool packed,
         bool antialiased,
         RenderMode render_mode,
-        const gs::geometry::BoundingBox* bounding_box,
-        bool gut) {
+        const gs::geometry::BoundingBox* bounding_box) {
         // Ensure we don't use packed mode (not supported in this implementation)
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
 
@@ -194,53 +193,35 @@ namespace gs::training {
         torch::Tensor depths;
         torch::Tensor conics;
         torch::Tensor compensations;
-        if (gut) {
-            auto proj_settings = GUTProjectionSettings{
-                image_width,
-                image_height,
-                eps2d,
-                near_plane,
-                far_plane,
-                radius_clip,
-                scaling_modifier,
-                viewpoint_camera.camera_model_type()};
-            auto proj_outputs = fully_fused_projection_with_ut(
-                means3D,
-                rotations,
-                scales,
-                opacities,
-                viewmat,
-                K,
-                radial_distortion,
-                tangential_distortion,
-                std::nullopt,
-                proj_settings,
-                UnscentedTransformParameters());
 
-            radii = proj_outputs[0];
-            means2d = proj_outputs[1];
-            depths = proj_outputs[2];
-            conics = proj_outputs[3];
-            compensations = proj_outputs[4];
-        } else {
-            auto proj_settings = ProjectionSettings{
-                image_width,
-                image_height,
-                eps2d,
-                near_plane,
-                far_plane,
-                radius_clip,
-                scaling_modifier};
+        auto proj_settings = GUTProjectionSettings{
+            image_width,
+            image_height,
+            eps2d,
+            near_plane,
+            far_plane,
+            radius_clip,
+            scaling_modifier,
+            viewpoint_camera.camera_model_type()};
+        auto proj_outputs = fully_fused_projection_with_ut(
+            means3D,
+            rotations,
+            scales,
+            opacities,
+            viewmat,
+            K,
+            radial_distortion,
+            tangential_distortion,
+            std::nullopt,
+            proj_settings,
+            UnscentedTransformParameters());
 
-            auto proj_outputs = ProjectionFunction::apply(
-                means3D, rotations, scales, opacities, viewmat, K, proj_settings);
+        radii = proj_outputs[0];
+        means2d = proj_outputs[1];
+        depths = proj_outputs[2];
+        conics = proj_outputs[3];
+        compensations = proj_outputs[4];
 
-            radii = proj_outputs[0];
-            means2d = proj_outputs[1];
-            depths = proj_outputs[2];
-            conics = proj_outputs[3];
-            compensations = proj_outputs[4];
-        }
 
         // Create means2d with gradient tracking for backward compatibility
         auto means2d_with_grad = means2d.contiguous();
@@ -336,47 +317,32 @@ namespace gs::training {
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
 
         // Step 6: Rasterization
-        torch::Tensor rendered_image;
-        torch::Tensor rendered_alpha;
-        if (gut) {
-            auto raster_settings = GUTRasterizationSettings{
-                image_width,
-                image_height,
-                tile_size,
-                scaling_modifier,
-                viewpoint_camera.camera_model_type()};
-            auto ut_params = UnscentedTransformParameters{};
-            auto raster_outputs = GUTRasterizationFunction::apply(
-                means3D,
-                rotations,
-                scales,
-                render_colors,
-                final_opacities,
-                final_bg,
-                std::nullopt,
-                viewmat,
-                K,
-                radial_distortion,
-                tangential_distortion,
-                std::nullopt, // thin_prism_coeffs
-                isect_offsets,
-                flatten_ids,
-                raster_settings,
-                ut_params);
-            rendered_image = raster_outputs[0];
-            rendered_alpha = raster_outputs[1];
-        } else {
-            auto raster_settings = RasterizationSettings{
-                image_width,
-                image_height,
-                tile_size};
-
-            auto raster_outputs = RasterizationFunction::apply(
-                means2d_with_grad, conics, render_colors, final_opacities, final_bg,
-                isect_offsets, flatten_ids, raster_settings);
-            rendered_image = raster_outputs[0];
-            rendered_alpha = raster_outputs[1];
-        }
+        auto raster_settings = GUTRasterizationSettings{
+            image_width,
+            image_height,
+            tile_size,
+            scaling_modifier,
+            viewpoint_camera.camera_model_type()};
+        auto ut_params = UnscentedTransformParameters{};
+        auto raster_outputs = GUTRasterizationFunction::apply(
+            means3D,
+            rotations,
+            scales,
+            render_colors,
+            final_opacities,
+            final_bg,
+            std::nullopt,
+            viewmat,
+            K,
+            radial_distortion,
+            tangential_distortion,
+            std::nullopt, // thin_prism_coeffs
+            isect_offsets,
+            flatten_ids,
+            raster_settings,
+            ut_params);
+        auto rendered_image = raster_outputs[0];
+        auto rendered_alpha = raster_outputs[1];
 
         // Step 7: Post-process based on render mode
         torch::Tensor final_image, final_depth;
