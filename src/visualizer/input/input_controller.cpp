@@ -441,6 +441,8 @@ namespace gs::visualizer {
                 LOG_TRACE("Checking directory for dataset markers: {}", filepath.string());
                 if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
                     std::filesystem::exists(filepath / "sparse" / "cameras.bin") ||
+                    std::filesystem::exists(filepath / "sparse" / "0" / "cameras.txt") ||
+                    std::filesystem::exists(filepath / "sparse" / "cameras.txt") ||
                     std::filesystem::exists(filepath / "transforms.json") ||
                     std::filesystem::exists(filepath / "transforms_train.json")) {
                     dataset_path = filepath;
