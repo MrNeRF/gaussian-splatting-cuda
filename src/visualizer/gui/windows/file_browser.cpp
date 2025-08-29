@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gui/windows/file_browser.hpp"
 #include "project/project.hpp"
 #include <algorithm>

@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gs_rasterizer.hpp"
 #include "rasterization_api.h"
 

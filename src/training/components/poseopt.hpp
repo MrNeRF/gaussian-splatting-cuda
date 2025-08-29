@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 #include <torch/nn/module.h>
 #include <torch/nn/modules/container/sequential.h>
