@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "rendering_engine_impl.hpp"
 #include "core/logger.hpp"
 #include "framebuffer_factory.hpp"

@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "loader/loaders/colmap_loader.hpp"
 #include "core/camera.hpp"
 #include "core/logger.hpp"

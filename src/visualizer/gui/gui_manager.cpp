@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gui/gui_manager.hpp"
 #include "core/logger.hpp"
 #include "gui/panels/main_panel.hpp"
