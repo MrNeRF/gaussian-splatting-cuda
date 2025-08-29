@@ -28,7 +28,7 @@ namespace gs::training {
         // Wait for callback to finish if busy
         if (callback_busy_.load()) {
             callback_stream_.synchronize();
-            callback_busy_ = false;
+            callback_busy_.store(false);
         }
 
         // Reset all components
@@ -78,9 +78,9 @@ namespace gs::training {
                     .eps(1e-15));
 
             LOG_DEBUG("Bilateral grid initialized with size {}x{}x{}",
-                     params_.optimization.bilateral_grid_X,
-                     params_.optimization.bilateral_grid_Y,
-                     params_.optimization.bilateral_grid_W);
+                      params_.optimization.bilateral_grid_X,
+                      params_.optimization.bilateral_grid_Y,
+                      params_.optimization.bilateral_grid_W);
             return {};
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to initialize bilateral grid: {}", e.what()));
@@ -168,6 +168,10 @@ namespace gs::training {
     }
 
     std::expected<void, std::string> Trainer::initialize(const param::TrainingParameters& params) {
+        // Thread-safe initialization using mutex
+        std::lock_guard<std::mutex> lock(init_mutex_);
+
+        // Check again after acquiring lock (double-checked locking pattern)
         if (initialized_.load()) {
             LOG_INFO("Re-initializing trainer with new parameters");
             // Clean up existing state for re-initialization
@@ -222,11 +226,11 @@ namespace gs::training {
             if (params.optimization.pose_optimization != "none") {
                 if (params.optimization.enable_eval) {
                     return std::unexpected("Evaluating with pose optimization is not supported yet. "
-                                            "Please disable pose optimization or evaluation.");
+                                           "Please disable pose optimization or evaluation.");
                 }
                 if (params.optimization.gut) {
                     return std::unexpected("The 3DGUT rasterizer doesn't have camera gradients yet. "
-                                            "Please disable pose optimization or disable gut.");
+                                           "Please disable pose optimization or disable gut.");
                 }
                 if (params.optimization.pose_optimization == "direct") {
                     poseopt_module_ = std::make_unique<DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());

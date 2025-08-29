@@ -345,7 +345,7 @@ namespace gs::gui::panels {
             project->setOptimizationParams(opt_params);
             ImGui::Separator();
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
-                "Parameters updated - will be applied when training starts");
+                               "Parameters updated - will be applied when training starts");
         }
 
         ImGui::PopStyleVar();

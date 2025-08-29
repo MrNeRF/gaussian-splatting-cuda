@@ -18,6 +18,7 @@
 #include <atomic>
 #include <expected>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <stop_token>
 #include <torch/torch.h>
@@ -164,6 +165,9 @@ namespace gs::training {
 
         // Single mutex that protects the model during training
         mutable std::shared_mutex render_mutex_;
+
+        // Mutex for initialization to ensure thread safety
+        mutable std::mutex init_mutex_;
 
         // Control flags for thread communication
         std::atomic<bool> pause_requested_{false};

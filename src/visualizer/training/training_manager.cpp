@@ -88,6 +88,30 @@ namespace gs {
         LOG_INFO("Trainer cleared");
     }
 
+    std::expected<bool, std::string> TrainerManager::initializeTrainerFromProject() {
+        if (!trainer_) {
+            return std::unexpected("No trainer available");
+        }
+
+        if (!project_) {
+            return std::unexpected("No project available");
+        }
+
+        // Create training parameters from project
+        param::TrainingParameters params;
+        params.dataset = project_->getProjectData().data_set_info;
+        params.optimization = project_->getOptimizationParams();
+        params.dataset.output_path = project_->getProjectOutputFolder();
+
+        // Initialize trainer
+        auto init_result = trainer_->initialize(params);
+        if (!init_result) {
+            return std::unexpected(init_result.error());
+        }
+
+        return true;
+    }
+
     bool TrainerManager::startTraining() {
         LOG_TIMER("TrainerManager::startTraining");
 
@@ -101,24 +125,10 @@ namespace gs {
             return false;
         }
 
-        // Get project from this TrainerManager instance
-        if (!project_) {
-            LOG_ERROR("No project available for training");
-            setState(State::Error);
-            last_error_ = "No project available";
-            return false;
-        }
-
-        // Create training parameters from project
-        param::TrainingParameters params;
-        params.dataset = project_->getProjectData().data_set_info;
-        params.optimization = project_->getOptimizationParams();
-        params.dataset.output_path = project_->getProjectOutputFolder();
-
         // Initialize trainer if not already initialized
         if (!trainer_->isInitialized()) {
             LOG_INFO("Initializing trainer before starting training");
-            auto init_result = trainer_->initialize(params);
+            auto init_result = initializeTrainerFromProject();
             if (!init_result) {
                 LOG_ERROR("Failed to initialize trainer: {}", init_result.error());
                 last_error_ = init_result.error();
@@ -374,12 +384,4 @@ namespace gs {
         LOG_ERROR("getCamList called but trainer is not initialized");
         return {};
     }
-
-    void TrainerManager::setProject(std::shared_ptr<gs::management::Project> project) {
-        project_ = project;
-        if (trainer_) {
-            trainer_->setProject(project);
-        }
-    }
-
 } // namespace gs
