@@ -4,7 +4,7 @@
 
 #include "rendering_pipeline.hpp"
 #include "gs_rasterizer.hpp"
-#include "training/training_setup.hpp"
+#include "training/rasterization/rasterizer.hpp"
 
 #include <print>
 
