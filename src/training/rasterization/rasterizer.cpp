@@ -222,7 +222,6 @@ namespace gs::training {
         conics = proj_outputs[3];
         compensations = proj_outputs[4];
 
-
         // Create means2d with gradient tracking for backward compatibility
         auto means2d_with_grad = means2d.contiguous();
         means2d_with_grad.set_requires_grad(true);
