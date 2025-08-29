@@ -56,6 +56,8 @@ namespace gs::visualizer {
         // Translation gizmo
         bool show_translation_gizmo = false;
         float gizmo_scale = 1.0f;
+
+        bool gut = false;
     };
 
     struct ViewportRegion {

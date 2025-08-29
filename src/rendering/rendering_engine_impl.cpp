@@ -140,7 +140,8 @@ namespace gs::rendering {
             .crop_box = nullptr,
             .background_color = request.background_color,
             .point_cloud_mode = request.point_cloud_mode,
-            .voxel_size = request.voxel_size};
+            .voxel_size = request.voxel_size,
+            .gut = request.gut};
 
         // Convert crop box if present
         std::unique_ptr<gs::geometry::BoundingBox> temp_crop_box;
@@ -323,7 +324,8 @@ namespace gs::rendering {
             .crop_box = static_cast<const geometry::BoundingBox*>(request.crop_box),
             .background_color = request.background_color,
             .point_cloud_mode = request.point_cloud_mode,
-            .voxel_size = request.voxel_size};
+            .voxel_size = request.voxel_size,
+            .gut = request.gut};
 
         auto result = pipeline_.render(model, internal_request);
 
