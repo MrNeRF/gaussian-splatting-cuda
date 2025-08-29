@@ -83,6 +83,9 @@ namespace gs {
         // Get attribute names for the PLY format
         std::vector<std::string> get_attribute_names() const;
 
+        // Remove splats that are outside of the mask
+        void filterByMask(const torch::Tensor& keep_mask);
+        
     public:
         // Holds the magnitude of the screen space gradient
         torch::Tensor _densification_info = torch::empty({0});

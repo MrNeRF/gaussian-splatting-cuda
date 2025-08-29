@@ -114,6 +114,12 @@ torch::Tensor fused_ssim(torch::Tensor img1, torch::Tensor img2,
 // HOST-ONLY IMPLEMENTATION  ➜ excluded from device compilation
 // ---------------------------------------------------------------------------
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ == 0)
+inline torch::Tensor fused_ssim_map(torch::Tensor img1, torch::Tensor img2,
+                                    const std::string& padding, bool train) {
+    fs_internal::check_padding(padding);
+    img1 = img1.contiguous();
+    return fs_internal::_FusedSSIM::apply(img1, img2, padding, train);
+}
 inline torch::Tensor fused_ssim(torch::Tensor img1, torch::Tensor img2,
                                 const std::string& padding, bool train) {
     fs_internal::check_padding(padding);
