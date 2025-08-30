@@ -35,6 +35,17 @@ namespace gs {
 
             setState(State::Ready);
 
+            // Initialize trainer if not already initialized
+            if (!trainer_->isInitialized()) {
+                LOG_INFO("Initializing trainer");
+                auto init_result = initializeTrainerFromProject();
+                if (!init_result) {
+                    LOG_ERROR("Failed to initialize trainer: {}", init_result.error());
+                    last_error_ = init_result.error();
+                    setState(State::Error);
+                }
+            }
+
             // Trainer is ready
             events::internal::TrainerReady{}.emit();
             LOG_INFO("Trainer ready for training");
