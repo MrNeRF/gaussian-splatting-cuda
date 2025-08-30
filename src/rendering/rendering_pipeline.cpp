@@ -70,14 +70,12 @@ namespace gs::rendering {
             RenderResult result;
             if (request.gut) {
                 auto render_result = gs::training::rasterize(
-                    cam, mutable_model, background_, request.scaling_modifier, false, request.antialiasing, static_cast<training::RenderMode>(request.render_mode), nullptr
-                    );
+                    cam, mutable_model, background_, request.scaling_modifier, false, request.antialiasing, static_cast<training::RenderMode>(request.render_mode), nullptr);
                 result.image = render_result.image;
                 result.depth = render_result.depth;
             } else {
                 result.image = rasterize(cam, mutable_model, background_);
                 result.depth = torch::empty({0}, torch::kFloat32); // No depth support in fast_rasterize; set empty
-
             }
             result.valid = true;
 
