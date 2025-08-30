@@ -64,8 +64,7 @@ namespace gs::loader {
         bool has_points_text = std::filesystem::exists(sparse_path / "points3D.txt");
 
         if ((has_cameras || has_images || has_points) &&
-            (has_cameras_text || has_images_text || has_points_text))
-        {
+            (has_cameras_text || has_images_text || has_points_text)) {
             LOG_WARN("Found both binary and text COLMAP files. Prioritizing binary files.");
         }
 
