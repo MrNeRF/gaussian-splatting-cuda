@@ -58,7 +58,8 @@ namespace gs {
                                                       .width = 1280,
                                                       .height = 720,
                                                       .antialiasing = params->optimization.antialiasing,
-                                                      .enable_cuda_interop = true});
+                                                      .enable_cuda_interop = true,
+                                                      .gut = params->optimization.gut});
 
         if (!params->dataset.project_path.empty() &&
             !std::filesystem::exists(params->dataset.project_path)) {

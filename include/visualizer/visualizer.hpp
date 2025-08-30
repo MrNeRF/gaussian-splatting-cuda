@@ -27,6 +27,7 @@ namespace gs::visualizer {
         int height = 720;
         bool antialiasing = false;
         bool enable_cuda_interop = true;
+        bool gut = false;
     };
 
     class Visualizer {

@@ -318,7 +318,8 @@ namespace gs::visualizer {
                 .background_color = bg_color,
                 .crop_box = std::nullopt,
                 .point_cloud_mode = settings_.point_cloud_mode,
-                .voxel_size = settings_.voxel_size};
+                .voxel_size = settings_.voxel_size,
+                .gut = settings_.gut};
 
             // Add crop box if enabled
             if (settings_.use_crop_box) {
