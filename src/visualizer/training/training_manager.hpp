@@ -94,7 +94,8 @@ namespace gs {
         std::shared_ptr<const Camera> getCamById(int camId) const;
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
-        void setProject(std::shared_ptr<gs::management::Project> project) { project_ = project; }
+        void setProject(std::shared_ptr<gs::management::Project> project);
+
         std::shared_ptr<gs::management::Project> getProject() const { return project_; }
 
     private:
