@@ -96,6 +96,8 @@ namespace gs::gui {
                 bool is_dataset = false;
                 if (std::filesystem::exists(dir.path() / "sparse" / "0" / "cameras.bin") ||
                     std::filesystem::exists(dir.path() / "sparse" / "cameras.bin") ||
+                    std::filesystem::exists(dir.path() / "sparse" / "0" / "cameras.txt") ||
+                    std::filesystem::exists(dir.path() / "sparse" / "cameras.txt") ||
                     std::filesystem::exists(dir.path() / "transforms.json") ||
                     std::filesystem::exists(dir.path() / "transforms_train.json")) {
                     is_dataset = true;
