@@ -61,15 +61,7 @@ namespace gs {
 
         torch::Tensor K() const;
 
-        std::tuple<float, float, float, float> get_intrinsics() const {
-            const float tanfovx = std::tan(_FoVx * 0.5f);
-            const float tanfovy = std::tan(_FoVy * 0.5f);
-            const float fx = _image_width / (2.f * tanfovx);
-            const float fy = _image_height / (2.f * tanfovy);
-            const float cx = _image_width / 2.0f;
-            const float cy = _image_height / 2.0f;
-            return std::make_tuple(fx, fy, cx, cy);
-        }
+        std::tuple<float, float, float, float> get_intrinsics() const;
 
         int image_height() const noexcept { return _image_height; }
         int image_width() const noexcept { return _image_width; }
