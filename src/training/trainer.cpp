@@ -167,6 +167,15 @@ namespace gs::training {
         LOG_DEBUG("Trainer constructed with {} cameras", base_dataset_->get_cameras().size());
     }
 
+    void Trainer::load_cameras_info() {
+
+        m_cam_id_to_cam.clear();
+        // Setup camera cache
+        for (const auto& cam : base_dataset_->get_cameras()) {
+            m_cam_id_to_cam[cam->uid()] = cam;
+        }
+    }
+
     std::expected<void, std::string> Trainer::initialize(const param::TrainingParameters& params) {
         // Thread-safe initialization using mutex
         std::lock_guard<std::mutex> lock(init_mutex_);
@@ -205,6 +214,7 @@ namespace gs::training {
 
             train_dataset_size_ = train_dataset_->size().value();
 
+            m_cam_id_to_cam.clear();
             // Setup camera cache
             for (const auto& cam : base_dataset_->get_cameras()) {
                 m_cam_id_to_cam[cam->uid()] = cam;

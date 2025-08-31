@@ -83,6 +83,8 @@ namespace gs::training {
 
         void setProject(std::shared_ptr<gs::management::Project> project) { lf_project_ = project; }
 
+        void load_cameras_info();
+
     private:
         // Helper for deferred event emission to prevent deadlocks
         struct DeferredEvents {
