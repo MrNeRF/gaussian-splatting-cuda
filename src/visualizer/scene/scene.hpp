@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gs {
@@ -38,6 +39,7 @@ namespace gs {
         void removeNode(const std::string& name);
         void setNodeVisibility(const std::string& name, bool visible);
         void clear();
+        std::pair<std::string, std::string> cycleVisibilityWithNames();
 
         // Get combined model for rendering
         const SplatData* getCombinedModel() const;

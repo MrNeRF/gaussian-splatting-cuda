@@ -64,6 +64,35 @@ namespace gs {
         cache_valid_ = false;
     }
 
+    std::pair<std::string, std::string> Scene::cycleVisibilityWithNames() {
+        if (nodes_.size() <= 1)
+            return {"", ""};
+
+        std::string hidden_name, shown_name;
+
+        // Find first visible node
+        auto visible = std::find_if(nodes_.begin(), nodes_.end(),
+                                    [](const Node& n) { return n.visible; });
+
+        if (visible != nodes_.end()) {
+            visible->visible = false;
+            hidden_name = visible->name;
+
+            auto next = std::next(visible);
+            if (next == nodes_.end())
+                next = nodes_.begin();
+            next->visible = true;
+            shown_name = next->name;
+        } else {
+            // No visible nodes, show first
+            nodes_[0].visible = true;
+            shown_name = nodes_[0].name;
+        }
+
+        invalidateCache();
+        return {hidden_name, shown_name};
+    }
+
     const SplatData* Scene::getCombinedModel() const {
         rebuildCacheIfNeeded();
         return cached_combined_.get();
