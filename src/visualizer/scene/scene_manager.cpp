@@ -37,6 +37,23 @@ namespace gs {
         cmd::ClearScene::when([this](const auto&) {
             clear();
         });
+
+        // Handle PLY cycling with proper event emission for UI updates
+        cmd::CyclePLY::when([this](const auto&) {
+            if (content_type_ == ContentType::PLYFiles) {
+                auto [hidden, shown] = scene_.cycleVisibilityWithNames();
+
+                if (!hidden.empty()) {
+                    events::cmd::SetPLYVisibility{.name = hidden, .visible = false}.emit();
+                }
+                if (!shown.empty()) {
+                    events::cmd::SetPLYVisibility{.name = shown, .visible = true}.emit();
+                    LOG_DEBUG("Cycled to PLY: {}", shown);
+                }
+
+                emitSceneChanged();
+            }
+        });
     }
 
     void SceneManager::changeContentType(const ContentType& type) {

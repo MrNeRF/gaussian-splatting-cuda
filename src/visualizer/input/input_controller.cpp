@@ -294,6 +294,11 @@ namespace gs::visualizer {
             }
         }
 
+        if (key == GLFW_KEY_T && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
+            events::cmd::CyclePLY{}.emit();
+            return;
+        }
+
         // Speed control works even when GUI has focus
         if (key_ctrl_pressed_ && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
             if (key == GLFW_KEY_EQUAL || key == GLFW_KEY_KP_ADD) {
@@ -439,10 +444,7 @@ namespace gs::visualizer {
             } else if (!dataset_path && std::filesystem::is_directory(filepath)) {
                 // Check for dataset markers
                 LOG_TRACE("Checking directory for dataset markers: {}", filepath.string());
-                if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
-                    std::filesystem::exists(filepath / "sparse" / "cameras.bin") ||
-                    std::filesystem::exists(filepath / "transforms.json") ||
-                    std::filesystem::exists(filepath / "transforms_train.json")) {
+                if (gs::loader::Loader::isDatasetPath(filepath)) {
                     dataset_path = filepath;
                     LOG_DEBUG("Dataset detected in dropped directory");
                 }

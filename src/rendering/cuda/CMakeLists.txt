@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # CUDA rasterization backend for rendering module
 set(CUDA_RASTERIZER_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/rasterization/src/rasterization_api.cu

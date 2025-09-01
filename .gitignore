@@ -20,6 +20,8 @@ data
 test.py
 *.nsys-rep
 testdata
+vcpkg/
+vcpkg/**
 
 *.pt
 !weights/*.pt

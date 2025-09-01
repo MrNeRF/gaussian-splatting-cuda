@@ -63,15 +63,12 @@ namespace gs::loader {
         bool has_images_text = std::filesystem::exists(sparse_path / "images.txt");
         bool has_points_text = std::filesystem::exists(sparse_path / "points3D.txt");
 
-        if (std::min(has_cameras || has_images || has_points,
-                     has_cameras_text || has_images_text || has_points_text) != 0) {
-            LOG_ERROR("Found mixed COLMAP binary and text files in: {}", sparse_path.string());
-            throw std::runtime_error(
-                "Found mixed COLMAP binary and text files. "
-                "Please use either binary or text format consistently.");
+        if ((has_cameras || has_images || has_points) &&
+            (has_cameras_text || has_images_text || has_points_text)) {
+            LOG_WARN("Found both binary and text COLMAP files. Prioritizing binary files.");
         }
 
-        bool trying_text = has_cameras_text || has_images_text;
+        bool trying_text = !(has_cameras && has_images) && (has_cameras_text && has_images_text);
         LOG_INFO("Loading COLMAP in {} format", trying_text ? "text" : "binary");
 
         // If you don't have binary cameras or images AND you are not trying text: error

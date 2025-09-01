@@ -18,6 +18,7 @@
 #include <atomic>
 #include <expected>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <stop_token>
 #include <torch/torch.h>
@@ -30,8 +31,7 @@ namespace gs::training {
     public:
         // Constructor that takes ownership of strategy and shares datasets
         Trainer(std::shared_ptr<CameraDataset> dataset,
-                std::unique_ptr<IStrategy> strategy,
-                const param::TrainingParameters& params);
+                std::unique_ptr<IStrategy> strategy);
 
         // Delete copy operations
         Trainer(const Trainer&) = delete;
@@ -44,6 +44,12 @@ namespace gs::training {
         Trainer& operator=(Trainer&&) = default;
 
         ~Trainer();
+
+        // Initialize trainer - must be called before training
+        std::expected<void, std::string> initialize(const param::TrainingParameters& params);
+
+        // Check if trainer is initialized
+        bool isInitialized() const { return initialized_.load(); }
 
         // Main training method with stop token support
         std::expected<void, std::string> train(std::stop_token stop_token = {});
@@ -76,6 +82,8 @@ namespace gs::training {
         std::vector<std::shared_ptr<const Camera>> getCamList() const;
 
         void setProject(std::shared_ptr<gs::management::Project> project) { lf_project_ = project; }
+
+        void load_cameras_info();
 
     private:
         // Helper for deferred event emission to prevent deadlocks
@@ -137,6 +145,8 @@ namespace gs::training {
             const std::unique_ptr<BilateralGrid>& bilateral_grid,
             const param::OptimizationParameters& opt_params);
 
+        void cleanup();
+
         std::expected<void, std::string> initialize_bilateral_grid();
 
         // Handle control requests
@@ -148,6 +158,7 @@ namespace gs::training {
         void save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads = true);
 
         // Member variables
+        std::shared_ptr<CameraDataset> base_dataset_;
         std::shared_ptr<CameraDataset> train_dataset_;
         std::shared_ptr<CameraDataset> val_dataset_;
         std::unique_ptr<IStrategy> strategy_;
@@ -155,7 +166,7 @@ namespace gs::training {
 
         torch::Tensor background_{};
         std::unique_ptr<TrainingProgress> progress_;
-        size_t train_dataset_size_;
+        size_t train_dataset_size_ = 0;
 
         // Bilateral grid components
         std::unique_ptr<BilateralGrid> bilateral_grid_;
@@ -170,6 +181,9 @@ namespace gs::training {
         // Single mutex that protects the model during training
         mutable std::shared_mutex render_mutex_;
 
+        // Mutex for initialization to ensure thread safety
+        mutable std::mutex init_mutex_;
+
         // Control flags for thread communication
         std::atomic<bool> pause_requested_{false};
         std::atomic<bool> save_requested_{false};
@@ -178,6 +192,7 @@ namespace gs::training {
         std::atomic<bool> is_running_{false};
         std::atomic<bool> training_complete_{false};
         std::atomic<bool> ready_to_start_{false};
+        std::atomic<bool> initialized_{false};
 
         // Current training state
         std::atomic<int> current_iteration_{0};

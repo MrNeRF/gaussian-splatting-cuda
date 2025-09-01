@@ -45,6 +45,7 @@ namespace gs::rendering {
         std::optional<BoundingBox> crop_box;
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
+        bool gut = false;
     };
 
     struct RenderResult {
@@ -113,6 +114,7 @@ namespace gs::rendering {
         glm::vec3 background_color = glm::vec3(0.0f, 0.0f, 0.0f);
         bool point_cloud_mode = false;
         float voxel_size = 0.01f;
+        bool gut = false;
     };
 
     struct RenderingPipelineResult {

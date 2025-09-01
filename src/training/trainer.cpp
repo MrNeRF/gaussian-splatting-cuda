@@ -6,6 +6,7 @@
 #include "components/bilateral_grid.hpp"
 #include "components/poseopt.hpp"
 #include "core/image_io.hpp"
+#include "core/logger.hpp"
 #include "kernels/fused_ssim.cuh"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
@@ -15,10 +16,50 @@
 #include <cuda_runtime.h>
 #include <expected>
 #include <memory>
-#include <print>
-#include "core/rasterizer_autograd.hpp"
 
 namespace gs::training {
+
+    void Trainer::cleanup() {
+        LOG_DEBUG("Cleaning up trainer for re-initialization");
+
+        // Stop any ongoing operations
+        stop_requested_ = true;
+
+        // Wait for callback to finish if busy
+        if (callback_busy_.load()) {
+            callback_stream_.synchronize();
+            callback_busy_.store(false);
+        }
+
+        // Reset all components
+        progress_.reset();
+        bilateral_grid_.reset();
+        bilateral_grid_optimizer_.reset();
+        poseopt_module_.reset();
+        poseopt_optimizer_.reset();
+        evaluator_.reset();
+
+        // Clear datasets (will be recreated)
+        train_dataset_.reset();
+        val_dataset_.reset();
+
+        // Clear camera cache
+        m_cam_id_to_cam.clear();
+
+        // Reset flags
+        pause_requested_ = false;
+        save_requested_ = false;
+        stop_requested_ = false;
+        is_paused_ = false;
+        is_running_ = false;
+        training_complete_ = false;
+        ready_to_start_ = false;
+        current_iteration_ = 0;
+        current_loss_ = 0.0f;
+
+        LOG_DEBUG("Trainer cleanup complete");
+    }
+
     std::expected<void, std::string> Trainer::initialize_bilateral_grid() {
         if (!params_.optimization.use_bilateral_grid) {
             return {};
@@ -36,6 +77,10 @@ namespace gs::training {
                 torch::optim::AdamOptions(params_.optimization.bilateral_grid_lr)
                     .eps(1e-15));
 
+            LOG_DEBUG("Bilateral grid initialized with size {}x{}x{}",
+                      params_.optimization.bilateral_grid_X,
+                      params_.optimization.bilateral_grid_Y,
+                      params_.optimization.bilateral_grid_W);
             return {};
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to initialize bilateral grid: {}", e.what()));
@@ -307,90 +352,129 @@ namespace gs::training {
     }
 
     Trainer::Trainer(std::shared_ptr<CameraDataset> dataset,
-                     std::unique_ptr<IStrategy> strategy,
-                     const param::TrainingParameters& params)
-        : strategy_(std::move(strategy)),
-          params_(params) {
+                     std::unique_ptr<IStrategy> strategy)
+        : base_dataset_(std::move(dataset)),
+          strategy_(std::move(strategy)) {
         if (!torch::cuda::is_available()) {
             throw std::runtime_error("CUDA is not available – aborting.");
         }
+        LOG_DEBUG("Trainer constructed with {} cameras", base_dataset_->get_cameras().size());
+    }
 
-        // Handle dataset split based on evaluation flag
-        if (params.optimization.enable_eval) {
-            // Create train/val split
-            train_dataset_ = std::make_shared<CameraDataset>(
-                dataset->get_cameras(), params.dataset, CameraDataset::Split::TRAIN);
-            val_dataset_ = std::make_shared<CameraDataset>(
-                dataset->get_cameras(), params.dataset, CameraDataset::Split::VAL);
+    void Trainer::load_cameras_info() {
 
-            std::println("Created train/val split: {} train, {} val images",
-                         train_dataset_->size().value(),
-                         val_dataset_->size().value());
-        } else {
-            // Use all images for training
-            train_dataset_ = dataset;
-            val_dataset_ = nullptr;
-
-            std::println("Using all {} images for training (no evaluation)",
-                         train_dataset_->size().value());
-        }
-
-        train_dataset_size_ = train_dataset_->size().value();
-
-        strategy_->initialize(params.optimization);
-
-        // Initialize bilateral grid if enabled
-        if (auto result = initialize_bilateral_grid(); !result) {
-            throw std::runtime_error(result.error());
-        }
-
-        background_ = torch::tensor({0.f, 0.f, 0.f},
-                                    torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
-        if (params.optimization.pose_optimization != "none") {
-            if (params.optimization.enable_eval) {
-                throw std::runtime_error("Evaluating with pose optimization is not supported yet. "
-                                         "Please disable pose optimization or evaluation.");
-            }
-            if (params.optimization.gut) {
-                throw std::runtime_error("The 3DGUT rasterizer doesn't have camera gradients yet. "
-                                         "Please disable pose optimization or disable gut.");
-            }
-            if (params.optimization.pose_optimization == "direct") {
-                poseopt_module_ = std::make_unique<DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
-            } else if (params.optimization.pose_optimization == "mlp") {
-                poseopt_module_ = std::make_unique<MLPPoseOptimizationModule>(train_dataset_->get_cameras().size());
-            } else {
-                throw std::runtime_error("Invalid pose optimization type: " + params.optimization.pose_optimization);
-            }
-            poseopt_optimizer_ = std::make_unique<torch::optim::Adam>(
-                std::vector<torch::Tensor>{poseopt_module_->parameters()},
-                torch::optim::AdamOptions(1e-5));
-        } else {
-            poseopt_module_ = std::make_unique<PoseOptimizationModule>();
-        }
-
-        background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
-        background_ = background_.to(torch::kCUDA);
-
-        // Create progress bar based on headless flag
-        if (params.optimization.headless) {
-            progress_ = std::make_unique<TrainingProgress>(
-                params.optimization.iterations,
-                /*update_frequency=*/100);
-        }
-
-        // Initialize the evaluator - it handles all metrics internally
-        evaluator_ = std::make_unique<MetricsEvaluator>(params);
-
-        // setup camera cache
-        for (const auto& cam : dataset->get_cameras()) {
+        m_cam_id_to_cam.clear();
+        // Setup camera cache
+        for (const auto& cam : base_dataset_->get_cameras()) {
             m_cam_id_to_cam[cam->uid()] = cam;
         }
+    }
 
-        // Print render mode configuration
-        std::println("Render mode: {}", params.optimization.render_mode);
-        std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
-        std::println("Strategy: {}", params.optimization.strategy);
+    std::expected<void, std::string> Trainer::initialize(const param::TrainingParameters& params) {
+        // Thread-safe initialization using mutex
+        std::lock_guard<std::mutex> lock(init_mutex_);
+
+        // Check again after acquiring lock (double-checked locking pattern)
+        if (initialized_.load()) {
+            LOG_INFO("Re-initializing trainer with new parameters");
+            // Clean up existing state for re-initialization
+            cleanup();
+        }
+
+        LOG_INFO("Initializing trainer with {} iterations", params.optimization.iterations);
+
+        try {
+            params_ = params;
+
+            // Handle dataset split based on evaluation flag
+            if (params.optimization.enable_eval) {
+                // Create train/val split
+                train_dataset_ = std::make_shared<CameraDataset>(
+                    base_dataset_->get_cameras(), params.dataset, CameraDataset::Split::TRAIN);
+                val_dataset_ = std::make_shared<CameraDataset>(
+                    base_dataset_->get_cameras(), params.dataset, CameraDataset::Split::VAL);
+
+                LOG_INFO("Created train/val split: {} train, {} val images",
+                         train_dataset_->size().value(),
+                         val_dataset_->size().value());
+            } else {
+                // Use all images for training
+                train_dataset_ = base_dataset_;
+                val_dataset_ = nullptr;
+
+                LOG_INFO("Using all {} images for training (no evaluation)",
+                         train_dataset_->size().value());
+            }
+
+            train_dataset_size_ = train_dataset_->size().value();
+
+            m_cam_id_to_cam.clear();
+            // Setup camera cache
+            for (const auto& cam : base_dataset_->get_cameras()) {
+                m_cam_id_to_cam[cam->uid()] = cam;
+            }
+            LOG_DEBUG("Camera cache initialized with {} cameras", m_cam_id_to_cam.size());
+
+            // Re-initialize strategy with new parameters
+            strategy_->initialize(params.optimization);
+            LOG_DEBUG("Strategy initialized");
+
+            // Initialize bilateral grid if enabled
+            if (auto result = initialize_bilateral_grid(); !result) {
+                return std::unexpected(result.error());
+            }
+
+            background_ = torch::tensor({0.f, 0.f, 0.f},
+                                        torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+
+            if (params.optimization.pose_optimization != "none") {
+                if (params.optimization.enable_eval) {
+                    return std::unexpected("Evaluating with pose optimization is not supported yet. "
+                                           "Please disable pose optimization or evaluation.");
+                }
+                if (params.optimization.gut) {
+                    return std::unexpected("The 3DGUT rasterizer doesn't have camera gradients yet. "
+                                           "Please disable pose optimization or disable gut.");
+                }
+                if (params.optimization.pose_optimization == "direct") {
+                    poseopt_module_ = std::make_unique<DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
+                    LOG_DEBUG("Direct pose optimization module created");
+                } else if (params.optimization.pose_optimization == "mlp") {
+                    poseopt_module_ = std::make_unique<MLPPoseOptimizationModule>(train_dataset_->get_cameras().size());
+                    LOG_DEBUG("MLP pose optimization module created");
+                } else {
+                    return std::unexpected("Invalid pose optimization type: " + params.optimization.pose_optimization);
+                }
+                poseopt_optimizer_ = std::make_unique<torch::optim::Adam>(
+                    std::vector<torch::Tensor>{poseopt_module_->parameters()},
+                    torch::optim::AdamOptions(1e-5));
+            } else {
+                poseopt_module_ = std::make_unique<PoseOptimizationModule>();
+            }
+
+            // Create progress bar based on headless flag
+            if (params.optimization.headless) {
+                progress_ = std::make_unique<TrainingProgress>(
+                    params.optimization.iterations,
+                    /*update_frequency=*/100);
+                LOG_DEBUG("Progress bar initialized for headless mode");
+            }
+
+            // Initialize the evaluator - it handles all metrics internally
+            evaluator_ = std::make_unique<MetricsEvaluator>(params_);
+            LOG_DEBUG("Metrics evaluator initialized");
+
+            // Print configuration
+            LOG_INFO("Render mode: {}", params.optimization.render_mode);
+            LOG_INFO("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
+            LOG_INFO("Strategy: {}", params.optimization.strategy);
+
+            initialized_ = true;
+            LOG_INFO("Trainer initialization complete");
+            return {};
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Failed to initialize trainer: {}", e.what()));
+        }
     }
 
     Trainer::~Trainer() {
@@ -401,6 +485,7 @@ namespace gs::training {
         if (callback_busy_.load()) {
             callback_stream_.synchronize();
         }
+        LOG_DEBUG("Trainer destroyed");
     }
 
     void Trainer::handle_control_requests(int iter, std::stop_token stop_token) {
@@ -416,23 +501,23 @@ namespace gs::training {
             if (progress_) {
                 progress_->pause();
             }
-            std::println("\nTraining paused at iteration {}", iter);
-            std::println("Click 'Resume Training' to continue.");
+            LOG_INFO("Training paused at iteration {}", iter);
+            LOG_DEBUG("Click 'Resume Training' to continue.");
         } else if (!pause_requested_.load() && is_paused_.load()) {
             is_paused_ = false;
             if (progress_) {
                 progress_->resume(iter, current_loss_.load(), static_cast<int>(strategy_->get_model().size()));
             }
-            std::println("\nTraining resumed at iteration {}", iter);
+            LOG_INFO("Training resumed at iteration {}", iter);
         }
 
         // Handle save request
         if (save_requested_.exchange(false)) {
-            std::println("\nSaving checkpoint at iteration {}...", iter);
+            LOG_INFO("Saving checkpoint at iteration {}...", iter);
             auto checkpoint_path = params_.dataset.output_path / "checkpoints";
             save_ply(checkpoint_path, iter, /*join=*/true);
 
-            std::println("Checkpoint saved to {}", checkpoint_path.string());
+            LOG_INFO("Checkpoint saved to {}", checkpoint_path.string());
 
             // Emit checkpoint saved event
             events::state::CheckpointSaved{
@@ -443,8 +528,8 @@ namespace gs::training {
 
         // Handle stop request - this permanently stops training
         if (stop_requested_.load()) {
-            std::println("\nStopping training permanently at iteration {}...", iter);
-            std::println("Saving final model...");
+            LOG_INFO("Stopping training permanently at iteration {}...", iter);
+            LOG_DEBUG("Saving final model...");
             save_ply(params_.dataset.output_path, iter, /*join=*/true);
             is_running_ = false;
         }
@@ -464,12 +549,15 @@ namespace gs::training {
                     return std::unexpected("Training on cameras with ortho model is not supported yet.");
                 }
             } else {
-                if (cam->radial_distortion().numel() != 0 ||
-                    cam->tangential_distortion().numel() != 0) {
-                    return std::unexpected("You must use --gut option to train on cameras with distortion.");
-                }
-                if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
-                    return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
+                // Flag is workaround for non-RC datasets with distortion. By default it is off.
+                if (!params_.optimization.rc) {
+                    if (cam->radial_distortion().numel() != 0 ||
+                        cam->tangential_distortion().numel() != 0) {
+                        return std::unexpected("You must use --gut option to train on cameras with distortion.");
+                    }
+                    if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
+                        return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
+                    }
                 }
             }
 
@@ -636,7 +724,7 @@ namespace gs::training {
                                                         strategy_->get_model(),
                                                         val_dataset_,
                                                         background_);
-                    std::println("{}", metrics.to_string());
+                    LOG_INFO("{}", metrics.to_string());
                 }
 
                 // Save model at specified steps
@@ -684,7 +772,7 @@ namespace gs::training {
                             image_io::save_image_async(output_path / std::format("{:06d}.jpg", iter),
                                                        rendered_timelapse_output.image);
                         } else {
-                            std::println("Warning: Timelapse image '{}' not found in dataset.", img_name);
+                            LOG_WARN("Timelapse image '{}' not found in dataset.", img_name);
                         }
                     }
                 }
@@ -702,6 +790,11 @@ namespace gs::training {
     }
 
     std::expected<void, std::string> Trainer::train(std::stop_token stop_token) {
+        // Check if initialized
+        if (!initialized_.load()) {
+            return std::unexpected("Trainer not initialized. Call initialize() before train()");
+        }
+
         is_running_ = false;
         training_complete_ = false;
         ready_to_start_ = false; // Reset the flag
@@ -717,12 +810,14 @@ namespace gs::training {
             events::internal::TrainerReady{}.emit();
 
             // Wait for start signal
+            LOG_DEBUG("Waiting for start signal from GUI...");
             while (!ready_to_start_.load() && !stop_token.stop_requested()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
         }
 
         is_running_ = true; // Now we can start
+        LOG_INFO("Starting training loop");
 
         try {
             int iter = 1;
@@ -739,6 +834,7 @@ namespace gs::training {
             auto train_dataloader = create_infinite_dataloader_from_dataset(train_dataset_, num_workers);
             auto loader = train_dataloader->begin();
 
+            LOG_DEBUG("Starting training iterations");
             // Single loop without epochs
             while (iter <= params_.optimization.iterations) {
                 if (stop_token.stop_requested() || stop_requested_.load()) {
@@ -788,7 +884,7 @@ namespace gs::training {
                         },
                         this);
                     if (err != cudaSuccess) {
-                        std::cerr << "Warning: Failed to launch callback: " << cudaGetErrorString(err) << std::endl;
+                        LOG_WARN("Failed to launch callback: {}", cudaGetErrorString(err));
                         callback_busy_ = false;
                     }
                 }
@@ -828,6 +924,7 @@ namespace gs::training {
             is_running_ = false;
             training_complete_ = true;
 
+            LOG_INFO("Training completed successfully");
             return {};
         } catch (const std::exception& e) {
             is_running_ = false;
@@ -838,7 +935,7 @@ namespace gs::training {
     std::shared_ptr<const Camera> Trainer::getCamById(int camId) const {
         const auto it = m_cam_id_to_cam.find(camId);
         if (it == m_cam_id_to_cam.end()) {
-            std::cerr << "error: getCamById - could not find cam with cam id " << camId << std::endl;
+            LOG_ERROR("getCamById - could not find cam with cam id {}", camId);
             return nullptr;
         }
         return it->second;
@@ -1010,5 +1107,6 @@ namespace gs::training {
             const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }
+        LOG_DEBUG("PLY saved: {}", save_path.string());
     }
 } // namespace gs::training

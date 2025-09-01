@@ -36,6 +36,7 @@ namespace gs::visualizer {
         // Set initial antialiasing
         RenderSettings initial_settings;
         initial_settings.antialiasing = options.antialiasing;
+        initial_settings.gut = options.gut;
         rendering_manager_->updateSettings(initial_settings);
 
         // Create command processor
