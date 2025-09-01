@@ -439,12 +439,7 @@ namespace gs::visualizer {
             } else if (!dataset_path && std::filesystem::is_directory(filepath)) {
                 // Check for dataset markers
                 LOG_TRACE("Checking directory for dataset markers: {}", filepath.string());
-                if (std::filesystem::exists(filepath / "sparse" / "0" / "cameras.bin") ||
-                    std::filesystem::exists(filepath / "sparse" / "cameras.bin") ||
-                    std::filesystem::exists(filepath / "sparse" / "0" / "cameras.txt") ||
-                    std::filesystem::exists(filepath / "sparse" / "cameras.txt") ||
-                    std::filesystem::exists(filepath / "transforms.json") ||
-                    std::filesystem::exists(filepath / "transforms_train.json")) {
+                if (gs::loader::Loader::isDatasetPath(filepath)) {
                     dataset_path = filepath;
                     LOG_DEBUG("Dataset detected in dropped directory");
                 }
