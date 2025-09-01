@@ -230,7 +230,7 @@ namespace gs::rendering {
         // === STEP 3: Composite the two views directly to screen ===
         LOG_DEBUG("Compositing split view at position {}", request.panels[0].end_position);
 
-        // Render directly to screen (framebuffer 0)
+        // CRITICAL: Render directly to screen (framebuffer 0)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // Set viewport to the actual screen area we want to render to
@@ -247,7 +247,8 @@ namespace gs::rendering {
                 left_framebuffer_->getFrameTexture(),
                 right_framebuffer_->getFrameTexture(),
                 request.panels[0].end_position,
-                request.divider_color);
+                request.divider_color,
+                request.viewport.size.x);
             !result) {
             LOG_ERROR("Failed to composite split view: {}", result.error());
             // Restore framebuffer binding before returning
@@ -258,17 +259,18 @@ namespace gs::rendering {
         // Restore the original framebuffer binding
         glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
 
-        // Return a result (using left as representative)
+        // Return a result (using left as representative, with move semantics to avoid copy)
         return RenderResult{
-            .image = std::make_shared<torch::Tensor>(left_result->image),
-            .depth = std::make_shared<torch::Tensor>(left_result->depth)};
+            .image = std::make_shared<torch::Tensor>(std::move(left_result->image)),
+            .depth = std::make_shared<torch::Tensor>(std::move(left_result->depth))};
     }
 
     Result<void> SplitViewRenderer::compositeSplitView(
         GLuint left_texture,
         GLuint right_texture,
         float split_position,
-        const glm::vec4& divider_color) {
+        const glm::vec4& divider_color,
+        int viewport_width) {
 
         LOG_TRACE("Compositing: left_tex={}, right_tex={}, split={}",
                   left_texture, right_texture, split_position);
@@ -313,6 +315,14 @@ namespace gs::rendering {
 
         if (auto result = split_shader_.set("dividerColor", divider_color); !result) {
             LOG_ERROR("Failed to set dividerColor uniform: {}", result.error());
+        }
+
+        // Calculate normalized divider width (2 pixels for typical viewport)
+        float divider_width_pixels = 2.0f;
+        float normalized_divider_width = divider_width_pixels / static_cast<float>(viewport_width);
+
+        if (auto result = split_shader_.set("dividerWidth", normalized_divider_width); !result) {
+            LOG_ERROR("Failed to set dividerWidth uniform: {}", result.error());
         }
 
         // Draw the full-screen quad

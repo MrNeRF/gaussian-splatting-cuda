@@ -46,7 +46,8 @@ namespace gs::rendering {
             GLuint left_texture,
             GLuint right_texture,
             float split_position,
-            const glm::vec4& divider_color);
+            const glm::vec4& divider_color,
+            int viewport_width);
     };
 
 } // namespace gs::rendering

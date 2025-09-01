@@ -8,10 +8,9 @@ uniform sampler2D rightTexture;
 uniform float splitPosition;
 uniform float showDivider;
 uniform vec4 dividerColor;
+uniform float dividerWidth;
 
 void main() {
-    float dividerWidth = 0.002; // 2 pixels for 1000px viewport
-
     // Check if we're on the divider
     if (showDivider > 0.5 && abs(TexCoord.x - splitPosition) < dividerWidth) {
         FragColor = dividerColor;

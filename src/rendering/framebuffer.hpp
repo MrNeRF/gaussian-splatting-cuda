@@ -98,7 +98,7 @@ namespace gs::rendering {
             width = newWidth;
             height = newHeight;
 
-            // Bind the framebuffer before resizing its attachments
+            // IMPORTANT: Bind the framebuffer before resizing its attachments
             glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
             // Resize color texture

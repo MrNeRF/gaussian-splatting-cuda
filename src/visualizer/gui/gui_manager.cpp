@@ -273,9 +273,7 @@ namespace gs::gui {
                     ImGui::SetCursorPos(ImVec2(10, 10));
 
                     // Draw the split view info
-                    ImGui::Text("Split View: %s | %s",
-                                split_info.left_name.c_str(),
-                                split_info.right_name.c_str());
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "Split View: %s | %s", split_info.left_name.c_str(), split_info.right_name.c_str());
 
                     // Add instructions
                     ImGui::SameLine();
