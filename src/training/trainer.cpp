@@ -10,6 +10,7 @@
 #include "kernels/fused_ssim.cuh"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
+#include "rasterization/projection_fast.hpp"  
 #include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <chrono>
@@ -1024,32 +1025,35 @@ namespace gs::training {
             const int image_width = static_cast<int>(cam->image_width());
             const int image_height = static_cast<int>(cam->image_height());
 
-            // 3.c) Projection-only (no rendering) - master uses ProjectionSettings (struct)
-            gs::ProjectionSettings st;
-            st.width = image_width;
-            st.height = image_height;
-            st.eps2d = eps2d;
-            st.near_plane = near_plane;
-            st.far_plane = far_plane;
-            st.radius_clip = radius_clip;
-            st.scaling_modifier = scaling_mod;
+            
+            // 3.c) Projection-only (no rendering) using GUT fast projection (supports distortion)
             // Ensure view/K are batched as [1,...] if needed
             if (viewmat.dim() == 2) viewmat = viewmat.unsqueeze(0);
             if (K.dim() == 2) K = K.unsqueeze(0);
-            auto proj_out = gs::ProjectionFunction::apply(
-                means3D, rotations, scales, opacities, viewmat, K, st);
 
-            torch::Tensor radii2 = proj_out[0];  // [1,N,2] or [N,2]
-            torch::Tensor means2d = proj_out[1]; // [1,N,2] or [N,2]
+            std::optional<torch::Tensor> radial, tangential, thin_prism;
+            if (cam->radial_distortion().defined() && cam->radial_distortion().numel() > 0) {
+                radial = cam->radial_distortion();
+            }
+            if (cam->tangential_distortion().defined() && cam->tangential_distortion().numel() > 0) {
+                tangential = cam->tangential_distortion();
+            }
+            // thin_prism left as nullopt unless you expose it in Camera
+
+            auto [radii2, means2d] = ProjectFast(
+                means3D, rotations, scales, opacities,
+                viewmat, K,
+                image_width, image_height,
+                eps2d, near_plane, far_plane,
+                radius_clip, scaling_mod,
+                cam->camera_model_type(),
+                radial, tangential, thin_prism
+            );
 
             if (!radii2.defined() || !means2d.defined()) {
                 printf("radii2 or means2d failed\n");
                 continue; // Projection failed, skip gracefully
             }
-            if (radii2.dim() == 3 && radii2.size(0) == 1)
-                radii2 = radii2.squeeze(0);
-            if (means2d.dim() == 3 && means2d.size(0) == 1)
-                means2d = means2d.squeeze(0);
 
             // 3.d) Visibility: positive projected radius
             torch::Tensor visible;
