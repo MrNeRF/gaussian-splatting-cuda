@@ -95,6 +95,7 @@ namespace {
             ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
             ::args::ValueFlagList<std::string> timelapse_images(parser, "timelapse_images", "Image filenames to render timelapse images for", {"timelapse-images"});
             ::args::ValueFlag<int> timelapse_every(parser, "timelapse_every", "Render timelapse image every N iterations (default: 50)", {"timelapse-every"});
+            ::args::ValueFlag<std::string> init_ply(parser, "init_ply", "Optional PLY splat file for initialization", {"init-ply"});
 
             // Sparsity optimization arguments
             ::args::ValueFlag<int> sparsify_steps(parser, "sparsify_steps", "Number of steps for sparsification (default: 15000)", {"sparsify-steps"});
@@ -189,6 +190,16 @@ namespace {
                 }
 
                 return std::make_tuple(ParseResult::Success, std::function<void()>{});
+            }
+
+            if (init_ply) {
+                const auto ply_path = ::args::get(init_ply);
+                params.init_ply = ply_path;
+
+                // Check if PLY file exists
+                if (!std::filesystem::exists(ply_path)) {
+                    return std::unexpected(std::format("Initialization PLY file does not exist: {}", ply_path));
+                }
             }
 
             // Training mode

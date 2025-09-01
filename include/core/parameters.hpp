@@ -98,6 +98,9 @@ namespace gs {
 
             // Viewer mode specific
             std::filesystem::path ply_path = "";
+
+            // Optional PLY splat file for initialization
+            std::optional<std::string> init_ply = std::nullopt;
         };
 
         // Modern C++23 functions returning expected values

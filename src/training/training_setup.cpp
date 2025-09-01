@@ -44,32 +44,58 @@ namespace gs::training {
             } else if constexpr (std::is_same_v<T, loader::LoadedScene>) {
                 // Full scene data - set up training
 
-                // Get point cloud or generate random one
-                PointCloud point_cloud_to_use;
-                if (data.point_cloud && data.point_cloud->size() > 0) {
-                    point_cloud_to_use = *data.point_cloud;
-                    LOG_INFO("Using point cloud with {} points", point_cloud_to_use.size());
+                // Initialize model directly with point cloud
+                std::expected<SplatData, std::string> splat_result;
+                if (params.init_ply.has_value()) {
+                    // I don't like this
+                    // PLYLoader is not exposed publicly so I have to use the general Loader class
+                    // which might load any format
+                    auto loader = loader::Loader::create();
+                    auto ply_load_result = loader->load(params.init_ply.value());
+
+                    if (!ply_load_result) {
+                        splat_result = std::unexpected(std::format(
+                            "Failed to load initialization PLY file '{}': {}",
+                            params.init_ply.value(),
+                            ply_load_result.error()));
+                    } else {
+                        try {
+                            splat_result = std::move(*std::get<std::shared_ptr<SplatData>>(ply_load_result->data));
+                        } catch (const std::bad_variant_access&) {
+                            splat_result = std::unexpected(std::format(
+                                "Initialization PLY file '{}' did not contain valid SplatData",
+                                params.init_ply.value()));
+                        }
+                    }
+
+
                 } else {
-                    // Generate random point cloud if needed
-                    LOG_INFO("No point cloud provided, using random initialization");
-                    // Need to generate random point cloud - this should be provided by the loader or a utility
-                    int numInitGaussian = 10000;
-                    uint64_t seed = 8128;
-                    torch::manual_seed(seed);
+                        // Get point cloud or generate random one
+                    PointCloud point_cloud_to_use;
+                    if (data.point_cloud && data.point_cloud->size() > 0) {
+                        point_cloud_to_use = *data.point_cloud;
+                        LOG_INFO("Using point cloud with {} points", point_cloud_to_use.size());
+                    } else {
+                        // Generate random point cloud if needed
+                        LOG_INFO("No point cloud provided, using random initialization");
+                        // Need to generate random point cloud - this should be provided by the loader or a utility
+                        int numInitGaussian = 10000;
+                        uint64_t seed = 8128;
+                        torch::manual_seed(seed);
 
-                    torch::Tensor positions = torch::rand({numInitGaussian, 3}); // in [0, 1]
-                    positions = positions * 2.0 - 1.0;                           // now in [-1, 1]
-                    torch::Tensor colors =
-                        torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
+                        torch::Tensor positions = torch::rand({numInitGaussian, 3}); // in [0, 1]
+                        positions = positions * 2.0 - 1.0;                           // now in [-1, 1]
+                        torch::Tensor colors =
+                            torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
 
-                    point_cloud_to_use = PointCloud(positions, colors);
+                        point_cloud_to_use = PointCloud(positions, colors);
+                    }
+                    splat_result = SplatData::init_model_from_pointcloud(
+                                    params,
+                                    load_result->scene_center,
+                                    point_cloud_to_use);
                 }
 
-                // Initialize model directly with point cloud
-                auto splat_result = SplatData::init_model_from_pointcloud(
-                    params,
-                    load_result->scene_center,
-                    point_cloud_to_use);
 
                 if (!splat_result) {
                     return std::unexpected(

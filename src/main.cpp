@@ -5,7 +5,9 @@
 #include "core/application.hpp"
 #include "core/argument_parser.hpp"
 #include "core/logger.hpp"
+
 #include <c10/cuda/CUDAAllocatorConfig.h>
+#include <iostream>
 #include <print>
 
 int main(int argc, char* argv[]) {
