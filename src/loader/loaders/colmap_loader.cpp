@@ -96,25 +96,17 @@ namespace gs::loader {
         // If the specified images folder doesn't exist, check if we're in a flat structure
         if (!std::filesystem::exists(image_dir)) {
             // Check if COLMAP files are in the root (flat structure)
-            bool is_flat_structure = false;
-            if (!cameras_txt.empty() && cameras_txt.parent_path() == path) {
-                is_flat_structure = true;
-            } else if (!cameras_bin.empty() && cameras_bin.parent_path() == path) {
-                is_flat_structure = true;
-            }
+            bool is_flat_structure = (!cameras_txt.empty() && cameras_txt.parent_path() == path) ||
+                                     (!cameras_bin.empty() && cameras_bin.parent_path() == path);
 
             if (is_flat_structure) {
                 // In flat structure, images are typically in the root directory
                 // Check if there are image files in the root
                 bool has_images_in_root = false;
                 for (const auto& entry : std::filesystem::directory_iterator(path)) {
-                    if (entry.is_regular_file()) {
-                        auto ext = entry.path().extension().string();
-                        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                        if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp") {
-                            has_images_in_root = true;
-                            break;
-                        }
+                    if (entry.is_regular_file() && is_image_file(entry.path())) {
+                        has_images_in_root = true;
+                        break;
                     }
                 }
 

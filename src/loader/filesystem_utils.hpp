@@ -68,4 +68,15 @@ namespace gs::loader {
         };
     }
 
+    // Check if a file has an image extension
+    inline bool is_image_file(const fs::path& path) {
+        static const std::vector<std::string> image_extensions = {
+            ".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"};
+
+        std::string ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        return std::find(image_extensions.begin(), image_extensions.end(), ext) != image_extensions.end();
+    }
+
 } // namespace gs::loader
