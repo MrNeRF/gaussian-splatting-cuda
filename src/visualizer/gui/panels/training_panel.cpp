@@ -584,6 +584,16 @@ namespace gs::gui::panels {
                 events::cmd::StartTraining{}.emit();
             }
             ImGui::PopStyleColor(2);
+
+            if (current_iteration > 0) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.7f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.6f, 0.8f, 1.0f));
+                if (ImGui::Button("Reset Training", ImVec2(-1, 0))) {
+                    trainer_manager->resetTraining();
+                }
+                ImGui::PopStyleColor(2);
+            }
+
             SaveProjectButton(ctx, state);
             break;
 
@@ -604,6 +614,14 @@ namespace gs::gui::panels {
             }
             ImGui::PopStyleColor(2);
 
+            // Reset button
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.7f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.6f, 0.8f, 1.0f));
+            if (ImGui::Button("Reset Training", ImVec2(-1, 0))) {
+                trainer_manager->resetTraining();
+            }
+            ImGui::PopStyleColor(2);
+
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
             if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
@@ -614,6 +632,15 @@ namespace gs::gui::panels {
 
         case TrainerManager::State::Completed:
             ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
+
+            // Reset button for completed state
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.7f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.6f, 0.8f, 1.0f));
+            if (ImGui::Button("Reset for New Training", ImVec2(-1, 0))) {
+                trainer_manager->resetTraining();
+            }
+            ImGui::PopStyleColor(2);
+
             SaveProjectButton(ctx, state);
             break;
 

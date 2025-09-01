@@ -56,6 +56,7 @@ namespace gs {
         void resumeTraining();
         void stopTraining();
         void requestSaveCheckpoint();
+        bool resetTraining();
 
         // State queries
         State getState() const { return state_.load(); }
@@ -69,6 +70,10 @@ namespace gs {
         bool canPause() const { return state_ == State::Running; }
         bool canResume() const { return state_ == State::Paused; }
         bool canStop() const { return isTrainingActive(); }
+        bool canReset() const {
+            auto s = state_.load();
+            return s == State::Paused || s == State::Completed || s == State::Ready;
+        }
 
         // Progress information - directly query trainer
         int getCurrentIteration() const;
