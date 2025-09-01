@@ -65,12 +65,15 @@ namespace gs {
     }
 
     std::pair<std::string, std::string> Scene::cycleVisibilityWithNames() {
-        if (nodes_.size() <= 1)
-            return {"", ""};
+        static constexpr std::pair<const char*, const char*> EMPTY_PAIR = {"", ""};
+
+        if (nodes_.size() <= 1) {
+            return EMPTY_PAIR;
+        }
 
         std::string hidden_name, shown_name;
 
-        // Find first visible node
+        // Find first visible node using modular arithmetic as suggested
         auto visible = std::find_if(nodes_.begin(), nodes_.end(),
                                     [](const Node& n) { return n.visible; });
 
@@ -78,9 +81,9 @@ namespace gs {
             visible->visible = false;
             hidden_name = visible->name;
 
-            auto next = std::next(visible);
-            if (next == nodes_.end())
-                next = nodes_.begin();
+            auto next_index = (std::distance(nodes_.begin(), visible) + 1) % nodes_.size();
+            auto next = nodes_.begin() + next_index;
+
             next->visible = true;
             shown_name = next->name;
         } else {
