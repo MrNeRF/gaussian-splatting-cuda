@@ -11,6 +11,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace gs {
     class SceneManager;
@@ -57,7 +58,18 @@ namespace gs::visualizer {
         bool show_translation_gizmo = false;
         float gizmo_scale = 1.0f;
 
+        // Split view
+        bool split_view_enabled = false;
+        float split_position = 0.5f;
+        size_t split_view_offset = 0;
+
         bool gut = false;
+    };
+
+    struct SplitViewInfo {
+        bool enabled = false;
+        std::string left_name;
+        std::string right_name;
     };
 
     struct ViewportRegion {
@@ -101,6 +113,10 @@ namespace gs::visualizer {
         void setFov(float f);
         void setScalingModifier(float s);
 
+        // Split view control
+        void advanceSplitOffset();
+        SplitViewInfo getSplitViewInfo() const;
+
         // FPS monitoring
         float getCurrentFPS() const { return framerate_controller_.getCurrentFPS(); }
         float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
@@ -113,6 +129,10 @@ namespace gs::visualizer {
         void renderOverlays(const RenderContext& context);
         void setupEventHandlers();
 
+        std::optional<gs::rendering::SplitViewRequest> createSplitViewRequest(
+            const RenderContext& context,
+            SceneManager* scene_manager);
+
         // Core components
         std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         FramerateController framerate_controller_;
@@ -123,6 +143,10 @@ namespace gs::visualizer {
         size_t last_model_ptr_ = 0;
         glm::ivec2 last_render_size_{0, 0};
         std::chrono::steady_clock::time_point last_training_render_;
+
+        // Split view state
+        mutable std::mutex split_info_mutex_;
+        SplitViewInfo current_split_info_;
 
         // Settings
         RenderSettings settings_;

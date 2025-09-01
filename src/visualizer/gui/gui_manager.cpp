@@ -239,6 +239,53 @@ namespace gs::gui {
         // Render speed overlay if visible
         renderSpeedOverlay();
 
+        // Render split view indicator if enabled
+        if (rendering_manager) {
+            auto split_info = rendering_manager->getSplitViewInfo();
+            if (split_info.enabled) {
+                // Create a small overlay showing which PLYs are being compared
+                const ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+                // Position at top center
+                ImVec2 overlay_pos(
+                    viewport->WorkPos.x + (viewport->WorkSize.x - 400.0f) * 0.5f,
+                    viewport->WorkPos.y + 10.0f);
+
+                ImGui::SetNextWindowPos(overlay_pos, ImGuiCond_Always);
+                ImGui::SetNextWindowSize(ImVec2(400.0f, 40.0f), ImGuiCond_Always);
+
+                ImGuiWindowFlags overlay_flags =
+                    ImGuiWindowFlags_NoTitleBar |
+                    ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoScrollbar |
+                    ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoSavedSettings |
+                    ImGuiWindowFlags_NoInputs |
+                    ImGuiWindowFlags_NoFocusOnAppearing;
+
+                ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.8f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 0.0f, 0.5f));
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
+
+                if (ImGui::Begin("##SplitViewIndicator", nullptr, overlay_flags)) {
+                    ImGui::SetCursorPos(ImVec2(10, 10));
+
+                    // Draw the split view info
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "Split View: %s | %s", split_info.left_name.c_str(), split_info.right_name.c_str());
+
+                    // Add instructions
+                    ImGui::SameLine();
+                    ImGui::TextDisabled(" (T: cycle, V: exit)");
+                }
+                ImGui::End();
+
+                ImGui::PopStyleVar(2);
+                ImGui::PopStyleColor(2);
+            }
+        }
+
         // Get the viewport region for 3D rendering
         updateViewportRegion();
 
@@ -247,7 +294,6 @@ namespace gs::gui {
 
         // Render viewport gizmo BEFORE focus indicator - always render regardless of focus
         if (show_viewport_gizmo_ && viewport_size_.x > 0 && viewport_size_.y > 0) {
-            auto* rendering_manager = viewer_->getRenderingManager();
             if (rendering_manager) {
                 auto* engine = rendering_manager->getRenderingEngine();
                 if (engine) {

@@ -20,6 +20,7 @@ set(RENDERING_SOURCES
         framebuffer_factory.cpp
         shader_manager.cpp
         screen_renderer.cpp
+        split_view_renderer.cpp
 )
 
 # Conditionally add CUDA GL interop

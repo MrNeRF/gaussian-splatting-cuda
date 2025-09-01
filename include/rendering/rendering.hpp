@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <torch/types.h>
+#include <vector>
 
 namespace gs {
     class SplatData;
@@ -51,6 +52,33 @@ namespace gs::rendering {
     struct RenderResult {
         std::shared_ptr<torch::Tensor> image;
         std::shared_ptr<torch::Tensor> depth;
+    };
+
+    // Split view support
+    struct SplitViewPanel {
+        const SplatData* model;
+        std::string label;
+        float start_position; // 0.0 to 1.0
+        float end_position;   // 0.0 to 1.0
+    };
+
+    struct SplitViewRequest {
+        std::vector<SplitViewPanel> panels;
+        ViewportData viewport;
+
+        // Common render settings
+        float scaling_modifier = 1.0f;
+        bool antialiasing = false;
+        glm::vec3 background_color{0.0f, 0.0f, 0.0f};
+        std::optional<BoundingBox> crop_box;
+        bool point_cloud_mode = false;
+        float voxel_size = 0.01f;
+        bool gut = false;
+
+        // UI settings
+        bool show_dividers = true;
+        glm::vec4 divider_color{1.0f, 0.85f, 0.0f, 1.0f};
+        bool show_labels = true;
     };
 
     enum class GridPlane {
@@ -172,6 +200,10 @@ namespace gs::rendering {
         virtual Result<RenderResult> renderGaussians(
             const SplatData& splat_data,
             const RenderRequest& request) = 0;
+
+        // Split view rendering
+        virtual Result<RenderResult> renderSplitView(
+            const SplitViewRequest& request) = 0;
 
         // Present to screen
         virtual Result<void> presentToScreen(

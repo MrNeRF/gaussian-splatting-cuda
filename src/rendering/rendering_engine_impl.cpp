@@ -31,6 +31,15 @@ namespace gs::rendering {
         // Create screen renderer with preferred mode
         screen_renderer_ = std::make_shared<ScreenQuadRenderer>(getPreferredFrameBufferMode());
 
+        // Initialize split view renderer
+        split_view_renderer_ = std::make_unique<SplitViewRenderer>();
+        if (auto result = split_view_renderer_->initialize(); !result) {
+            LOG_ERROR("Failed to initialize split view renderer: {}", result.error());
+            shutdown();
+            return std::unexpected(result.error());
+        }
+        LOG_DEBUG("Split view renderer initialized");
+
         if (auto result = grid_renderer_.init(); !result) {
             LOG_ERROR("Failed to initialize grid renderer: {}", result.error());
             shutdown();
@@ -86,6 +95,7 @@ namespace gs::rendering {
         // Just reset/clean up - safe to call multiple times
         quad_shader_ = ManagedShader();
         screen_renderer_.reset();
+        split_view_renderer_.reset();
         translation_gizmo_.shutdown();
         viewport_gizmo_.shutdown();
         gizmo_interaction_.reset();
@@ -169,6 +179,24 @@ namespace gs::rendering {
             .depth = std::make_shared<torch::Tensor>(pipeline_result->depth)};
 
         return result;
+    }
+
+    Result<RenderResult> RenderingEngineImpl::renderSplitView(
+        const SplitViewRequest& request) {
+
+        if (!isInitialized()) {
+            LOG_ERROR("Rendering engine not initialized");
+            return std::unexpected("Rendering engine not initialized");
+        }
+
+        if (!split_view_renderer_) {
+            LOG_ERROR("Split view renderer not initialized");
+            return std::unexpected("Split view renderer not initialized");
+        }
+
+        LOG_TRACE("Rendering split view with {} panels", request.panels.size());
+
+        return split_view_renderer_->render(request, pipeline_, *screen_renderer_, quad_shader_);
     }
 
     Result<void> RenderingEngineImpl::presentToScreen(

@@ -11,6 +11,7 @@
 #include "rendering_pipeline.hpp"
 #include "screen_renderer.hpp"
 #include "shader_manager.hpp"
+#include "split_view_renderer.hpp"
 #include "translation_gizmo.hpp"
 #include "viewport_gizmo.hpp"
 
@@ -66,6 +67,9 @@ namespace gs::rendering {
             const SplatData& splat_data,
             const RenderRequest& request) override;
 
+        Result<RenderResult> renderSplitView(
+            const SplitViewRequest& request) override;
+
         Result<void> presentToScreen(
             const RenderResult& result,
             const glm::ivec2& viewport_pos,
@@ -116,6 +120,9 @@ namespace gs::rendering {
         // Core components
         RenderingPipeline pipeline_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
+
+        // Split view renderer
+        std::unique_ptr<SplitViewRenderer> split_view_renderer_;
 
         // Overlay renderers
         RenderInfiniteGrid grid_renderer_;
