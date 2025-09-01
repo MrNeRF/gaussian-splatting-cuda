@@ -57,7 +57,18 @@ namespace gs::visualizer {
         bool show_translation_gizmo = false;
         float gizmo_scale = 1.0f;
 
+        // Split view
+        bool split_view_enabled = false;
+        float split_position = 0.5f;
+        size_t split_view_offset = 0;
+
         bool gut = false;
+    };
+
+    struct SplitViewInfo {
+        bool enabled = false;
+        std::string left_name;
+        std::string right_name;
     };
 
     struct ViewportRegion {
@@ -101,6 +112,10 @@ namespace gs::visualizer {
         void setFov(float f);
         void setScalingModifier(float s);
 
+        // Split view control
+        void advanceSplitOffset();
+        SplitViewInfo getSplitViewInfo() const;
+
         // FPS monitoring
         float getCurrentFPS() const { return framerate_controller_.getCurrentFPS(); }
         float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
@@ -112,6 +127,9 @@ namespace gs::visualizer {
         void doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model);
         void renderOverlays(const RenderContext& context);
         void setupEventHandlers();
+        void renderSplitView(const RenderContext& context, const SplatData* left_model, const SplatData* right_model);
+        void renderSplitLabels(const RenderContext& context, const std::string& left_name, const std::string& right_name);
+        void renderSplitViewUI(const glm::ivec2& offset, const glm::ivec2& size, int split_x);
 
         // Core components
         std::unique_ptr<gs::rendering::RenderingEngine> engine_;
@@ -123,6 +141,10 @@ namespace gs::visualizer {
         size_t last_model_ptr_ = 0;
         glm::ivec2 last_render_size_{0, 0};
         std::chrono::steady_clock::time_point last_training_render_;
+
+        // Split view state
+        mutable std::mutex split_info_mutex_;
+        SplitViewInfo current_split_info_;
 
         // Settings
         RenderSettings settings_;

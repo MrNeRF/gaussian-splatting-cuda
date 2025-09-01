@@ -52,6 +52,9 @@ namespace gs {
         Node* getMutableNode(const std::string& name);
         bool hasNodes() const { return !nodes_.empty(); }
 
+        // Get visible nodes for split view
+        std::vector<const Node*> getVisibleNodes() const;
+
     private:
         std::vector<Node> nodes_;
 

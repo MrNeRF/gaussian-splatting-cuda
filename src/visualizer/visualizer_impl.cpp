@@ -33,6 +33,9 @@ namespace gs::visualizer {
         // Create rendering manager with initial antialiasing setting
         rendering_manager_ = std::make_unique<RenderingManager>();
 
+        // Connect scene manager to rendering manager
+        scene_manager_->setRenderingManager(rendering_manager_.get());
+
         // Set initial antialiasing
         RenderSettings initial_settings;
         initial_settings.antialiasing = options.antialiasing;
@@ -259,6 +262,7 @@ namespace gs::visualizer {
                 window_manager_->getWindow(), viewport_);
             input_controller_->initialize();
             input_controller_->setTrainingManager(trainer_manager_);
+            input_controller_->setRenderingManager(rendering_manager_.get());
         }
 
         // Initialize rendering with proper viewport dimensions
