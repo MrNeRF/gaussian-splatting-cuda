@@ -523,7 +523,7 @@ namespace gs::loader {
             const auto& line = lines[i * 2];
 
             const auto tokens = split_string(line, ' ');
-            if (tokens.size() != 10) {
+            if (tokens.size() < 10) {
                 LOG_ERROR("Invalid format in images.txt line {}", i * 2 + 1);
                 throw std::runtime_error("Invalid format in images.txt line " + std::to_string(i * 2 + 1));
             }
@@ -538,7 +538,18 @@ namespace gs::loader {
                                       torch::kFloat32);
 
             img._camera_id = std::stoul(tokens[8]);
-            img._name = tokens[9];
+
+            // Handle filenames with spaces
+            if (tokens.size() == 10) {
+                img._name = tokens[9];
+            } else {
+                // Reconstruct filename with spaces
+                img._name = tokens[9];
+                for (size_t j = 10; j < tokens.size(); ++j) {
+                    img._name += " " + tokens[j];
+                }
+            }
+            LOG_TRACE("Loaded image: {}", img._name);
         }
         return images;
     }
