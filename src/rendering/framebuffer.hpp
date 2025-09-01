@@ -92,24 +92,47 @@ namespace gs::rendering {
             return {};
         }
 
-        virtual void resize(int newWidth, int newHeight) { // Made virtual
+        virtual void resize(int newWidth, int newHeight) {
             LOG_TRACE("Resizing FrameBuffer from {}x{} to {}x{}", width, height, newWidth, newHeight);
 
             width = newWidth;
             height = newHeight;
 
+            // Bind the framebuffer before resizing its attachments
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
             // Resize color texture
             glBindTexture(GL_TEXTURE_2D, texture);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0,
                          GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+            // Re-attach color texture to framebuffer
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                    GL_TEXTURE_2D, texture, 0);
+
             // Resize depth texture
             glBindTexture(GL_TEXTURE_2D, depthTexture);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height,
                          0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+            // Re-attach depth texture to framebuffer
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                                    GL_TEXTURE_2D, depthTexture, 0);
+
+            // Check framebuffer completeness after resize
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                LOG_ERROR("Framebuffer incomplete after resize to {}x{}", width, height);
+            }
+
+            // Unbind framebuffer
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindTexture(GL_TEXTURE_2D, 0);
         }
 
         void uploadImage(const unsigned char* data, int width_, int height_) {

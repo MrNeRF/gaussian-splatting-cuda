@@ -11,6 +11,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace gs {
     class SceneManager;
@@ -127,9 +128,10 @@ namespace gs::visualizer {
         void doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model);
         void renderOverlays(const RenderContext& context);
         void setupEventHandlers();
-        void renderSplitView(const RenderContext& context, const SplatData* left_model, const SplatData* right_model);
-        void renderSplitLabels(const RenderContext& context, const std::string& left_name, const std::string& right_name);
-        void renderSplitViewUI(const glm::ivec2& offset, const glm::ivec2& size, int split_x);
+
+        std::optional<gs::rendering::SplitViewRequest> createSplitViewRequest(
+            const RenderContext& context,
+            SceneManager* scene_manager);
 
         // Core components
         std::unique_ptr<gs::rendering::RenderingEngine> engine_;
