@@ -342,7 +342,8 @@ namespace gs::visualizer {
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
             .viewport_region = has_viewport_region ? &viewport_region : nullptr,
-            .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
+            .has_focus = gui_manager_ && gui_manager_->isViewportFocused(),
+            .scene_manager = scene_manager_.get()};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 
