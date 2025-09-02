@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "core/camera.hpp"
 #include "core/image_io.hpp"
 #include <c10/cuda/CUDAGuard.h>
@@ -74,14 +78,23 @@ namespace gs {
     }
     torch::Tensor Camera::K() const {
         const auto K = torch::zeros({1, 3, 3}, _world_view_transform.options());
-        float x_scale_factor = float(_image_width) / float(_camera_width);
-        float y_scale_factor = float(_image_height) / float(_camera_height);
-        K[0][0][0] = _focal_x * x_scale_factor;
-        K[0][1][1] = _focal_y * y_scale_factor;
-        K[0][0][2] = _center_x * x_scale_factor;
-        K[0][1][2] = _center_y * y_scale_factor;
+        auto [fx, fy, cx, cy] = get_intrinsics();
+        K[0][0][0] = fx;
+        K[0][1][1] = fy;
+        K[0][0][2] = cx;
+        K[0][1][2] = cy;
         K[0][2][2] = 1.0f;
         return K;
+    }
+
+    std::tuple<float, float, float, float> Camera::get_intrinsics() const {
+        float x_scale_factor = float(_image_width) / float(_camera_width);
+        float y_scale_factor = float(_image_height) / float(_camera_height);
+        float fx = _focal_x * x_scale_factor;
+        float fy = _focal_y * y_scale_factor;
+        float cx = _center_x * x_scale_factor;
+        float cy = _center_y * y_scale_factor;
+        return std::make_tuple(fx, fy, cx, cy);
     }
 
     torch::Tensor Camera::load_and_get_image(int resize_factor) {

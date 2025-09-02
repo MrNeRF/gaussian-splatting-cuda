@@ -1,7 +1,13 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "colmap.hpp"
+#include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "core/torch_shapes.hpp"
+#include "loader/filesystem_utils.hpp"
 #include <algorithm>
 #include <cstring>
 #include <exception>
@@ -161,6 +167,139 @@ namespace gs::loader {
     }
 
     // -----------------------------------------------------------------------------
+    //  Helper to scale camera intrinsics based on model
+    // -----------------------------------------------------------------------------
+    static void scale_camera_intrinsics(CAMERA_MODEL model, std::vector<double>& params, float factor) {
+        switch (model) {
+        case CAMERA_MODEL::SIMPLE_PINHOLE:
+            // params: [f, cx, cy]
+            params[0] /= factor; // f
+            params[1] /= factor; // cx
+            params[2] /= factor; // cy
+            break;
+
+        case CAMERA_MODEL::PINHOLE:
+            // params: [fx, fy, cx, cy]
+            params[0] /= factor; // fx
+            params[1] /= factor; // fy
+            params[2] /= factor; // cx
+            params[3] /= factor; // cy
+            break;
+
+        case CAMERA_MODEL::SIMPLE_RADIAL:
+            // params: [f, cx, cy, k1]
+            params[0] /= factor; // f
+            params[1] /= factor; // cx
+            params[2] /= factor; // cy
+            // k1 unchanged
+            break;
+
+        case CAMERA_MODEL::RADIAL:
+            // params: [f, cx, cy, k1, k2]
+            params[0] /= factor; // f
+            params[1] /= factor; // cx
+            params[2] /= factor; // cy
+            // k1, k2 unchanged
+            break;
+
+        case CAMERA_MODEL::OPENCV:
+        case CAMERA_MODEL::OPENCV_FISHEYE:
+            // params: [fx, fy, cx, cy, k1, k2, p1, p2, ...]
+            params[0] /= factor; // fx
+            params[1] /= factor; // fy
+            params[2] /= factor; // cx
+            params[3] /= factor; // cy
+            // distortion params unchanged
+            break;
+
+        case CAMERA_MODEL::FULL_OPENCV:
+            // params: [fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, k5, k6]
+            params[0] /= factor; // fx
+            params[1] /= factor; // fy
+            params[2] /= factor; // cx
+            params[3] /= factor; // cy
+            // distortion params unchanged
+            break;
+
+        case CAMERA_MODEL::SIMPLE_RADIAL_FISHEYE:
+        case CAMERA_MODEL::RADIAL_FISHEYE:
+            // params: [f, cx, cy, k1, ...]
+            params[0] /= factor; // f
+            params[1] /= factor; // cx
+            params[2] /= factor; // cy
+            // distortion params unchanged
+            break;
+
+        case CAMERA_MODEL::FOV:
+            // params: [fx, fy, cx, cy, omega]
+            params[0] /= factor; // fx
+            params[1] /= factor; // fy
+            params[2] /= factor; // cx
+            params[3] /= factor; // cy
+            // omega unchanged
+            break;
+
+        case CAMERA_MODEL::THIN_PRISM_FISHEYE:
+            // params: [fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1]
+            params[0] /= factor; // fx
+            params[1] /= factor; // fy
+            params[2] /= factor; // cx
+            params[3] /= factor; // cy
+            // distortion params unchanged
+            break;
+
+        default:
+            LOG_WARN("Unknown camera model for scaling: {}", static_cast<int>(model));
+            // At minimum, try to scale principal point if present
+            if (params.size() >= 4) {
+                params[2] /= factor; // cx
+                params[3] /= factor; // cy
+            }
+            break;
+        }
+    }
+
+    // -----------------------------------------------------------------------------
+    //  Helper to extract scale factor from folder name
+    // -----------------------------------------------------------------------------
+    static float extract_scale_from_folder(const std::string& folder_name) {
+        // Check for pattern like "images_4" where 4 is the downscale factor
+        size_t underscore_pos = folder_name.rfind('_');
+        if (underscore_pos != std::string::npos) {
+            std::string suffix = folder_name.substr(underscore_pos + 1);
+            try {
+                float factor = std::stof(suffix);
+                if (factor > 0 && factor <= 16) { // Sanity check
+                    LOG_DEBUG("Extracted scale factor {} from folder name", factor);
+                    return factor;
+                }
+            } catch (...) {
+                // Not a valid number
+            }
+        }
+        return 1.0f;
+    }
+
+    // -----------------------------------------------------------------------------
+    //  Helper to apply dimension correction to camera
+    // -----------------------------------------------------------------------------
+    static void apply_dimension_correction(CameraData& cam, float scale_x, float scale_y,
+                                           int actual_w, int actual_h) {
+        // Update dimensions
+        cam._width = actual_w;
+        cam._height = actual_h;
+
+        // Update intrinsics that were already extracted
+        cam._focal_x *= scale_x;
+        cam._focal_y *= scale_y;
+        cam._center_x *= scale_x;
+        cam._center_y *= scale_y;
+
+        // No need to update distortion parameters as they are dimensionless
+        LOG_TRACE("Applied dimension correction to camera: scale_x={:.3f}, scale_y={:.3f}", scale_x, scale_y);
+    }
+
+    // -----------------------------------------------------------------------------
     //  images.bin
     // -----------------------------------------------------------------------------
     std::vector<Image> read_images_binary(const std::filesystem::path& file_path) {
@@ -208,14 +347,15 @@ namespace gs::loader {
     //  cameras.bin
     // -----------------------------------------------------------------------------
     std::unordered_map<uint32_t, CameraData>
-    read_cameras_binary(const std::filesystem::path& file_path) {
+    read_cameras_binary(const std::filesystem::path& file_path, float scale_factor = 1.0f) {
         LOG_TIMER_TRACE("Read cameras.bin");
         auto buf_owner = read_binary(file_path);
         const char* cur = buf_owner->data();
         const char* end = cur + buf_owner->size();
 
         uint64_t n_cams = read_u64(cur);
-        LOG_DEBUG("Reading {} cameras from binary file", n_cams);
+        LOG_DEBUG("Reading {} cameras from binary file{}", n_cams,
+                  scale_factor != 1.0f ? std::format(" with scale factor {}", scale_factor) : "");
         std::unordered_map<uint32_t, CameraData> cams;
         cams.reserve(n_cams);
 
@@ -227,6 +367,14 @@ namespace gs::loader {
             cam._width = read_u64(cur);
             cam._height = read_u64(cur);
 
+            // Apply scaling to dimensions if needed
+            if (scale_factor != 1.0f) {
+                cam._width = static_cast<uint64_t>(cam._width / scale_factor);
+                cam._height = static_cast<uint64_t>(cam._height / scale_factor);
+                LOG_TRACE("Scaled camera {} dimensions to {}x{}",
+                          cam._camera_ID, cam._width, cam._height);
+            }
+
             auto it = camera_model_ids.find(model_id);
             if (it == camera_model_ids.end() || it->second.second < 0) {
                 LOG_ERROR("Unsupported camera-model id: {}", model_id);
@@ -235,11 +383,21 @@ namespace gs::loader {
 
             cam._camera_model = it->second.first;
             int32_t param_cnt = it->second.second;
-            cam._params = torch::from_blob(const_cast<char*>(cur),
-                                           {param_cnt}, torch::kFloat64)
+
+            // Read raw parameters
+            std::vector<double> raw_params(param_cnt);
+            for (int j = 0; j < param_cnt; j++) {
+                raw_params[j] = read_f64(cur);
+            }
+
+            // Scale intrinsics based on camera model
+            if (scale_factor != 1.0f) {
+                scale_camera_intrinsics(cam._camera_model, raw_params, scale_factor);
+            }
+
+            cam._params = torch::from_blob(raw_params.data(), {param_cnt}, torch::kFloat64)
                               .clone()
                               .to(torch::kFloat32);
-            cur += param_cnt * sizeof(double);
 
             cams.emplace(cam._camera_ID, std::move(cam));
         }
@@ -387,16 +545,15 @@ namespace gs::loader {
     }
 
     // -----------------------------------------------------------------------------
-    //  cameras.txt
-    //  Camera list with one line of data per camera:
-    //    CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]
+    //  cameras.txt with optional scaling
     // -----------------------------------------------------------------------------
     std::unordered_map<uint32_t, CameraData>
-    read_cameras_text(const std::filesystem::path& file_path) {
+    read_cameras_text(const std::filesystem::path& file_path, float scale_factor = 1.0f) {
         LOG_TIMER_TRACE("Read cameras.txt");
         auto lines = read_text_file(file_path);
         std::unordered_map<uint32_t, CameraData> cams;
-        LOG_DEBUG("Reading {} cameras from text file", lines.size());
+        LOG_DEBUG("Reading {} cameras from text file{}", lines.size(),
+                  scale_factor != 1.0f ? std::format(" with scale factor {}", scale_factor) : "");
 
         for (const auto& line : lines) {
             const auto tokens = split_string(line, ' ');
@@ -415,10 +572,28 @@ namespace gs::loader {
             cam._width = std::stoi(tokens[2]);
             cam._height = std::stoi(tokens[3]);
 
+            // Apply scaling to dimensions if needed
+            if (scale_factor != 1.0f) {
+                cam._width = static_cast<uint64_t>(cam._width / scale_factor);
+                cam._height = static_cast<uint64_t>(cam._height / scale_factor);
+                LOG_TRACE("Scaled camera {} dimensions to {}x{}",
+                          cam._camera_ID, cam._width, cam._height);
+            }
+
             // Read parameters
-            cam._params = torch::empty({static_cast<int64_t>(tokens.size() - 4)}, torch::kFloat32);
+            std::vector<double> raw_params;
             for (uint64_t j = 4; j < tokens.size(); ++j) {
-                cam._params[static_cast<int64_t>(j) - 4] = std::stof(tokens[j]);
+                raw_params.push_back(std::stod(tokens[j]));
+            }
+
+            // Scale intrinsics based on camera model
+            if (scale_factor != 1.0f) {
+                scale_camera_intrinsics(cam._camera_model, raw_params, scale_factor);
+            }
+
+            cam._params = torch::empty({static_cast<int64_t>(raw_params.size())}, torch::kFloat32);
+            for (size_t j = 0; j < raw_params.size(); ++j) {
+                cam._params[j] = static_cast<float>(raw_params[j]);
             }
 
             cams.emplace(cam._camera_ID, std::move(cam));
@@ -464,7 +639,7 @@ namespace gs::loader {
     }
 
     // -----------------------------------------------------------------------------
-    //  Assemble per-image camera information
+    //  Assemble per-image camera information with dimension verification
     // -----------------------------------------------------------------------------
     std::tuple<std::vector<CameraData>, torch::Tensor>
     read_colmap_cameras(const std::filesystem::path base_path,
@@ -630,6 +805,7 @@ namespace gs::loader {
             }
             // fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, sx1, sy1
             case CAMERA_MODEL::THIN_PRISM_FISHEYE: {
+                throw std::runtime_error("THIN_PRISM_FISHEYE camera model is not supported but could be implemented in 3DGUT pretty easily");
                 out[i]._focal_x = out[i]._params[0].item<float>();
                 out[i]._focal_y = out[i]._params[1].item<float>();
                 out[i]._center_x = out[i]._params[2].item<float>();
@@ -649,13 +825,13 @@ namespace gs::loader {
             }
             // fx, fy, cx, cy, omega
             case CAMERA_MODEL::FOV: {
+                throw std::runtime_error("FOV camera model is not supported.");
                 out[i]._focal_x = out[i]._params[0].item<float>();
                 out[i]._focal_y = out[i]._params[1].item<float>();
                 out[i]._center_x = out[i]._params[2].item<float>();
                 out[i]._center_y = out[i]._params[3].item<float>();
-                float omega = out[i]._params[4].item<float>();
-                out[i]._radial_distortion = torch::tensor({omega}, torch::kFloat32);
-                out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
+                // float omega = out[i]._params[4].item<float>();
+                // out[i]._camera_model_type = ;
                 break;
             }
             default:
@@ -667,6 +843,36 @@ namespace gs::loader {
             out[i]._img_data = nullptr;
         }
 
+        // Verify actual image dimensions and apply correction if needed
+        if (!out.empty() && std::filesystem::exists(out[0]._image_path)) {
+            LOG_DEBUG("Verifying actual image dimensions against COLMAP database");
+
+            // Load first image to check actual dimensions
+            auto [img_data, actual_w, actual_h, channels] = load_image(out[0]._image_path);
+
+            int expected_w = out[0]._width;
+            int expected_h = out[0]._height;
+
+            float scale_x = static_cast<float>(actual_w) / expected_w;
+            float scale_y = static_cast<float>(actual_h) / expected_h;
+
+            if (std::abs(scale_x - 1.0f) > 1e-5 || std::abs(scale_y - 1.0f) > 1e-5) {
+                LOG_WARN("Image dimension mismatch detected!");
+                LOG_INFO("  Expected (from COLMAP): {}x{}", expected_w, expected_h);
+                LOG_INFO("  Actual (from image file): {}x{}", actual_w, actual_h);
+                LOG_INFO("  Applying correction scale: {:.3f}x{:.3f}", scale_x, scale_y);
+
+                // Apply correction to all cameras
+                for (auto& cam : out) {
+                    apply_dimension_correction(cam, scale_x, scale_y, actual_w, actual_h);
+                }
+            } else {
+                LOG_DEBUG("Image dimensions match COLMAP database ({}x{})", actual_w, actual_h);
+            }
+
+            free_image(img_data);
+        }
+
         LOG_INFO("Training with {} images", out.size());
         return {std::move(out), camera_locations.mean(0)};
     }
@@ -676,23 +882,23 @@ namespace gs::loader {
     // -----------------------------------------------------------------------------
 
     static fs::path get_sparse_file_path(const fs::path& base, const std::string& filename) {
-        fs::path candidate0 = base / "sparse" / "0" / filename;
-        if (fs::exists(candidate0)) {
-            LOG_TRACE("Found sparse file at: {}", candidate0.string());
-            return candidate0;
+        auto search_paths = get_colmap_search_paths(base);
+        auto found = find_file_in_paths(search_paths, filename);
+
+        if (!found.empty()) {
+            LOG_TRACE("Found sparse file at: {}", found.string());
+            return found;
         }
 
-        fs::path candidate = base / "sparse" / filename;
-        if (fs::exists(candidate)) {
-            LOG_TRACE("Found sparse file at: {}", candidate.string());
-            return candidate;
+        // Build error message showing all attempted locations
+        std::string error_msg = std::format("Cannot find '{}' in any of these locations:\n", filename);
+        for (const auto& dir : search_paths) {
+            error_msg += std::format("  - {}\n", (dir / filename).string());
         }
+        error_msg += "Searched case-insensitively for: " + filename;
 
-        LOG_ERROR("Cannot find {} in sparse directories", filename);
-        throw std::runtime_error(
-            "Cannot find \"" + filename +
-            "\" in \"" + candidate0.string() + "\" or \"" + candidate.string() + "\". "
-                                                                                 "Expected directory structure: 'sparse/0/' or 'sparse/'.");
+        LOG_ERROR("{}", error_msg);
+        throw std::runtime_error(error_msg);
     }
 
     PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {
@@ -707,10 +913,13 @@ namespace gs::loader {
 
         LOG_TIMER_TRACE("Read COLMAP cameras and images");
 
+        // Extract scale factor from folder name if present
+        const float scale_factor = extract_scale_from_folder(images_folder);
+
         fs::path cams_file = get_sparse_file_path(base, "cameras.bin");
         fs::path images_file = get_sparse_file_path(base, "images.bin");
 
-        auto cams = read_cameras_binary(cams_file);
+        auto cams = read_cameras_binary(cams_file, scale_factor);
         auto images = read_images_binary(images_file);
 
         LOG_INFO("Read {} cameras and {} images from COLMAP", cams.size(), images.size());
@@ -730,10 +939,13 @@ namespace gs::loader {
 
         LOG_TIMER_TRACE("Read COLMAP cameras and images (text)");
 
+        // Extract scale factor from folder name if present
+        const float scale_factor = extract_scale_from_folder(images_folder);
+
         fs::path cams_file = get_sparse_file_path(base, "cameras.txt");
         fs::path images_file = get_sparse_file_path(base, "images.txt");
 
-        auto cams = read_cameras_text(cams_file);
+        auto cams = read_cameras_text(cams_file, scale_factor);
         auto images = read_images_text(images_file);
 
         LOG_INFO("Read {} cameras and {} images from COLMAP text files", cams.size(), images.size());

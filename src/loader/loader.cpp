@@ -1,7 +1,16 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "loader/loader.hpp"
 #include "core/logger.hpp"
+#include "loader/filesystem_utils.hpp"
 #include "loader_service.hpp"
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <memory>
+#include <system_error>
 
 namespace gs::loader {
 
@@ -26,7 +35,7 @@ namespace gs::loader {
                 // Check if any registered loader can handle this path
                 // We would need to expose this functionality from the service
                 // For now, let's check common extensions
-                if (!std::filesystem::exists(path)) {
+                if (!safe_exists(path)) {
                     LOG_TRACE("Path does not exist: {}", path.string());
                     return false;
                 }
@@ -55,6 +64,85 @@ namespace gs::loader {
     std::unique_ptr<Loader> Loader::create() {
         LOG_DEBUG("Creating Loader instance");
         return std::make_unique<LoaderImpl>();
+    }
+
+    bool Loader::isDatasetPath(const std::filesystem::path& path) {
+        if (!safe_exists(path)) {
+            LOG_TRACE("Path does not exist for dataset check: {}", path.string());
+            return false;
+        }
+
+        if (!safe_is_directory(path)) {
+            auto ext = path.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            // JSON files might be datasets (transforms.json)
+            if (ext == ".json") {
+                LOG_TRACE("JSON file detected, treating as potential dataset: {}", path.string());
+                return true;
+            }
+
+            // PLY files are definitely not datasets
+            LOG_TRACE("Non-dataset file detected: {}", path.string());
+            return false;
+        }
+
+        // Check for COLMAP markers in any standard location
+        auto colmap_paths = get_colmap_search_paths(path);
+        const std::vector<std::string> colmap_markers = {
+            "cameras.bin", "cameras.txt", "images.bin", "images.txt"};
+
+        for (const auto& marker : colmap_markers) {
+            if (!find_file_in_paths(colmap_paths, marker).empty()) {
+                LOG_TRACE("COLMAP dataset detected at: {}", path.string());
+                return true;
+            }
+        }
+
+        // Blender/NeRF markers
+        if (safe_exists(path / "transforms.json") ||
+            safe_exists(path / "transforms_train.json")) {
+            LOG_TRACE("Blender/NeRF dataset detected at: {}", path.string());
+            return true;
+        }
+
+        LOG_TRACE("No dataset markers found in directory: {}", path.string());
+        return false;
+    }
+
+    // Static method to determine dataset type
+    DatasetType Loader::getDatasetType(const std::filesystem::path& path) {
+        if (!safe_exists(path)) {
+            return DatasetType::Unknown;
+        }
+
+        if (!safe_is_directory(path)) {
+            auto ext = path.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            if (ext == ".json") {
+                return DatasetType::Transforms;
+            }
+            return DatasetType::Unknown;
+        }
+
+        // Check for COLMAP markers
+        auto colmap_paths = get_colmap_search_paths(path);
+        const std::vector<std::string> colmap_markers = {
+            "cameras.bin", "cameras.txt", "images.bin", "images.txt"};
+
+        for (const auto& marker : colmap_markers) {
+            if (!find_file_in_paths(colmap_paths, marker).empty()) {
+                return DatasetType::COLMAP;
+            }
+        }
+
+        // Check for Transforms markers
+        if (safe_exists(path / "transforms.json") ||
+            safe_exists(path / "transforms_train.json")) {
+            return DatasetType::Transforms;
+        }
+
+        return DatasetType::Unknown;
     }
 
 } // namespace gs::loader

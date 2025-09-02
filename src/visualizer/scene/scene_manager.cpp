@@ -1,6 +1,11 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "scene/scene_manager.hpp"
 #include "core/logger.hpp"
 #include "loader/loader.hpp"
+#include "rendering/rendering_manager.hpp"
 #include "training/training_manager.hpp"
 #include "training_setup.hpp"
 #include <stdexcept>
@@ -32,6 +37,29 @@ namespace gs {
 
         cmd::ClearScene::when([this](const auto&) {
             clear();
+        });
+
+        // Handle PLY cycling with proper event emission for UI updates
+        cmd::CyclePLY::when([this](const auto&) {
+            // Check if rendering manager has split view enabled
+            if (rendering_manager_ && rendering_manager_->getSettings().split_view_enabled) {
+                // In split mode: advance the offset
+                rendering_manager_->advanceSplitOffset();
+                LOG_DEBUG("Advanced split view offset");
+            } else if (content_type_ == ContentType::PLYFiles) {
+                // Normal mode: existing cycle code
+                auto [hidden, shown] = scene_.cycleVisibilityWithNames();
+
+                if (!hidden.empty()) {
+                    events::cmd::SetPLYVisibility{.name = hidden, .visible = false}.emit();
+                }
+                if (!shown.empty()) {
+                    events::cmd::SetPLYVisibility{.name = shown, .visible = true}.emit();
+                    LOG_DEBUG("Cycled to PLY: {}", shown);
+                }
+
+                emitSceneChanged();
+            }
         });
     }
 
@@ -373,6 +401,10 @@ namespace gs {
 
     void SceneManager::emitSceneChanged() {
         events::state::SceneChanged{}.emit();
+    }
+
+    void SceneManager::setRenderingManager(visualizer::RenderingManager* rm) {
+        rendering_manager_ = rm;
     }
 
 } // namespace gs

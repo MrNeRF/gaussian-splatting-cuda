@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include <chrono>
@@ -24,6 +28,13 @@ namespace gs::loader {
 
     // Progress callback type
     using ProgressCallback = std::function<void(float percentage, const std::string& message)>;
+
+    // Dataset type enum
+    enum class DatasetType {
+        Unknown,
+        COLMAP,
+        Transforms
+    };
 
     // Public types that clients need
     struct LoadOptions {
@@ -58,6 +69,20 @@ namespace gs::loader {
          * @brief Create a loader instance
          */
         static std::unique_ptr<Loader> create();
+
+        /**
+         * @brief Quick check if path contains a dataset (vs single file like PLY)
+         * @param path Directory or file to check
+         * @return true if dataset, false if single file or not loadable
+         */
+        static bool isDatasetPath(const std::filesystem::path& path);
+
+        /**
+         * @brief Determine the type of dataset at the given path
+         * @param path Directory or file to check
+         * @return DatasetType enum value
+         */
+        static DatasetType getDatasetType(const std::filesystem::path& path);
 
         /**
          * @brief Load data from any supported format

@@ -100,6 +100,8 @@ cmake --build build -- -j$(nproc)
 # Set up vcpkg (one-time setup)
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg && ./bootstrap-vcpkg.sh -disableMetrics && cd ..
+
+## If you want you can specify vcpkg locally without globally setting env variable (see -DCMAKE_TOOLCHAIN_FILE version)
 export VCPKG_ROOT=/path/to/vcpkg  # Add to ~/.bashrc
 
 # Clone repository
@@ -113,6 +115,10 @@ rm libtorch-cxx11-abi-shared-with-deps-2.7.0+cu128.zip
 
 # Build
 cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
+
+## Or if you want you can specify your own vcpkg 
+# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake" -G Ninja 
+
 cmake --build build -- -j$(nproc)
 ```
 
@@ -127,6 +133,8 @@ Run in **VS Developer Command Prompt**:
 # Set up vcpkg (one-time setup)
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg && .\bootstrap-vcpkg.bat -disableMetrics && cd ..
+
+## If you want you can specify vcpkg locally without globally setting env variable (see -DCMAKE_TOOLCHAIN_FILE version)
 set VCPKG_ROOT=%CD%\vcpkg
 
 # Clone repository
@@ -150,6 +158,10 @@ del libtorch-release.zip
 
 # Build
 cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+## Or if you want you can specify your own vcpkg 
+# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
+
 cmake --build build --config Release -j
 ```
 

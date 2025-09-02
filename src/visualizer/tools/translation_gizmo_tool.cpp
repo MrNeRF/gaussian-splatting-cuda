@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "tools/translation_gizmo_tool.hpp"
 #include "core/events.hpp"
 #include "rendering/rendering_manager.hpp"

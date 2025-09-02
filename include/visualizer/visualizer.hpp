@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include <expected>
@@ -23,6 +27,7 @@ namespace gs::visualizer {
         int height = 720;
         bool antialiasing = false;
         bool enable_cuda_interop = true;
+        bool gut = false;
     };
 
     class Visualizer {

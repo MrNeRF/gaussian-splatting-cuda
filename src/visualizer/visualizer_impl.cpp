@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "visualizer_impl.hpp"
 #include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
@@ -29,9 +33,13 @@ namespace gs::visualizer {
         // Create rendering manager with initial antialiasing setting
         rendering_manager_ = std::make_unique<RenderingManager>();
 
+        // Connect scene manager to rendering manager
+        scene_manager_->setRenderingManager(rendering_manager_.get());
+
         // Set initial antialiasing
         RenderSettings initial_settings;
         initial_settings.antialiasing = options.antialiasing;
+        initial_settings.gut = options.gut;
         rendering_manager_->updateSettings(initial_settings);
 
         // Create command processor
@@ -254,6 +262,7 @@ namespace gs::visualizer {
                 window_manager_->getWindow(), viewport_);
             input_controller_->initialize();
             input_controller_->setTrainingManager(trainer_manager_);
+            input_controller_->setRenderingManager(rendering_manager_.get());
         }
 
         // Initialize rendering with proper viewport dimensions
@@ -333,7 +342,8 @@ namespace gs::visualizer {
             .viewport = viewport_,
             .settings = rendering_manager_->getSettings(),
             .viewport_region = has_viewport_region ? &viewport_region : nullptr,
-            .has_focus = gui_manager_ && gui_manager_->isViewportFocused()};
+            .has_focus = gui_manager_ && gui_manager_->isViewportFocused(),
+            .scene_manager = scene_manager_.get()};
 
         rendering_manager_->renderFrame(context, scene_manager_.get());
 

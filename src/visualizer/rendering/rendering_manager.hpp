@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "framerate_controller.hpp"
@@ -7,6 +11,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace gs {
     class SceneManager;
@@ -52,6 +57,25 @@ namespace gs::visualizer {
         // Translation gizmo
         bool show_translation_gizmo = false;
         float gizmo_scale = 1.0f;
+
+        // Camera frustums
+        bool show_camera_frustums = false;
+        float camera_frustum_scale = 0.25f;
+        glm::vec3 train_camera_color = glm::vec3(1.0f, 1.0f, 1.0f);
+        glm::vec3 eval_camera_color = glm::vec3(1.0f, 0.0f, 0.0f);
+
+        // Split view
+        bool split_view_enabled = false;
+        float split_position = 0.5f;
+        size_t split_view_offset = 0;
+
+        bool gut = false;
+    };
+
+    struct SplitViewInfo {
+        bool enabled = false;
+        std::string left_name;
+        std::string right_name;
     };
 
     struct ViewportRegion {
@@ -65,6 +89,7 @@ namespace gs::visualizer {
             const RenderSettings& settings;
             const ViewportRegion* viewport_region = nullptr;
             bool has_focus = false;
+            SceneManager* scene_manager = nullptr;
         };
 
         RenderingManager();
@@ -95,6 +120,10 @@ namespace gs::visualizer {
         void setFov(float f);
         void setScalingModifier(float s);
 
+        // Split view control
+        void advanceSplitOffset();
+        SplitViewInfo getSplitViewInfo() const;
+
         // FPS monitoring
         float getCurrentFPS() const { return framerate_controller_.getCurrentFPS(); }
         float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
@@ -107,6 +136,10 @@ namespace gs::visualizer {
         void renderOverlays(const RenderContext& context);
         void setupEventHandlers();
 
+        std::optional<gs::rendering::SplitViewRequest> createSplitViewRequest(
+            const RenderContext& context,
+            SceneManager* scene_manager);
+
         // Core components
         std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         FramerateController framerate_controller_;
@@ -117,6 +150,10 @@ namespace gs::visualizer {
         size_t last_model_ptr_ = 0;
         glm::ivec2 last_render_size_{0, 0};
         std::chrono::steady_clock::time_point last_training_render_;
+
+        // Split view state
+        mutable std::mutex split_info_mutex_;
+        SplitViewInfo current_split_info_;
 
         // Settings
         RenderSettings settings_;

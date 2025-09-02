@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gui/panels/main_panel.hpp"
 #include "core/events.hpp"
 #include "gui/panels/tools_panel.hpp"
@@ -135,6 +139,35 @@ namespace gs::gui::panels {
             }
 
             if (axes_changed) {
+                settings_changed = true;
+            }
+
+            ImGui::Unindent();
+        }
+
+        // Camera Frustums
+        ImGui::Separator();
+        if (ImGui::Checkbox("Show Camera Frustums", &settings.show_camera_frustums)) {
+            settings_changed = true;
+        }
+
+        if (settings.show_camera_frustums) {
+            ImGui::Indent();
+
+            if (ImGui::SliderFloat("Frustum Scale", &settings.camera_frustum_scale, 0.01f, 1.0f)) {
+                settings_changed = true;
+            }
+
+            ImGui::Text("Colors:");
+            float train_color[3] = {settings.train_camera_color.x, settings.train_camera_color.y, settings.train_camera_color.z};
+            if (ImGui::ColorEdit3("Training##cam", train_color)) {
+                settings.train_camera_color = glm::vec3(train_color[0], train_color[1], train_color[2]);
+                settings_changed = true;
+            }
+
+            float eval_color[3] = {settings.eval_camera_color.x, settings.eval_camera_color.y, settings.eval_camera_color.z};
+            if (ImGui::ColorEdit3("Evaluation##cam", eval_color)) {
+                settings.eval_camera_color = glm::vec3(eval_color[0], eval_color[1], eval_color[2]);
                 settings_changed = true;
             }
 

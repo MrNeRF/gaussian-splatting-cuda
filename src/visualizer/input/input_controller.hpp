@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "core/events.hpp"
@@ -16,6 +20,7 @@ namespace gs::visualizer {
         class TranslationGizmoTool;
     }
     class ToolContext;
+    class RenderingManager;
 
     class InputController {
     public:
@@ -38,6 +43,11 @@ namespace gs::visualizer {
         // Set tool context for gizmo
         void setToolContext(ToolContext* context) {
             tool_context_ = context;
+        }
+
+        // Set rendering manager for split view
+        void setRenderingManager(RenderingManager* rm) {
+            rendering_manager_ = rm;
         }
 
         // Called every frame by GUI manager to update viewport bounds
@@ -88,11 +98,13 @@ namespace gs::visualizer {
         bool shouldCameraHandleInput() const;
         void updateCameraSpeed(bool increase);
         void publishCameraMove();
+        bool isNearSplitter(double x) const;
 
         // Core state
         GLFWwindow* window_;
         Viewport& viewport_;
         std::shared_ptr<const TrainerManager> training_manager_;
+        RenderingManager* rendering_manager_ = nullptr;
 
         // Tool support
         std::shared_ptr<tools::TranslationGizmoTool> translation_gizmo_;
@@ -109,10 +121,13 @@ namespace gs::visualizer {
             Pan,
             Rotate,
             Orbit,
-            Gizmo
+            Gizmo,
+            Splitter
         };
         DragMode drag_mode_ = DragMode::None;
         glm::dvec2 last_mouse_pos_{0, 0};
+        float splitter_start_pos_ = 0.5f;
+        double splitter_start_x_ = 0.0;
 
         // Key states (only what we actually need)
         bool key_r_pressed_ = false;
@@ -128,6 +143,14 @@ namespace gs::visualizer {
 
         // Frame timing for WASD movement
         std::chrono::high_resolution_clock::time_point last_frame_time_;
+
+        // Cursor state tracking - NEW!
+        enum class CursorType {
+            Default,
+            Resize
+        };
+        CursorType current_cursor_ = CursorType::Default;
+        GLFWcursor* resize_cursor_ = nullptr;
 
         // Static instance for callbacks
         static InputController* instance_;

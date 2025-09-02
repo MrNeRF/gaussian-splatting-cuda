@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "trainer.hpp"
@@ -52,6 +56,7 @@ namespace gs {
         void resumeTraining();
         void stopTraining();
         void requestSaveCheckpoint();
+        bool resetTraining();
 
         // State queries
         State getState() const { return state_.load(); }
@@ -65,6 +70,10 @@ namespace gs {
         bool canPause() const { return state_ == State::Running; }
         bool canResume() const { return state_ == State::Paused; }
         bool canStop() const { return isTrainingActive(); }
+        bool canReset() const {
+            auto s = state_.load();
+            return s == State::Paused || s == State::Completed || s == State::Ready;
+        }
 
         // Progress information - directly query trainer
         int getCurrentIteration() const;
@@ -92,7 +101,12 @@ namespace gs {
 
         void setProject(std::shared_ptr<gs::management::Project> project);
 
+        std::shared_ptr<gs::management::Project> getProject() const { return project_; }
+
     private:
+        // Helper method to avoid duplicated initialization logic
+        std::expected<bool, std::string> initializeTrainerFromProject();
+
         // Training thread function
         void trainingThreadFunc(std::stop_token stop_token);
 

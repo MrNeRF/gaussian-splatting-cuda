@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gui/panels/scene_panel.hpp"
 #include "core/logger.hpp"
 #include "gui/windows/image_preview.hpp"
@@ -38,6 +42,17 @@ namespace gs::gui {
 
         events::state::PLYRemoved::when([this](const auto& event) {
             handlePLYRemoved(event);
+        });
+
+        // Listen for PLY visibility changes to update checkboxes
+        events::cmd::SetPLYVisibility::when([this](const auto& event) {
+            // Update the visibility state in our local PLY nodes
+            auto it = std::find_if(m_plyNodes.begin(), m_plyNodes.end(),
+                                   [&event](const PLYNode& node) { return node.name == event.name; });
+            if (it != m_plyNodes.end()) {
+                it->visible = event.visible;
+                LOG_TRACE("Updated PLY '{}' visibility in scene panel to: {}", event.name, event.visible);
+            }
         });
     }
 
@@ -260,6 +275,11 @@ namespace gs::gui {
 
     void ScenePanel::renderPLYSceneGraph() {
         ImGui::Text("Scene Graph (PLY Mode)");
+
+        if (!m_plyNodes.empty() && m_plyNodes.size() > 1) {
+            ImGui::TextDisabled("Tip: Press 'T' to cycle through PLYs");
+        }
+
         ImGui::Separator();
 
         // Add PLY button

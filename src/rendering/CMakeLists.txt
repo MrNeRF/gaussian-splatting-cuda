@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Add the internal CUDA subdirectory first
 add_subdirectory(cuda)
 
@@ -16,6 +20,8 @@ set(RENDERING_SOURCES
         framebuffer_factory.cpp
         shader_manager.cpp
         screen_renderer.cpp
+        split_view_renderer.cpp
+        camera_frustum_renderer.cpp
 )
 
 # Conditionally add CUDA GL interop

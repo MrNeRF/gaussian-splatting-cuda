@@ -1,5 +1,11 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "training/training_manager.hpp"
 #include "core/logger.hpp"
+#include "training/training_setup.hpp"
+#include <c10/cuda/CUDACachingAllocator.h>
 #include <stdexcept>
 
 namespace gs {
@@ -28,6 +34,10 @@ namespace gs {
             LOG_DEBUG("Setting new trainer");
             trainer_ = std::move(trainer);
             trainer_->setProject(project_);
+
+            if (project_) {
+                trainer_->load_cameras_info();
+            }
 
             setState(State::Ready);
 
@@ -84,6 +94,30 @@ namespace gs {
         LOG_INFO("Trainer cleared");
     }
 
+    std::expected<bool, std::string> TrainerManager::initializeTrainerFromProject() {
+        if (!trainer_) {
+            return std::unexpected("No trainer available");
+        }
+
+        if (!project_) {
+            return std::unexpected("No project available");
+        }
+
+        // Create training parameters from project
+        param::TrainingParameters params;
+        params.dataset = project_->getProjectData().data_set_info;
+        params.optimization = project_->getOptimizationParams();
+        params.dataset.output_path = project_->getProjectOutputFolder();
+
+        // Initialize trainer
+        auto init_result = trainer_->initialize(params);
+        if (!init_result) {
+            return std::unexpected(init_result.error());
+        }
+
+        return true;
+    }
+
     bool TrainerManager::startTraining() {
         LOG_TIMER("TrainerManager::startTraining");
 
@@ -94,6 +128,17 @@ namespace gs {
 
         if (!trainer_) {
             LOG_ERROR("Cannot start training - no trainer available");
+            return false;
+        }
+
+        // ALWAYS reinitialize trainer to pick up any parameter changes from the project
+        // This ensures that any UI changes are applied
+        LOG_INFO("Initializing trainer with current project parameters");
+        auto init_result = initializeTrainerFromProject();
+        if (!init_result) {
+            LOG_ERROR("Failed to initialize trainer: {}", init_result.error());
+            last_error_ = init_result.error();
+            setState(State::Error);
             return false;
         }
 
@@ -189,6 +234,60 @@ namespace gs {
         } else {
             LOG_WARN("Cannot save checkpoint - training not active");
         }
+    }
+
+    bool TrainerManager::resetTraining() {
+        LOG_INFO("Resetting training to initial state");
+
+        if (!trainer_) {
+            LOG_WARN("No trainer to reset");
+            return false;
+        }
+
+        // Stop if active
+        if (isTrainingActive()) {
+            stopTraining();
+            waitForCompletion();
+        }
+
+        if (trainer_->isInitialized()) {
+            LOG_DEBUG("Clearing GPU memory from previous training");
+
+            // Save params before destroying
+            auto params = trainer_->getParams();
+
+            // Destroy the trainer to release all tensors
+            trainer_.reset();
+
+            // Force PyTorch to release cached memory back to system
+            c10::cuda::CUDACachingAllocator::emptyCache();
+            cudaDeviceSynchronize();
+
+            LOG_DEBUG("GPU memory cache cleared");
+
+            // Recreate trainer
+            auto setup_result = gs::training::setupTraining(params);
+            if (setup_result) {
+                trainer_ = std::move(setup_result->trainer);
+                trainer_->setProject(project_);
+                if (project_) {
+                    trainer_->load_cameras_info();
+                }
+            } else {
+                LOG_ERROR("Failed to recreate trainer after reset: {}", setup_result.error());
+                setState(State::Error);
+                return false;
+            }
+        }
+
+        // Clear loss buffer
+        loss_buffer_.clear();
+
+        // Set to Ready state
+        setState(State::Ready);
+
+        LOG_INFO("Training reset complete - GPU memory freed, ready to start with current parameters");
+        return true;
     }
 
     void TrainerManager::waitForCompletion() {

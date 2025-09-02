@@ -1,9 +1,14 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "core/splat_data.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gs {
@@ -34,6 +39,7 @@ namespace gs {
         void removeNode(const std::string& name);
         void setNodeVisibility(const std::string& name, bool visible);
         void clear();
+        std::pair<std::string, std::string> cycleVisibilityWithNames();
 
         // Get combined model for rendering
         const SplatData* getCombinedModel() const;
@@ -45,6 +51,9 @@ namespace gs {
         const Node* getNode(const std::string& name) const;
         Node* getMutableNode(const std::string& name);
         bool hasNodes() const { return !nodes_.empty(); }
+
+        // Get visible nodes for split view
+        std::vector<const Node*> getVisibleNodes() const;
 
     private:
         std::vector<Node> nodes_;

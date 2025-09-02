@@ -1,8 +1,12 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gui/windows/file_browser.hpp"
+#include "loader/loader.hpp"
 #include "project/project.hpp"
 #include <algorithm>
 #include <imgui.h>
-#include <print>
 
 namespace gs::gui {
     using management::Project;
@@ -89,13 +93,7 @@ namespace gs::gui {
                 std::string dirname = "[DIR] " + dir.path().filename().string();
                 bool is_selected = (selected_file_ == dir.path().string());
 
-                bool is_dataset = false;
-                if (std::filesystem::exists(dir.path() / "sparse" / "0" / "cameras.bin") ||
-                    std::filesystem::exists(dir.path() / "sparse" / "cameras.bin") ||
-                    std::filesystem::exists(dir.path() / "transforms.json") ||
-                    std::filesystem::exists(dir.path() / "transforms_train.json")) {
-                    is_dataset = true;
-                }
+                bool is_dataset = gs::loader::Loader::isDatasetPath(dir.path());
 
                 if (is_dataset) {
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
@@ -158,20 +156,9 @@ namespace gs::gui {
             std::filesystem::path selected_path(selected_file_);
 
             if (std::filesystem::is_directory(selected_path)) {
-                bool is_colmap_dataset = false;
-                bool is_transforms_dataset = false;
+                bool is_dataset = gs::loader::Loader::isDatasetPath(selected_path);
 
-                if (std::filesystem::exists(selected_path / "sparse" / "0" / "cameras.bin") ||
-                    std::filesystem::exists(selected_path / "sparse" / "cameras.bin")) {
-                    is_colmap_dataset = true;
-                }
-
-                if (std::filesystem::exists(selected_path / "transforms.json") ||
-                    std::filesystem::exists(selected_path / "transforms_train.json")) {
-                    is_transforms_dataset = true;
-                }
-
-                if (is_colmap_dataset || is_transforms_dataset) {
+                if (is_dataset) {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
                     if (ImGui::Button("Load Dataset", ImVec2(120, 0))) {
                         if (on_file_selected_) {
@@ -182,7 +169,11 @@ namespace gs::gui {
                     ImGui::PopStyleColor();
 
                     ImGui::SameLine();
-                    ImGui::TextDisabled(is_colmap_dataset ? "(COLMAP)" : "(Transforms)");
+
+                    auto dataset_type = gs::loader::Loader::getDatasetType(selected_path);
+                    const char* type_str = (dataset_type == gs::loader::DatasetType::COLMAP) ? "(COLMAP)" : (dataset_type == gs::loader::DatasetType::Transforms) ? "(Transforms)"
+                                                                                                                                                                  : "(Dataset)";
+                    ImGui::TextDisabled(type_str);
                 } else {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
                     if (ImGui::Button("Enter Directory", ImVec2(120, 0))) {

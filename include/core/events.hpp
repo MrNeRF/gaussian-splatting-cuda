@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 #include "core/event_bus.hpp"
 #include <filesystem>
@@ -49,6 +53,8 @@ namespace gs {
             EVENT(AddPLY, std::filesystem::path path; std::string name;);
             EVENT(RemovePLY, std::string name;);
             EVENT(SetPLYVisibility, std::string name; bool visible;);
+            EVENT(CyclePLY, );
+            EVENT(ToggleSplitView, );
         } // namespace cmd
 
         // ============================================================================
@@ -147,6 +153,7 @@ namespace gs {
                   bool enabled;);
             EVENT(CropBoxVisibilityChanged, bool visible;);
             EVENT(ConsoleResult, std::string command; std::string result;);
+            EVENT(SplitPositionChanged, float position;);
         } // namespace ui
 
         // ============================================================================

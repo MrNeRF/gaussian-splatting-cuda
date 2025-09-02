@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "core/camera.hpp"
@@ -63,6 +67,5 @@ namespace gs::training {
         bool packed = false,
         bool antialiased = false,
         RenderMode render_mode = RenderMode::RGB,
-        const gs::geometry::BoundingBox* = nullptr,
-        bool gut = false);
+        const gs::geometry::BoundingBox* = nullptr);
 } // namespace gs::training

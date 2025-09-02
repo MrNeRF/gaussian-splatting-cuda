@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "rasterizer.hpp"
 #include "Ops.h"
 #include "rasterizer_autograd.hpp"
@@ -47,8 +51,7 @@ namespace gs::training {
         bool packed,
         bool antialiased,
         RenderMode render_mode,
-        const gs::geometry::BoundingBox* bounding_box,
-        bool gut) {
+        const gs::geometry::BoundingBox* bounding_box) {
         // Ensure we don't use packed mode (not supported in this implementation)
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
 
@@ -179,13 +182,27 @@ namespace gs::training {
 
         std::optional<torch::Tensor> radial_distortion;
         if (viewpoint_camera.radial_distortion().numel() > 0) {
-            radial_distortion = viewpoint_camera.radial_distortion().to(torch::kCUDA);
-            TORCH_CHECK(radial_distortion->dim() == 1, "radial_distortion must be 1D, got ", radial_distortion->sizes());
+            auto radial_distortion_val = viewpoint_camera.radial_distortion().to(torch::kCUDA);
+            TORCH_CHECK(radial_distortion_val.dim() == 1, "radial_distortion must be 1D, got ", radial_distortion_val.sizes());
+            if (radial_distortion_val.size(-1) < 4) {
+                // Pad to 4 coefficients if less are provided
+                radial_distortion_val = torch::nn::functional::pad(
+                    radial_distortion_val,
+                    torch::nn::functional::PadFuncOptions({0, 4 - radial_distortion_val.size(-1)}).mode(torch::kConstant).value(0));
+            }
+            radial_distortion = radial_distortion_val;
         }
         std::optional<torch::Tensor> tangential_distortion;
         if (viewpoint_camera.tangential_distortion().numel() > 0) {
-            tangential_distortion = viewpoint_camera.tangential_distortion().to(torch::kCUDA);
-            TORCH_CHECK(tangential_distortion->dim() == 1, "tangential_distortion must be 1D, got ", tangential_distortion->sizes());
+            auto tangential_distortion_val = viewpoint_camera.tangential_distortion().to(torch::kCUDA);
+            TORCH_CHECK(tangential_distortion_val.dim() == 1, "tangential_distortion must be 1D, got ", tangential_distortion_val.sizes());
+            if (tangential_distortion_val.size(-1) < 2) {
+                // Pad to 2 coefficients if less are provided
+                tangential_distortion_val = torch::nn::functional::pad(
+                    tangential_distortion_val,
+                    torch::nn::functional::PadFuncOptions({0, 2 - tangential_distortion_val.size(-1)}).mode(torch::kConstant).value(0));
+            }
+            tangential_distortion = tangential_distortion_val;
         }
 
         // Step 1: Projection
@@ -194,53 +211,34 @@ namespace gs::training {
         torch::Tensor depths;
         torch::Tensor conics;
         torch::Tensor compensations;
-        if (gut) {
-            auto proj_settings = GUTProjectionSettings{
-                image_width,
-                image_height,
-                eps2d,
-                near_plane,
-                far_plane,
-                radius_clip,
-                scaling_modifier,
-                viewpoint_camera.camera_model_type()};
-            auto proj_outputs = fully_fused_projection_with_ut(
-                means3D,
-                rotations,
-                scales,
-                opacities,
-                viewmat,
-                K,
-                radial_distortion,
-                tangential_distortion,
-                std::nullopt,
-                proj_settings,
-                UnscentedTransformParameters());
 
-            radii = proj_outputs[0];
-            means2d = proj_outputs[1];
-            depths = proj_outputs[2];
-            conics = proj_outputs[3];
-            compensations = proj_outputs[4];
-        } else {
-            auto proj_settings = ProjectionSettings{
-                image_width,
-                image_height,
-                eps2d,
-                near_plane,
-                far_plane,
-                radius_clip,
-                scaling_modifier};
+        auto proj_settings = GUTProjectionSettings{
+            image_width,
+            image_height,
+            eps2d,
+            near_plane,
+            far_plane,
+            radius_clip,
+            scaling_modifier,
+            viewpoint_camera.camera_model_type()};
+        auto proj_outputs = fully_fused_projection_with_ut(
+            means3D,
+            rotations,
+            scales,
+            opacities,
+            viewmat,
+            K,
+            radial_distortion,
+            tangential_distortion,
+            std::nullopt,
+            proj_settings,
+            UnscentedTransformParameters());
 
-            auto proj_outputs = ProjectionFunction::apply(
-                means3D, rotations, scales, opacities, viewmat, K, proj_settings);
-
-            radii = proj_outputs[0];
-            means2d = proj_outputs[1];
-            depths = proj_outputs[2];
-            conics = proj_outputs[3];
-            compensations = proj_outputs[4];
-        }
+        radii = proj_outputs[0];
+        means2d = proj_outputs[1];
+        depths = proj_outputs[2];
+        conics = proj_outputs[3];
+        compensations = proj_outputs[4];
 
         // Create means2d with gradient tracking for backward compatibility
         auto means2d_with_grad = means2d.contiguous();
@@ -336,47 +334,32 @@ namespace gs::training {
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
 
         // Step 6: Rasterization
-        torch::Tensor rendered_image;
-        torch::Tensor rendered_alpha;
-        if (gut) {
-            auto raster_settings = GUTRasterizationSettings{
-                image_width,
-                image_height,
-                tile_size,
-                scaling_modifier,
-                viewpoint_camera.camera_model_type()};
-            auto ut_params = UnscentedTransformParameters{};
-            auto raster_outputs = GUTRasterizationFunction::apply(
-                means3D,
-                rotations,
-                scales,
-                render_colors,
-                final_opacities,
-                final_bg,
-                std::nullopt,
-                viewmat,
-                K,
-                radial_distortion,
-                tangential_distortion,
-                std::nullopt, // thin_prism_coeffs
-                isect_offsets,
-                flatten_ids,
-                raster_settings,
-                ut_params);
-            rendered_image = raster_outputs[0];
-            rendered_alpha = raster_outputs[1];
-        } else {
-            auto raster_settings = RasterizationSettings{
-                image_width,
-                image_height,
-                tile_size};
-
-            auto raster_outputs = RasterizationFunction::apply(
-                means2d_with_grad, conics, render_colors, final_opacities, final_bg,
-                isect_offsets, flatten_ids, raster_settings);
-            rendered_image = raster_outputs[0];
-            rendered_alpha = raster_outputs[1];
-        }
+        auto raster_settings = GUTRasterizationSettings{
+            image_width,
+            image_height,
+            tile_size,
+            scaling_modifier,
+            viewpoint_camera.camera_model_type()};
+        auto ut_params = UnscentedTransformParameters{};
+        auto raster_outputs = GUTRasterizationFunction::apply(
+            means3D,
+            rotations,
+            scales,
+            render_colors,
+            final_opacities,
+            final_bg,
+            std::nullopt,
+            viewmat,
+            K,
+            radial_distortion,
+            tangential_distortion,
+            std::nullopt, // thin_prism_coeffs
+            isect_offsets,
+            flatten_ids,
+            raster_settings,
+            ut_params);
+        auto rendered_image = raster_outputs[0];
+        auto rendered_alpha = raster_outputs[1];
 
         // Step 7: Post-process based on render mode
         torch::Tensor final_image, final_depth;
