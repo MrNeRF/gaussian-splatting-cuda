@@ -438,7 +438,11 @@ namespace gs {
         pc.shN = _shN.transpose(1, 2).flatten(1).cpu();
         pc.opacity = _opacity.cpu();
         pc.scaling = _scaling.cpu();
-        pc.rotation = _rotation.cpu();
+
+        pc.rotation = torch::nn::functional::normalize(_rotation,
+                                                       torch::nn::functional::NormalizeFuncOptions().dim(-1))
+                          .cpu()
+                          .contiguous();
 
         // Set attribute names for PLY export
         pc.attribute_names = get_attribute_names();
