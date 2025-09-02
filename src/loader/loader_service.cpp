@@ -7,6 +7,7 @@
 #include "loader/loaders/blender_loader.hpp"
 #include "loader/loaders/colmap_loader.hpp"
 #include "loader/loaders/ply_loader.hpp"
+#include "loader/loaders/sogs_loader.hpp"
 #include <format>
 
 namespace gs::loader {
@@ -16,6 +17,7 @@ namespace gs::loader {
 
         // Register default loaders
         registry_->registerLoader(std::make_unique<PLYLoader>());
+        registry_->registerLoader(std::make_unique<SogLoader>());
         registry_->registerLoader(std::make_unique<ColmapLoader>());
         registry_->registerLoader(std::make_unique<BlenderLoader>());
 

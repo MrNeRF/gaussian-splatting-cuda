@@ -146,7 +146,9 @@ namespace gs {
                     {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
                     {"random", defaults.random, "Use random initialization instead of SfM"},
                     {"init_num_pts", defaults.init_num_pts, "Number of random initialization points"},
-                    {"init_extent", defaults.init_extent, "Extent of random initialization"}};
+                    {"init_extent", defaults.init_extent, "Extent of random initialization"},
+                    {"save_sog", defaults.save_sog, "Save in SOG format alongside PLY"},
+                    {"sog_iterations", defaults.sog_iterations, "K-means iterations for SOG compression"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -295,6 +297,8 @@ namespace gs {
             opt_json["random"] = random;
             opt_json["init_num_pts"] = init_num_pts;
             opt_json["init_extent"] = init_extent;
+            opt_json["save_sog"] = save_sog;
+            opt_json["sog_iterations"] = sog_iterations;
 
             return opt_json;
         }
@@ -444,6 +448,12 @@ namespace gs {
             }
             if (json.contains("init_extent")) {
                 params.init_extent = json["init_extent"];
+            }
+            if (json.contains("save_sog")) {
+                params.save_sog = json["save_sog"];
+            }
+            if (json.contains("sog_iterations")) {
+                params.sog_iterations = json["sog_iterations"];
             }
 
             return params;

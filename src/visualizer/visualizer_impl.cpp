@@ -413,7 +413,7 @@ namespace gs::visualizer {
                   });
 
         if (!plys.empty()) {
-            scene_manager_->changeContentType(SceneManager::ContentType::PLYFiles);
+            scene_manager_->changeContentType(SceneManager::ContentType::SplatFiles);
         }
 
         // set all of the nodes to invisible except the last one

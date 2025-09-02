@@ -5,6 +5,7 @@
 #include "core/data_loading_service.hpp"
 #include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
+#include <algorithm>
 #include <stdexcept>
 
 namespace gs::visualizer {
@@ -29,15 +30,73 @@ namespace gs::visualizer {
         if (cmd.is_dataset) {
             loadDataset(cmd.path);
         } else {
-            // Check if we should add or replace
-            if (scene_manager_->hasPLYFiles()) {
-                // In PLY viewing mode, add to existing
-                scene_manager_->addPLY(cmd.path);
+            // Determine file type and load appropriately
+            if (isSOGFile(cmd.path)) {
+                // Check if we should add or replace
+                if (scene_manager_->hasSplatFiles()) {
+                    // In viewing mode, add to existing
+                    scene_manager_->addSplatFile(cmd.path);
+                } else {
+                    // Not in viewing mode - load as new scene
+                    scene_manager_->loadSplatFile(cmd.path);
+                }
+            } else if (isPLYFile(cmd.path)) {
+                // Check if we should add or replace
+                if (scene_manager_->hasSplatFiles()) {
+                    // In viewing mode, add to existing
+                    scene_manager_->addPLY(cmd.path);
+                } else {
+                    // Not in viewing mode - load as new scene
+                    scene_manager_->loadPLY(cmd.path);
+                }
             } else {
-                // Not in viewing mode - load as new scene
-                scene_manager_->loadPLY(cmd.path);
+                // Let scene manager determine the type
+                scene_manager_->loadSplatFile(cmd.path);
             }
         }
+    }
+
+    bool DataLoadingService::isSOGFile(const std::filesystem::path& path) const {
+        // Check for .sog extension
+        auto ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext == ".sog") {
+            return true;
+        }
+
+        // Check for SOG directory (with meta.json and WebP files)
+        if (std::filesystem::is_directory(path)) {
+            if (std::filesystem::exists(path / "meta.json")) {
+                // Check for SOG-specific files
+                if (std::filesystem::exists(path / "means_l.webp") ||
+                    std::filesystem::exists(path / "means_u.webp") ||
+                    std::filesystem::exists(path / "quats.webp") ||
+                    std::filesystem::exists(path / "scales.webp") ||
+                    std::filesystem::exists(path / "sh0.webp")) {
+                    return true;
+                }
+            }
+        }
+
+        // Check if it's a meta.json file that's part of a SOG dataset
+        if (path.filename() == "meta.json") {
+            auto parent = path.parent_path();
+            if (std::filesystem::exists(parent / "means_l.webp") ||
+                std::filesystem::exists(parent / "means_u.webp") ||
+                std::filesystem::exists(parent / "quats.webp") ||
+                std::filesystem::exists(parent / "scales.webp") ||
+                std::filesystem::exists(parent / "sh0.webp")) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool DataLoadingService::isPLYFile(const std::filesystem::path& path) const {
+        auto ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        return ext == ".ply";
     }
 
     std::expected<void, std::string> DataLoadingService::loadPLY(const std::filesystem::path& path) {
@@ -56,6 +115,51 @@ namespace gs::visualizer {
             return {};
         } catch (const std::exception& e) {
             std::string error_msg = std::format("Failed to load PLY: {}", e.what());
+            LOG_ERROR("{} (Path: {})", error_msg, path.string());
+            throw std::runtime_error(error_msg);
+        }
+    }
+
+    std::expected<void, std::string> DataLoadingService::loadSOG(const std::filesystem::path& path) {
+        LOG_TIMER("LoadSOG");
+
+        try {
+            LOG_INFO("Loading SOG file: {}", path.string());
+
+            // Load through scene manager
+            scene_manager_->loadSplatFile(path);
+
+            LOG_INFO("Successfully loaded SOG: {} (from: {})",
+                     path.filename().string(),
+                     path.parent_path().string());
+
+            return {};
+        } catch (const std::exception& e) {
+            std::string error_msg = std::format("Failed to load SOG: {}", e.what());
+            LOG_ERROR("{} (Path: {})", error_msg, path.string());
+            throw std::runtime_error(error_msg);
+        }
+    }
+
+    std::expected<void, std::string> DataLoadingService::loadSplatFile(const std::filesystem::path& path) {
+        LOG_TIMER("LoadSplatFile");
+
+        try {
+            // Determine file type
+            if (isSOGFile(path)) {
+                return loadSOG(path);
+            } else if (isPLYFile(path)) {
+                return loadPLY(path);
+            } else {
+                // Let the scene manager figure it out with the generic loader
+                LOG_INFO("Loading splat file: {}", path.string());
+                scene_manager_->loadSplatFile(path);
+
+                LOG_INFO("Successfully loaded splat file: {}", path.filename().string());
+                return {};
+            }
+        } catch (const std::exception& e) {
+            std::string error_msg = std::format("Failed to load splat file: {}", e.what());
             LOG_ERROR("{} (Path: {})", error_msg, path.string());
             throw std::runtime_error(error_msg);
         }
@@ -80,6 +184,40 @@ namespace gs::visualizer {
             std::string error_msg = std::format("Failed to add PLY: {}", e.what());
             LOG_ERROR("{} (Path: {})", error_msg, path.string());
             throw std::runtime_error(error_msg);
+        }
+    }
+
+    void DataLoadingService::addSOGToScene(const std::filesystem::path& path) {
+        LOG_TIMER_TRACE("AddSOGToScene");
+
+        try {
+            LOG_DEBUG("Adding SOG to scene: {}", path.string());
+
+            // Extract name from path
+            std::string name = path.stem().string();
+            LOG_TRACE("Extracted SOG name: {}", name);
+
+            // Add through scene manager
+            scene_manager_->addSplatFile(path, name);
+
+            LOG_INFO("Added SOG '{}' to scene", name);
+
+        } catch (const std::exception& e) {
+            std::string error_msg = std::format("Failed to add SOG: {}", e.what());
+            LOG_ERROR("{} (Path: {})", error_msg, path.string());
+            throw std::runtime_error(error_msg);
+        }
+    }
+
+    void DataLoadingService::addSplatFileToScene(const std::filesystem::path& path) {
+        if (isSOGFile(path)) {
+            addSOGToScene(path);
+        } else if (isPLYFile(path)) {
+            addPLYToScene(path);
+        } else {
+            // Generic add
+            std::string name = path.stem().string();
+            scene_manager_->addSplatFile(path, name);
         }
     }
 

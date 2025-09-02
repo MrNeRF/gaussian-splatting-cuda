@@ -20,6 +20,8 @@ add_library(gs_loader STATIC
         formats/colmap.cpp
         formats/transforms.hpp
         formats/transforms.cpp
+        formats/sogs.hpp
+        formats/sogs.cpp
 
         # Concrete loader implementations
         loaders/ply_loader.hpp
@@ -28,6 +30,8 @@ add_library(gs_loader STATIC
         loaders/colmap_loader.cpp
         loaders/blender_loader.hpp
         loaders/blender_loader.cpp
+        loaders/sogs_loader.hpp
+        loaders/sogs_loader.cpp
 )
 
 # Set include directories
@@ -40,6 +44,30 @@ target_include_directories(gs_loader
         ${CMAKE_SOURCE_DIR}/src
 )
 
+# Find the actual WebP library target
+if(TARGET WebP::webpdecoder)
+    set(WEBP_DECODE_LIB WebP::webpdecoder)
+elseif(TARGET WebP::webp)
+    set(WEBP_DECODE_LIB WebP::webp)
+elseif(TARGET webpdecoder)
+    set(WEBP_DECODE_LIB webpdecoder)
+else()
+    find_library(WEBP_DECODE_LIBRARY NAMES webpdecoder webp libwebpdecoder libwebp REQUIRED)
+    set(WEBP_DECODE_LIB ${WEBP_DECODE_LIBRARY})
+endif()
+
+# Find the actual LibArchive library target
+if(TARGET LibArchive::LibArchive)
+    set(ARCHIVE_LIB LibArchive::LibArchive)
+elseif(TARGET archive)
+    set(ARCHIVE_LIB archive)
+elseif(TARGET archive_static)
+    set(ARCHIVE_LIB archive_static)
+else()
+    find_library(ARCHIVE_LIBRARY NAMES archive libarchive REQUIRED)
+    set(ARCHIVE_LIB ${ARCHIVE_LIBRARY})
+endif()
+
 # Link dependencies
 target_link_libraries(gs_loader
         PUBLIC
@@ -48,6 +76,8 @@ target_link_libraries(gs_loader
         TBB::tbb
         spdlog::spdlog
         nlohmann_json::nlohmann_json
+        ${WEBP_DECODE_LIB}     # WebP for SOG decompression
+        ${ARCHIVE_LIB}         # LibArchive for SOG bundle support
 )
 
 # Set C++ standard
@@ -75,3 +105,7 @@ endif ()
 # Export only the public header
 install(FILES ${CMAKE_SOURCE_DIR}/include/loader/loader.hpp
         DESTINATION include/loader)
+
+message(STATUS "Loader module configured with SOG support")
+message(STATUS "  WebP decoder library: ${WEBP_DECODE_LIB}")
+message(STATUS "  Archive library: ${ARCHIVE_LIB}")

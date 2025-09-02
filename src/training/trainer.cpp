@@ -712,12 +712,23 @@ namespace gs::training {
     }
 
     void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
-        strategy_->get_model().save_ply(save_path, iter_num + 1, /*join=*/join_threads);
+        // Save PLY format - no longer needs join parameter
+        strategy_->get_model().save_ply(save_path, iter_num + 1);
+
+        // Save SOG format if requested - no longer needs join parameter
+        if (params_.optimization.save_sog) {
+            strategy_->get_model().save_sog(save_path, iter_num + 1,
+                                            params_.optimization.sog_iterations);
+            LOG_DEBUG("SOG saved: {}/sog/", save_path.string());
+        }
+
+        // Update project with PLY info
         if (lf_project_) {
             const std::string ply_name = "splat_" + std::to_string(iter_num + 1);
             const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }
+
         LOG_DEBUG("PLY saved: {}", save_path.string());
     }
 } // namespace gs::training

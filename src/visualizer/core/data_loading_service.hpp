@@ -1,5 +1,5 @@
 /* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
- *
+*
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #pragma once
@@ -27,6 +27,8 @@ namespace gs::visualizer {
 
         // Loading operations
         std::expected<void, std::string> loadPLY(const std::filesystem::path& path);
+        std::expected<void, std::string> loadSOG(const std::filesystem::path& path);
+        std::expected<void, std::string> loadSplatFile(const std::filesystem::path& path);
         std::expected<void, std::string> loadDataset(const std::filesystem::path& path);
         void clearScene();
 
@@ -34,6 +36,12 @@ namespace gs::visualizer {
         void setupEventHandlers();
         void handleLoadFileCommand(const events::cmd::LoadFile& cmd);
         void addPLYToScene(const std::filesystem::path& path);
+        void addSOGToScene(const std::filesystem::path& path);
+        void addSplatFileToScene(const std::filesystem::path& path);
+
+        // Helper to determine file type
+        bool isSOGFile(const std::filesystem::path& path) const;
+        bool isPLYFile(const std::filesystem::path& path) const;
 
         SceneManager* scene_manager_;
         param::TrainingParameters params_;

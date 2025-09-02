@@ -8,9 +8,7 @@
 #include <expected>
 #include <filesystem>
 #include <glm/glm.hpp>
-#include <mutex>
 #include <string>
-#include <thread>
 #include <torch/torch.h>
 #include <vector>
 
@@ -22,12 +20,12 @@ namespace gs {
     class SplatData {
     public:
         SplatData() = default;
-        ~SplatData();
+        ~SplatData() = default;
 
         SplatData(const SplatData&) = delete;
         SplatData& operator=(const SplatData&) = delete;
-        SplatData(SplatData&& other) noexcept;
-        SplatData& operator=(SplatData&& other) noexcept;
+        SplatData(SplatData&& other) noexcept = default;
+        SplatData& operator=(SplatData&& other) noexcept = default;
 
         // Constructor
         SplatData(int sh_degree,
@@ -77,8 +75,9 @@ namespace gs {
         // Utility methods
         void increment_sh_degree();
 
-        // Export methods - clean public interface
-        void save_ply(const std::filesystem::path& root, int iteration, bool join_thread = false) const;
+        // Export methods - now always synchronous
+        void save_ply(const std::filesystem::path& root, int iteration) const;
+        void save_sog(const std::filesystem::path& root, int iteration, int kmeans_iterations = 10) const;
 
         // Get attribute names for the PLY format
         std::vector<std::string> get_attribute_names() const;
@@ -99,14 +98,7 @@ namespace gs {
         torch::Tensor _rotation;
         torch::Tensor _opacity;
 
-        // Thread management for async saves
-        mutable std::vector<std::thread> _save_threads;
-        mutable std::mutex _threads_mutex;
-
         // Convert to point cloud for export
         PointCloud to_point_cloud() const;
-
-        // Helper to clean up finished threads
-        void cleanup_finished_threads() const;
     };
 } // namespace gs

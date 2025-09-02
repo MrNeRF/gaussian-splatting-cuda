@@ -70,8 +70,15 @@ namespace gs::gui {
                         auto ext = entry.path().extension().string();
                         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-                        if (ext == ".ply" || ext == ".json" || ext == Project::EXTENSION ||
+                        // Add .sog to the list of supported file extensions
+                        if (ext == ".ply" || ext == ".sog" || ext == ".json" || ext == Project::EXTENSION ||
                             entry.path().filename() == "cameras.bin" ||
+                            entry.path().filename() == "cameras.txt" ||
+                            entry.path().filename() == "images.bin" ||
+                            entry.path().filename() == "images.txt" ||
+                            entry.path().filename() == "points3D.bin" ||
+                            entry.path().filename() == "points3D.txt" ||
+                            entry.path().filename() == "meta.json" ||
                             entry.path().filename() == "transforms.json" ||
                             entry.path().filename() == "transforms_train.json") {
                             files.push_back(entry);
@@ -89,28 +96,52 @@ namespace gs::gui {
                 return a.path().filename() < b.path().filename();
             });
 
+            // Create a Loader instance to check if paths can be loaded
+            auto loader = gs::loader::Loader::create();
+
             for (const auto& dir : dirs) {
                 std::string dirname = "[DIR] " + dir.path().filename().string();
                 bool is_selected = (selected_file_ == dir.path().string());
 
                 bool is_dataset = gs::loader::Loader::isDatasetPath(dir.path());
+                bool is_sog_dir = false;
+
+                // Check if it's a SOG directory (has meta.json and WebP files)
+                if (!is_dataset && std::filesystem::exists(dir.path() / "meta.json")) {
+                    // Check for SOG-specific files
+                    if (std::filesystem::exists(dir.path() / "means_l.webp") ||
+                        std::filesystem::exists(dir.path() / "means_u.webp") ||
+                        std::filesystem::exists(dir.path() / "quats.webp") ||
+                        std::filesystem::exists(dir.path() / "scales.webp") ||
+                        std::filesystem::exists(dir.path() / "sh0.webp")) {
+                        is_sog_dir = true;
+                    }
+                }
 
                 if (is_dataset) {
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
                     dirname += " [Dataset]";
+                } else if (is_sog_dir) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.6f, 0.2f, 1.0f)); // Orange for SOG
+                    dirname += " [SOG]";
                 }
 
                 if (ImGui::Selectable(dirname.c_str(), is_selected,
                                       ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_DontClosePopups)) {
                     if (ImGui::IsMouseDoubleClicked(0)) {
-                        current_path_ = dir.path().string();
-                        selected_file_.clear();
+                        if (!is_sog_dir) {
+                            current_path_ = dir.path().string();
+                            selected_file_.clear();
+                        } else {
+                            // For SOG directories, select them instead of entering
+                            selected_file_ = dir.path().string();
+                        }
                     } else {
                         selected_file_ = dir.path().string();
                     }
                 }
 
-                if (is_dataset) {
+                if (is_dataset || is_sog_dir) {
                     ImGui::PopStyleColor();
                 }
             }
@@ -121,12 +152,27 @@ namespace gs::gui {
 
                 ImVec4 color = ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
                 if (file.path().extension() == ".ply") {
-                    color = ImVec4(0.3f, 0.8f, 0.3f, 1.0f);
+                    color = ImVec4(0.3f, 0.8f, 0.3f, 1.0f); // Green for PLY
+                } else if (file.path().extension() == ".sog") {
+                    color = ImVec4(0.9f, 0.6f, 0.2f, 1.0f); // Orange for SOG
                 } else if (file.path().extension() == Project::EXTENSION) {
-                    color = ImVec4(0.9f, 0.4f, 0.9f, 1.0f); // Pink/purple color for project files
-                } else if (filename == "cameras.bin" || filename == "transforms.json" ||
-                           filename == "transforms_train.json") {
-                    color = ImVec4(0.3f, 0.5f, 0.9f, 1.0f);
+                    color = ImVec4(0.9f, 0.4f, 0.9f, 1.0f); // Pink/purple for project files
+                } else if (filename == "cameras.bin" || filename == "cameras.txt" ||
+                           filename == "images.bin" || filename == "images.txt" ||
+                           filename == "transforms.json" || filename == "transforms_train.json") {
+                    color = ImVec4(0.3f, 0.5f, 0.9f, 1.0f); // Blue for dataset files
+                } else if (filename == "meta.json") {
+                    // Check if it's a SOG meta.json by looking for SOG files in the same directory
+                    bool is_sog_meta = false;
+                    auto parent = file.path().parent_path();
+                    if (std::filesystem::exists(parent / "means_l.webp") ||
+                        std::filesystem::exists(parent / "means_u.webp") ||
+                        std::filesystem::exists(parent / "quats.webp") ||
+                        std::filesystem::exists(parent / "scales.webp") ||
+                        std::filesystem::exists(parent / "sh0.webp")) {
+                        is_sog_meta = true;
+                    }
+                    color = is_sog_meta ? ImVec4(0.9f, 0.6f, 0.2f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
                 }
 
                 ImGui::PushStyleColor(ImGuiCol_Text, color);
@@ -158,6 +204,18 @@ namespace gs::gui {
             if (std::filesystem::is_directory(selected_path)) {
                 bool is_dataset = gs::loader::Loader::isDatasetPath(selected_path);
 
+                // Check if it's a SOG directory
+                bool is_sog_dir = false;
+                if (std::filesystem::exists(selected_path / "meta.json")) {
+                    if (std::filesystem::exists(selected_path / "means_l.webp") ||
+                        std::filesystem::exists(selected_path / "means_u.webp") ||
+                        std::filesystem::exists(selected_path / "quats.webp") ||
+                        std::filesystem::exists(selected_path / "scales.webp") ||
+                        std::filesystem::exists(selected_path / "sh0.webp")) {
+                        is_sog_dir = true;
+                    }
+                }
+
                 if (is_dataset) {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
                     if (ImGui::Button("Load Dataset", ImVec2(120, 0))) {
@@ -171,9 +229,22 @@ namespace gs::gui {
                     ImGui::SameLine();
 
                     auto dataset_type = gs::loader::Loader::getDatasetType(selected_path);
-                    const char* type_str = (dataset_type == gs::loader::DatasetType::COLMAP) ? "(COLMAP)" : (dataset_type == gs::loader::DatasetType::Transforms) ? "(Transforms)"
-                                                                                                                                                                  : "(Dataset)";
+                    const char* type_str = (dataset_type == gs::loader::DatasetType::COLMAP) ? "(COLMAP)" :
+                                          (dataset_type == gs::loader::DatasetType::Transforms) ? "(Transforms)" :
+                                          "(Dataset)";
                     ImGui::TextDisabled(type_str);
+                } else if (is_sog_dir) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.5f, 0.1f, 1.0f)); // Orange button
+                    if (ImGui::Button("Load SOG", ImVec2(120, 0))) {
+                        if (on_file_selected_) {
+                            on_file_selected_(selected_path, false);
+                            *p_open = false;
+                        }
+                    }
+                    ImGui::PopStyleColor();
+
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(SOG Directory)");
                 } else {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
                     if (ImGui::Button("Enter Directory", ImVec2(120, 0))) {
@@ -198,6 +269,15 @@ namespace gs::gui {
                         }
                     }
                     ImGui::PopStyleColor();
+                } else if (ext == ".sog") {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.5f, 0.1f, 1.0f)); // Orange button
+                    if (ImGui::Button("Load SOG", ImVec2(120, 0))) {
+                        if (on_file_selected_) {
+                            on_file_selected_(selected_path, false);
+                            *p_open = false;
+                        }
+                    }
+                    ImGui::PopStyleColor();
                 } else if (ext == Project::EXTENSION) {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.7f, 1.0f));
                     if (ImGui::Button("Load LichtFeldStudio Project", ImVec2(200, 0))) {
@@ -207,6 +287,31 @@ namespace gs::gui {
                         }
                     }
                     ImGui::PopStyleColor();
+                } else if (selected_path.filename() == "meta.json") {
+                    // Check if it's a SOG meta.json
+                    bool is_sog_meta = false;
+                    auto parent = selected_path.parent_path();
+                    if (std::filesystem::exists(parent / "means_l.webp") ||
+                        std::filesystem::exists(parent / "means_u.webp") ||
+                        std::filesystem::exists(parent / "quats.webp") ||
+                        std::filesystem::exists(parent / "scales.webp") ||
+                        std::filesystem::exists(parent / "sh0.webp")) {
+                        is_sog_meta = true;
+                    }
+
+                    if (is_sog_meta) {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.5f, 0.1f, 1.0f)); // Orange button
+                        if (ImGui::Button("Load SOG", ImVec2(120, 0))) {
+                            if (on_file_selected_) {
+                                on_file_selected_(selected_path, false);
+                                *p_open = false;
+                            }
+                        }
+                        ImGui::PopStyleColor();
+
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(SOG meta.json)");
+                    }
                 }
             }
         }

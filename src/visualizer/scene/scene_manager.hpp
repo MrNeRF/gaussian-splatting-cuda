@@ -26,7 +26,7 @@ namespace gs {
         // Content type - what's loaded, not execution state
         enum class ContentType {
             Empty,
-            PLYFiles,
+            SplatFiles,  // Changed from PLYFiles to be more generic
             Dataset
         };
 
@@ -47,10 +47,13 @@ namespace gs {
             return content_type_ == ContentType::Empty;
         }
 
-        bool hasPLYFiles() const {
+        bool hasSplatFiles() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            return content_type_ == ContentType::PLYFiles;
+            return content_type_ == ContentType::SplatFiles;
         }
+
+        // Legacy compatibility
+        bool hasPLYFiles() const { return hasSplatFiles(); }
 
         bool hasDataset() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
@@ -58,10 +61,13 @@ namespace gs {
         }
 
         // Path accessors
-        std::vector<std::filesystem::path> getPLYPaths() const {
+        std::vector<std::filesystem::path> getSplatPaths() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            return ply_paths_;
+            return splat_paths_;
         }
+
+        // Legacy compatibility
+        std::vector<std::filesystem::path> getPLYPaths() const { return getSplatPaths(); }
 
         std::filesystem::path getDatasetPath() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
@@ -83,9 +89,16 @@ namespace gs {
 
         void changeContentType(const ContentType& type);
 
-        // Operations
-        void loadPLY(const std::filesystem::path& path);
-        void addPLY(const std::filesystem::path& path, const std::string& name = "", bool is_visible = true);
+        // Operations - Generic splat file loading
+        void loadSplatFile(const std::filesystem::path& path);
+        void addSplatFile(const std::filesystem::path& path, const std::string& name = "", bool is_visible = true);
+
+        // Legacy PLY-specific methods (redirects to generic)
+        void loadPLY(const std::filesystem::path& path) { loadSplatFile(path); }
+        void addPLY(const std::filesystem::path& path, const std::string& name = "", bool is_visible = true) {
+            addSplatFile(path, name, is_visible);
+        }
+
         void removePLY(const std::string& name);
         void setPLYVisibility(const std::string& name, bool visible);
 
@@ -115,7 +128,7 @@ namespace gs {
         mutable std::mutex state_mutex_;
 
         ContentType content_type_ = ContentType::Empty;
-        std::vector<std::filesystem::path> ply_paths_;
+        std::vector<std::filesystem::path> splat_paths_;
         std::filesystem::path dataset_path_;
 
         // Training support
