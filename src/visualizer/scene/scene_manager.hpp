@@ -17,6 +17,10 @@ namespace gs {
     class TrainerManager;
     class SplatData;
 
+    namespace visualizer {
+        class RenderingManager;
+    }
+
     class SceneManager {
     public:
         // Content type - what's loaded, not execution state
@@ -38,7 +42,6 @@ namespace gs {
             std::lock_guard<std::mutex> lock(state_mutex_);
             return content_type_;
         }
-
         bool isEmpty() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
             return content_type_ == ContentType::Empty;
@@ -73,6 +76,10 @@ namespace gs {
         void setTrainerManager(TrainerManager* tm) { trainer_manager_ = tm; }
         TrainerManager* getTrainerManager() { return trainer_manager_; }
         const TrainerManager* getTrainerManager() const { return trainer_manager_; }
+
+        // Rendering manager link
+        void setRenderingManager(visualizer::RenderingManager* rm);
+        visualizer::RenderingManager* getRenderingManager() { return rendering_manager_; }
 
         void changeContentType(const ContentType& type);
 
@@ -113,6 +120,9 @@ namespace gs {
 
         // Training support
         TrainerManager* trainer_manager_ = nullptr;
+
+        // Rendering support
+        visualizer::RenderingManager* rendering_manager_ = nullptr;
 
         // Cache for parameters
         std::optional<param::TrainingParameters> cached_params_;

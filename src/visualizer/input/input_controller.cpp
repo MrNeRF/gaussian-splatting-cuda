@@ -4,6 +4,7 @@
 
 #include "input/input_controller.hpp"
 #include "core/logger.hpp"
+#include "rendering/rendering_manager.hpp"
 #include "tools/tool_base.hpp"
 #include "tools/translation_gizmo_tool.hpp"
 #include <GLFW/glfw3.h>
@@ -34,6 +35,17 @@ namespace gs::visualizer {
         if (instance_ == this) {
             instance_ = nullptr;
         }
+
+        // Clean up cursor resources
+        if (resize_cursor_) {
+            glfwDestroyCursor(resize_cursor_);
+            resize_cursor_ = nullptr;
+        }
+
+        // Reset cursor to default before destruction
+        if (window_ && current_cursor_ != CursorType::Default) {
+            glfwSetCursor(window_, nullptr);
+        }
     }
 
     void InputController::initialize() {
@@ -55,6 +67,9 @@ namespace gs::visualizer {
 
         // Initialize frame timer
         last_frame_time_ = std::chrono::high_resolution_clock::now();
+
+        // Create the resize cursor once at initialization
+        resize_cursor_ = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
 
         LOG_DEBUG("InputController initialized - callbacks set");
     }
@@ -135,6 +150,12 @@ namespace gs::visualizer {
                 instance_->drag_mode_ = DragMode::None;
                 std::fill(std::begin(instance_->keys_wasd_),
                           std::end(instance_->keys_wasd_), false);
+
+                // Reset cursor to default when losing focus
+                if (instance_->current_cursor_ != CursorType::Default) {
+                    glfwSetCursor(instance_->window_, nullptr);
+                    instance_->current_cursor_ = CursorType::Default;
+                }
             }
             events::internal::WindowFocusLost{}.emit();
             LOG_DEBUG("Window lost focus - input states reset");
@@ -143,9 +164,42 @@ namespace gs::visualizer {
         }
     }
 
+    bool InputController::isNearSplitter(double x) const {
+        if (!rendering_manager_ || !rendering_manager_->getSettings().split_view_enabled) {
+            return false;
+        }
+
+        float split_pos = rendering_manager_->getSettings().split_position;
+        float split_x = viewport_bounds_.x + viewport_bounds_.width * split_pos;
+
+        // Increase the hit area to 10 pixels for easier grabbing
+        return std::abs(x - split_x) < 10.0;
+    }
+
     // Core handlers
     void InputController::handleMouseButton(int button, int action, double x, double y) {
-        // CHECK GIZMO FIRST - before any other input handling
+        // Check for splitter drag FIRST
+        if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+            if (isNearSplitter(x) && rendering_manager_) {
+                drag_mode_ = DragMode::Splitter;
+                splitter_start_pos_ = rendering_manager_->getSettings().split_position;
+                splitter_start_x_ = x;
+
+                // Change cursor to resize
+                glfwSetCursor(window_, glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR));
+                LOG_TRACE("Started splitter drag");
+                return;
+            }
+        }
+
+        if (action == GLFW_RELEASE && drag_mode_ == DragMode::Splitter) {
+            drag_mode_ = DragMode::None;
+            glfwSetCursor(window_, nullptr); // Reset cursor
+            LOG_TRACE("Ended splitter drag");
+            return;
+        }
+
+        // CHECK GIZMO NEXT - before any other input handling
         if (translation_gizmo_ && translation_gizmo_->isEnabled() && tool_context_) {
             if (translation_gizmo_->handleMouseButton(button, action, x, y, *tool_context_)) {
                 // Gizmo consumed the event
@@ -218,24 +272,54 @@ namespace gs::visualizer {
     }
 
     void InputController::handleMouseMove(double x, double y) {
-        // Check gizmo first if not already in gizmo drag mode
+        // Handle splitter dragging
+        if (drag_mode_ == DragMode::Splitter && rendering_manager_) {
+            double delta = x - splitter_start_x_;
+            float new_pos = splitter_start_pos_ + static_cast<float>(delta / viewport_bounds_.width);
+
+            // FIX: Allow dragging all the way to the edges - no margins!
+            new_pos = std::clamp(new_pos, 0.0f, 1.0f);
+
+            events::ui::SplitPositionChanged{.position = new_pos}.emit();
+            last_mouse_pos_ = {x, y};
+            return;
+        }
+
+        // Determine if we should show resize cursor
+        bool should_show_resize = false;
+        if (rendering_manager_ && rendering_manager_->getSettings().split_view_enabled) {
+            should_show_resize = (drag_mode_ == DragMode::None &&
+                                  isInViewport(x, y) &&
+                                  isNearSplitter(x));
+        }
+
+        // Only call glfwSetCursor when state actually changes
+        if (should_show_resize && current_cursor_ != CursorType::Resize) {
+            glfwSetCursor(window_, resize_cursor_);
+            current_cursor_ = CursorType::Resize;
+        } else if (!should_show_resize && current_cursor_ != CursorType::Default) {
+            glfwSetCursor(window_, nullptr);
+            current_cursor_ = CursorType::Default;
+        }
+
+        // Check gizmo if not already in gizmo drag mode
         if (translation_gizmo_ && translation_gizmo_->isEnabled() && tool_context_) {
             if (drag_mode_ == DragMode::Gizmo ||
                 translation_gizmo_->handleMouseMove(x, y, *tool_context_)) {
-                // Gizmo is handling the mouse move
                 last_mouse_pos_ = {x, y};
                 return;
             }
         }
 
         glm::vec2 pos(x, y);
-
-        // Always update last position
         glm::dvec2 current_pos{x, y};
         last_mouse_pos_ = current_pos;
 
         // Handle camera dragging
-        if (drag_mode_ != DragMode::None && drag_mode_ != DragMode::Gizmo) {
+        if (drag_mode_ != DragMode::None &&
+            drag_mode_ != DragMode::Gizmo &&
+            drag_mode_ != DragMode::Splitter) {
+
             switch (drag_mode_) {
             case DragMode::Pan:
                 viewport_.camera.translate(pos);
@@ -256,8 +340,8 @@ namespace gs::visualizer {
     }
 
     void InputController::handleScroll([[maybe_unused]] double xoff, double yoff) {
-        // Don't scroll if gizmo is active
-        if (drag_mode_ == DragMode::Gizmo) {
+        // Don't scroll if gizmo or splitter is active
+        if (drag_mode_ == DragMode::Gizmo || drag_mode_ == DragMode::Splitter) {
             return;
         }
 
@@ -299,6 +383,11 @@ namespace gs::visualizer {
             return;
         }
 
+        if (key == GLFW_KEY_V && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
+            events::cmd::ToggleSplitView{}.emit();
+            return;
+        }
+
         // Speed control works even when GUI has focus
         if (key_ctrl_pressed_ && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
             if (key == GLFW_KEY_EQUAL || key == GLFW_KEY_KP_ADD) {
@@ -312,7 +401,7 @@ namespace gs::visualizer {
         }
 
         // WASD only works when viewport has focus and gizmo isn't active
-        if (!shouldCameraHandleInput() || drag_mode_ == DragMode::Gizmo)
+        if (!shouldCameraHandleInput() || drag_mode_ == DragMode::Gizmo || drag_mode_ == DragMode::Splitter)
             return;
 
         bool pressed = (action != GLFW_RELEASE);
@@ -406,8 +495,15 @@ namespace gs::visualizer {
             LOG_TRACE("Pan stopped - button released outside window");
         }
 
+        if (drag_mode_ == DragMode::Splitter &&
+            glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) {
+            drag_mode_ = DragMode::None;
+            glfwSetCursor(window_, nullptr); // Reset cursor
+            LOG_TRACE("Splitter drag stopped - button released outside window");
+        }
+
         // Handle continuous WASD movement
-        if (shouldCameraHandleInput() && drag_mode_ != DragMode::Gizmo) {
+        if (shouldCameraHandleInput() && drag_mode_ != DragMode::Gizmo && drag_mode_ != DragMode::Splitter) {
             if (keys_wasd_[0]) {
                 viewport_.camera.advance_forward(delta_time);
             }
@@ -540,8 +636,8 @@ namespace gs::visualizer {
     }
 
     bool InputController::shouldCameraHandleInput() const {
-        // Don't handle if gizmo is active
-        if (drag_mode_ == DragMode::Gizmo) {
+        // Don't handle if gizmo or splitter is active
+        if (drag_mode_ == DragMode::Gizmo || drag_mode_ == DragMode::Splitter) {
             return false;
         }
 

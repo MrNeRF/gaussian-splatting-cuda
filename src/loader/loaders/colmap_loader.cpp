@@ -7,6 +7,7 @@
 #include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "formats/colmap.hpp"
+#include "loader/filesystem_utils.hpp"
 #include "training/dataset.hpp"
 #include <algorithm>
 #include <cctype>
@@ -40,28 +41,25 @@ namespace gs::loader {
             options.progress(0.0f, "Loading COLMAP dataset...");
         }
 
-        // Check for sparse reconstruction
-        std::filesystem::path sparse_path;
-        if (std::filesystem::exists(path / "sparse" / "0")) {
-            sparse_path = path / "sparse" / "0";
-            LOG_DEBUG("Found sparse reconstruction at: {}", sparse_path.string());
-        } else if (std::filesystem::exists(path / "sparse")) {
-            sparse_path = path / "sparse";
-            LOG_DEBUG("Found sparse reconstruction at: {}", sparse_path.string());
-        } else {
-            LOG_ERROR("No sparse reconstruction found in: {}", path.string());
-            throw std::runtime_error("No sparse reconstruction found (expected 'sparse' or 'sparse/0' directory)");
-        }
+        // Get search paths for COLMAP files
+        auto search_paths = get_colmap_search_paths(path);
 
-        // Check for required COLMAP files
-        bool has_cameras = std::filesystem::exists(sparse_path / "cameras.bin");
-        bool has_images = std::filesystem::exists(sparse_path / "images.bin");
-        bool has_points = std::filesystem::exists(sparse_path / "points3D.bin");
+        // Check for required COLMAP files in any of the search paths
+        auto cameras_bin = find_file_in_paths(search_paths, "cameras.bin");
+        auto images_bin = find_file_in_paths(search_paths, "images.bin");
+        auto points_bin = find_file_in_paths(search_paths, "points3D.bin");
 
-        // Check for COLMAP text files
-        bool has_cameras_text = std::filesystem::exists(sparse_path / "cameras.txt");
-        bool has_images_text = std::filesystem::exists(sparse_path / "images.txt");
-        bool has_points_text = std::filesystem::exists(sparse_path / "points3D.txt");
+        auto cameras_txt = find_file_in_paths(search_paths, "cameras.txt");
+        auto images_txt = find_file_in_paths(search_paths, "images.txt");
+        auto points_txt = find_file_in_paths(search_paths, "points3D.txt");
+
+        bool has_cameras = !cameras_bin.empty();
+        bool has_images = !images_bin.empty();
+        bool has_points = !points_bin.empty();
+
+        bool has_cameras_text = !cameras_txt.empty();
+        bool has_images_text = !images_txt.empty();
+        bool has_points_text = !points_txt.empty();
 
         if ((has_cameras || has_images || has_points) &&
             (has_cameras_text || has_images_text || has_points_text)) {
@@ -91,13 +89,44 @@ namespace gs::loader {
             throw std::runtime_error(error_msg);
         }
 
-        // Check for image directory
-        std::filesystem::path image_dir = path / options.images_folder;
+        // First check if the requested images folder exists
+        std::string actual_images_folder = options.images_folder;
+        std::filesystem::path image_dir = path / actual_images_folder;
+
+        // If the specified images folder doesn't exist, check if we're in a flat structure
         if (!std::filesystem::exists(image_dir)) {
-            std::string error_msg = std::format(
-                "Images directory '{}' not found", options.images_folder);
-            LOG_ERROR("{}", error_msg);
-            throw std::runtime_error(error_msg);
+            // Check if COLMAP files are in the root (flat structure)
+            bool is_flat_structure = (!cameras_txt.empty() && cameras_txt.parent_path() == path) ||
+                                     (!cameras_bin.empty() && cameras_bin.parent_path() == path);
+
+            if (is_flat_structure) {
+                // In flat structure, images are typically in the root directory
+                // Check if there are image files in the root
+                bool has_images_in_root = false;
+                for (const auto& entry : std::filesystem::directory_iterator(path)) {
+                    if (entry.is_regular_file() && is_image_file(entry.path())) {
+                        has_images_in_root = true;
+                        break;
+                    }
+                }
+
+                if (has_images_in_root) {
+                    // Use root directory as images folder for flat structure
+                    actual_images_folder = ".";
+                    image_dir = path;
+                    LOG_INFO("Detected flat structure - using root directory for images");
+                } else {
+                    std::string error_msg = std::format(
+                        "Images directory '{}' not found and no images in root", options.images_folder);
+                    LOG_ERROR("{}", error_msg);
+                    throw std::runtime_error(error_msg);
+                }
+            } else {
+                std::string error_msg = std::format(
+                    "Images directory '{}' not found", options.images_folder);
+                LOG_ERROR("{}", error_msg);
+                throw std::runtime_error(error_msg);
+            }
         }
 
         // Validation only mode
@@ -129,12 +158,12 @@ namespace gs::loader {
             torch::Tensor scene_center;
             if (has_cameras && has_images) {
                 LOG_DEBUG("Reading binary COLMAP data");
-                // Read binary COLMAP data
-                std::tie(camera_infos, scene_center) = read_colmap_cameras_and_images(path, options.images_folder);
+                // Read binary COLMAP data with actual images folder
+                std::tie(camera_infos, scene_center) = read_colmap_cameras_and_images(path, actual_images_folder);
             } else if (has_cameras_text && has_images_text) {
                 LOG_DEBUG("Reading text COLMAP data");
-                // Read text-based COLMAP data
-                std::tie(camera_infos, scene_center) = read_colmap_cameras_and_images_text(path, options.images_folder);
+                // Read text-based COLMAP data with actual images folder
+                std::tie(camera_infos, scene_center) = read_colmap_cameras_and_images_text(path, actual_images_folder);
             } else {
                 LOG_ERROR("No valid COLMAP camera and image data found");
                 throw std::runtime_error("No valid COLMAP camera and image data found");
@@ -173,10 +202,10 @@ namespace gs::loader {
                 cameras.push_back(std::move(cam));
             }
 
-            // Create dataset configuration
+            // Create dataset configuration with actual images folder
             gs::param::DatasetConfig dataset_config;
             dataset_config.data_path = path;
-            dataset_config.images = options.images_folder;
+            dataset_config.images = actual_images_folder;
             dataset_config.resize_factor = options.resize_factor;
 
             // Create dataset with ALL images - use correct namespace
@@ -239,64 +268,19 @@ namespace gs::loader {
     }
 
     bool ColmapLoader::canLoad(const std::filesystem::path& path) const {
-        if (!std::filesystem::exists(path) || !std::filesystem::is_directory(path)) {
+        if (!safe_exists(path) || !safe_is_directory(path)) {
             return false;
         }
 
-        // Helper function to check for case-insensitive file existence
-        auto caseInsensitiveExists = [](const std::filesystem::path& dir, const std::string& filename) -> bool {
-            if (!std::filesystem::exists(dir)) {
-                return false;
-            }
+        auto search_paths = get_colmap_search_paths(path);
 
-            // Convert target filename to lowercase for comparison
-            std::string targetLower = filename;
-            std::transform(targetLower.begin(), targetLower.end(), targetLower.begin(), ::tolower);
+        // Check for COLMAP files in any location
+        const std::vector<std::string> colmap_files = {
+            "cameras.bin", "cameras.txt",
+            "images.bin", "images.txt"};
 
-            // Check all entries in the directory
-            for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-                std::string entryName = entry.path().filename().string();
-                std::transform(entryName.begin(), entryName.end(), entryName.begin(), ::tolower);
-
-                if (entryName == targetLower) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        // Helper to find sparse directory (case-insensitive)
-        auto findSparseDir = [&](const std::filesystem::path& parentDir) -> std::filesystem::path {
-            for (const auto& entry : std::filesystem::directory_iterator(parentDir)) {
-                if (entry.is_directory()) {
-                    std::string dirName = entry.path().filename().string();
-                    std::transform(dirName.begin(), dirName.end(), dirName.begin(), ::tolower);
-                    if (dirName == "sparse") {
-                        return entry.path();
-                    }
-                }
-            }
-            return {};
-        };
-
-        // First, try to find the sparse directory
-        std::filesystem::path sparseDir = findSparseDir(path);
-
-        if (!sparseDir.empty()) {
-            // Check in sparse/0/ first
-            std::filesystem::path sparse0 = sparseDir / "0";
-            if (std::filesystem::exists(sparse0) && caseInsensitiveExists(sparse0, "cameras.bin")) {
-                return true;
-            }
-            if (std::filesystem::exists(sparse0) && caseInsensitiveExists(sparse0, "cameras.txt")) {
-                return true;
-            }
-
-            // Check directly in sparse/
-            if (caseInsensitiveExists(sparseDir, "cameras.bin")) {
-                return true;
-            }
-            if (caseInsensitiveExists(sparseDir, "cameras.txt")) {
+        for (const auto& filename : colmap_files) {
+            if (!find_file_in_paths(search_paths, filename).empty()) {
                 return true;
             }
         }

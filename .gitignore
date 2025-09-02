@@ -22,6 +22,8 @@ test.py
 testdata
 vcpkg/
 vcpkg/**
+vcpkg_*/**
+vcpkg_*/
 
 *.pt
 !weights/*.pt

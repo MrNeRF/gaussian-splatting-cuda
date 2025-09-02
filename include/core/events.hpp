@@ -54,6 +54,7 @@ namespace gs {
             EVENT(RemovePLY, std::string name;);
             EVENT(SetPLYVisibility, std::string name; bool visible;);
             EVENT(CyclePLY, );
+            EVENT(ToggleSplitView, );
         } // namespace cmd
 
         // ============================================================================
@@ -152,6 +153,7 @@ namespace gs {
                   bool enabled;);
             EVENT(CropBoxVisibilityChanged, bool visible;);
             EVENT(ConsoleResult, std::string command; std::string result;);
+            EVENT(SplitPositionChanged, float position;);
         } // namespace ui
 
         // ============================================================================

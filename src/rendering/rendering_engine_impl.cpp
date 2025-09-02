@@ -31,6 +31,15 @@ namespace gs::rendering {
         // Create screen renderer with preferred mode
         screen_renderer_ = std::make_shared<ScreenQuadRenderer>(getPreferredFrameBufferMode());
 
+        // Initialize split view renderer
+        split_view_renderer_ = std::make_unique<SplitViewRenderer>();
+        if (auto result = split_view_renderer_->initialize(); !result) {
+            LOG_ERROR("Failed to initialize split view renderer: {}", result.error());
+            shutdown();
+            return std::unexpected(result.error());
+        }
+        LOG_DEBUG("Split view renderer initialized");
+
         if (auto result = grid_renderer_.init(); !result) {
             LOG_ERROR("Failed to initialize grid renderer: {}", result.error());
             shutdown();
@@ -67,6 +76,14 @@ namespace gs::rendering {
         }
         LOG_DEBUG("Translation gizmo initialized");
 
+        // Initialize camera frustum renderer
+        if (auto result = camera_frustum_renderer_.init(); !result) {
+            LOG_ERROR("Failed to initialize camera frustum renderer: {}", result.error());
+            // Non-critical, continue without it
+        } else {
+            LOG_DEBUG("Camera frustum renderer initialized");
+        }
+
         // Create gizmo interaction adapter
         gizmo_interaction_ = std::make_shared<GizmoInteractionAdapter>(&translation_gizmo_);
 
@@ -86,6 +103,7 @@ namespace gs::rendering {
         // Just reset/clean up - safe to call multiple times
         quad_shader_ = ManagedShader();
         screen_renderer_.reset();
+        split_view_renderer_.reset();
         translation_gizmo_.shutdown();
         viewport_gizmo_.shutdown();
         gizmo_interaction_.reset();
@@ -169,6 +187,24 @@ namespace gs::rendering {
             .depth = std::make_shared<torch::Tensor>(pipeline_result->depth)};
 
         return result;
+    }
+
+    Result<RenderResult> RenderingEngineImpl::renderSplitView(
+        const SplitViewRequest& request) {
+
+        if (!isInitialized()) {
+            LOG_ERROR("Rendering engine not initialized");
+            return std::unexpected("Rendering engine not initialized");
+        }
+
+        if (!split_view_renderer_) {
+            LOG_ERROR("Split view renderer not initialized");
+            return std::unexpected("Split view renderer not initialized");
+        }
+
+        LOG_TRACE("Rendering split view with {} panels", request.panels.size());
+
+        return split_view_renderer_->render(request, pipeline_, *screen_renderer_, quad_shader_);
     }
 
     Result<void> RenderingEngineImpl::presentToScreen(
@@ -300,6 +336,23 @@ namespace gs::rendering {
         auto proj = createProjectionMatrix(viewport);
 
         return translation_gizmo_.render(view, proj, position, scale);
+    }
+
+    Result<void> RenderingEngineImpl::renderCameraFrustums(
+        const std::vector<std::shared_ptr<const Camera>>& cameras,
+        const ViewportData& viewport,
+        float scale,
+        const glm::vec3& train_color,
+        const glm::vec3& eval_color) {
+
+        if (!camera_frustum_renderer_.isInitialized()) {
+            return {}; // Silent fail if not initialized
+        }
+
+        auto view = createViewMatrix(viewport);
+        auto proj = createProjectionMatrix(viewport);
+
+        return camera_frustum_renderer_.render(cameras, view, proj, scale, train_color, eval_color);
     }
 
     std::shared_ptr<GizmoInteraction> RenderingEngineImpl::getGizmoInteraction() {

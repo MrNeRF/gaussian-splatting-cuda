@@ -120,6 +120,16 @@ namespace gs {
         return result;
     }
 
+    std::vector<const Scene::Node*> Scene::getVisibleNodes() const {
+        std::vector<const Node*> visible;
+        for (const auto& node : nodes_) {
+            if (node.visible && node.model) {
+                visible.push_back(&node);
+            }
+        }
+        return visible;
+    }
+
     const Scene::Node* Scene::getNode(const std::string& name) const {
         auto it = std::find_if(nodes_.begin(), nodes_.end(),
                                [&name](const Node& node) { return node.name == name; });

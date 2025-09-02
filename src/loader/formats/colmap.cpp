@@ -7,6 +7,7 @@
 #include "core/logger.hpp"
 #include "core/point_cloud.hpp"
 #include "core/torch_shapes.hpp"
+#include "loader/filesystem_utils.hpp"
 #include <algorithm>
 #include <cstring>
 #include <exception>
@@ -884,23 +885,23 @@ namespace gs::loader {
     // -----------------------------------------------------------------------------
 
     static fs::path get_sparse_file_path(const fs::path& base, const std::string& filename) {
-        fs::path candidate0 = base / "sparse" / "0" / filename;
-        if (fs::exists(candidate0)) {
-            LOG_TRACE("Found sparse file at: {}", candidate0.string());
-            return candidate0;
+        auto search_paths = get_colmap_search_paths(base);
+        auto found = find_file_in_paths(search_paths, filename);
+
+        if (!found.empty()) {
+            LOG_TRACE("Found sparse file at: {}", found.string());
+            return found;
         }
 
-        fs::path candidate = base / "sparse" / filename;
-        if (fs::exists(candidate)) {
-            LOG_TRACE("Found sparse file at: {}", candidate.string());
-            return candidate;
+        // Build error message showing all attempted locations
+        std::string error_msg = std::format("Cannot find '{}' in any of these locations:\n", filename);
+        for (const auto& dir : search_paths) {
+            error_msg += std::format("  - {}\n", (dir / filename).string());
         }
+        error_msg += "Searched case-insensitively for: " + filename;
 
-        LOG_ERROR("Cannot find {} in sparse directories", filename);
-        throw std::runtime_error(
-            "Cannot find \"" + filename +
-            "\" in \"" + candidate0.string() + "\" or \"" + candidate.string() + "\". "
-                                                                                 "Expected directory structure: 'sparse/0/' or 'sparse/'.");
+        LOG_ERROR("{}", error_msg);
+        throw std::runtime_error(error_msg);
     }
 
     PointCloud read_colmap_point_cloud(const std::filesystem::path& filepath) {

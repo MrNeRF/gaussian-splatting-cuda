@@ -6,11 +6,13 @@
 
 #include "axes_renderer.hpp"
 #include "bbox_renderer.hpp"
+#include "camera_frustum_renderer.hpp"
 #include "grid_renderer.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering_pipeline.hpp"
 #include "screen_renderer.hpp"
 #include "shader_manager.hpp"
+#include "split_view_renderer.hpp"
 #include "translation_gizmo.hpp"
 #include "viewport_gizmo.hpp"
 
@@ -66,6 +68,9 @@ namespace gs::rendering {
             const SplatData& splat_data,
             const RenderRequest& request) override;
 
+        Result<RenderResult> renderSplitView(
+            const SplitViewRequest& request) override;
+
         Result<void> presentToScreen(
             const RenderResult& result,
             const glm::ivec2& viewport_pos,
@@ -97,6 +102,13 @@ namespace gs::rendering {
             const ViewportData& viewport,
             float scale) override;
 
+        Result<void> renderCameraFrustums(
+            const std::vector<std::shared_ptr<const Camera>>& cameras,
+            const ViewportData& viewport,
+            float scale,
+            const glm::vec3& train_color,
+            const glm::vec3& eval_color) override;
+
         std::shared_ptr<GizmoInteraction> getGizmoInteraction() override;
 
         // Pipeline compatibility
@@ -117,12 +129,16 @@ namespace gs::rendering {
         RenderingPipeline pipeline_;
         std::shared_ptr<ScreenQuadRenderer> screen_renderer_;
 
+        // Split view renderer
+        std::unique_ptr<SplitViewRenderer> split_view_renderer_;
+
         // Overlay renderers
         RenderInfiniteGrid grid_renderer_;
         RenderBoundingBox bbox_renderer_;
         RenderCoordinateAxes axes_renderer_;
         ViewportGizmo viewport_gizmo_;
         TranslationGizmo translation_gizmo_;
+        CameraFrustumRenderer camera_frustum_renderer_;
 
         // Gizmo interaction adapter
         std::shared_ptr<GizmoInteractionAdapter> gizmo_interaction_;
