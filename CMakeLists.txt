@@ -30,14 +30,41 @@ set(BUILD_CUDA_ALL_MIN_SM "86" CACHE STRING "Minimum SM (compute capability) use
 
 # Set Torch_DIR based on platform and build type
 if (WIN32)
-    if(CMAKE_CONFIGURATION_TYPES)
+    if(CMAKE_CONFIGURATION_TYPES AND "${CMAKE_BUILD_TYPE}" STREQUAL "")
         # https://github.com/pytorch/pytorch/issues/155667
         set(Torch_DIR "${PROJ_ROOT_DIR}/external/release/libtorch/share/cmake/Torch")
+        message(STATUS "[${PROJECT_NAME}] User didn't specify -DCMAKE_BUILD_TYPE so use this path for searching libtorch -> ${PROJ_ROOT_DIR}/external/release/libtorch/share/cmake/Torch")
+
+        if (NOT EXISTS "${PROJ_ROOT_DIR}/external/release/")
+            message(FATAL_ERROR "you don't have a such path ${PROJ_ROOT_DIR}/external/release/ on your disk")
+        endif()
+
+        if (NOT EXISTS "${PROJ_ROOT_DIR}/external/release/libtorch/")
+            message(FATAL_ERROR "you don't have an extracted pre-installed libtorch (${PROJ_ROOT_DIR}/external/release/libtorch)!")
+        endif()
     else()
         if (CMAKE_BUILD_TYPE STREQUAL "Release")
             set(Torch_DIR "${PROJ_ROOT_DIR}/external/release/libtorch/share/cmake/Torch")
+            message(STATUS "[${PROJECT_NAME}] User specified -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} so let's search libtorch by this path -> ${PROJ_ROOT_DIR}/external/release/libtorch/share/cmake/Torch")
+
+            if (NOT EXISTS "${PROJ_ROOT_DIR}/external/release/")
+                message(FATAL_ERROR "you don't have a such path ${PROJ_ROOT_DIR}/external/release/ on your disk")
+            endif()
+
+            if (NOT EXISTS "${PROJ_ROOT_DIR}/external/release/libtorch")
+                message(FATAL_ERROR "you don't have an extracted pre-installed libtorch (${PROJ_ROOT_DIR}/external/release/libtorch)!")
+            endif()
         elseif (CMAKE_BUILD_TYPE STREQUAL "Debug")
             set(Torch_DIR "${PROJ_ROOT_DIR}/external/debug/libtorch/share/cmake/Torch")
+            message(STATUS "[${PROJECT_NAME}] User specified -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} so let's search libtorch by this path -> ${PROJ_ROOT_DIR}/external/debug/libtorch/share/cmake/Torch")
+
+            if (NOT EXISTS "${PROJ_ROOT_DIR}/external/debug/")
+                message(FATAL_ERROR "you don't have a such path ${PROJ_ROOT_DIR}/external/debug/ on your disk")
+            endif()
+
+            if (NOT EXISTS "${PROJ_ROOT_DIR}/external/debug/libtorch")
+                message(FATAL_ERROR "you don't have an extracted pre-installed libtorch (${PROJ_ROOT_DIR}/external/debug/libtorch)!")
+            endif()
         else()
             message(FATAL_ERROR "libtorch binaries only available for Debug and Release on Windows. Current build type: '${CMAKE_BUILD_TYPE}'")
         endif()
