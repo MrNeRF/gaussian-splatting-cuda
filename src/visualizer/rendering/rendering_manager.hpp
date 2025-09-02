@@ -58,6 +58,12 @@ namespace gs::visualizer {
         bool show_translation_gizmo = false;
         float gizmo_scale = 1.0f;
 
+        // Camera frustums
+        bool show_camera_frustums = false;
+        float camera_frustum_scale = 0.25f;
+        glm::vec3 train_camera_color = glm::vec3(1.0f, 1.0f, 1.0f);
+        glm::vec3 eval_camera_color = glm::vec3(1.0f, 0.0f, 0.0f);
+
         // Split view
         bool split_view_enabled = false;
         float split_position = 0.5f;
@@ -83,6 +89,7 @@ namespace gs::visualizer {
             const RenderSettings& settings;
             const ViewportRegion* viewport_region = nullptr;
             bool has_focus = false;
+            SceneManager* scene_manager = nullptr;
         };
 
         RenderingManager();
