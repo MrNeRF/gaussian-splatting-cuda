@@ -375,7 +375,8 @@ namespace gs::loader {
 
                     // Decode opacity (inverse sigmoid)
                     float opacity_norm = sh0_img[ti + 3] / 255.0f;
-                    opacity_norm = std::max(1e-6f, std::min(1.0f - 1e-6f, opacity_norm));
+                    // Clamp with a safer epsilon to prevent infinity
+                    opacity_norm = std::max(1e-5f, std::min(1.0f - 1e-5f, opacity_norm));
                     opacity_acc[i][0] = std::log(opacity_norm / (1.0f - opacity_norm));
                 }
             }

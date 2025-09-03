@@ -56,6 +56,13 @@ namespace gs::core {
                 x /= len;
                 y /= len;
                 z /= len;
+            } else {
+                // Handle zero-length quaternion: set to identity quaternion
+                w = 1.0f;
+                x = 0.0f;
+                y = 0.0f;
+                z = 0.0f;
+                LOG_WARN("pack_quaternion: Zero-length quaternion encountered, replaced with identity quaternion.");
             }
 
             // Find largest component (in absolute value)
@@ -551,9 +558,9 @@ namespace gs::core {
                 sh0_data[ti * 4 + 1] = static_cast<uint8_t>(colors_labels_acc[num_splats + idx]);
                 sh0_data[ti * 4 + 2] = static_cast<uint8_t>(colors_labels_acc[2 * num_splats + idx]);
 
-                // Add opacity (already sigmoid applied in get_opacity())
+                // Decode opacity (already sigmoid applied in get_opacity())
                 float opacity = opacity_acc[idx];
-                sh0_data[ti * 4 + 3] = static_cast<uint8_t>(255 * std::max(0.0f, std::min(1.0f, opacity)));
+                sh0_data[ti * 4 + 3] = static_cast<uint8_t>(255 * opacity);
             }
 
             if (!write_image("sh0.webp", sh0_data.data())) {

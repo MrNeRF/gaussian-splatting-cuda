@@ -21,6 +21,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <print>
 #include <string>
+#include <thread>
 #include <torch/torch.h>
 #include <vector>
 
