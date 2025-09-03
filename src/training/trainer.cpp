@@ -212,6 +212,14 @@ namespace gs::training {
                          train_dataset_->size().value());
             }
 
+            // chage resize factor (change may comes from gui)
+            if (train_dataset_) {
+                train_dataset_->set_resize_factor(params.dataset.resize_factor);
+            }
+            if (val_dataset_) {
+                val_dataset_->set_resize_factor(params.dataset.resize_factor);
+            }
+
             train_dataset_size_ = train_dataset_->size().value();
 
             m_cam_id_to_cam.clear();
