@@ -93,10 +93,22 @@ namespace gs::gui::panels {
                 ImGui::TableNextColumn();
                 if (can_edit) {
                     ImGui::PushItemWidth(-1);
-                    if (ImGui::InputInt("##resize_factor", &dataset_params.resize_factor, 1, 2)) {
-                        if (dataset_params.resize_factor >= -1 && dataset_params.resize_factor <= 8) {
-                            dataset_params_changed = true;
+                    // Available options
+                    static const int resize_options[] = {1, 2, 4, 8};
+                    static const char* resize_labels[] = {"1", "2", "4", "8"};
+                    static int current_index = 0; // default is 1
+                    int array_size = IM_ARRAYSIZE(resize_labels);
+                    // Set current_index to current value, if needed
+                    for (int i = 0; i < array_size; ++i) {
+                        if (dataset_params.resize_factor == resize_options[i]) {
+                            current_index = i;
                         }
+                    }
+
+                    // Draw combo
+                    if (ImGui::Combo("##resize_factor", &current_index, resize_labels, array_size)) {
+                        dataset_params.resize_factor = resize_options[current_index];
+                        dataset_params_changed = true;
                     }
                     ImGui::PopItemWidth();
                 } else {

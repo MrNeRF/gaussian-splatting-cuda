@@ -12,6 +12,7 @@
 #include "external/stb_image_write.h"
 
 #include <algorithm>
+#include <core/logger.hpp>
 #include <filesystem>
 #include <iostream>
 #include <vector>
@@ -63,7 +64,10 @@ std::tuple<unsigned char*, int, int, int> load_image(std::filesystem::path p, in
         img = out;
         w = nw;
         h = nh;
+    } else if (res_div > 1) {
+        LOG_ERROR("load_image: unimplement resize factor {}", res_div);
     }
+
     return {img, w, h, c};
 }
 
