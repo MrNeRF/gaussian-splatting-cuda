@@ -2,11 +2,16 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
+#ifdef _WIN32
+#define NOMINMAX
+#endif
+
 #include "sogs.hpp"
 #include "core/logger.hpp"
 #include <archive.h>
 #include <archive_entry.h>
 #include <cmath>
+#include <cstddef>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -17,6 +22,10 @@
 namespace gs::loader {
 
     namespace {
+
+#ifdef _WIN32
+        using ssize_t = std::ptrdiff_t;
+#endif
 
         // Identity layout matching the exporter
         int identity_layout(int index, [[maybe_unused]] int width) {
@@ -48,7 +57,7 @@ namespace gs::loader {
             float v2 = (c / 255.0f - 0.5f) * sqrt2;
 
             // Reconstruct the largest component
-            float largest_val = std::sqrt(std::max(0.0f, 1.0f - (v0 * v0 + v1 * v1 + v2 * v2)));
+            float largest_val = std::sqrt(std::clamp(1.0f - (v0 * v0 + v1 * v1 + v2 * v2), 0.0f, 1.0f));
 
             // Build the quaternion [x, y, z, w] based on what was packed
             std::array<float, 4> quat; // [x, y, z, w]
@@ -376,7 +385,7 @@ namespace gs::loader {
                     // Decode opacity (inverse sigmoid)
                     float opacity_norm = sh0_img[ti + 3] / 255.0f;
                     // Clamp with a safer epsilon to prevent infinity
-                    opacity_norm = std::max(1e-5f, std::min(1.0f - 1e-5f, opacity_norm));
+                    opacity_norm = std::clamp(opacity_norm, 1e-5f, 1.0f - 1e-5f);
                     opacity_acc[i][0] = std::log(opacity_norm / (1.0f - opacity_norm));
                 }
             }
