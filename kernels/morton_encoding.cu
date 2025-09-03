@@ -2,7 +2,6 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-
 #include "kernels/morton_encoding.cuh"
 #include <cstdint>
 #include <cuda_runtime.h>
