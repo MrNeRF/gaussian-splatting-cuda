@@ -416,7 +416,7 @@ target_link_libraries(${PROJECT_NAME}
         gs_kernels
         gsplat_backend
         fastgs_backend
-        Python3::Python
+        ${Python3_LIBRARIES}
         ${OPENGL_LIBRARIES}
         CUDA::cudart
         spdlog::spdlog
