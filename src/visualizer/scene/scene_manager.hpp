@@ -26,7 +26,7 @@ namespace gs {
         // Content type - what's loaded, not execution state
         enum class ContentType {
             Empty,
-            SplatFiles,  // Changed from PLYFiles to be more generic
+            SplatFiles, // Changed from PLYFiles to be more generic
             Dataset
         };
 
@@ -92,12 +92,6 @@ namespace gs {
         // Operations - Generic splat file loading
         void loadSplatFile(const std::filesystem::path& path);
         void addSplatFile(const std::filesystem::path& path, const std::string& name = "", bool is_visible = true);
-
-        // Legacy PLY-specific methods (redirects to generic)
-        void loadPLY(const std::filesystem::path& path) { loadSplatFile(path); }
-        void addPLY(const std::filesystem::path& path, const std::string& name = "", bool is_visible = true) {
-            addSplatFile(path, name, is_visible);
-        }
 
         void removePLY(const std::string& name);
         void setPLYVisibility(const std::string& name, bool visible);

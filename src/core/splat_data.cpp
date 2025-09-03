@@ -163,9 +163,9 @@ namespace {
     }
 
     void write_sog_impl(const gs::SplatData& splat_data,
-                       const std::filesystem::path& root,
-                       int iteration,
-                       int kmeans_iterations) {
+                        const std::filesystem::path& root,
+                        int iteration,
+                        int kmeans_iterations) {
         namespace fs = std::filesystem;
 
         // Create SOG subdirectory
@@ -175,9 +175,7 @@ namespace {
         // Set up SOG write options - use .sog extension to create bundle
         gs::core::SogWriteOptions options{
             .iterations = kmeans_iterations,
-            .use_gpu = torch::cuda::is_available(),
-            .output_path = sog_dir / ("splat_" + std::to_string(iteration) + ".sog")
-        };
+            .output_path = sog_dir / ("splat_" + std::to_string(iteration) + ".sog")};
 
         // Write SOG format
         auto result = gs::core::write_sog(splat_data, options);

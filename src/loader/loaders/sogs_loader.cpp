@@ -35,9 +35,9 @@ namespace gs::loader {
         // Validation only mode
         if (options.validate_only) {
             LOG_DEBUG("Validation only mode for SOG: {}", path.string());
-            
+
             bool valid = false;
-            
+
             // Check if it's a .sog bundle
             if (path.extension() == ".sog" && std::filesystem::is_regular_file(path)) {
                 // Basic validation - check if it's a valid archive
@@ -50,7 +50,7 @@ namespace gs::loader {
                         valid = true;
                     }
                 }
-            } 
+            }
             // Check if it's a directory with meta.json
             else if (std::filesystem::is_directory(path)) {
                 if (std::filesystem::exists(path / "meta.json")) {
@@ -61,7 +61,7 @@ namespace gs::loader {
             else if (path.filename() == "meta.json" && std::filesystem::is_regular_file(path)) {
                 valid = true;
             }
-            
+
             if (!valid) {
                 LOG_ERROR("Invalid SOG format: {}", path.string());
                 throw std::runtime_error("Invalid SOG format");

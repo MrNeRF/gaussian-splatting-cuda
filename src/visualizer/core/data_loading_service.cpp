@@ -44,10 +44,10 @@ namespace gs::visualizer {
                 // Check if we should add or replace
                 if (scene_manager_->hasSplatFiles()) {
                     // In viewing mode, add to existing
-                    scene_manager_->addPLY(cmd.path);
+                    scene_manager_->addSplatFile(cmd.path);
                 } else {
                     // Not in viewing mode - load as new scene
-                    scene_manager_->loadPLY(cmd.path);
+                    scene_manager_->loadSplatFile(cmd.path);
                 }
             } else {
                 // Let scene manager determine the type
@@ -106,7 +106,7 @@ namespace gs::visualizer {
             LOG_INFO("Loading PLY file: {}", path.string());
 
             // Load through scene manager
-            scene_manager_->loadPLY(path);
+            scene_manager_->loadSplatFile(path);
 
             LOG_INFO("Successfully loaded PLY: {} (from: {})",
                      path.filename().string(),
@@ -176,7 +176,7 @@ namespace gs::visualizer {
             LOG_TRACE("Extracted PLY name: {}", name);
 
             // Add through scene manager
-            scene_manager_->addPLY(path, name);
+            scene_manager_->addSplatFile(path, name);
 
             LOG_INFO("Added PLY '{}' to scene", name);
 

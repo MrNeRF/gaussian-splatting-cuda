@@ -59,7 +59,7 @@ namespace gs::loader {
                 // Check other file extensions
                 auto ext = path.extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                
+
                 // Check common extensions
                 if (ext == ".ply") {
                     LOG_TRACE("PLY file detected: {}", path.string());
@@ -75,8 +75,7 @@ namespace gs::loader {
                 if (safe_is_directory(path)) {
                     auto colmap_paths = get_colmap_search_paths(path);
                     const std::vector<std::string> colmap_markers = {
-                        "cameras.bin", "cameras.txt", "images.bin", "images.txt"
-                    };
+                        "cameras.bin", "cameras.txt", "images.bin", "images.txt"};
 
                     for (const auto& marker : colmap_markers) {
                         if (!find_file_in_paths(colmap_paths, marker).empty()) {
@@ -153,12 +152,12 @@ namespace gs::loader {
         if (safe_exists(path / "meta.json")) {
             // Need to check if this is a SOG directory or something else
             // SOG directories have specific WebP files
-            bool has_sog_files = safe_exists(path / "means_l.webp") || 
+            bool has_sog_files = safe_exists(path / "means_l.webp") ||
                                  safe_exists(path / "means_u.webp") ||
                                  safe_exists(path / "quats.webp") ||
                                  safe_exists(path / "scales.webp") ||
                                  safe_exists(path / "sh0.webp");
-            
+
             if (has_sog_files) {
                 LOG_TRACE("SOG directory detected, not a dataset: {}", path.string());
                 return false; // SOG directories are treated as single splat files
@@ -168,8 +167,7 @@ namespace gs::loader {
         // Check for COLMAP markers in any standard location
         auto colmap_paths = get_colmap_search_paths(path);
         const std::vector<std::string> colmap_markers = {
-            "cameras.bin", "cameras.txt", "images.bin", "images.txt"
-        };
+            "cameras.bin", "cameras.txt", "images.bin", "images.txt"};
 
         for (const auto& marker : colmap_markers) {
             if (!find_file_in_paths(colmap_paths, marker).empty()) {
@@ -210,12 +208,12 @@ namespace gs::loader {
 
         // Check if it's a SOG directory (not a dataset)
         if (safe_exists(path / "meta.json")) {
-            bool has_sog_files = safe_exists(path / "means_l.webp") || 
+            bool has_sog_files = safe_exists(path / "means_l.webp") ||
                                  safe_exists(path / "means_u.webp") ||
                                  safe_exists(path / "quats.webp") ||
                                  safe_exists(path / "scales.webp") ||
                                  safe_exists(path / "sh0.webp");
-            
+
             if (has_sog_files) {
                 return DatasetType::Unknown; // SOG is not a dataset type
             }
@@ -224,8 +222,7 @@ namespace gs::loader {
         // Check for COLMAP markers
         auto colmap_paths = get_colmap_search_paths(path);
         const std::vector<std::string> colmap_markers = {
-            "cameras.bin", "cameras.txt", "images.bin", "images.txt"
-        };
+            "cameras.bin", "cameras.txt", "images.bin", "images.txt"};
 
         for (const auto& marker : colmap_markers) {
             if (!find_file_in_paths(colmap_paths, marker).empty()) {

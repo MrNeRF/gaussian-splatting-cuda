@@ -229,9 +229,8 @@ namespace gs::gui {
                     ImGui::SameLine();
 
                     auto dataset_type = gs::loader::Loader::getDatasetType(selected_path);
-                    const char* type_str = (dataset_type == gs::loader::DatasetType::COLMAP) ? "(COLMAP)" :
-                                          (dataset_type == gs::loader::DatasetType::Transforms) ? "(Transforms)" :
-                                          "(Dataset)";
+                    const char* type_str = (dataset_type == gs::loader::DatasetType::COLMAP) ? "(COLMAP)" : (dataset_type == gs::loader::DatasetType::Transforms) ? "(Transforms)"
+                                                                                                                                                                  : "(Dataset)";
                     ImGui::TextDisabled(type_str);
                 } else if (is_sog_dir) {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.5f, 0.1f, 1.0f)); // Orange button

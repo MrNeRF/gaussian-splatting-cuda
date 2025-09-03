@@ -66,9 +66,8 @@ namespace gs {
     void SceneManager::changeContentType(const ContentType& type) {
         std::lock_guard<std::mutex> lock(state_mutex_);
 
-        const char* type_str = (type == ContentType::Empty) ? "Empty" :
-                               (type == ContentType::SplatFiles) ? "SplatFiles" :
-                               "Dataset";
+        const char* type_str = (type == ContentType::Empty) ? "Empty" : (type == ContentType::SplatFiles) ? "SplatFiles"
+                                                                                                          : "Dataset";
         LOG_DEBUG("Changing content type to: {}", type_str);
 
         content_type_ = type;
@@ -122,8 +121,7 @@ namespace gs {
             // Determine file type for event
             auto ext = path.extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-            auto file_type = (ext == ".sog") ? events::state::SceneLoaded::Type::SOG :
-                            events::state::SceneLoaded::Type::PLY;
+            auto file_type = (ext == ".sog") ? events::state::SceneLoaded::Type::SOG : events::state::SceneLoaded::Type::PLY;
 
             // Emit events
             events::state::SceneLoaded{
