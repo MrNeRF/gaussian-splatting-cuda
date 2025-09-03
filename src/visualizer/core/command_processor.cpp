@@ -121,8 +121,8 @@ namespace gs {
                 } else {
                     result << "Dataset loaded but no trainer available";
                 }
-            } else if (content_type == SceneManager::ContentType::PLYFiles) {
-                result << "PLY Viewer mode (no training)";
+            } else if (content_type == SceneManager::ContentType::SplatFiles) {
+                result << "Splat Viewer mode (no training)";
             } else {
                 result << "No content loaded";
             }

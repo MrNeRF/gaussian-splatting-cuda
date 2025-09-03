@@ -291,7 +291,7 @@ namespace gs::rendering {
                     }
                 }
             } // VAOBinder automatically unbinds here
-        } // ShaderScope automatically unbinds here
+        }     // ShaderScope automatically unbinds here
 
         // GLStateGuard will restore all OpenGL state when it goes out of scope
 

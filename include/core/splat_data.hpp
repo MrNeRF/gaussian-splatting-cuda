@@ -7,10 +7,10 @@
 #include "core/point_cloud.hpp"
 #include <expected>
 #include <filesystem>
+#include <future>
 #include <glm/glm.hpp>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <torch/torch.h>
 #include <vector>
 
@@ -24,8 +24,11 @@ namespace gs {
         SplatData() = default;
         ~SplatData();
 
+        // Delete copy operations
         SplatData(const SplatData&) = delete;
         SplatData& operator=(const SplatData&) = delete;
+
+        // Custom move operations (needed because of mutex)
         SplatData(SplatData&& other) noexcept;
         SplatData& operator=(SplatData&& other) noexcept;
 
@@ -77,8 +80,9 @@ namespace gs {
         // Utility methods
         void increment_sh_degree();
 
-        // Export methods - clean public interface
-        void save_ply(const std::filesystem::path& root, int iteration, bool join_thread = false) const;
+        // Export methods - join_threads controls sync vs async
+        void save_ply(const std::filesystem::path& root, int iteration, bool join_threads = true) const;
+        void save_sog(const std::filesystem::path& root, int iteration, int kmeans_iterations = 10, bool join_threads = true) const;
 
         // Get attribute names for the PLY format
         std::vector<std::string> get_attribute_names() const;
@@ -99,14 +103,15 @@ namespace gs {
         torch::Tensor _rotation;
         torch::Tensor _opacity;
 
-        // Thread management for async saves
-        mutable std::vector<std::thread> _save_threads;
-        mutable std::mutex _threads_mutex;
+        // Async save management
+        mutable std::mutex _save_mutex;
+        mutable std::vector<std::future<void>> _save_futures;
 
         // Convert to point cloud for export
         PointCloud to_point_cloud() const;
 
-        // Helper to clean up finished threads
-        void cleanup_finished_threads() const;
+        // Helper methods for async save management
+        void wait_for_saves() const;
+        void cleanup_finished_saves() const;
     };
 } // namespace gs
