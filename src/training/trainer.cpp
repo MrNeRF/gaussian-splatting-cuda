@@ -735,11 +735,11 @@ namespace gs::training {
         // Save PLY format - join_threads controls sync vs async
         strategy_->get_model().save_ply(save_path, iter_num, join_threads);
 
-        // Save SOG format if requested - same sync/async behavior
+        // Save SOG format if requested - ALWAYS synchronous
         if (params_.optimization.save_sog) {
             strategy_->get_model().save_sog(save_path, iter_num,
                                             params_.optimization.sog_iterations,
-                                            join_threads);
+                                            true); // Always synchronous
         }
 
         // Update project with PLY info
@@ -749,6 +749,6 @@ namespace gs::training {
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }
 
-        LOG_DEBUG("PLY save initiated: {} (sync={})", save_path.string(), join_threads);
+        LOG_DEBUG("PLY save initiated: {} (sync={}), SOG always sync", save_path.string(), join_threads);
     }
 } // namespace gs::training

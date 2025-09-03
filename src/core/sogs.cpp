@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
+#ifdef _WIN32
+#define NOMINMAX
+#endif
+
 #include "core/sogs.hpp"
 #include "core/logger.hpp"
 #include "kernels/kmeans.cuh"
@@ -432,8 +436,11 @@ namespace gs::core {
                 }
             }
 
-            auto [means_min, _] = means_log.min(0);
-            auto [means_max, __] = means_log.max(0);
+            // Fix for Windows because it sucks: avoid  bindings with min/max
+            auto means_min_tuple = means_log.min(0);
+            auto means_min = std::get<0>(means_min_tuple);
+            auto means_max_tuple = means_log.max(0);
+            auto means_max = std::get<0>(means_max_tuple);
 
             auto means_min_acc = means_min.accessor<float, 1>();
             auto means_max_acc = means_max.accessor<float, 1>();

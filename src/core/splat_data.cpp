@@ -460,26 +460,9 @@ namespace gs {
 
     // Export to SOG
     void SplatData::save_sog(const std::filesystem::path& root, int iteration, int kmeans_iterations, bool join_threads) const {
-        if (join_threads) {
-            // Synchronous save - wait for completion
-            write_sog_impl(*this, root, iteration, kmeans_iterations);
-        } else {
-            // Asynchronous save
-            cleanup_finished_saves();
-
-            // For SOG, we need to pass the data by reference through a shared_ptr
-            // to avoid copying while ensuring the data stays alive
-            std::lock_guard<std::mutex> lock(_save_mutex);
-            _save_futures.emplace_back(
-                std::async(std::launch::async,
-                           [this, root, iteration, kmeans_iterations]() {
-                               try {
-                                   write_sog_impl(*this, root, iteration, kmeans_iterations);
-                               } catch (const std::exception& e) {
-                                   LOG_ERROR("Failed to save SOG for iteration {}: {}", iteration, e.what());
-                               }
-                           }));
-        }
+        // SOG must always be synchronous - k-means clustering is too heavy for async
+        // and the shared data access patterns don't work well with async execution
+        write_sog_impl(*this, root, iteration, kmeans_iterations);
     }
 
     PointCloud SplatData::to_point_cloud() const {
