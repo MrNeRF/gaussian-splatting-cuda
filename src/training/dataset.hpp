@@ -108,10 +108,11 @@ namespace gs::training {
             }
             return std::nullopt;
         }
+        void set_resize_factor(int resize_factor) { _datasetConfig.resize_factor = resize_factor; }
 
     private:
         std::vector<std::shared_ptr<Camera>> _cameras;
-        const gs::param::DatasetConfig _datasetConfig;
+        gs::param::DatasetConfig _datasetConfig;
         Split _split;
         std::vector<size_t> _indices;
     };

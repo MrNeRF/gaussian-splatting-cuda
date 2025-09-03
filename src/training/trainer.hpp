@@ -10,6 +10,7 @@
 #include "core/parameters.hpp"
 #include "dataset.hpp"
 #include "metrics/metrics.hpp"
+#include "optimizers/scheduler.hpp"
 #include "progress.hpp"
 #include "project/project.hpp"
 #include "rasterization/rasterizer.hpp"
@@ -108,6 +109,9 @@ namespace gs::training {
             Error
         };
 
+        // Returns the background color to use at a given iteration
+        torch::Tensor& background_for_step(int iter);
+
         // Protected method for processing a single training step
         std::expected<StepResult, std::string> train_step(
             int iter,
@@ -165,12 +169,14 @@ namespace gs::training {
         param::TrainingParameters params_;
 
         torch::Tensor background_{};
+        torch::Tensor bg_mix_buffer_;
         std::unique_ptr<TrainingProgress> progress_;
         size_t train_dataset_size_ = 0;
 
         // Bilateral grid components
         std::unique_ptr<BilateralGrid> bilateral_grid_;
         std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
+        std::unique_ptr<WarmupExponentialLR> bilateral_grid_scheduler_;
 
         std::unique_ptr<PoseOptimizationModule> poseopt_module_; // Pose optimization module
         std::unique_ptr<torch::optim::Adam> poseopt_optimizer_;  // Optimizer for pose optimization
