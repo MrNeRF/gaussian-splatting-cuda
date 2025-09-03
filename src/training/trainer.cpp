@@ -685,10 +685,10 @@ namespace gs::training {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                save_ply(final_path, iter - 1, /*join=*/true);
+                save_ply(final_path, iter, /*join=*/true);
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
-                    .iteration = iter - 1,
+                    .iteration = iter,
                     .path = final_path}
                     .emit();
             }
@@ -732,7 +732,7 @@ namespace gs::training {
     }
 
     void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
-        strategy_->get_model().save_ply(save_path, iter_num + 1, /*join=*/join_threads);
+        strategy_->get_model().save_ply(save_path, iter_num, /*join=*/join_threads);
         if (lf_project_) {
             const std::string ply_name = "splat_" + std::to_string(iter_num + 1);
             const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
