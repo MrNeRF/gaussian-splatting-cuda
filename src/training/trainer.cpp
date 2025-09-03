@@ -733,18 +733,18 @@ namespace gs::training {
 
     void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
         // Save PLY format - no longer needs join parameter
-        strategy_->get_model().save_ply(save_path, iter_num + 1);
+        strategy_->get_model().save_ply(save_path, iter_num);
 
         // Save SOG format if requested - no longer needs join parameter
         if (params_.optimization.save_sog) {
-            strategy_->get_model().save_sog(save_path, iter_num + 1,
+            strategy_->get_model().save_sog(save_path, iter_num,
                                             params_.optimization.sog_iterations);
             LOG_DEBUG("SOG saved: {}/sog/", save_path.string());
         }
 
         // Update project with PLY info
         if (lf_project_) {
-            const std::string ply_name = "splat_" + std::to_string(iter_num + 1);
+            const std::string ply_name = "splat_" + std::to_string(iter_num);
             const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }

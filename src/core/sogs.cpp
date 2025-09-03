@@ -21,159 +21,26 @@
 #include <iomanip>
 #include <cstring>
 
-namespace gs {
-namespace core {
+namespace gs::core {
 
 namespace {
-
-constexpr int CHUNK_SIZE = 256;
 
 struct KMeansResult {
     torch::Tensor centroids;
     torch::Tensor labels;
 };
 
-// CPU fallback k-means for 1D data
-KMeansResult kmeans_1d_cpu(const torch::Tensor& data, int k, int iterations) {
-    const int n = data.size(0);
-    const auto device = data.device();
-    const auto dtype = data.dtype();
-
-    // Handle case where we have fewer points than clusters
-    if (n <= k) {
-        auto centroids = data.clone();
-        auto labels = torch::arange(n, torch::kInt32).to(device);
-        // Pad centroids if needed
-        if (n < k) {
-            auto padded = torch::zeros({k, 1}, data.options());
-            padded.slice(0, 0, n) = centroids;
-            // Fill remaining with evenly spaced values
-            if (n > 0) {
-                auto [min_val, _] = data.min(0);
-                auto [max_val, __] = data.max(0);
-                for (int i = n; i < k; ++i) {
-                    padded[i] = min_val + (max_val - min_val) * float(i - n) / float(k - n);
-                }
-            }
-            centroids = padded;
-        }
-        return {centroids, labels};
-    }
-
-    // Initialize centroids evenly over the input range
-    auto [min_val, _] = data.min(0);
-    auto [max_val, __] = data.max(0);
-
-    auto centroids = torch::linspace(
-        min_val.item<float>(),
-        max_val.item<float>(),
-        k,
-        torch::TensorOptions().dtype(dtype).device(device)
-    ).unsqueeze(1);
-
-    auto labels = torch::zeros({n}, torch::kInt64).to(device);
-
-    for (int iter = 0; iter < iterations; ++iter) {
-        // Assign points to nearest centroid
-        auto dists = torch::cdist(data.unsqueeze(1), centroids.unsqueeze(0));
-        labels = std::get<1>(dists.squeeze(1).min(1));
-
-        // Update centroids
-        for (int i = 0; i < k; ++i) {
-            auto mask = labels == i;
-            if (mask.any().item<bool>()) {
-                centroids[i] = data.index_select(0, mask.nonzero().squeeze(1)).mean(0);
-            }
-        }
-    }
-
-    // Sort centroids and remap labels
-    auto [sorted_centroids, sort_idx] = centroids.squeeze(1).sort(0);
-    centroids = sorted_centroids.unsqueeze(1);
-
-    // Create inverse mapping
-    auto inv_idx = torch::zeros({k}, torch::kInt64).to(device);
-    for (int i = 0; i < k; ++i) {
-        inv_idx[sort_idx[i].item<int64_t>()] = i;
-    }
-
-    // Remap labels
-    labels = inv_idx.index_select(0, labels);
-
-    return {centroids, labels.to(torch::kInt32)};
-}
-
-// CPU fallback k-means for N-D data
-KMeansResult kmeans_nd_cpu(const torch::Tensor& data, int k, int iterations) {
-    const int n = data.size(0);
-    const int d = data.size(1);
-    const auto device = data.device();
-    const auto dtype = data.dtype();
-
-    // Handle case where we have fewer points than clusters
-    if (n <= k) {
-        auto centroids = data.clone();
-        auto labels = torch::arange(n, torch::kInt32).to(device);
-        // Pad centroids if needed
-        if (n < k) {
-            auto padded = torch::zeros({k, d}, data.options());
-            padded.slice(0, 0, n) = centroids;
-            // Fill remaining with random points within data range
-            if (n > 0) {
-                auto [min_vals, _] = data.min(0);
-                auto [max_vals, __] = data.max(0);
-                for (int i = n; i < k; ++i) {
-                    padded[i] = min_vals + (max_vals - min_vals) * torch::rand({d}, data.options());
-                }
-            }
-            centroids = padded;
-        }
-        return {centroids, labels};
-    }
-
-    // Random initialization
-    auto perm = torch::randperm(n, torch::kInt64).to(device);
-    auto centroids = data.index_select(0, perm.slice(0, 0, k));
-
-    auto labels = torch::zeros({n}, torch::kInt64).to(device);
-
-    for (int iter = 0; iter < iterations; ++iter) {
-        // Assign points to nearest centroid
-        auto dists = torch::cdist(data, centroids);
-        labels = std::get<1>(dists.min(1));
-
-        // Update centroids
-        for (int i = 0; i < k; ++i) {
-            auto mask = labels == i;
-            if (mask.any().item<bool>()) {
-                auto indices = mask.nonzero().squeeze(1);
-                centroids[i] = data.index_select(0, indices).mean(0);
-            }
-        }
-    }
-
-    return {centroids, labels.to(torch::kInt32)};
-}
-
 // Wrapper for GPU/CPU k-means selection
-KMeansResult cluster_1d(const torch::Tensor& data, int k, int iterations, bool use_gpu) {
-    if (use_gpu && torch::cuda::is_available()) {
-        auto data_gpu = data.to(torch::kCUDA);
-        auto [centroids, labels] = gs::cuda::kmeans_1d(data_gpu, k, iterations);
-        return {centroids.cpu(), labels.cpu()};
-    } else {
-        return kmeans_1d_cpu(data, k, iterations);
-    }
+KMeansResult cluster_1d(const torch::Tensor& data, int k, int iterations) {
+    auto data_gpu = data.to(torch::kCUDA);
+    auto [centroids, labels] = gs::cuda::kmeans_1d(data_gpu, k, iterations);
+    return {centroids.cpu(), labels.cpu()};
 }
 
-KMeansResult cluster_nd(const torch::Tensor& data, int k, int iterations, bool use_gpu) {
-    if (use_gpu && torch::cuda::is_available()) {
-        auto data_gpu = data.to(torch::kCUDA);
-        auto [centroids, labels] = gs::cuda::kmeans(data_gpu, k, iterations);
-        return {centroids.cpu(), labels.cpu()};
-    } else {
-        return kmeans_nd_cpu(data, k, iterations);
-    }
+KMeansResult cluster_nd(const torch::Tensor& data, int k, int iterations) {
+    auto data_gpu = data.to(torch::kCUDA);
+    auto [centroids, labels] = gs::cuda::kmeans(data_gpu, k, iterations);
+    return {centroids.cpu(), labels.cpu()};
 }
 
 // Apply log transform for better quantization
@@ -484,16 +351,9 @@ std::expected<void, std::string> write_sog(
         }
         LOG_DEBUG("Detected SH degree: {}", sh_degree);
 
-        // Generate Morton order indices
-        torch::Tensor indices;
-        if (torch::cuda::is_available() && options.use_gpu) {
-            auto means_gpu = means.to(torch::kCUDA);
-            auto morton_codes = morton_encode(means_gpu);
-            indices = morton_sort_indices(morton_codes).cpu();
-        } else {
-            // Simple ordering for CPU fallback
-            indices = torch::arange(num_splats, torch::kInt64);
-        }
+        auto means_gpu = means.to(torch::kCUDA);
+        auto morton_codes = morton_encode(means_gpu);
+        auto indices = morton_sort_indices(morton_codes).cpu();
 
         // Check if output is .sog bundle or individual files
         bool is_bundle = options.output_path.extension() == ".sog";
@@ -633,7 +493,7 @@ std::expected<void, std::string> write_sog(
             scales_flat_ptr[2 * num_splats + i] = scales_acc[i][2];
         }
 
-        auto scales_result = cluster_1d(scales_flat, 256, options.iterations, options.use_gpu);
+        auto scales_result = cluster_1d(scales_flat, 256, options.iterations);
 
         std::vector<uint8_t> scales_data(width * height * channels, 255);
         auto scales_labels_acc = scales_result.labels.accessor<int32_t, 1>();
@@ -668,7 +528,7 @@ std::expected<void, std::string> write_sog(
             colors_1d_ptr[2 * num_splats + i] = sh0_acc[i][2];   // B values
         }
 
-        auto colors_result = cluster_1d(colors_1d, 256, options.iterations, options.use_gpu);
+        auto colors_result = cluster_1d(colors_1d, 256, options.iterations);
 
         std::vector<uint8_t> sh0_data(width * height * channels, 0);
         auto colors_labels_acc = colors_result.labels.accessor<int32_t, 1>();
@@ -748,7 +608,7 @@ std::expected<void, std::string> write_sog(
             LOG_DEBUG("Clustering SH with palette_size={}, sh_coeffs={}", palette_size, sh_coeffs);
 
             // Cluster SH coefficients
-            auto sh_result = cluster_nd(shN_reshaped, palette_size, options.iterations, options.use_gpu);
+            auto sh_result = cluster_nd(shN_reshaped, palette_size, options.iterations);
 
             if (sh_result.centroids.size(0) == 0) {
                 LOG_WARN("SH clustering returned empty centroids, skipping SH compression");
@@ -757,8 +617,7 @@ std::expected<void, std::string> write_sog(
                 LOG_DEBUG("SH clustering complete, actual_palette_size={}", actual_palette_size);
 
                 // Further cluster the centroids to create codebook
-                auto codebook_result = cluster_1d(sh_result.centroids.flatten(), 256,
-                                                options.iterations, options.use_gpu);
+                auto codebook_result = cluster_1d(sh_result.centroids.flatten(), 256, options.iterations);
 
                 // Calculate dimensions for centroids texture
                 const int centroids_width = 64 * sh_coeffs;
@@ -876,6 +735,4 @@ std::expected<void, std::string> write_sog(
         return std::unexpected(std::format("Failed to write SOG: {}", e.what()));
     }
 }
-
-} // namespace core
-} // namespace gs
+} // namespace gs::core

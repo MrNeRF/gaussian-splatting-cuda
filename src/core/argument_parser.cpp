@@ -114,7 +114,7 @@ namespace {
             ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
             ::args::Flag gut(parser, "gut", "Enable GUT mode", {"gut"});
             ::args::Flag rc(parser, "rc", "Workaround for reality captures - doesn't properly convert COLMAP camera model", {"rc"});
-            ::args::Flag save_sog(parser, "save_sog", "Save in SOG format alongside PLY", {"save-sog"});
+            ::args::Flag save_sog(parser, "sog", "Save in SOG format alongside PLY", {"sog"});
 
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
                                                             "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
@@ -358,7 +358,6 @@ namespace {
     std::vector<std::string> convert_args(int argc, const char* const argv[]) {
         return std::vector<std::string>(argv, argv + argc);
     }
-
 } // anonymous namespace
 
 // Public interface
