@@ -11,7 +11,7 @@ if ("${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
     set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
 endif()
 
-cmake_minimum_required(VERSION 3.24...3.30)
+cmake_minimum_required(VERSION 3.24)
 project(gaussian_splatting_cuda LANGUAGES CUDA CXX C)
 
 # Setup

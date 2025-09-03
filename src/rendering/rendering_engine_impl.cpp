@@ -76,6 +76,14 @@ namespace gs::rendering {
         }
         LOG_DEBUG("Translation gizmo initialized");
 
+        // Initialize camera frustum renderer
+        if (auto result = camera_frustum_renderer_.init(); !result) {
+            LOG_ERROR("Failed to initialize camera frustum renderer: {}", result.error());
+            // Non-critical, continue without it
+        } else {
+            LOG_DEBUG("Camera frustum renderer initialized");
+        }
+
         // Create gizmo interaction adapter
         gizmo_interaction_ = std::make_shared<GizmoInteractionAdapter>(&translation_gizmo_);
 
@@ -328,6 +336,23 @@ namespace gs::rendering {
         auto proj = createProjectionMatrix(viewport);
 
         return translation_gizmo_.render(view, proj, position, scale);
+    }
+
+    Result<void> RenderingEngineImpl::renderCameraFrustums(
+        const std::vector<std::shared_ptr<const Camera>>& cameras,
+        const ViewportData& viewport,
+        float scale,
+        const glm::vec3& train_color,
+        const glm::vec3& eval_color) {
+
+        if (!camera_frustum_renderer_.isInitialized()) {
+            return {}; // Silent fail if not initialized
+        }
+
+        auto view = createViewMatrix(viewport);
+        auto proj = createProjectionMatrix(viewport);
+
+        return camera_frustum_renderer_.render(cameras, view, proj, scale, train_color, eval_color);
     }
 
     std::shared_ptr<GizmoInteraction> RenderingEngineImpl::getGizmoInteraction() {

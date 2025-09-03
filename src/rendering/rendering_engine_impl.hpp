@@ -6,6 +6,7 @@
 
 #include "axes_renderer.hpp"
 #include "bbox_renderer.hpp"
+#include "camera_frustum_renderer.hpp"
 #include "grid_renderer.hpp"
 #include "rendering/rendering.hpp"
 #include "rendering_pipeline.hpp"
@@ -101,6 +102,13 @@ namespace gs::rendering {
             const ViewportData& viewport,
             float scale) override;
 
+        Result<void> renderCameraFrustums(
+            const std::vector<std::shared_ptr<const Camera>>& cameras,
+            const ViewportData& viewport,
+            float scale,
+            const glm::vec3& train_color,
+            const glm::vec3& eval_color) override;
+
         std::shared_ptr<GizmoInteraction> getGizmoInteraction() override;
 
         // Pipeline compatibility
@@ -130,6 +138,7 @@ namespace gs::rendering {
         RenderCoordinateAxes axes_renderer_;
         ViewportGizmo viewport_gizmo_;
         TranslationGizmo translation_gizmo_;
+        CameraFrustumRenderer camera_frustum_renderer_;
 
         // Gizmo interaction adapter
         std::shared_ptr<GizmoInteractionAdapter> gizmo_interaction_;

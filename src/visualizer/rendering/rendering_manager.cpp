@@ -546,6 +546,52 @@ namespace gs::visualizer {
             }
         }
 
+        // Camera frustums
+        if (settings_.show_camera_frustums && engine_) {
+            LOG_TRACE("Camera frustums enabled, checking for scene_manager...");
+
+            if (!context.scene_manager) {
+                LOG_ERROR("Camera frustums enabled but scene_manager is null in render context!");
+                return;
+            }
+
+            // Get cameras from scene manager's trainer
+            std::vector<std::shared_ptr<const Camera>> cameras;
+            auto* trainer_manager = context.scene_manager->getTrainerManager();
+
+            if (!trainer_manager) {
+                LOG_WARN("Camera frustums enabled but trainer_manager is null");
+                return;
+            }
+
+            if (!trainer_manager->hasTrainer()) {
+                LOG_TRACE("Camera frustums enabled but no trainer is loaded");
+                return;
+            }
+
+            cameras = trainer_manager->getCamList();
+            LOG_TRACE("Retrieved {} cameras from trainer manager", cameras.size());
+
+            if (!cameras.empty()) {
+                LOG_DEBUG("Rendering {} camera frustums with scale {}",
+                          cameras.size(), settings_.camera_frustum_scale);
+
+                auto frustum_result = engine_->renderCameraFrustums(
+                    cameras, viewport,
+                    settings_.camera_frustum_scale,
+                    settings_.train_camera_color,
+                    settings_.eval_camera_color);
+
+                if (!frustum_result) {
+                    LOG_ERROR("Failed to render camera frustums: {}", frustum_result.error());
+                } else {
+                    LOG_TRACE("Successfully rendered camera frustums");
+                }
+            } else {
+                LOG_WARN("Camera frustums enabled but no cameras available");
+            }
+        }
+
         // Translation gizmo (render last so it's on top)
         if (settings_.show_translation_gizmo && engine_) {
             glm::vec3 gizmo_pos = settings_.world_transform.getTranslation();

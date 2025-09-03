@@ -4,6 +4,7 @@
 
 #include "loader/loader.hpp"
 #include "core/logger.hpp"
+#include "loader/filesystem_utils.hpp"
 #include "loader_service.hpp"
 #include <algorithm>
 #include <cctype>
@@ -14,28 +15,6 @@
 namespace gs::loader {
 
     namespace {
-        // Helper function to safely check file existence
-        bool safe_exists(const std::filesystem::path& path) {
-            std::error_code ec;
-            bool exists = std::filesystem::exists(path, ec);
-            if (ec) {
-                LOG_TRACE("Cannot access path {}: {}", path.string(), ec.message());
-                return false;
-            }
-            return exists;
-        }
-
-        // Helper function to safely check if path is directory
-        bool safe_is_directory(const std::filesystem::path& path) {
-            std::error_code ec;
-            bool is_dir = std::filesystem::is_directory(path, ec);
-            if (ec) {
-                LOG_TRACE("Cannot check directory status for {}: {}", path.string(), ec.message());
-                return false;
-            }
-            return is_dir;
-        }
-
         // Implementation class that hides all internal details
         class LoaderImpl : public Loader {
         public:
@@ -99,8 +78,6 @@ namespace gs::loader {
 
             // JSON files might be datasets (transforms.json)
             if (ext == ".json") {
-                // Check if it's a transforms file by trying to read it
-                // For now, assume .json files in the context are datasets
                 LOG_TRACE("JSON file detected, treating as potential dataset: {}", path.string());
                 return true;
             }
@@ -110,27 +87,21 @@ namespace gs::loader {
             return false;
         }
 
-        // Check for dataset markers - use safe_exists for all checks
-        namespace fs = std::filesystem;
+        // Check for COLMAP markers in any standard location
+        auto colmap_paths = get_colmap_search_paths(path);
+        const std::vector<std::string> colmap_markers = {
+            "cameras.bin", "cameras.txt", "images.bin", "images.txt"};
 
-        // COLMAP markers - check both binary and text formats
-        bool has_colmap =
-            safe_exists(path / "sparse" / "0" / "cameras.bin") ||
-            safe_exists(path / "sparse" / "cameras.bin") ||
-            safe_exists(path / "sparse" / "0" / "cameras.txt") ||
-            safe_exists(path / "sparse" / "cameras.txt");
-
-        if (has_colmap) {
-            LOG_TRACE("COLMAP dataset detected at: {}", path.string());
-            return true;
+        for (const auto& marker : colmap_markers) {
+            if (!find_file_in_paths(colmap_paths, marker).empty()) {
+                LOG_TRACE("COLMAP dataset detected at: {}", path.string());
+                return true;
+            }
         }
 
         // Blender/NeRF markers
-        bool has_transforms =
-            safe_exists(path / "transforms.json") ||
-            safe_exists(path / "transforms_train.json");
-
-        if (has_transforms) {
+        if (safe_exists(path / "transforms.json") ||
+            safe_exists(path / "transforms_train.json")) {
             LOG_TRACE("Blender/NeRF dataset detected at: {}", path.string());
             return true;
         }
@@ -154,12 +125,15 @@ namespace gs::loader {
             return DatasetType::Unknown;
         }
 
-        // Check for COLMAP markers first
-        if (safe_exists(path / "sparse" / "0" / "cameras.bin") ||
-            safe_exists(path / "sparse" / "cameras.bin") ||
-            safe_exists(path / "sparse" / "0" / "cameras.txt") ||
-            safe_exists(path / "sparse" / "cameras.txt")) {
-            return DatasetType::COLMAP;
+        // Check for COLMAP markers
+        auto colmap_paths = get_colmap_search_paths(path);
+        const std::vector<std::string> colmap_markers = {
+            "cameras.bin", "cameras.txt", "images.bin", "images.txt"};
+
+        for (const auto& marker : colmap_markers) {
+            if (!find_file_in_paths(colmap_paths, marker).empty()) {
+                return DatasetType::COLMAP;
+            }
         }
 
         // Check for Transforms markers
