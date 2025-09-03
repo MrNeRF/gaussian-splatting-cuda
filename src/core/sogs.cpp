@@ -12,6 +12,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
@@ -24,6 +25,10 @@
 namespace gs::core {
 
     namespace {
+
+#ifdef _WIN32
+        using ssize_t = std::ptrdiff_t;
+#endif
 
         struct KMeansResult {
             torch::Tensor centroids;
@@ -105,24 +110,24 @@ namespace gs::core {
 
             if (max_idx == 0) {
                 // w is largest, store x, y, z
-                result[0] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (x * 0.5f + 0.5f) * 255.0f)));
-                result[1] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (y * 0.5f + 0.5f) * 255.0f)));
-                result[2] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (z * 0.5f + 0.5f) * 255.0f)));
+                result[0] = static_cast<uint8_t>(std::clamp((x * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                result[1] = static_cast<uint8_t>(std::clamp((y * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                result[2] = static_cast<uint8_t>(std::clamp((z * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
             } else if (max_idx == 1) {
                 // x is largest, store w, y, z
-                result[0] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (w * 0.5f + 0.5f) * 255.0f)));
-                result[1] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (y * 0.5f + 0.5f) * 255.0f)));
-                result[2] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (z * 0.5f + 0.5f) * 255.0f)));
+                result[0] = static_cast<uint8_t>(std::clamp((w * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                result[1] = static_cast<uint8_t>(std::clamp((y * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                result[2] = static_cast<uint8_t>(std::clamp((z * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
             } else if (max_idx == 2) {
                 // y is largest, store w, x, z
-                result[0] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (w * 0.5f + 0.5f) * 255.0f)));
-                result[1] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (x * 0.5f + 0.5f) * 255.0f)));
-                result[2] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (z * 0.5f + 0.5f) * 255.0f)));
+                result[0] = static_cast<uint8_t>(std::clamp((w * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                result[1] = static_cast<uint8_t>(std::clamp((x * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                result[2] = static_cast<uint8_t>(std::clamp((z * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
             } else {
                 // z is largest, store w, x, y
-                result[0] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (w * 0.5f + 0.5f) * 255.0f)));
-                result[1] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (x * 0.5f + 0.5f) * 255.0f)));
-                result[2] = static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, (y * 0.5f + 0.5f) * 255.0f)));
+                result[0] = static_cast<uint8_t>(std::clamp((w * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                result[1] = static_cast<uint8_t>(std::clamp((x * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                result[2] = static_cast<uint8_t>(std::clamp((y * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
             }
 
             // Store which component was largest
@@ -445,9 +450,9 @@ namespace gs::core {
                 float z = (means_log_data[idx][2] - means_min_acc[2]) /
                           (means_max_acc[2] - means_min_acc[2] + 1e-10f);
 
-                uint16_t x16 = static_cast<uint16_t>(65535 * std::max(0.0f, std::min(1.0f, x)));
-                uint16_t y16 = static_cast<uint16_t>(65535 * std::max(0.0f, std::min(1.0f, y)));
-                uint16_t z16 = static_cast<uint16_t>(65535 * std::max(0.0f, std::min(1.0f, z)));
+                uint16_t x16 = static_cast<uint16_t>(65535 * std::clamp(x, 0.0f, 1.0f));
+                uint16_t y16 = static_cast<uint16_t>(65535 * std::clamp(y, 0.0f, 1.0f));
+                uint16_t z16 = static_cast<uint16_t>(65535 * std::clamp(z, 0.0f, 1.0f));
 
                 means_l[ti * 4 + 0] = x16 & 0xff;
                 means_l[ti * 4 + 1] = y16 & 0xff;
