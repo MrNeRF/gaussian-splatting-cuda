@@ -35,6 +35,8 @@ namespace gs::training {
         gs::SplatData& get_model() override { return _splat_data; }
         const gs::SplatData& get_model() const override { return _splat_data; }
 
+        void remove_gaussians(const torch::Tensor& mask) override;
+
     private:
         // Simple ExponentialLR implementation since C++ API is different
         class ExponentialLR {
