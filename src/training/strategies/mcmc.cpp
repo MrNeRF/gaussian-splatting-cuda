@@ -4,10 +4,11 @@
 
 #include "mcmc.hpp"
 #include "Ops.h"
-#include "core/parameters.hpp"
 #include "core/logger.hpp"
+#include "core/parameters.hpp"
 #include "optimizers/fused_adam.hpp"
 #include "rasterization/rasterizer.hpp"
+#include "strategy_utils.hpp"
 #include <iostream>
 #include <random>
 
@@ -410,9 +411,36 @@ namespace gs::training {
 
         LOG_DEBUG("MCMC: Removing {} Gaussians", mask.sum().item<int>());
 
-        // For MCMC, we just mark them as dead and let relocate handle it
-        auto opacities = _splat_data.opacity_raw();
-        opacities.index_put_({mask}, torch::logit(torch::tensor(1e-7f)));
+        const torch::Tensor sampled_idxs = mask.logical_not().nonzero().squeeze(-1);
+
+        const auto param_fn = [&sampled_idxs](const int i, const torch::Tensor& param) {
+            return param.index_select(0, sampled_idxs).set_requires_grad(param.requires_grad());
+        };
+
+        const auto optimizer_fn = [&sampled_idxs](
+                                      torch::optim::OptimizerParamState& state,
+                                      const torch::Tensor& new_param)
+            -> std::unique_ptr<torch::optim::OptimizerParamState> {
+            if (auto* fused_adam_state = dynamic_cast<FusedAdam::AdamParamState*>(&state)) {
+                // FusedAdam state
+                auto new_exp_avg = fused_adam_state->exp_avg.index_select(0, sampled_idxs);
+                auto new_exp_avg_sq = fused_adam_state->exp_avg_sq.index_select(0, sampled_idxs);
+
+                // Create new state
+                auto new_state = std::make_unique<FusedAdam::AdamParamState>();
+                new_state->step_count = fused_adam_state->step_count;
+                new_state->exp_avg = new_exp_avg;
+                new_state->exp_avg_sq = new_exp_avg_sq;
+                if (fused_adam_state->max_exp_avg_sq.defined()) {
+                    auto new_max_exp_avg_sq = fused_adam_state->max_exp_avg_sq.index_select(0, sampled_idxs);
+                    new_state->max_exp_avg_sq = new_max_exp_avg_sq;
+                }
+                return new_state;
+            }
+            return nullptr;
+        };
+
+        update_param_with_optimizer(param_fn, optimizer_fn, _optimizer, _splat_data);
     }
 
     void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
