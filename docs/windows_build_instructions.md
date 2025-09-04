@@ -30,217 +30,137 @@ Long Version:
 - Download from https://developer.nvidia.com/cuda-12-8-0-download-archive
 - Select windows as your operation system, select x86_64 as architecture and select your windows version and select "exe (local)".
 - Download the 3.2GB file
-```
-### 
+- After download, execute the file and unpack the installation files in the proposed directory
+- Use "express" installation during installation
+- After installation is complete, verify if "nsight for Visual Studio 2022" was installed
+- Press "next" and close the installation
 
-### ○
+### Python 3
+- Download the Winsodws installer for the latest stable release from https://www.python.org/downloads/windows/
+- Run the installer
+- Choose "Customize the installation"
+- In the first options screen, select all options
+- In "Advanced options", make sure the following are selected:
+	- Add Python to environment variables
+ 	- Download debug binaries
+- Press "install" to start the installation
+- Close the installer when completed
 
-```
-○After download, execute the file and unpack the installation files in the proposed directory
-○Use "express" installation during installation
-```
-### •
-
-# LichtFeld Compilation on Windows
-
-woensdag 3 september 2025 12:
-
-
-```
-○After installation is complete, verify nsight for Visual Studio 2022 was installed
-```
-```
-○Press "next" and close the installation
-```
-```
-Python 3.
-○Download the Winsodws installer for the latest stable release from https://www.python.org/downloads/windows/
-○Run the installer
-○Choose "Customize the installation"
-○In the first options screen, select all options
-```
-```
-In "Advanced options", make sure the following are selected:
-Add Python to environment variables
-Download debug binaries
-```
-### ○
-
-```
-○Press "install" to start the installation
-○Close the installer when completed
-```
-### •
-
-```
-Git
-○Download windows installer from https://git-scm.com/downloads
-○Follow instructions, use default settings for all options (there are many)
-○Close installation after completion
-```
-### •
-
+### Git
+- Download windows installer from https://git-scm.com/downloads
+- Follow instructions, use default settings for all options (there are many)
+- Close installation after completion
 
 ## Step 2: Verifying your prerequiristes
 
 - Press start and find "developer command prompt for VS 2022"
-    Type the following commands to verify your installation:
-       Cmake --version
-          Must be 3.24 or higher
+- Type the following commands to verify your installation:
 
-### ○
-
-```
-nvcc --version
-Verify that 12.8 is being used
-```
-### ○
-
-```
-Git --version
-Verify that git shows version information
-```
-### ○
-
-```
-Python --version
-Verify that 3.10 or above is used
-```
-### ○
-
-### •
+		cmake --version
+  
+		nvcc --version
+  
+		git --version
+  
+ 		Python --version
+ 
+- Cmake: Must be 3.24 or higher
+- nvcc: Verify that 12.8 is being used
+- git: Verify that git shows version information
+- python: Verify that 3.10 or above is used
 
 ## Step 3 : Downloading and building LichtFeld Studio
 
 - Press start and find "developer command prompt for VS 2022"
-    Create a directory "repos"
-       ○mkdir repos
+- Create a directory "repos"
+  
+		mkdir repos
 
-### •
+- Go to the directoy "repos"
 
-```
-Go to the directoy "repos"
-○cd repos
-```
-### •
+		cd repos
 
-```
-Enter all lines in bold below one by one
-○These commands can also be found on https://github.com/MrNeRF/gaussian-splatting-cudain the "windows" section
-```
-### •
+- Set up vcpkg (one-time setup)
 
-```
-# Set up vcpkg (one-time setup)
-git clone https://github.com/microsoft/vcpkg.git
-cd vcpkg && .\bootstrap-vcpkg.bat -disableMetrics && cd ..
-```
-```
-## If you want you can specify vcpkg locally without globally setting env variable (see -DCMAKE_TOOLCHAIN_FILE version)
-set VCPKG_ROOT=%CD%\vcpkg
-```
-```
-# Clone repository
-git clone https://github.com/MrNeRF/gaussian-splatting-cuda
-cd gaussian-splatting-cuda
-```
-```
-# Create directories
-if not exist external mkdir external
-if not exist external\debug mkdir external\debug
-if not exist external\release mkdir external\release
-```
-```
-# Download LibTorch (Debug)
-curl -L -o libtorch-debug.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-debug-2.7.0%2Bcu128.zip
-tar -xf libtorch-debug.zip -C external\debug
-del libtorch-debug.zip
-```
-```
-# Download LibTorch (Release)
-curl -L -o libtorch-release.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-2.7.0%2Bcu128.zip
-tar -xf libtorch-release.zip -C external\release
-del libtorch-release.zip
-```
-```
-# Build configuration files and donwload dependancies
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-```
-```
-## Or if you want you can specify your own vcpkg
-# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
-```
-```
-# build LichtFeld Studio
-cmake --build build --config Release -j
-```
+		git clone https://github.com/microsoft/vcpkg.git
+  		cd vcpkg && .\bootstrap-vcpkg.bat -disableMetrics && cd ..
+
+- set environment variable
+
+		set VCPKG_ROOT=%CD%\vcpkg
+  
+- Clone repository
+  
+		git clone https://github.com/MrNeRF/gaussian-splatting-cuda
+  
+- Create directories
+  
+		cd gaussian-splatting-cuda
+		if not exist external mkdir external
+		if not exist external\debug mkdir external\debug
+		if not exist external\release mkdir external\release
+
+- Download LibTorch (Debug)
+
+		curl -L -o libtorch-debug.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-debug-2.7.0%2Bcu128.zip
+		tar -xf libtorch-debug.zip -C external\debug
+		del libtorch-debug.zip
+
+- Download LibTorch (Release)
+  
+		curl -L -o libtorch-release.zip https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-2.7.0%2Bcu128.zip
+		tar -xf libtorch-release.zip -C external\release
+		del libtorch-release.zip
+
+- Build configuration files and donwload dependancies
+ 
+		cmake -B build -DCMAKE_BUILD_TYPE=Release
+		## Or if you want you can specify your own vcpkg
+		# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
+
+- build LichtFeld Studio
+ 
+		cmake --build build --config Release -j
+
 After the last step is complete, you should have a new directory "\build\releases" where you can find "gaussian_splatting_cuda.exe"
+
 
 ## Troubleshooting
 
-```
-Before anything else:
-○Make sure you run all commands from the "developer command prompt for VS 2022" (notstandard command or cmd or powershell)
-○Verify if you have the proper requirements installed -see Step 2
-○Uninstall all Cuda Toolkit versions and re-install 12.
-○Delete the gaussian splatting directory, and restart the instructions from Step 3
-```
-### -
+### Before anything else:
+- Make sure you run all commands from the "developer command prompt for VS 2022" (notstandard command or cmd or powershell)
+- Verify if you have the proper requirements installed -see Step 2
+- Uninstall all Cuda Toolkit versions and re-install 12.
+- Delete the gaussian splatting directory, and restart the instructions from Step 3
 
-```
-Common issues
-Release build works, but debug build fails with error "cannot open file 'python313_d.lib'"
-This could be missing python debug libraries
-Run the python setup again, choose "modify" and select "download debug binaries"
-```
-### ○
+### Common issues
+- Release build works, but debug build fails with error "cannot open file 'python313_d.lib'"
+	- this could be missing python debug libraries
+ 	- Run the python setup again, choose "modify" and select "download debug binaries"
+  	- copy the files python313_d.lib from your python installation directory to the build\debug directory
+  	  
+- Cannot open include file
+	- Run the visual studio installation and modify the installation. Verify you have the C++ package installed (see step 1)
 
-### -
+- Building does not generate the .exe, but only the lib file:
+	- Possible cause: build files not up-to date with latest changes
+ 	- Solution: Re-generate the configuration files using in the command prompt and rebuild LichtFeld Studio
+    
+			cmake -B build -DCMAKE_BUILD_TYPE=Release
+			cmake --build build --config Release -j
 
 
-### 
+- Other things to check
+	- Type "set" in the console
+ 	- Verify the following environment variables
+  		- CUDA_ROOT -> must point to your cuda toolkit installation
+    	- INCLUDE -> must point to your Visual Studio installation
+     	- PATH -> must contain path to all binaries of the installed tools (Python, Visual Studio, Nvida Toolkit, Git)
 
-○Cannot open include file
-
-```
-Run the visual studio installation and modify the installation. Verify you have the C++ package installed (see step 1)
-```
-○Building does not generate the .exe, but only the lib file:
-
-```
-Possible cause: build files not up-to date with latest changes
-Solution: Re-generate the configuration files using in the command prompt and rebuild LichtFeld Studio
-□cmake -B build -DCMAKE_BUILD_TYPE=Release
-□cmake --build build --config Release -j
-```
-### 
-
-```
-Other things to check
-Type "set" in the console
-Verify the following environment variables
-□CUDA_ROOT -> must point to your cuda toolkit installation
-□INCLUDE -> must point to your Visual Studio installation
-□PATH -> must contain path to all binaries of the installed tools (Python, Visual Studio, Nvida Toolkit, Git)
-```
-### 
-
-### ○
-
-```
-Manual installation of Cuda in Visual Studio
- set CUDA_ROOT environment variable manually
-copy the files from
-"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\extras\visual_studio_integration\MSBuildExtensions"
-to
-```
-### □
-
-```
-□"C:\Program Files\Microsoft Visual Studio\ 2022 \Community\MSBuild\Microsoft\VC\v170\BuildCustomizations"
-```
-### 
-
-### ○
-
+- Manual installation of Cuda in Visual Studio
+	- set CUDA_ROOT environment variable manually
+ 	- copy the files from
+  		`C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\extras\visual_studio_integration\MSBuildExtensions`
+    	to
+    	`C:\Program Files\Microsoft Visual Studio\ 2022 \Community\MSBuild\Microsoft\VC\v170\BuildCustomizations`
 
