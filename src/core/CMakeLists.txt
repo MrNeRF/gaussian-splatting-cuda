@@ -4,13 +4,14 @@
 
 # Core module - fundamental data structures and utilities
 set(CORE_SOURCES
-    application.cpp
-    argument_parser.cpp
-    camera.cpp
-    image_io.cpp
-    parameters.cpp
-    splat_data.cpp
-    tinyply.cpp
+        application.cpp
+        argument_parser.cpp
+        camera.cpp
+        image_io.cpp
+        parameters.cpp
+        splat_data.cpp
+        sogs.cpp
+        tinyply.cpp
 )
 
 add_library(gs_core STATIC ${CORE_SOURCES})
@@ -29,6 +30,30 @@ target_include_directories(gs_core
         ${OPENGL_INCLUDE_DIRS}
 )
 
+# Find the actual WebP library target
+if(TARGET WebP::webp)
+    set(WEBP_LIB WebP::webp)
+elseif(TARGET WebP::libwebp)
+    set(WEBP_LIB WebP::libwebp)
+elseif(TARGET webp)
+    set(WEBP_LIB webp)
+else()
+    find_library(WEBP_LIBRARY NAMES webp libwebp REQUIRED)
+    set(WEBP_LIB ${WEBP_LIBRARY})
+endif()
+
+# Find the actual LibArchive library target
+if(TARGET LibArchive::LibArchive)
+    set(ARCHIVE_LIB LibArchive::LibArchive)
+elseif(TARGET archive)
+    set(ARCHIVE_LIB archive)
+elseif(TARGET archive_static)
+    set(ARCHIVE_LIB archive_static)
+else()
+    find_library(ARCHIVE_LIBRARY NAMES archive libarchive REQUIRED)
+    set(ARCHIVE_LIB ${ARCHIVE_LIBRARY})
+endif()
+
 target_link_libraries(gs_core
     PUBLIC
         ${TORCH_LIBRARIES}
@@ -39,6 +64,8 @@ target_link_libraries(gs_core
         Python3::Python
         CUDA::cudart    # For Camera CUDA operations
         spdlog::spdlog
+        ${WEBP_LIB}     # WebP for SOG compression
+        ${ARCHIVE_LIB}  # LibArchive for SOG bundle support
     PRIVATE
         taywee::args    # Only used in argument_parser.cpp
 )
@@ -110,3 +137,5 @@ endfunction()
 configure_build_type(gs_core)
 
 message(STATUS "Core module configured with ${CMAKE_BUILD_TYPE} build type")
+message(STATUS "  WebP library: ${WEBP_LIB}")
+message(STATUS "  Archive library: ${ARCHIVE_LIB}")

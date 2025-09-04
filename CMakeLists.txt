@@ -258,6 +258,8 @@ find_package(args REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(Freetype REQUIRED)
+find_package(WebP REQUIRED)
+find_package(LibArchive REQUIRED)
 
 # TORCH_CUDA_ARCH_LIST is already defined by Torch
 # use it here as the global default CUDA architecture list too
@@ -330,6 +332,12 @@ set(KERNEL_SOURCES)
 if(CUDA_GL_INTEROP_FOUND)
     list(APPEND KERNEL_SOURCES kernels/cuda_gl_interop.cu)
 endif()
+
+# Add SOG-related kernels
+list(APPEND KERNEL_SOURCES
+        kernels/morton_encoding.cu
+        kernels/kmeans.cu
+)
 
 # Only create gaussian_kernels if there are kernels
 if(KERNEL_SOURCES)
@@ -581,6 +589,8 @@ message(STATUS "  Torch Version: ${Torch_VERSION}")
 message(STATUS "  Python Version: ${Python3_VERSION}")
 message(STATUS "  OpenGL Found: ${OPENGL_FOUND}")
 message(STATUS "  FreeType Found: ${FREETYPE_FOUND}")
+message(STATUS "  WebP Found: ${WebP_FOUND}")
+message(STATUS "  LibArchive Found: ${LibArchive_FOUND}")
 message(STATUS "  CUDA-GL Interop Option: ${ENABLE_CUDA_GL_INTEROP}")
 message(STATUS "  CUDA-GL Interop Available: ${CUDA_GL_INTEROP_FOUND}")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")

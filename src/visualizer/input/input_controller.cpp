@@ -528,15 +528,18 @@ namespace gs::visualizer {
     void InputController::handleFileDrop(const std::vector<std::string>& paths) {
         LOG_DEBUG("Handling file drop with {} files", paths.size());
 
-        std::vector<std::filesystem::path> ply_files;
+        std::vector<std::filesystem::path> splat_files;
         std::optional<std::filesystem::path> dataset_path;
 
         for (const auto& path_str : paths) {
             std::filesystem::path filepath(path_str);
             LOG_TRACE("Processing dropped file: {}", filepath.string());
 
-            if (filepath.extension() == ".ply" || filepath.extension() == ".PLY") {
-                ply_files.push_back(filepath);
+            auto ext = filepath.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            if (ext == ".ply" || ext == ".sog") {
+                splat_files.push_back(filepath);
             } else if (!dataset_path && std::filesystem::is_directory(filepath)) {
                 // Check for dataset markers
                 LOG_TRACE("Checking directory for dataset markers: {}", filepath.string());
@@ -547,10 +550,11 @@ namespace gs::visualizer {
             }
         }
 
-        // Load PLY files
-        for (const auto& ply : ply_files) {
-            events::cmd::LoadFile{.path = ply, .is_dataset = false}.emit();
-            LOG_INFO("Loading PLY via drag-and-drop: {}", ply.filename().string());
+        // Load splat files (PLY or SOG)
+        for (const auto& splat : splat_files) {
+            events::cmd::LoadFile{.path = splat, .is_dataset = false}.emit();
+            LOG_INFO("Loading {} via drag-and-drop: {}",
+                     splat.extension().string(), splat.filename().string());
         }
 
         // Load dataset if found

@@ -17,6 +17,8 @@
     "nlohmann-json",
     "spdlog",
     "tbb",
-    "freetype"
+    "freetype",
+    "libwebp",
+    "libarchive"
   ]
 }

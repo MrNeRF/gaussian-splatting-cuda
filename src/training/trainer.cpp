@@ -732,12 +732,23 @@ namespace gs::training {
     }
 
     void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
-        strategy_->get_model().save_ply(save_path, iter_num, /*join=*/join_threads);
+        // Save PLY format - join_threads controls sync vs async
+        strategy_->get_model().save_ply(save_path, iter_num, join_threads);
+
+        // Save SOG format if requested - ALWAYS synchronous
+        if (params_.optimization.save_sog) {
+            strategy_->get_model().save_sog(save_path, iter_num,
+                                            params_.optimization.sog_iterations,
+                                            true); // Always synchronous
+        }
+
+        // Update project with PLY info
         if (lf_project_) {
             const std::string ply_name = "splat_" + std::to_string(iter_num);
             const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }
-        LOG_DEBUG("PLY saved: {}", save_path.string());
+
+        LOG_DEBUG("PLY save initiated: {} (sync={}), SOG always sync", save_path.string(), join_threads);
     }
 } // namespace gs::training
