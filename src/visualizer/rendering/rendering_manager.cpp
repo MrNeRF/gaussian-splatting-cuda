@@ -152,6 +152,7 @@ namespace gs::visualizer {
 
     void RenderingManager::markDirty() {
         needs_render_ = true;
+        LOG_TRACE("Render marked dirty");
     }
 
     void RenderingManager::updateSettings(const RenderSettings& new_settings) {
@@ -203,6 +204,24 @@ namespace gs::visualizer {
             initialize();
         }
         return engine_.get();
+    }
+
+    int RenderingManager::pickCameraFrustum(const glm::vec2& mouse_pos) {
+        // Throttle picking to avoid excessive calls
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_pick_time_ < pick_throttle_interval_) {
+            return hovered_camera_id_; // Return cached value
+        }
+        last_pick_time_ = now;
+
+        pending_pick_pos_ = mouse_pos;
+        pick_requested_ = true;
+
+        pick_count_++;
+        LOG_TRACE("Pick #{} requested at ({}, {}), current hover: {}",
+                  pick_count_, mouse_pos.x, mouse_pos.y, hovered_camera_id_);
+
+        return hovered_camera_id_; // Return current value
     }
 
     void RenderingManager::renderFrame(const RenderContext& context, SceneManager* scene_manager) {
@@ -310,6 +329,9 @@ namespace gs::visualizer {
 
     void RenderingManager::doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model) {
         LOG_TIMER_TRACE("Full render pass");
+
+        render_count_++;
+        LOG_TRACE("Render #{}, pick_requested: {}", render_count_, pick_requested_);
 
         glm::ivec2 render_size = context.viewport.windowSize;
         if (context.viewport_region) {
@@ -546,7 +568,7 @@ namespace gs::visualizer {
             }
         }
 
-        // Camera frustums
+        // Camera frustums section
         if (settings_.show_camera_frustums && engine_) {
             LOG_TRACE("Camera frustums enabled, checking for scene_manager...");
 
@@ -573,19 +595,64 @@ namespace gs::visualizer {
             LOG_TRACE("Retrieved {} cameras from trainer manager", cameras.size());
 
             if (!cameras.empty()) {
-                LOG_DEBUG("Rendering {} camera frustums with scale {}",
-                          cameras.size(), settings_.camera_frustum_scale);
+                // Find the actual index for the hovered camera ID
+                int highlight_index = -1;
+                if (hovered_camera_id_ >= 0) {
+                    for (size_t i = 0; i < cameras.size(); ++i) {
+                        if (cameras[i]->uid() == hovered_camera_id_) {
+                            highlight_index = static_cast<int>(i);
+                            break;
+                        }
+                    }
+                }
 
-                auto frustum_result = engine_->renderCameraFrustums(
+                // FIRST: Render the frustums with correct highlight
+                LOG_TRACE("Rendering {} camera frustums with scale {}, highlighted index: {} (ID: {})",
+                          cameras.size(), settings_.camera_frustum_scale, highlight_index, hovered_camera_id_);
+
+                auto frustum_result = engine_->renderCameraFrustumsWithHighlight(
                     cameras, viewport,
                     settings_.camera_frustum_scale,
                     settings_.train_camera_color,
-                    settings_.eval_camera_color);
+                    settings_.eval_camera_color,
+                    highlight_index // Use the calculated index, not the stored one
+                );
 
                 if (!frustum_result) {
                     LOG_ERROR("Failed to render camera frustums: {}", frustum_result.error());
-                } else {
-                    LOG_TRACE("Successfully rendered camera frustums");
+                }
+
+                // SECOND: Now perform picking if requested (after instances are cached from render)
+                if (pick_requested_ && context.viewport_region) {
+                    pick_requested_ = false;
+
+                    auto pick_result = engine_->pickCameraFrustum(
+                        cameras,
+                        pending_pick_pos_,
+                        glm::vec2(context.viewport_region->x, context.viewport_region->y),
+                        glm::vec2(context.viewport_region->width, context.viewport_region->height),
+                        viewport,
+                        settings_.camera_frustum_scale);
+
+                    if (pick_result) {
+                        int cam_id = *pick_result;
+
+                        // Only process if camera ID actually changed
+                        if (cam_id != hovered_camera_id_) {
+                            int old_hover = hovered_camera_id_;
+                            hovered_camera_id_ = cam_id;
+
+                            // Only mark dirty on actual change
+                            markDirty();
+                            LOG_DEBUG("Camera hover changed: {} -> {}", old_hover, cam_id);
+                        }
+                    } else if (hovered_camera_id_ != -1) {
+                        // Lost hover - only update if we had a hover before
+                        int old_hover = hovered_camera_id_;
+                        hovered_camera_id_ = -1;
+                        markDirty();
+                        LOG_DEBUG("Camera hover lost (was ID: {})", old_hover);
+                    }
                 }
             } else {
                 LOG_WARN("Camera frustums enabled but no cameras available");

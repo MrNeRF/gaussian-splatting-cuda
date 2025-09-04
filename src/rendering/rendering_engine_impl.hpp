@@ -109,6 +109,22 @@ namespace gs::rendering {
             const glm::vec3& train_color,
             const glm::vec3& eval_color) override;
 
+        Result<void> renderCameraFrustumsWithHighlight(
+            const std::vector<std::shared_ptr<const Camera>>& cameras,
+            const ViewportData& viewport,
+            float scale,
+            const glm::vec3& train_color,
+            const glm::vec3& eval_color,
+            int highlight_index) override;
+
+        Result<int> pickCameraFrustum(
+            const std::vector<std::shared_ptr<const Camera>>& cameras,
+            const glm::vec2& mouse_pos,
+            const glm::vec2& viewport_pos,
+            const glm::vec2& viewport_size,
+            const ViewportData& viewport,
+            float scale) override;
+
         std::shared_ptr<GizmoInteraction> getGizmoInteraction() override;
 
         // Pipeline compatibility
