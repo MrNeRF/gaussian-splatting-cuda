@@ -1,3 +1,9 @@
+# LichtFeld Studio - Windows Buiild Instructions
+
+Currently, LichtFeld Studio does not offer any pre-compiled binaries as the project is geared towards devevelopment and with the current speed of development it does not make sense for binaries to be distributed to the casual user. 
+
+But if you are not a developer but you are keen on trying LichtFeld Studio, then this step by step guide is intented  is for you!  Follow the steps below and you will be creating gaussian splats with LichtFeld Studio soon!
+
 Note: Installation of dependencies and compiling of LichtFeld Studio will take about 1 hour
 
 # TLDR
