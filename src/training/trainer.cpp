@@ -36,6 +36,7 @@ namespace gs::training {
         progress_.reset();
         bilateral_grid_.reset();
         bilateral_grid_optimizer_.reset();
+        bilateral_grid_scheduler_.reset();
         poseopt_module_.reset();
         poseopt_optimizer_.reset();
         sparsity_optimizer_.reset();
@@ -79,7 +80,17 @@ namespace gs::training {
                 torch::optim::AdamOptions(params_.optimization.bilateral_grid_lr)
                     .eps(1e-15));
 
-            LOG_DEBUG("Bilateral grid initialized with size {}x{}x{}",
+            // Create scheduler with warmup
+            const double gamma = std::pow(0.01, 1.0 / params_.optimization.iterations);
+            bilateral_grid_scheduler_ = std::make_unique<WarmupExponentialLR>(
+                *bilateral_grid_optimizer_,
+                gamma,
+                1000, // warmup steps
+                0.01, // start at 1% of initial LR
+                -1    // all param groups
+            );
+
+            LOG_DEBUG("Bilateral grid initialized with size {}x{}x{} and warmup scheduler",
                       params_.optimization.bilateral_grid_X,
                       params_.optimization.bilateral_grid_Y,
                       params_.optimization.bilateral_grid_W);
@@ -278,6 +289,14 @@ namespace gs::training {
 
                 LOG_INFO("Using all {} images for training (no evaluation)",
                          train_dataset_->size().value());
+            }
+
+            // chage resize factor (change may comes from gui)
+            if (train_dataset_) {
+                train_dataset_->set_resize_factor(params.dataset.resize_factor);
+            }
+            if (val_dataset_) {
+                val_dataset_->set_resize_factor(params.dataset.resize_factor);
             }
 
             train_dataset_size_ = train_dataset_->size().value();
@@ -579,6 +598,7 @@ namespace gs::training {
                     if (params_.optimization.use_bilateral_grid) {
                         bilateral_grid_optimizer_->step();
                         bilateral_grid_optimizer_->zero_grad(true);
+                        bilateral_grid_scheduler_->step();
                     }
                     if (params_.optimization.pose_optimization != "none") {
                         poseopt_optimizer_->step();
@@ -777,10 +797,10 @@ namespace gs::training {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                save_ply(final_path, iter - 1, /*join=*/true);
+                save_ply(final_path, iter, /*join=*/true);
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
-                    .iteration = iter - 1,
+                    .iteration = iter,
                     .path = final_path}
                     .emit();
             }
@@ -824,12 +844,23 @@ namespace gs::training {
     }
 
     void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
-        strategy_->get_model().save_ply(save_path, iter_num + 1, /*join=*/join_threads);
+        // Save PLY format - join_threads controls sync vs async
+        strategy_->get_model().save_ply(save_path, iter_num, join_threads);
+
+        // Save SOG format if requested - ALWAYS synchronous
+        if (params_.optimization.save_sog) {
+            strategy_->get_model().save_sog(save_path, iter_num,
+                                            params_.optimization.sog_iterations,
+                                            true); // Always synchronous
+        }
+
+        // Update project with PLY info
         if (lf_project_) {
-            const std::string ply_name = "splat_" + std::to_string(iter_num + 1);
+            const std::string ply_name = "splat_" + std::to_string(iter_num);
             const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }
-        LOG_DEBUG("PLY saved: {}", save_path.string());
+
+        LOG_DEBUG("PLY save initiated: {} (sync={}), SOG always sync", save_path.string(), join_threads);
     }
 } // namespace gs::training

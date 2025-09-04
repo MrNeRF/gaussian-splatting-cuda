@@ -84,7 +84,7 @@ namespace gs {
             EVENT(SceneLoaded,
                   Scene* scene;
                   std::filesystem::path path;
-                  enum class Type{PLY, Dataset} type;
+                  enum class Type{PLY, Dataset, SOG} type;
                   size_t num_gaussians;);
             EVENT(SceneCleared, );
             EVENT(ModelUpdated, int iteration; size_t num_gaussians;);

@@ -24,7 +24,7 @@ namespace gs {
 
         // Handle PLY commands
         cmd::AddPLY::when([this](const auto& cmd) {
-            addPLY(cmd.path, cmd.name);
+            addSplatFile(cmd.path, cmd.name);
         });
 
         cmd::RemovePLY::when([this](const auto& cmd) {
@@ -46,7 +46,7 @@ namespace gs {
                 // In split mode: advance the offset
                 rendering_manager_->advanceSplitOffset();
                 LOG_DEBUG("Advanced split view offset");
-            } else if (content_type_ == ContentType::PLYFiles) {
+            } else if (content_type_ == ContentType::SplatFiles) {
                 // Normal mode: existing cycle code
                 auto [hidden, shown] = scene_.cycleVisibilityWithNames();
 
@@ -55,7 +55,7 @@ namespace gs {
                 }
                 if (!shown.empty()) {
                     events::cmd::SetPLYVisibility{.name = shown, .visible = true}.emit();
-                    LOG_DEBUG("Cycled to PLY: {}", shown);
+                    LOG_DEBUG("Cycled to: {}", shown);
                 }
 
                 emitSceneChanged();
@@ -66,63 +66,68 @@ namespace gs {
     void SceneManager::changeContentType(const ContentType& type) {
         std::lock_guard<std::mutex> lock(state_mutex_);
 
-        const char* type_str = (type == ContentType::Empty) ? "Empty" : (type == ContentType::PLYFiles) ? "PLYFiles"
-                                                                                                        : "Dataset";
+        const char* type_str = (type == ContentType::Empty) ? "Empty" : (type == ContentType::SplatFiles) ? "SplatFiles"
+                                                                                                          : "Dataset";
         LOG_DEBUG("Changing content type to: {}", type_str);
 
         content_type_ = type;
     }
 
-    void SceneManager::loadPLY(const std::filesystem::path& path) {
-        LOG_TIMER("SceneManager::loadPLY");
+    void SceneManager::loadSplatFile(const std::filesystem::path& path) {
+        LOG_TIMER("SceneManager::loadSplatFile");
 
         try {
-            LOG_INFO("Loading PLY file: {}", path.string());
+            LOG_INFO("Loading splat file: {}", path.string());
 
             // Clear existing scene
             clear();
 
-            // Load the PLY
-            LOG_DEBUG("Creating loader for PLY file");
+            // Load the file
+            LOG_DEBUG("Creating loader for splat file");
             auto loader = gs::loader::Loader::create();
             gs::loader::LoadOptions options{
                 .resize_factor = -1,
                 .images_folder = "images",
                 .validate_only = false};
 
-            LOG_TRACE("Loading PLY with loader");
+            LOG_TRACE("Loading splat file with loader");
             auto load_result = loader->load(path, options);
             if (!load_result) {
-                LOG_ERROR("Failed to load PLY: {}", load_result.error());
+                LOG_ERROR("Failed to load splat file: {}", load_result.error());
                 throw std::runtime_error(load_result.error());
             }
 
             auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
             if (!splat_data || !*splat_data) {
-                LOG_ERROR("Expected PLY file but got different data type from: {}", path.string());
-                throw std::runtime_error("Expected PLY file but got different data type");
+                LOG_ERROR("Expected splat file but got different data type from: {}", path.string());
+                throw std::runtime_error("Expected splat file but got different data type");
             }
 
             // Add to scene
             std::string name = path.stem().string();
             size_t gaussian_count = (*splat_data)->size();
-            LOG_DEBUG("Adding PLY '{}' to scene with {} gaussians", name, gaussian_count);
+            LOG_DEBUG("Adding '{}' to scene with {} gaussians", name, gaussian_count);
 
             scene_.addNode(name, std::make_unique<SplatData>(std::move(**splat_data)));
 
             // Update content state
             {
                 std::lock_guard<std::mutex> lock(state_mutex_);
-                content_type_ = ContentType::PLYFiles;
-                ply_paths_.clear();
-                ply_paths_.push_back(path);
+                content_type_ = ContentType::SplatFiles;
+                splat_paths_.clear();
+                splat_paths_.push_back(path);
             }
+
+            // Determine file type for event
+            auto ext = path.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            auto file_type = (ext == ".sog") ? events::state::SceneLoaded::Type::SOG : events::state::SceneLoaded::Type::PLY;
 
             // Emit events
             events::state::SceneLoaded{
                 .scene = nullptr,
                 .path = path,
-                .type = events::state::SceneLoaded::Type::PLY,
+                .type = file_type,
                 .num_gaussians = scene_.getTotalGaussianCount()}
                 .emit();
 
@@ -135,46 +140,46 @@ namespace gs {
 
             emitSceneChanged();
 
-            LOG_INFO("Successfully loaded PLY '{}' with {} gaussians", name, gaussian_count);
+            LOG_INFO("Successfully loaded '{}' with {} gaussians", name, gaussian_count);
 
         } catch (const std::exception& e) {
-            LOG_ERROR("Failed to load PLY: {} (path: {})", e.what(), path.string());
+            LOG_ERROR("Failed to load splat file: {} (path: {})", e.what(), path.string());
             throw;
         }
     }
 
-    void SceneManager::addPLY(const std::filesystem::path& path, const std::string& name_hint,
-                              bool is_visible) {
-        LOG_TIMER_TRACE("SceneManager::addPLY");
+    void SceneManager::addSplatFile(const std::filesystem::path& path, const std::string& name_hint,
+                                    bool is_visible) {
+        LOG_TIMER_TRACE("SceneManager::addSplatFile");
 
         try {
-            // If not in PLY mode, switch to it
-            if (content_type_ != ContentType::PLYFiles) {
-                LOG_DEBUG("Not in PLY mode, switching to PLY mode and loading");
-                loadPLY(path);
+            // If not in splat mode, switch to it
+            if (content_type_ != ContentType::SplatFiles) {
+                LOG_DEBUG("Not in splat mode, switching to splat mode and loading");
+                loadSplatFile(path);
                 return;
             }
 
-            LOG_INFO("Adding PLY to scene: {}", path.string());
+            LOG_INFO("Adding splat file to scene: {}", path.string());
 
-            // Load the PLY
+            // Load the file
             auto loader = gs::loader::Loader::create();
             gs::loader::LoadOptions options{
                 .resize_factor = -1,
                 .images_folder = "images",
                 .validate_only = false};
 
-            LOG_TRACE("Loading PLY data");
+            LOG_TRACE("Loading splat data");
             auto load_result = loader->load(path, options);
             if (!load_result) {
-                LOG_ERROR("Failed to load PLY: {}", load_result.error());
+                LOG_ERROR("Failed to load splat file: {}", load_result.error());
                 throw std::runtime_error(load_result.error());
             }
 
             auto* splat_data = std::get_if<std::shared_ptr<gs::SplatData>>(&load_result->data);
             if (!splat_data || !*splat_data) {
-                LOG_ERROR("Expected PLY file from: {}", path.string());
-                throw std::runtime_error("Expected PLY file");
+                LOG_ERROR("Expected splat file from: {}", path.string());
+                throw std::runtime_error("Expected splat file");
             }
 
             // Generate unique name
@@ -195,7 +200,7 @@ namespace gs {
             // Update paths
             {
                 std::lock_guard<std::mutex> lock(state_mutex_);
-                ply_paths_.push_back(path);
+                splat_paths_.push_back(path);
             }
 
             events::state::PLYAdded{
@@ -207,17 +212,17 @@ namespace gs {
 
             emitSceneChanged();
 
-            LOG_INFO("Added PLY '{}' to scene ({} gaussians, visible: {})",
+            LOG_INFO("Added '{}' to scene ({} gaussians, visible: {})",
                      name, gaussian_count, is_visible);
 
         } catch (const std::exception& e) {
-            LOG_ERROR("Failed to add PLY: {} (path: {})", e.what(), path.string());
+            LOG_ERROR("Failed to add splat file: {} (path: {})", e.what(), path.string());
             throw;
         }
     }
 
     void SceneManager::removePLY(const std::string& name) {
-        LOG_DEBUG("Removing PLY '{}' from scene", name);
+        LOG_DEBUG("Removing '{}' from scene", name);
 
         scene_.removeNode(name);
 
@@ -225,18 +230,18 @@ namespace gs {
         if (scene_.getNodeCount() == 0) {
             std::lock_guard<std::mutex> lock(state_mutex_);
             content_type_ = ContentType::Empty;
-            ply_paths_.clear();
+            splat_paths_.clear();
             LOG_DEBUG("No nodes remaining, transitioning to empty state");
         }
 
         events::state::PLYRemoved{.name = name}.emit();
         emitSceneChanged();
 
-        LOG_INFO("Removed PLY '{}' from scene", name);
+        LOG_INFO("Removed '{}' from scene", name);
     }
 
     void SceneManager::setPLYVisibility(const std::string& name, bool visible) {
-        LOG_TRACE("Setting PLY '{}' visibility to: {}", name, visible);
+        LOG_TRACE("Setting '{}' visibility to: {}", name, visible);
         scene_.setNodeVisibility(name, visible);
         emitSceneChanged();
     }
@@ -335,7 +340,7 @@ namespace gs {
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             content_type_ = ContentType::Empty;
-            ply_paths_.clear();
+            splat_paths_.clear();
             dataset_path_.clear();
         }
 
@@ -348,7 +353,7 @@ namespace gs {
     const SplatData* SceneManager::getModelForRendering() const {
         std::lock_guard<std::mutex> lock(state_mutex_);
 
-        if (content_type_ == ContentType::PLYFiles) {
+        if (content_type_ == ContentType::SplatFiles) {
             return scene_.getCombinedModel();
         } else if (content_type_ == ContentType::Dataset) {
             if (trainer_manager_ && trainer_manager_->getTrainer()) {
@@ -369,13 +374,21 @@ namespace gs {
             info.source_type = "Empty";
             break;
 
-        case ContentType::PLYFiles:
+        case ContentType::SplatFiles:
             info.has_model = scene_.hasNodes();
             info.num_gaussians = scene_.getTotalGaussianCount();
             info.num_nodes = scene_.getNodeCount();
-            info.source_type = "PLY";
-            if (!ply_paths_.empty()) {
-                info.source_path = ply_paths_.back();
+            info.source_type = "Splat";
+            if (!splat_paths_.empty()) {
+                info.source_path = splat_paths_.back();
+                // Determine specific type from extension
+                auto ext = info.source_path.extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                if (ext == ".sog") {
+                    info.source_type = "SOG";
+                } else if (ext == ".ply") {
+                    info.source_type = "PLY";
+                }
             }
             break;
 

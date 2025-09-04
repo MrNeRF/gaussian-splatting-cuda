@@ -150,7 +150,10 @@ namespace gs {
                     {"enable_sparsity", defaults.enable_sparsity, "Enable sparsity optimization"},
                     {"sparsify_steps", defaults.sparsify_steps, "Number of steps for sparsification"},
                     {"init_rho", defaults.init_rho, "Initial ADMM penalty parameter"},
-                    {"prune_ratio", defaults.prune_ratio, "Final pruning ratio for sparsity"}
+                    {"prune_ratio", defaults.prune_ratio, "Final pruning ratio for sparsity"},
+                    {"init_extent", defaults.init_extent, "Extent of random initialization"},
+                    {"save_sog", defaults.save_sog, "Save in SOG format alongside PLY"},
+                    {"sog_iterations", defaults.sog_iterations, "K-means iterations for SOG compression"}
                 };
 
                 // Check all expected parameters
@@ -300,6 +303,8 @@ namespace gs {
             opt_json["random"] = random;
             opt_json["init_num_pts"] = init_num_pts;
             opt_json["init_extent"] = init_extent;
+            opt_json["save_sog"] = save_sog;
+            opt_json["sog_iterations"] = sog_iterations;
             opt_json["enable_sparsity"] = enable_sparsity;
             opt_json["sparsify_steps"] = sparsify_steps;
             opt_json["init_rho"] = init_rho;
@@ -453,6 +458,12 @@ namespace gs {
             }
             if (json.contains("init_extent")) {
                 params.init_extent = json["init_extent"];
+            }
+            if (json.contains("save_sog")) {
+                params.save_sog = json["save_sog"];
+            }
+            if (json.contains("sog_iterations")) {
+                params.sog_iterations = json["sog_iterations"];
             }
             if (json.contains("enable_sparsity")) {
                 params.enable_sparsity = json["enable_sparsity"];

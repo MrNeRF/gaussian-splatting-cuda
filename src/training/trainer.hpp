@@ -11,6 +11,7 @@
 #include "core/parameters.hpp"
 #include "dataset.hpp"
 #include "metrics/metrics.hpp"
+#include "optimizers/scheduler.hpp"
 #include "progress.hpp"
 #include "project/project.hpp"
 #include "rasterization/rasterizer.hpp"
@@ -173,6 +174,7 @@ namespace gs::training {
         // Bilateral grid components
         std::unique_ptr<BilateralGrid> bilateral_grid_;
         std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
+        std::unique_ptr<WarmupExponentialLR> bilateral_grid_scheduler_;
 
         std::unique_ptr<PoseOptimizationModule> poseopt_module_; // Pose optimization module
         std::unique_ptr<torch::optim::Adam> poseopt_optimizer_;  // Optimizer for pose optimization

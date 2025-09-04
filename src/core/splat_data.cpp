@@ -6,6 +6,7 @@
 #include "core/logger.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
+#include "core/sogs.hpp"
 
 #include "external/nanoflann.hpp"
 #include "external/tinyply.hpp"
@@ -15,6 +16,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <future>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <print>
@@ -161,70 +163,33 @@ namespace {
 
         write_output_ply(root / ("splat_" + std::to_string(iteration) + ".ply"), tensors, pc.attribute_names);
     }
+
+    void write_sog_impl(const gs::SplatData& splat_data,
+                        const std::filesystem::path& root,
+                        int iteration,
+                        int kmeans_iterations) {
+        namespace fs = std::filesystem;
+
+        // Create SOG subdirectory
+        fs::path sog_dir = root / "sog";
+        fs::create_directories(sog_dir);
+
+        // Set up SOG write options - use .sog extension to create bundle
+        gs::core::SogWriteOptions options{
+            .iterations = kmeans_iterations,
+            .output_path = sog_dir / ("splat_" + std::to_string(iteration) + ".sog")};
+
+        // Write SOG format
+        auto result = gs::core::write_sog(splat_data, options);
+        if (!result) {
+            LOG_ERROR("Failed to write SOG format: {}", result.error());
+        } else {
+            LOG_DEBUG("Successfully wrote SOG format for iteration {}", iteration);
+        }
+    }
 } // namespace
 
 namespace gs {
-    SplatData::~SplatData() {
-        // Wait for all save threads to complete
-        std::lock_guard<std::mutex> lock(_threads_mutex);
-        for (auto& t : _save_threads) {
-            if (t.joinable()) {
-                t.join();
-            }
-        }
-    }
-
-    // Move constructor
-    SplatData::SplatData(SplatData&& other) noexcept
-        : _active_sh_degree(other._active_sh_degree),
-          _max_sh_degree(other._max_sh_degree),
-          _scene_scale(other._scene_scale),
-          _means(std::move(other._means)),
-          _sh0(std::move(other._sh0)),
-          _shN(std::move(other._shN)),
-          _scaling(std::move(other._scaling)),
-          _rotation(std::move(other._rotation)),
-          _opacity(std::move(other._opacity)),
-          _densification_info(std::move(other._densification_info)) {
-        // Move threads under lock
-        std::lock_guard<std::mutex> lock(other._threads_mutex);
-        _save_threads = std::move(other._save_threads);
-    }
-
-    // Move assignment operator
-    SplatData& SplatData::operator=(SplatData&& other) noexcept {
-        if (this != &other) {
-            // First, wait for our own threads to complete
-            {
-                std::lock_guard<std::mutex> lock(_threads_mutex);
-                for (auto& t : _save_threads) {
-                    if (t.joinable()) {
-                        t.join();
-                    }
-                }
-            }
-
-            // Move scalar members
-            _active_sh_degree = other._active_sh_degree;
-            _max_sh_degree = other._max_sh_degree;
-            _scene_scale = other._scene_scale;
-
-            // Move tensors
-            _means = std::move(other._means);
-            _sh0 = std::move(other._sh0);
-            _shN = std::move(other._shN);
-            _scaling = std::move(other._scaling);
-            _rotation = std::move(other._rotation);
-            _opacity = std::move(other._opacity);
-            _densification_info = other._densification_info;
-
-            // Move threads under lock
-            std::lock_guard<std::mutex> lock(other._threads_mutex);
-            _save_threads = std::move(other._save_threads);
-        }
-        return *this;
-    }
-
     // Constructor from tensors
     SplatData::SplatData(int sh_degree,
                          torch::Tensor means,
@@ -243,6 +208,52 @@ namespace gs {
           _scaling{std::move(scaling)},
           _rotation{std::move(rotation)},
           _opacity{std::move(opacity)} {}
+
+    // Move constructor
+    SplatData::SplatData(SplatData&& other) noexcept
+        : _active_sh_degree(other._active_sh_degree),
+          _max_sh_degree(other._max_sh_degree),
+          _scene_scale(other._scene_scale),
+          _means(std::move(other._means)),
+          _sh0(std::move(other._sh0)),
+          _shN(std::move(other._shN)),
+          _scaling(std::move(other._scaling)),
+          _rotation(std::move(other._rotation)),
+          _opacity(std::move(other._opacity)),
+          _densification_info(std::move(other._densification_info))
+    // Note: _save_mutex and _save_futures are default constructed
+    {
+        // Don't move the mutex or futures - each instance should have its own
+    }
+
+    // Move assignment operator
+    SplatData& SplatData::operator=(SplatData&& other) noexcept {
+        if (this != &other) {
+            // Wait for any pending saves to complete
+            wait_for_saves();
+
+            // Move scalar members
+            _active_sh_degree = other._active_sh_degree;
+            _max_sh_degree = other._max_sh_degree;
+            _scene_scale = other._scene_scale;
+
+            // Move tensors
+            _means = std::move(other._means);
+            _sh0 = std::move(other._sh0);
+            _shN = std::move(other._shN);
+            _scaling = std::move(other._scaling);
+            _rotation = std::move(other._rotation);
+            _opacity = std::move(other._opacity);
+            _densification_info = std::move(other._densification_info);
+
+            // Don't move the mutex or futures
+        }
+        return *this;
+    }
+
+    SplatData::~SplatData() {
+        wait_for_saves();
+    }
 
     // Computed getters
     torch::Tensor SplatData::get_means() const {
@@ -390,40 +401,68 @@ namespace gs {
         return a;
     }
 
-    void SplatData::cleanup_finished_threads() const {
-        std::lock_guard<std::mutex> lock(_threads_mutex);
+    void SplatData::wait_for_saves() const {
+        std::lock_guard<std::mutex> lock(_save_mutex);
 
-        // Remove threads that have finished
-        _save_threads.erase(
-            std::remove_if(_save_threads.begin(), _save_threads.end(),
-                           [](std::thread& t) {
-                               if (t.joinable()) {
-                                   // Try to join with zero timeout to check if finished
-                                   // Since C++11 doesn't have try_join, we'll keep all threads
-                                   return false;
-                               }
-                               return true;
+        // Wait for all pending saves
+        for (auto& future : _save_futures) {
+            if (future.valid()) {
+                try {
+                    future.wait();
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Error waiting for save to complete: {}", e.what());
+                }
+            }
+        }
+        _save_futures.clear();
+    }
+
+    void SplatData::cleanup_finished_saves() const {
+        std::lock_guard<std::mutex> lock(_save_mutex);
+
+        // Remove completed futures
+        _save_futures.erase(
+            std::remove_if(_save_futures.begin(), _save_futures.end(),
+                           [](const std::future<void>& f) {
+                               return !f.valid() ||
+                                      f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
                            }),
-            _save_threads.end());
+            _save_futures.end());
+
+        // Log if we have many pending saves (might indicate a problem)
+        if (_save_futures.size() > 5) {
+            LOG_WARN("Multiple saves pending: {} operations in queue", _save_futures.size());
+        }
     }
 
     // Export to PLY
-    void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_thread) const {
+    void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_threads) const {
         auto pc = to_point_cloud();
 
-        if (join_thread) {
-            // Synchronous save
+        if (join_threads) {
+            // Synchronous save - wait for completion
             write_ply_impl(pc, root, iteration);
         } else {
-            // Clean up any finished threads first
-            cleanup_finished_threads();
+            // Asynchronous save
+            cleanup_finished_saves();
 
-            // Asynchronous save with thread tracking
-            std::lock_guard<std::mutex> lock(_threads_mutex);
-            _save_threads.emplace_back([pc = std::move(pc), root, iteration]() {
-                write_ply_impl(pc, root, iteration);
-            });
+            std::lock_guard<std::mutex> lock(_save_mutex);
+            _save_futures.emplace_back(
+                std::async(std::launch::async, [pc = std::move(pc), root, iteration]() {
+                    try {
+                        write_ply_impl(pc, root, iteration);
+                    } catch (const std::exception& e) {
+                        LOG_ERROR("Failed to save PLY for iteration {}: {}", iteration, e.what());
+                    }
+                }));
         }
+    }
+
+    // Export to SOG
+    void SplatData::save_sog(const std::filesystem::path& root, int iteration, int kmeans_iterations, bool join_threads) const {
+        // SOG must always be synchronous - k-means clustering is too heavy for async
+        // and the shared data access patterns don't work well with async execution
+        write_sog_impl(*this, root, iteration, kmeans_iterations);
     }
 
     PointCloud SplatData::to_point_cloud() const {
@@ -438,7 +477,11 @@ namespace gs {
         pc.shN = _shN.transpose(1, 2).flatten(1).cpu();
         pc.opacity = _opacity.cpu();
         pc.scaling = _scaling.cpu();
-        pc.rotation = _rotation.cpu();
+
+        pc.rotation = torch::nn::functional::normalize(_rotation,
+                                                       torch::nn::functional::NormalizeFuncOptions().dim(-1))
+                          .cpu()
+                          .contiguous();
 
         // Set attribute names for PLY export
         pc.attribute_names = get_attribute_names();
