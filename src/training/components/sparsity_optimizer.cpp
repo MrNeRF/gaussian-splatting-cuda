@@ -100,7 +100,7 @@ namespace gs::training {
             }
 
             // Find indices of smallest opacities
-            auto [_, prune_indices] = torch::topk(opa, n_prune, /*largest=*/false);
+            auto [_, prune_indices] = torch::topk(opa, n_prune, -1, /*largest=*/false);
 
             // Create boolean mask
             auto mask = torch::zeros(opa.size(0), torch::kBool).to(opa.device());
