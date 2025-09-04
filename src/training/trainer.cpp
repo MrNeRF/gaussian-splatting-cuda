@@ -571,7 +571,9 @@ namespace gs::training {
                     std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
                     // Execute strategy post-backward and step
-                    strategy_->post_backward(iter, r_output);
+                    if (!params_.optimization.enable_sparsity) {
+                        strategy_->post_backward(iter, r_output);
+                    }
                     strategy_->step(iter);
 
                     if (params_.optimization.use_bilateral_grid) {
