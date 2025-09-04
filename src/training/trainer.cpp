@@ -225,7 +225,7 @@ namespace gs::training {
 
                 int n_after = splatData.size();
                 std::println("Sparsity pruning complete: {} -> {} Gaussians (removed {})",
-                            n_before, n_after, n_prune);
+                             n_before, n_after, n_prune);
 
                 // Clear sparsity optimizer after pruning
                 sparsity_optimizer_.reset();
@@ -323,8 +323,7 @@ namespace gs::training {
                     .sparsify_steps = params.optimization.sparsify_steps,
                     .init_rho = params.optimization.init_rho,
                     .prune_ratio = params.optimization.prune_ratio,
-                    .update_every = 50
-                };
+                    .update_every = 50};
 
                 sparsity_optimizer_ = SparsityOptimizerFactory::create("admm", sparsity_config);
 

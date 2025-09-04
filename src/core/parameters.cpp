@@ -153,8 +153,7 @@ namespace gs {
                     {"prune_ratio", defaults.prune_ratio, "Final pruning ratio for sparsity"},
                     {"init_extent", defaults.init_extent, "Extent of random initialization"},
                     {"save_sog", defaults.save_sog, "Save in SOG format alongside PLY"},
-                    {"sog_iterations", defaults.sog_iterations, "K-means iterations for SOG compression"}
-                };
+                    {"sog_iterations", defaults.sog_iterations, "K-means iterations for SOG compression"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {

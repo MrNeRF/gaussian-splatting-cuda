@@ -76,7 +76,7 @@ namespace gs::training {
             z_ = prune_z(z_temp);
             u_ += opa - z_;
 
-            LOG_TRACE("ADMM state updated - ||u||={}, ||z||={}", 
+            LOG_TRACE("ADMM state updated - ||u||={}, ||z||={}",
                       torch::norm(u_).item<float>(), torch::norm(z_).item<float>());
             return {};
         } catch (const std::exception& e) {
@@ -106,7 +106,7 @@ namespace gs::training {
             auto mask = torch::zeros(opa.size(0), torch::kBool).to(opa.device());
             mask.index_put_({prune_indices}, true);
 
-            LOG_DEBUG("Generated prune mask for {} out of {} Gaussians", 
+            LOG_DEBUG("Generated prune mask for {} out of {} Gaussians",
                       n_prune, opa.size(0));
             return mask;
         } catch (const std::exception& e) {

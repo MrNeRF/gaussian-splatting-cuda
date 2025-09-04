@@ -68,9 +68,8 @@ namespace gs::training {
                         }
                     }
 
-
                 } else {
-                        // Get point cloud or generate random one
+                    // Get point cloud or generate random one
                     PointCloud point_cloud_to_use;
                     if (data.point_cloud && data.point_cloud->size() > 0) {
                         point_cloud_to_use = *data.point_cloud;
@@ -91,11 +90,10 @@ namespace gs::training {
                         point_cloud_to_use = PointCloud(positions, colors);
                     }
                     splat_result = SplatData::init_model_from_pointcloud(
-                                    params,
-                                    load_result->scene_center,
-                                    point_cloud_to_use);
+                        params,
+                        load_result->scene_center,
+                        point_cloud_to_use);
                 }
-
 
                 if (!splat_result) {
                     return std::unexpected(

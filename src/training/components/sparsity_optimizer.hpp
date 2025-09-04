@@ -76,10 +76,10 @@ namespace gs::training {
     class ADMMSparsityOptimizer : public ISparsityOptimizer {
     public:
         struct Config {
-            int sparsify_steps = 15000;     // Total steps for sparsification
-            float init_rho = 0.0005f;        // ADMM penalty parameter
-            float prune_ratio = 0.8f;        // Final pruning ratio
-            int update_every = 50;           // Update ADMM state every N iterations
+            int sparsify_steps = 15000; // Total steps for sparsification
+            float init_rho = 0.0005f;   // ADMM penalty parameter
+            float prune_ratio = 0.8f;   // Final pruning ratio
+            int update_every = 50;      // Update ADMM state every N iterations
         };
 
         explicit ADMMSparsityOptimizer(const Config& config);
@@ -112,8 +112,8 @@ namespace gs::training {
         torch::Tensor prune_z(const torch::Tensor& z) const;
 
         Config config_;
-        torch::Tensor u_;  // Dual variable (Lagrange multiplier)
-        torch::Tensor z_;  // Auxiliary variable for sparsity
+        torch::Tensor u_; // Dual variable (Lagrange multiplier)
+        torch::Tensor z_; // Auxiliary variable for sparsity
         bool initialized_ = false;
     };
 
