@@ -104,7 +104,7 @@ namespace gs {
             }
 
             // Add to scene
-            std::string name = path.stem().string();
+            std::string name = path.filename().string();
             size_t gaussian_count = (*splat_data)->size();
             LOG_DEBUG("Adding PLY '{}' to scene with {} gaussians", name, gaussian_count);
 
