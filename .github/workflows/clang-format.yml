@@ -3,6 +3,8 @@ name: Clang Format Check
 on:
   push:
     branches: [ master ]
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 
 jobs:
