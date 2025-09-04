@@ -2,17 +2,17 @@ Note: Installation of dependencies and compiling of LichtFeld Studio will take a
 
 ## TLDR
 
-- Install Visual Studio 2022
-- Install Cuda Toolkit 12.8 after installing Visual Studio
+- [Install Visual Studio 2022](#vs2020)
+- [Install Cuda Toolkit 12.8 after installing Visual Studio](#cuda128)
 - Install Python 3.13.X
 - Install GIT
 - Follow the instructions for "Windows" on https://github.com/MrNeRF/gaussian-splatting-cuda/
 
-Long Version:
+## Long Version:
 
 ## Step 1: Installation Dependencies
 
-### Visual Studio 2022
+### Visual Studio 2022 <a name="vs2020"></a>
 - Download installer from https://visualstudio.microsoft.com/vs/community/
 	- **NOT** Visual Studio Code
 		- this does not contain the required files for building LichtFeld Studio
@@ -21,18 +21,30 @@ Long Version:
 - Run setup.exe
 - Install the following packages:
 	- Dekstop Development with C++
+
+ <img width="600" alt="image" src="https://github.com/user-attachments/assets/095ed93e-1cb0-44c6-82c3-14fda647efe7" />
+  
 - After installation is complete, exit Visual Studio if it was started automatically
 
-### Cuda Toolkit 12.8
+### Cuda Toolkit 12.8 <a name="cuda128"></a>
 - <u>Important</u>:
 	- Dont start installation until Visual Studio has completed installation
 	- if you have another version of Cuda Toolkit, uninstall it and re-install Cuda Toolkit 12.
 - Download from https://developer.nvidia.com/cuda-12-8-0-download-archive
 - Select windows as your operation system, select x86_64 as architecture and select your windows version and select "exe (local)".
 - Download the 3.2GB file
+
+<img width="600" alt="image" src="https://github.com/user-attachments/assets/7c11556f-93d7-4a8a-8fab-7222c30e8c9c" />
+
 - After download, execute the file and unpack the installation files in the proposed directory
 - Use "express" installation during installation
+
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/f8262aaa-db90-47fa-b3bf-830c64edbb88" />
+  
 - After installation is complete, verify if "nsight for Visual Studio 2022" was installed
+
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/6663bfe7-456d-4262-aab7-cf6c25f77e83" />
+
 - Press "next" and close the installation
 
 ### Python 3
@@ -40,9 +52,15 @@ Long Version:
 - Run the installer
 - Choose "Customize the installation"
 - In the first options screen, select all options
+
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/f6350398-43dc-485a-b0ae-e4ac81580eed" />
+
 - In "Advanced options", make sure the following are selected:
 	- Add Python to environment variables
  	- Download debug binaries
+
+ <img width="400" alt="image" src="https://github.com/user-attachments/assets/7cb1a205-85cd-4a9e-b504-b630dcada95a" />
+
 - Press "install" to start the installation
 - Close the installer when completed
 
@@ -68,6 +86,9 @@ Long Version:
 - nvcc: Verify that 12.8 is being used
 - git: Verify that git shows version information
 - python: Verify that 3.10 or above is used
+
+<img width="1108" height="622" alt="image" src="https://github.com/user-attachments/assets/9cdee296-47f4-4cde-8072-03829ecc6342" />
+
 
 ## Step 3 : Downloading and building LichtFeld Studio
 
@@ -122,7 +143,12 @@ Long Version:
  
 		cmake --build build --config Release -j
 
+
+<img width="1110" height="683" alt="image" src="https://github.com/user-attachments/assets/605c5b3a-53b3-4f16-85e2-05e9af2327cd" />
+
 After the last step is complete, you should have a new directory "\build\releases" where you can find "gaussian_splatting_cuda.exe"
+
+<img width="1276" height="744" alt="image" src="https://github.com/user-attachments/assets/0daee03d-8aa5-4168-a5d0-c317491e21ff" />
 
 
 ## Troubleshooting
@@ -148,8 +174,6 @@ After the last step is complete, you should have a new directory "\build\release
     
 			cmake -B build -DCMAKE_BUILD_TYPE=Release
 			cmake --build build --config Release -j
-
-
 - Other things to check
 	- Type "set" in the console
  	- Verify the following environment variables
