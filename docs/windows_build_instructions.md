@@ -133,7 +133,7 @@ Note: Installation of dependencies and compiling of LichtFeld Studio will take a
 		tar -xf libtorch-release.zip -C external\release
 		del libtorch-release.zip
 
-- Build configuration files and donwload dependancies
+- Build configuration files and download dependancies
  
 		cmake -B build -DCMAKE_BUILD_TYPE=Release
 		## Or if you want you can specify your own vcpkg
