@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #pragma once
 
 #include "core/splat_data.hpp"
@@ -65,6 +69,11 @@ namespace gs::training {
          * @brief Get the number of Gaussians that will be pruned
          */
         virtual int get_num_to_prune(const torch::Tensor& opacities) const = 0;
+
+        /**
+         * @brief Check if the optimizer has been initialized
+         */
+        virtual bool is_initialized() const = 0;
     };
 
     /**
@@ -76,10 +85,11 @@ namespace gs::training {
     class ADMMSparsityOptimizer : public ISparsityOptimizer {
     public:
         struct Config {
-            int sparsify_steps = 15000; // Total steps for sparsification
-            float init_rho = 0.0005f;   // ADMM penalty parameter
-            float prune_ratio = 0.8f;   // Final pruning ratio
-            int update_every = 50;      // Update ADMM state every N iterations
+            int sparsify_steps = 15000;  // Total steps for sparsification
+            float init_rho = 0.0005f;    // ADMM penalty parameter
+            float prune_ratio = 0.6f;    // Final pruning ratio
+            int update_every = 50;       // Update ADMM state every N iterations
+            int start_iteration = 30000; // When to start sparsification (after base training)
         };
 
         explicit ADMMSparsityOptimizer(const Config& config);
@@ -90,18 +100,25 @@ namespace gs::training {
         std::expected<torch::Tensor, std::string> get_prune_mask(const torch::Tensor& opacities) const override;
 
         bool should_update(int iter) const override {
-            return iter > 0 && iter < config_.sparsify_steps && iter % config_.update_every == 0;
+            int relative_iter = iter - config_.start_iteration;
+            return iter >= config_.start_iteration &&
+                   relative_iter > 0 &&
+                   relative_iter < config_.sparsify_steps &&
+                   relative_iter % config_.update_every == 0;
         }
 
         bool should_apply_loss(int iter) const override {
-            return iter > 0 && iter < config_.sparsify_steps;
+            return iter >= config_.start_iteration &&
+                   iter < (config_.start_iteration + config_.sparsify_steps);
         }
 
         bool should_prune(int iter) const override {
-            return iter == config_.sparsify_steps;
+            return iter == (config_.start_iteration + config_.sparsify_steps);
         }
 
         int get_num_to_prune(const torch::Tensor& opacities) const override;
+
+        bool is_initialized() const override { return initialized_; }
 
     private:
         /**

@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "sparsity_optimizer.hpp"
 #include "core/logger.hpp"
 #include <format>
@@ -7,8 +11,8 @@ namespace gs::training {
 
     ADMMSparsityOptimizer::ADMMSparsityOptimizer(const Config& config)
         : config_(config) {
-        LOG_DEBUG("Initializing ADMM sparsity optimizer with rho={}, prune_ratio={}, steps={}",
-                  config_.init_rho, config_.prune_ratio, config_.sparsify_steps);
+        LOG_DEBUG("Initializing ADMM sparsity optimizer with rho={}, prune_ratio={}, steps={}, start_iteration={}",
+                  config_.init_rho, config_.prune_ratio, config_.sparsify_steps, config_.start_iteration);
     }
 
     std::expected<void, std::string> ADMMSparsityOptimizer::initialize(const torch::Tensor& opacities) {
@@ -25,7 +29,12 @@ namespace gs::training {
             z_ = prune_z(opa + u_);
             initialized_ = true;
 
-            LOG_DEBUG("ADMM sparsity optimizer initialized with {} Gaussians", opa.numel());
+            LOG_INFO("=== ADMM Sparsity Optimizer Initialized ===");
+            LOG_INFO("Number of Gaussians: {}", opa.numel());
+            LOG_INFO("Target pruning ratio: {}%", config_.prune_ratio * 100);
+            LOG_INFO("Will prune approximately {} Gaussians", static_cast<int>(config_.prune_ratio * opa.numel()));
+            LOG_INFO("ADMM penalty parameter (rho): {}", config_.init_rho);
+
             return {};
         } catch (const std::exception& e) {
             LOG_ERROR("Failed to initialize ADMM sparsity optimizer: {}", e.what());
@@ -76,8 +85,15 @@ namespace gs::training {
             z_ = prune_z(z_temp);
             u_ += opa - z_;
 
-            LOG_TRACE("ADMM state updated - ||u||={}, ||z||={}",
-                      torch::norm(u_).item<float>(), torch::norm(z_).item<float>());
+            // Calculate sparsity statistics
+            int num_zeros = (z_ == 0).sum().item<int>();
+            float sparsity_ratio = static_cast<float>(num_zeros) / z_.numel();
+
+            LOG_TRACE("ADMM state updated - ||u||={:.4f}, ||z||={:.4f}, current sparsity={:.2f}%",
+                      torch::norm(u_).item<float>(),
+                      torch::norm(z_).item<float>(),
+                      sparsity_ratio * 100);
+
             return {};
         } catch (const std::exception& e) {
             LOG_ERROR("Failed to update ADMM state: {}", e.what());
@@ -100,14 +116,25 @@ namespace gs::training {
             }
 
             // Find indices of smallest opacities
-            auto [_, prune_indices] = torch::topk(opa, n_prune, -1, /*largest=*/false);
+            auto [sorted_values, prune_indices] = torch::topk(opa, n_prune, -1, /*largest=*/false);
 
             // Create boolean mask
             auto mask = torch::zeros(opa.size(0), torch::kBool).to(opa.device());
             mask.index_put_({prune_indices}, true);
 
-            LOG_DEBUG("Generated prune mask for {} out of {} Gaussians",
-                      n_prune, opa.size(0));
+            // Calculate statistics for logging
+            float min_pruned = sorted_values[0].item<float>();
+            float max_pruned = sorted_values[-1].item<float>();
+            float mean_remaining = opa.masked_select(~mask).mean().item<float>();
+
+            LOG_INFO("=== Sparsity Pruning Results ===");
+            LOG_INFO("Total Gaussians: {}", opa.size(0));
+            LOG_INFO("Pruning: {} Gaussians ({:.1f}%)", n_prune, config_.prune_ratio * 100);
+            LOG_INFO("Remaining: {} Gaussians", opa.size(0) - n_prune);
+            LOG_INFO("Opacity range of pruned: [{:.6f}, {:.6f}]", min_pruned, max_pruned);
+            LOG_INFO("Mean opacity of remaining: {:.6f}", mean_remaining);
+            LOG_INFO("Compression ratio: {:.2f}x", 1.0f / (1.0f - config_.prune_ratio));
+
             return mask;
         } catch (const std::exception& e) {
             LOG_ERROR("Failed to generate prune mask: {}", e.what());

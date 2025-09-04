@@ -175,6 +175,15 @@ namespace gs::training {
         const SplatData& splatData) {
         try {
             if (sparsity_optimizer_ && sparsity_optimizer_->should_apply_loss(iter)) {
+                // Initialize on first use (lazy initialization)
+                if (!sparsity_optimizer_->is_initialized()) {
+                    auto init_result = sparsity_optimizer_->initialize(splatData.opacity_raw());
+                    if (!init_result) {
+                        return std::unexpected(init_result.error());
+                    }
+                    LOG_INFO("Sparsity optimizer initialized at iteration {}", iter);
+                }
+
                 auto loss_result = sparsity_optimizer_->compute_loss(splatData.opacity_raw());
                 if (!loss_result) {
                     return std::unexpected(loss_result.error());
@@ -319,23 +328,33 @@ namespace gs::training {
 
             // Initialize sparsity optimizer if enabled
             if (params.optimization.enable_sparsity) {
+                // Calculate when sparsity should start
+                int base_iterations = params.optimization.iterations;
+                int sparsity_start = base_iterations; // Start after base training
+                int total_iterations = base_iterations + params.optimization.sparsify_steps;
+
+                // Extend the total training iterations
+                params_.optimization.iterations = total_iterations;
+
                 ADMMSparsityOptimizer::Config sparsity_config{
                     .sparsify_steps = params.optimization.sparsify_steps,
                     .init_rho = params.optimization.init_rho,
                     .prune_ratio = params.optimization.prune_ratio,
-                    .update_every = 50};
+                    .update_every = 50,
+                    .start_iteration = sparsity_start // Start after base training completes
+                };
 
                 sparsity_optimizer_ = SparsityOptimizerFactory::create("admm", sparsity_config);
 
                 if (sparsity_optimizer_) {
-                    // Initialize with current model opacities
-                    auto init_result = sparsity_optimizer_->initialize(strategy_->get_model().opacity_raw());
-                    if (!init_result) {
-                        LOG_ERROR("Failed to initialize sparsity optimizer: {}", init_result.error());
-                        return std::unexpected(init_result.error());
-                    }
-                    std::println("Sparsity optimization enabled: ADMM with prune_ratio={}",
-                                 params.optimization.prune_ratio);
+                    // Don't initialize yet - will initialize when we reach start_iteration
+                    LOG_INFO("=== Sparsity Optimization Configuration ===");
+                    LOG_INFO("Base training iterations: {}", base_iterations);
+                    LOG_INFO("Sparsification starts at: iteration {}", sparsity_start);
+                    LOG_INFO("Sparsification duration: {} iterations", params.optimization.sparsify_steps);
+                    LOG_INFO("Total training iterations: {}", total_iterations);
+                    LOG_INFO("Pruning ratio: {}%", params.optimization.prune_ratio * 100);
+                    LOG_INFO("ADMM penalty (rho): {}", params.optimization.init_rho);
                 }
             }
 
@@ -370,9 +389,9 @@ namespace gs::training {
             // Create progress bar based on headless flag
             if (params.optimization.headless) {
                 progress_ = std::make_unique<TrainingProgress>(
-                    params.optimization.iterations,
+                    params_.optimization.iterations, // This now includes sparsity steps if enabled
                     /*update_frequency=*/100);
-                LOG_DEBUG("Progress bar initialized for headless mode");
+                LOG_DEBUG("Progress bar initialized for {} total iterations", params_.optimization.iterations);
             }
 
             // Initialize the evaluator - it handles all metrics internally
@@ -495,6 +514,33 @@ namespace gs::training {
                 return StepResult::Stop;
             }
 
+            // Add phase transition logging for sparsity
+            if (params_.optimization.enable_sparsity) {
+                // Calculate base iterations (original iterations before extension)
+                int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+
+                // Log phase transition
+                if (iter == base_iterations + 1) {
+                    LOG_INFO("=== Entering Sparsification Phase ===");
+                    LOG_INFO("Base training complete at iteration {}", base_iterations);
+                    LOG_INFO("Starting ADMM sparsification for {} iterations",
+                             params_.optimization.sparsify_steps);
+                    LOG_INFO("Current model size: {} Gaussians", strategy_->get_model().size());
+                    LOG_INFO("Target pruning: {}% of Gaussians", params_.optimization.prune_ratio * 100);
+                }
+
+                // Log when approaching pruning
+                if (iter == params_.optimization.iterations - 100) {
+                    LOG_INFO("Approaching final pruning in 100 iterations (at iteration {})",
+                             params_.optimization.iterations);
+                }
+
+                // Log when pruning will occur
+                if (iter == params_.optimization.iterations - 1) {
+                    LOG_INFO("Final pruning will occur next iteration");
+                }
+            }
+
             auto adjusted_cam_pos = poseopt_module_->forward(cam->world_view_transform(), torch::tensor({cam->uid()}));
             auto adjusted_cam = Camera(*cam, adjusted_cam_pos);
 
@@ -589,9 +635,18 @@ namespace gs::training {
                     std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
                     // Execute strategy post-backward and step
-                    if (!params_.optimization.enable_sparsity) {
+                    // Only call post_backward during base training (not during sparsification)
+                    if (params_.optimization.enable_sparsity) {
+                        int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+                        if (iter <= base_iterations) {
+                            strategy_->post_backward(iter, r_output);
+                        }
+                        // During sparsification phase, skip post_backward entirely
+                    } else {
+                        // No sparsity, always call post_backward
                         strategy_->post_backward(iter, r_output);
                     }
+
                     strategy_->step(iter);
 
                     if (params_.optimization.use_bilateral_grid) {
@@ -796,11 +851,11 @@ namespace gs::training {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                save_ply(final_path, iter, /*join=*/true);
+                save_ply(final_path, params_.optimization.iterations, /*join=*/true);
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
-                    .iteration = iter,
-                    .path = final_path}
+                    static_cast<int>(params_.optimization.iterations),
+                    final_path}
                     .emit();
             }
 

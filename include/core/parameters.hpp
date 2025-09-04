@@ -79,7 +79,7 @@ namespace gs {
             bool enable_sparsity = false;
             int sparsify_steps = 15000;
             float init_rho = 0.0005f;
-            float prune_ratio = 0.8f;
+            float prune_ratio = 0.6f;
 
             nlohmann::json to_json() const;
             static OptimizationParameters from_json(const nlohmann::json& j);

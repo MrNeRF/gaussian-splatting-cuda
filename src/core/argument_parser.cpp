@@ -100,7 +100,7 @@ namespace {
             // Sparsity optimization arguments
             ::args::ValueFlag<int> sparsify_steps(parser, "sparsify_steps", "Number of steps for sparsification (default: 15000)", {"sparsify-steps"});
             ::args::ValueFlag<float> init_rho(parser, "init_rho", "Initial ADMM penalty parameter (default: 0.0005)", {"init-rho"});
-            ::args::ValueFlag<float> prune_ratio(parser, "prune_ratio", "Final pruning ratio for sparsity (default: 0.8)", {"prune-ratio"});
+            ::args::ValueFlag<float> prune_ratio(parser, "prune_ratio", "Final pruning ratio for sparsity (default: 0.6)", {"prune-ratio"});
 
             // SOG format arguments
             ::args::ValueFlag<int> sog_iterations(parser, "sog_iterations", "K-means iterations for SOG compression (default: 10)", {"sog-iterations"});
@@ -377,11 +377,6 @@ namespace {
             opt.stop_refine *= scaler;
             opt.refine_every *= scaler;
             opt.sh_degree_interval *= scaler;
-
-            // Also scale sparsity steps if enabled
-            if (opt.enable_sparsity) {
-                opt.sparsify_steps *= scaler;
-            }
 
             scale_steps_vector(opt.eval_steps, scaler);
             scale_steps_vector(opt.save_steps, scaler);
