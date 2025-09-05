@@ -127,7 +127,7 @@ cmake --build build -- -j$(nproc)
 <details>
 <summary><b>Windows Build</b></summary>
 
-Run in **VS Developer Command Prompt**:
+Run in <u>**x64 native tools command prompt for VS**</u>:
 
 ```bash
 # Set up vcpkg (one-time setup)
@@ -156,13 +156,17 @@ curl -L -o libtorch-release.zip https://download.pytorch.org/libtorch/cu128/libt
 tar -xf libtorch-release.zip -C external\release
 del libtorch-release.zip
 
-# Build
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+# Build 
 
 ## Or if you want you can specify your own vcpkg 
-# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
+# cmake -B build -DCMAKE_BUILD_TYPE=Release -G ninja -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
 
-cmake --build build --config Release -j
+# Ninja should be included with Visual Studio installation, 
+# if not you can either install it, 
+# or ignore this flag and use native generator - Building time might be extended
+cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
+
+cmake --build build -j
 ```
 
 </details>
