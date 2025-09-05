@@ -81,7 +81,7 @@ namespace {
 
             // Optional value arguments
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
-            ::args::ValueFlag<int> num_workers(parser, "num_threads", "Number of workers", {"num_workers"});
+            ::args::ValueFlag<int> num_workers(parser, "num_threads", "Number of workers", {"num-workers"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
