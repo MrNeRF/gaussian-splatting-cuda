@@ -475,7 +475,7 @@ namespace gs::training {
 
         const float limit_hi = 1.0f / 4.0f;  // start limit
         const float limit_mid = 2.0f / 4.0f; // middle limit
-        const float limit_lo = 3.0f / 4.0f;   // final limit
+        const float limit_lo = 3.0f / 4.0f;  // final limit
 
         const float weight_hi = 1.0f;  // start weight
         const float weight_mid = 0.5f; // middle weight
