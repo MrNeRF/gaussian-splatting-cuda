@@ -333,7 +333,7 @@ namespace gs::gui {
 
                 // Show gaussian count
                 ImGui::SameLine();
-                ImGui::TextDisabled("(%zu)", node.gaussian_count);
+                ImGui::TextColored(ImVec4(0.2f, 0.2f, 0.2f, 1), "(%zu)", node.gaussian_count);
 
                 // Selection
                 if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {

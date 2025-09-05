@@ -24,6 +24,8 @@ vcpkg/
 vcpkg/**
 vcpkg_*/**
 vcpkg_*/
+build*/
+build*/**
 
 *.pt
 !weights/*.pt

@@ -99,8 +99,8 @@ namespace gs::gui::widgets {
             mode_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
             break;
 
-        case SceneManager::ContentType::PLYFiles:
-            mode_str = "PLY Viewer";
+        case SceneManager::ContentType::SplatFiles:
+            mode_str = "Splat Viewer";
             mode_color = ImVec4(0.2f, 0.6f, 1.0f, 1.0f);
             break;
 
@@ -188,12 +188,12 @@ namespace gs::gui::widgets {
             // Determine button label based on current content type
             const char* button_label = "";
             SceneManager::ContentType change_to;
-            if (content_type == gs::SceneManager::ContentType::PLYFiles) {
+            if (content_type == gs::SceneManager::ContentType::SplatFiles) {
                 button_label = "Go to Dataset Mode";
                 change_to = SceneManager::ContentType::Dataset;
             } else if (content_type == gs::SceneManager::ContentType::Dataset) {
-                button_label = "Go to PLY Mode";
-                change_to = SceneManager::ContentType::PLYFiles;
+                button_label = "Go to Splat Mode";
+                change_to = SceneManager::ContentType::SplatFiles;
             }
 
             // Draw the button

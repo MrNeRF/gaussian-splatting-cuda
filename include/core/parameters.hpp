@@ -32,10 +32,12 @@ namespace gs {
             float scale_reg = 0.01f;
             float init_opacity = 0.5f;
             float init_scaling = 0.1f;
+            int num_workers = 16;
             int max_cap = 1000000;
             std::vector<size_t> eval_steps = {7'000, 30'000}; // Steps to evaluate the model
             std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
             bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
+            bool bg_modulation = false;                       // Enable sinusoidal background modulation
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
             bool rc = false;                                  // Workaround for reality captures - doesn't properly convert COLMAP camera model
             bool enable_save_eval_images = true;              // Save during evaluation images
@@ -71,6 +73,16 @@ namespace gs {
             int init_num_pts = 100'000; // Number of random points to initialize
             float init_extent = 3.0f;   // Extent of random point cloud
 
+            // SOG format parameters
+            bool save_sog = false;   // Save in SOG format alongside PLY
+            int sog_iterations = 10; // K-means iterations for SOG compression
+
+            // Sparsity optimization parameters
+            bool enable_sparsity = false;
+            int sparsify_steps = 15000;
+            float init_rho = 0.0005f;
+            float prune_ratio = 0.6f;
+
             nlohmann::json to_json() const;
             static OptimizationParameters from_json(const nlohmann::json& j);
         };
@@ -92,6 +104,9 @@ namespace gs {
 
             // Viewer mode specific
             std::filesystem::path ply_path = "";
+
+            // Optional PLY splat file for initialization
+            std::optional<std::string> init_ply = std::nullopt;
         };
 
         // Modern C++23 functions returning expected values

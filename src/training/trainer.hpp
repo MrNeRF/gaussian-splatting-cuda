@@ -6,10 +6,12 @@
 
 #include "components/bilateral_grid.hpp"
 #include "components/poseopt.hpp"
+#include "components/sparsity_optimizer.hpp"
 #include "core/events.hpp"
 #include "core/parameters.hpp"
 #include "dataset.hpp"
 #include "metrics/metrics.hpp"
+#include "optimizers/scheduler.hpp"
 #include "progress.hpp"
 #include "project/project.hpp"
 #include "rasterization/rasterizer.hpp"
@@ -108,6 +110,9 @@ namespace gs::training {
             Error
         };
 
+        // Returns the background color to use at a given iteration
+        torch::Tensor& background_for_step(int iter);
+
         // Protected method for processing a single training step
         std::expected<StepResult, std::string> train_step(
             int iter,
@@ -135,6 +140,20 @@ namespace gs::training {
             const std::unique_ptr<BilateralGrid>& bilateral_grid,
             const param::OptimizationParameters& opt_params);
 
+        // Sparsity-related methods
+        std::expected<torch::Tensor, std::string> compute_sparsity_loss(
+            int iter,
+            const SplatData& splatData);
+
+        std::expected<void, std::string> handle_sparsity_update(
+            int iter,
+            SplatData& splatData);
+
+        std::expected<void, std::string> apply_sparsity_pruning(
+            int iter,
+            SplatData& splatData);
+
+        // Cleanup method for re-initialization
         void cleanup();
 
         std::expected<void, std::string> initialize_bilateral_grid();
@@ -152,15 +171,20 @@ namespace gs::training {
         param::TrainingParameters params_;
 
         torch::Tensor background_{};
+        torch::Tensor bg_mix_buffer_;
         std::unique_ptr<TrainingProgress> progress_;
         size_t train_dataset_size_ = 0;
 
         // Bilateral grid components
         std::unique_ptr<BilateralGrid> bilateral_grid_;
         std::unique_ptr<torch::optim::Adam> bilateral_grid_optimizer_;
+        std::unique_ptr<WarmupExponentialLR> bilateral_grid_scheduler_;
 
         std::unique_ptr<PoseOptimizationModule> poseopt_module_; // Pose optimization module
         std::unique_ptr<torch::optim::Adam> poseopt_optimizer_;  // Optimizer for pose optimization
+
+        // Sparsity optimizer
+        std::unique_ptr<ISparsityOptimizer> sparsity_optimizer_;
 
         // Metrics evaluator - handles all evaluation logic
         std::unique_ptr<MetricsEvaluator> evaluator_;

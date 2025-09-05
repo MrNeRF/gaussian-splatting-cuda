@@ -28,6 +28,7 @@ set(TRAINING_HOST_SOURCES
         # Components
         components/bilateral_grid.cpp
         components/poseopt.cpp
+        components/sparsity_optimizer.cpp
 )
 
 # CUDA kernel sources
@@ -94,10 +95,10 @@ target_include_directories(gs_training
 
 target_link_libraries(gs_training
         PUBLIC
-        gs_core              # CHANGED: Use modular core library instead of gaussian_host
-        gs_training_kernels  # Training-specific kernels
-        gs_kernels           # CHANGED: Use modular kernels instead of gaussian_kernels
-        gs_loader           # For loading datasets
+        gs_core
+        gs_training_kernels
+        gs_kernels
+        gs_loader
         gsplat_backend
         fastgs_backend
         ${TORCH_LIBRARIES}

@@ -131,6 +131,11 @@ namespace gs::visualizer {
         // Access to rendering engine (for initialization only)
         gs::rendering::RenderingEngine* getRenderingEngine();
 
+        // Camera frustum picking
+        int pickCameraFrustum(const glm::vec2& mouse_pos);
+        void setHoveredCameraId(int cam_id) { hovered_camera_id_ = cam_id; }
+        int getHoveredCameraId() const { return hovered_camera_id_; }
+
     private:
         void doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model);
         void renderOverlays(const RenderContext& context);
@@ -161,6 +166,18 @@ namespace gs::visualizer {
 
         bool initialized_ = false;
         glm::ivec2 initial_viewport_size_{1280, 720}; // Default fallback
+
+        // Camera picking state
+        int hovered_camera_id_ = -1;
+        int highlighted_camera_index_ = -1;
+        glm::vec2 pending_pick_pos_{-1, -1};
+        bool pick_requested_ = false;
+        std::chrono::steady_clock::time_point last_pick_time_;
+        static constexpr auto pick_throttle_interval_ = std::chrono::milliseconds(50);
+
+        // Debug tracking
+        uint64_t render_count_ = 0;
+        uint64_t pick_count_ = 0;
     };
 
 } // namespace gs::visualizer
