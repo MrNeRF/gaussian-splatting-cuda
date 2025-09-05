@@ -110,18 +110,31 @@ namespace gs::training {
             Error
         };
 
+        // Returns the background color to use at a given iteration
+        torch::Tensor& background_for_step(int iter);
+
         // Protected method for processing a single training step
         std::expected<StepResult, std::string> train_step(
             int iter,
             Camera* cam,
             torch::Tensor gt_image,
+            torch::Tensor weights,
             RenderMode render_mode,
+            bool out_of_mask_penalty,
             std::stop_token stop_token = {});
 
         // Protected methods for computing loss
         std::expected<torch::Tensor, std::string> compute_photometric_loss(
             const RenderOutput& render_output,
             const torch::Tensor& gt_image,
+            const SplatData& splatData,
+            const param::OptimizationParameters& opt_params);
+            
+        std::expected<torch::Tensor, std::string> compute_photometric_loss(
+            const RenderOutput& render_output,
+            const torch::Tensor& gt_image,
+            const torch::Tensor& weights,
+            const float outOfMaskAlphaPenalty,
             const SplatData& splatData,
             const param::OptimizationParameters& opt_params);
 
@@ -158,6 +171,9 @@ namespace gs::training {
         // Handle control requests
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
+        // Prune gaussians using masks
+        void prune_after_training(float threshold);
+        
         void save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads = true);
 
         // Member variables
@@ -168,6 +184,7 @@ namespace gs::training {
         param::TrainingParameters params_;
 
         torch::Tensor background_{};
+        torch::Tensor bg_mix_buffer_;
         std::unique_ptr<TrainingProgress> progress_;
         size_t train_dataset_size_ = 0;
 

@@ -36,12 +36,14 @@ namespace gs {
             std::vector<size_t> eval_steps = {7'000, 30'000}; // Steps to evaluate the model
             std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
             bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
+            bool bg_modulation = false;                       // Enable sinusoidal background modulation
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
             bool rc = false;                                  // Workaround for reality captures - doesn't properly convert COLMAP camera model
             bool enable_save_eval_images = true;              // Save during evaluation images
             bool headless = false;                            // Disable visualization during training
             std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
             std::string strategy = "mcmc";                    // Optimization strategy: mcmc, default.
+            bool use_attention_mask = false;                  // Skip saving intermediate results and only save final output
             bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
             std::string pose_optimization = "none";           // Pose optimization type: none, direct, mlp
 
@@ -90,6 +92,7 @@ namespace gs {
             std::filesystem::path output_path = "";
             std::filesystem::path project_path = ""; // if path is relative it will be saved to output_path/project_name.ls
             std::string images = "images";
+            std::string attention_masks = "masks";
             int resize_factor = -1;
             int test_every = 8;
             std::vector<std::string> timelapse_images = {};

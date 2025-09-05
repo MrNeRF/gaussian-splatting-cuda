@@ -83,6 +83,7 @@ namespace {
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
+            ::args::ValueFlag<std::string> attention_masks_folder(parser, "attention_masks_folder", "Attention masks folder name", {"attention-masks-folder"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
             ::args::ValueFlag<float> steps_scaler(parser, "steps_scaler", "Scale training steps by factor", {"steps-scaler"});
             ::args::ValueFlag<int> sh_degree_interval(parser, "sh_degree_interval", "SH degree interval", {"sh-degree-interval"});
@@ -117,6 +118,7 @@ namespace {
             ::args::Flag enable_save_eval_images(parser, "save_eval_images", "Save eval images and depth maps", {"save-eval-images"});
             ::args::Flag save_depth(parser, "save_depth", "Save depth maps during training", {"save-depth"});
             ::args::Flag skip_intermediate_saving(parser, "skip_intermediate", "Skip saving intermediate results and only save final output", {"skip-intermediate"});
+            ::args::Flag bg_modulation(parser, "bg_modulation", "Enable sinusoidal background modulation mixed with base background", {"bg-modulation"});
             ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
             ::args::Flag gut(parser, "gut", "Enable GUT mode", {"gut"});
             ::args::Flag enable_sparsity(parser, "enable_sparsity", "Enable sparsity optimization", {"enable-sparsity"});
@@ -133,6 +135,8 @@ namespace {
                                                                 {"2", 2},
                                                                 {"4", 4},
                                                                 {"8", 8}});
+                                                                
+            ::args::Flag use_attention_mask(parser, "attention_masks", "Use attention masks on training", {"attention-masks"});
 
             // Parse arguments
             try {
@@ -295,12 +299,14 @@ namespace {
                                         prune_ratio_val = prune_ratio ? std::optional<float>(::args::get(prune_ratio)) : std::optional<float>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
+                                        use_attention_mask_flag = bool(use_attention_mask),
                                         enable_eval_flag = bool(enable_eval),
                                         rc_flag = bool(rc),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
                                         skip_intermediate_saving_flag = bool(skip_intermediate_saving),
+                                        bg_modulation_flag = bool(bg_modulation),
                                         random_flag = bool(random),
                                         gut_flag = bool(gut),
                                         save_sog_flag = bool(save_sog),
@@ -344,6 +350,7 @@ namespace {
                 setVal(init_rho_val, opt.init_rho);
                 setVal(prune_ratio_val, opt.prune_ratio);
 
+                setFlag(use_attention_mask_flag, opt.use_attention_mask);
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
                 setFlag(rc_flag, opt.rc);
@@ -351,6 +358,7 @@ namespace {
                 setFlag(antialiasing_flag, opt.antialiasing);
                 setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
                 setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
+                setFlag(bg_modulation_flag, opt.bg_modulation);
                 setFlag(random_flag, opt.random);
                 setFlag(gut_flag, opt.gut);
                 setFlag(save_sog_flag, opt.save_sog);
