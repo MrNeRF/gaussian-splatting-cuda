@@ -534,10 +534,15 @@ namespace gs::training {
     // Helper to ensure buf matches base (defined, dtype, device, shape)
     static inline void ensure_like(torch::Tensor& buf, const torch::Tensor& base) {
         bool is_undefined = !buf.defined();
-        bool dtype_mismatch = buf.dtype() != base.dtype();
-        bool device_mismatch = buf.device() != base.device();
-        bool shape_mismatch = buf.sizes().vec() != base.sizes().vec();
-        bool need = is_undefined || dtype_mismatch || device_mismatch || shape_mismatch;
+        bool dtype_mismatch = (buf.dtype() != base.dtype());
+
+        bool need = (is_undefined || dtype_mismatch);
+        if (!need) {
+            bool device_mismatch = (buf.device() != base.device());
+            bool shape_mismatch = (buf.sizes().vec() != base.sizes().vec());
+            need = (device_mismatch || shape_mismatch);
+        }
+
         if (need)
             buf = torch::empty_like(base);
     }
