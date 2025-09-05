@@ -6,9 +6,9 @@
 
 #include <expected>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
 
 namespace gs {
     namespace param {
@@ -18,11 +18,11 @@ namespace gs {
             StrategyParameters() = default;
 
             StrategyParameters(nlohmann::json common, nlohmann::json strategy_specific)
-                : common_(std::move(common))
-                , specific_(std::move(strategy_specific)) {}
+                : common_(std::move(common)),
+                  specific_(std::move(strategy_specific)) {}
 
             // Type-safe getter that checks strategy-specific first, then common
-            template<typename T>
+            template <typename T>
             T get(const std::string& key, T default_value = T{}) const {
                 // First check strategy-specific
                 if (auto it = specific_.find(key); it != specific_.end()) {

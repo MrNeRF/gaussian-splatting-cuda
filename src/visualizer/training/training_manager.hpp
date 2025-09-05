@@ -124,6 +124,7 @@ namespace gs {
         std::atomic<State> state_{State::Idle};
         std::string last_error_;
         mutable std::mutex state_mutex_;
+        std::string last_initialized_strategy_; // Track last initialized strategy
 
         // Synchronization
         std::condition_variable completion_cv_;

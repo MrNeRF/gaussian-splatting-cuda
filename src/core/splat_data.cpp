@@ -494,6 +494,10 @@ namespace gs {
         torch::Tensor scene_center,
         const PointCloud& pcd) {
 
+        float init_opacity = params.optimization.params.get<float>("init_opacity", 0.1f);
+        float init_scaling = params.optimization.params.get<float>("init_scaling", 1.0f);
+        LOG_INFO("Initializing SplatData with strategy '{}': init_opacity={}, init_scaling={}",
+                 params.optimization.strategy, init_opacity, init_scaling);
         try {
             // Generate positions and colors based on init type
             torch::Tensor positions, colors;

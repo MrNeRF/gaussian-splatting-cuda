@@ -4,6 +4,7 @@
 
 #include "gui/panels/training_panel.hpp"
 #include "core/events.hpp"
+#include "core/logger.hpp"
 #include "gui/panels/parameter_editor.hpp"
 #include "gui/ui_widgets.hpp"
 #include "visualizer_impl.hpp"
@@ -43,6 +44,9 @@ namespace gs::gui::panels {
             return;
         }
 
+        // Get state instance
+        auto& state = TrainingPanelState::getInstance();
+
         // Get parameters - either from project (if Ready) or from trainer (if training/completed)
         param::OptimizationParameters opt_params;
         param::DatasetConfig dataset_params;
@@ -66,9 +70,32 @@ namespace gs::gui::panels {
             dataset_params = project->getProjectData().data_set_info;
         }
 
+        // Initialize cache on first use
+        if (state.strategy_params_cache.empty()) {
+            // Load default parameters for both strategies
+            auto default_params = param::OptimizationParameters::from_strategy("default");
+            if (default_params) {
+                state.strategy_params_cache["default"] = *default_params;
+            }
+
+            auto mcmc_params = param::OptimizationParameters::from_strategy("mcmc");
+            if (mcmc_params) {
+                state.strategy_params_cache["mcmc"] = *mcmc_params;
+            }
+
+            // Set the current strategy as last active
+            state.last_active_strategy = opt_params.strategy;
+
+            // Store current parameters in cache
+            state.strategy_params_cache[opt_params.strategy] = opt_params;
+
+            LOG_DEBUG("Initialized strategy parameter cache with default and mcmc strategies");
+        }
+
         // Track changes separately for optimization and dataset parameters
         bool opt_params_changed = false;
         bool dataset_params_changed = false;
+        bool strategy_changed = false;
 
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 12.0f);
 
@@ -80,28 +107,56 @@ namespace gs::gui::panels {
             int current_strategy_idx = (opt_params.strategy == "mcmc") ? 1 : 0;
             int original_idx = current_strategy_idx;
 
+            // Store original strategy for comparison
+            std::string original_strategy = opt_params.strategy;
+
             ImGui::PushItemWidth(150);
             if (ImGui::Combo("##strategy", &current_strategy_idx, strategies, IM_ARRAYSIZE(strategies))) {
                 if (current_strategy_idx != original_idx) {
                     std::string new_strategy = strategies[current_strategy_idx];
 
-                    // Load the new strategy's base parameters
-                    auto new_params_result = param::OptimizationParameters::from_strategy(new_strategy);
-                    if (new_params_result) {
-                        // Get current parameters as JSON to preserve user edits
-                        nlohmann::json current_overrides = opt_params.params.common();
-                        for (const auto& [key, value] : opt_params.params.specific().items()) {
-                            current_overrides[key] = value;
-                        }
+                    // Save current parameters to cache before switching
+                    state.strategy_params_cache[original_strategy] = opt_params;
+                    LOG_DEBUG("Saved {} strategy parameters to cache", original_strategy);
 
-                        // Apply current values as overrides to new strategy
-                        opt_params = *new_params_result;
-                        opt_params.params = opt_params.params.with_overrides(current_overrides);
-                        opt_params_changed = true;
+                    // Check if we have cached parameters for the new strategy
+                    auto cached_it = state.strategy_params_cache.find(new_strategy);
+                    if (cached_it != state.strategy_params_cache.end()) {
+                        // Use cached parameters
+                        opt_params = cached_it->second;
+                        LOG_INFO("Restored cached parameters for {} strategy", new_strategy);
+                    } else {
+                        // Load fresh parameters for the new strategy
+                        auto new_params_result = param::OptimizationParameters::from_strategy(new_strategy);
+                        if (new_params_result) {
+                            opt_params = *new_params_result;
+                            state.strategy_params_cache[new_strategy] = opt_params;
+                            LOG_INFO("Loaded fresh parameters for {} strategy", new_strategy);
+                        }
                     }
+
+                    opt_params_changed = true;
+                    strategy_changed = true;
+                    state.last_active_strategy = new_strategy;
+
+                    LOG_INFO("Strategy changed from {} to {} - model will be reinitialized",
+                             original_strategy, new_strategy);
+
+                    // Log the init parameters that will be used
+                    float init_opacity = opt_params.params.get<float>("init_opacity", 0.1f);
+                    float init_scaling = opt_params.params.get<float>("init_scaling", 1.0f);
+                    LOG_INFO("New strategy will use: init_opacity={}, init_scaling={}",
+                             init_opacity, init_scaling);
                 }
             }
             ImGui::PopItemWidth();
+
+            // Show warning if strategy was changed
+            if (strategy_changed) {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
+                                   "Strategy changed - model will be reinitialized");
+            }
+
             ImGui::Separator();
         } else {
             ImGui::Text("Strategy: %s", opt_params.strategy.c_str());
@@ -535,6 +590,13 @@ namespace gs::gui::panels {
         // Check if editor had any changes
         opt_params_changed |= editor.changed();
 
+        // Update cache if parameters changed (but not from strategy switch)
+        if (opt_params_changed && !strategy_changed && can_edit) {
+            // Update the cache for the current strategy
+            state.strategy_params_cache[opt_params.strategy] = opt_params;
+            LOG_TRACE("Updated cached parameters for {} strategy", opt_params.strategy);
+        }
+
         // Apply changes if any were made and we can edit
         if ((opt_params_changed || dataset_params_changed) && can_edit) {
             // Update optimization parameters if they changed
@@ -555,8 +617,13 @@ namespace gs::gui::panels {
             }
 
             ImGui::Separator();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
-                               "Parameters updated - will be applied when training starts");
+            if (strategy_changed) {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
+                                   "Strategy changed - model will be reinitialized when training starts");
+            } else {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
+                                   "Parameters updated - will be applied when training starts");
+            }
         }
 
         ImGui::PopStyleVar();

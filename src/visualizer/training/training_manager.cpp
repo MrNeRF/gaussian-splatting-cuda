@@ -39,6 +39,9 @@ namespace gs {
             if (project_) {
                 // Load camera info if available
                 LOG_DEBUG("Loading camera info for trainer");
+                // Store the initial strategy
+                last_initialized_strategy_ = project_->getOptimizationParams().strategy;
+                LOG_INFO("Initial strategy set to: {}", last_initialized_strategy_);
             }
 
             setState(State::Ready);
@@ -89,6 +92,7 @@ namespace gs {
         // Now safe to clear the trainer
         trainer_.reset();
         last_error_.clear();
+        last_initialized_strategy_.clear();
         setState(State::Idle);
 
         // Reset loss buffer
@@ -110,6 +114,72 @@ namespace gs {
         params.dataset = project_->getProjectData().data_set_info;
         params.optimization = project_->getOptimizationParams();
         params.dataset.output_path = project_->getProjectOutputFolder();
+
+        LOG_INFO("Current strategy from project: {}", params.optimization.strategy);
+        LOG_INFO("Last initialized strategy: {}", last_initialized_strategy_.empty() ? "NONE" : last_initialized_strategy_);
+
+        // Check if strategy changed - if so, need full recreation
+        if (!last_initialized_strategy_.empty() &&
+            last_initialized_strategy_ != params.optimization.strategy) {
+            LOG_INFO("STRATEGY CHANGE DETECTED: {} -> {}",
+                     last_initialized_strategy_, params.optimization.strategy);
+
+            // Log the init parameters that will change
+            float new_init_opacity = params.optimization.params.get<float>("init_opacity", 0.1f);
+            float new_init_scaling = params.optimization.params.get<float>("init_scaling", 1.0f);
+
+            LOG_INFO("New strategy will use initialization parameters:");
+            LOG_INFO("  init_opacity: {}", new_init_opacity);
+            LOG_INFO("  init_scaling: {}", new_init_scaling);
+
+            // Store the new strategy
+            last_initialized_strategy_ = params.optimization.strategy;
+
+            // Force a full reset which will recreate everything with new strategy
+            LOG_DEBUG("Destroying old trainer to force recreation with new strategy");
+
+            // Save the project reference
+            auto saved_project = project_;
+
+            // Destroy the trainer to release all tensors
+            trainer_.reset();
+
+            // Force PyTorch to release cached memory back to system
+            c10::cuda::CUDACachingAllocator::emptyCache();
+            cudaDeviceSynchronize();
+
+            LOG_DEBUG("GPU memory cache cleared");
+
+            LOG_INFO("Calling setupTraining to create new trainer with {} strategy", params.optimization.strategy);
+            // Recreate trainer from scratch with new strategy
+            auto setup_result = gs::training::setupTraining(params);
+            if (!setup_result) {
+                LOG_ERROR("Failed to recreate trainer with new strategy: {}", setup_result.error());
+                last_error_ = setup_result.error();
+                setState(State::Error);
+                return std::unexpected(setup_result.error());
+            }
+
+            trainer_ = std::move(setup_result->trainer);
+            trainer_->setProject(saved_project);
+
+            // Initialize the new trainer
+            auto init_result = trainer_->initialize(params);
+            if (!init_result) {
+                return std::unexpected(init_result.error());
+            }
+
+            LOG_INFO("Trainer recreated and initialized with {} strategy", params.optimization.strategy);
+            return true;
+        }
+
+        // No strategy change, just initialize normally
+        if (last_initialized_strategy_.empty()) {
+            LOG_INFO("First initialization with strategy: {}", params.optimization.strategy);
+            last_initialized_strategy_ = params.optimization.strategy;
+        } else {
+            LOG_DEBUG("Strategy unchanged ({}), initializing normally", params.optimization.strategy);
+        }
 
         // Initialize trainer
         auto init_result = trainer_->initialize(params);
@@ -238,7 +308,7 @@ namespace gs {
     }
 
     bool TrainerManager::resetTraining() {
-        LOG_INFO("Resetting training to initial state");
+        LOG_INFO("resetTraining() called");
 
         if (!trainer_) {
             LOG_WARN("No trainer to reset");
@@ -251,37 +321,47 @@ namespace gs {
             waitForCompletion();
         }
 
-        // Check if trainer has been initialized
-        bool was_initialized = (trainer_->get_current_iteration() > 0);
+        // ALWAYS recreate the trainer to ensure proper initialization with current params
+        LOG_DEBUG("Recreating trainer with current parameters");
 
-        if (was_initialized) {
-            LOG_DEBUG("Clearing GPU memory from previous training");
+        // Save params from project
+        param::TrainingParameters params;
+        params.dataset = project_->getProjectData().data_set_info;
+        params.optimization = project_->getOptimizationParams();
+        params.dataset.output_path = project_->getProjectOutputFolder();
 
-            // Save params before destroying
-            param::TrainingParameters params;
-            params.dataset = project_->getProjectData().data_set_info;
-            params.optimization = project_->getOptimizationParams();
+        LOG_INFO("Resetting with strategy: {}", params.optimization.strategy);
 
-            // Destroy the trainer to release all tensors
-            trainer_.reset();
+        // Log the init parameters that will be used
+        float init_opacity = params.optimization.params.get<float>("init_opacity", 0.1f);
+        float init_scaling = params.optimization.params.get<float>("init_scaling", 1.0f);
+        LOG_INFO("Reset will use initialization parameters:");
+        LOG_INFO("  init_opacity: {}", init_opacity);
+        LOG_INFO("  init_scaling: {}", init_scaling);
 
-            // Force PyTorch to release cached memory back to system
-            c10::cuda::CUDACachingAllocator::emptyCache();
-            cudaDeviceSynchronize();
+        // Destroy the trainer to release all resources
+        trainer_.reset();
 
-            LOG_DEBUG("GPU memory cache cleared");
+        // Force PyTorch to release cached memory
+        c10::cuda::CUDACachingAllocator::emptyCache();
+        cudaDeviceSynchronize();
 
-            // Recreate trainer
-            auto setup_result = gs::training::setupTraining(params);
-            if (setup_result) {
-                trainer_ = std::move(setup_result->trainer);
-                trainer_->setProject(project_);
-            } else {
-                LOG_ERROR("Failed to recreate trainer after reset: {}", setup_result.error());
-                setState(State::Error);
-                return false;
-            }
+        LOG_DEBUG("GPU memory cache cleared");
+
+        // Recreate trainer from scratch
+        LOG_INFO("Calling setupTraining in resetTraining");
+        auto setup_result = gs::training::setupTraining(params);
+        if (!setup_result) {
+            LOG_ERROR("Failed to recreate trainer after reset: {}", setup_result.error());
+            setState(State::Error);
+            return false;
         }
+
+        trainer_ = std::move(setup_result->trainer);
+        trainer_->setProject(project_);
+
+        // Update the last initialized strategy
+        last_initialized_strategy_ = params.optimization.strategy;
 
         // Clear loss buffer
         loss_buffer_.clear();
@@ -289,7 +369,8 @@ namespace gs {
         // Set to Ready state
         setState(State::Ready);
 
-        LOG_INFO("Training reset complete - GPU memory freed, ready to start with current parameters");
+        LOG_INFO("Training reset complete - trainer recreated with {} strategy (init_opacity={}, init_scaling={})",
+                 params.optimization.strategy, init_opacity, init_scaling);
         return true;
     }
 
