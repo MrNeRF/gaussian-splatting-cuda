@@ -81,6 +81,7 @@ namespace {
 
             // Optional value arguments
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
+            ::args::ValueFlag<int> num_workers(parser, "num_threads", "Number of workers", {"num_workers"});
             ::args::ValueFlag<int> max_cap(parser, "max_cap", "Max Gaussians for MCMC", {"max-cap"});
             ::args::ValueFlag<std::string> images_folder(parser, "images", "Images folder name", {"images"});
             ::args::ValueFlag<int> test_every(parser, "test_every", "Use every Nth image as test", {"test-every"});
@@ -274,6 +275,7 @@ namespace {
                                         // Capture values, not references
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
                                         resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
+                                        num_workers_val = num_workers ? std::optional<int>(::args::get(num_workers)) : std::optional<int>(),
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
                                         project_name_val = project_name ? std::optional<std::string>(::args::get(project_name)) : std::optional<std::string>(),
                                         images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
@@ -324,6 +326,7 @@ namespace {
                 // Apply all overrides
                 setVal(iterations_val, opt.iterations);
                 setVal(resize_factor_val, ds.resize_factor);
+                setVal(num_workers_val, opt.num_workers);
                 setVal(max_cap_val, opt.max_cap);
                 setVal(project_name_val, ds.project_path);
                 setVal(images_folder_val, ds.images);
