@@ -98,7 +98,7 @@ Note: Installation of dependencies and compiling of LichtFeld Studio will take a
 
 ## Step 3 : Downloading and building LichtFeld Studio <a name="step3"></a>
 
-- Press start and find "developer command prompt for VS 2022"
+- Press start and find "x64 native tools command prompt for VS 2022"
 - Create a directory "repos"
   
 		mkdir repos
@@ -141,13 +141,13 @@ Note: Installation of dependencies and compiling of LichtFeld Studio will take a
 
 - Build configuration files and download dependancies
  
-		cmake -B build -DCMAKE_BUILD_TYPE=Release
+		cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 		## Or if you want you can specify your own vcpkg
-		# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
+		# cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
 
 - build LichtFeld Studio
  
-		cmake --build build --config Release -j
+		cmake --build build -j
 
 After the last step is complete, you should have a new directory "\build\releases" where you can find "gaussian_splatting_cuda.exe" and you can execute that file to run LichtFeld Studio.
 
@@ -183,8 +183,8 @@ After the last step is complete, you should have a new directory "\build\release
 - Possible cause: build files not up-to date with latest changes
 - Solution: Re-generate the configuration files using in the command prompt and rebuild LichtFeld Studio
         
-			cmake -B build -DCMAKE_BUILD_TYPE=Release
-			cmake --build build --config Release -j
+			cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
+			cmake --build build -j
 
 #### Other things to check
 - Type "set" in the console
