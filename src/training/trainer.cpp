@@ -777,11 +777,11 @@ namespace gs::training {
         }
 
         is_running_ = true; // Now we can start
-        LOG_INFO("Starting training loop");
+        LOG_INFO("Starting training loop with {} workers", params_.optimization.num_workers);
 
         try {
             int iter = 1;
-            const int num_workers = 16;
+            const int num_workers = params_.optimization.num_workers;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
             if (progress_) {
