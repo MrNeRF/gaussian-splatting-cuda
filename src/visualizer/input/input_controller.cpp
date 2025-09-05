@@ -26,6 +26,7 @@ namespace gs::visualizer {
         events::internal::WindowFocusLost::when([this](const auto&) {
             drag_mode_ = DragMode::None;
             std::fill(std::begin(keys_wasd_), std::end(keys_wasd_), false);
+            hovered_camera_id_ = -1;
         });
 
         LOG_DEBUG("InputController created");
@@ -40,6 +41,10 @@ namespace gs::visualizer {
         if (resize_cursor_) {
             glfwDestroyCursor(resize_cursor_);
             resize_cursor_ = nullptr;
+        }
+        if (hand_cursor_) {
+            glfwDestroyCursor(hand_cursor_);
+            hand_cursor_ = nullptr;
         }
 
         // Reset cursor to default before destruction
@@ -68,8 +73,9 @@ namespace gs::visualizer {
         // Initialize frame timer
         last_frame_time_ = std::chrono::high_resolution_clock::now();
 
-        // Create the resize cursor once at initialization
+        // Create the cursors once at initialization
         resize_cursor_ = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+        hand_cursor_ = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
 
         LOG_DEBUG("InputController initialized - callbacks set");
     }
@@ -150,6 +156,7 @@ namespace gs::visualizer {
                 instance_->drag_mode_ = DragMode::None;
                 std::fill(std::begin(instance_->keys_wasd_),
                           std::end(instance_->keys_wasd_), false);
+                instance_->hovered_camera_id_ = -1; // Reset hovered camera
 
                 // Reset cursor to default when losing focus
                 if (instance_->current_cursor_ != CursorType::Default) {
@@ -180,13 +187,47 @@ namespace gs::visualizer {
     void InputController::handleMouseButton(int button, int action, double x, double y) {
         // Check for splitter drag FIRST
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+            // Check for double-click on camera frustum
+            auto now = std::chrono::steady_clock::now();
+            auto time_since_last = std::chrono::duration<double>(now - last_click_time_).count();
+            double dist = glm::length(glm::dvec2(x, y) - last_click_pos_);
+
+            constexpr double DOUBLE_CLICK_TIME = 0.5;
+            constexpr double DOUBLE_CLICK_DISTANCE = 10.0;
+
+            bool is_double_click = (time_since_last < DOUBLE_CLICK_TIME &&
+                                    dist < DOUBLE_CLICK_DISTANCE);
+
+            // If we have a hovered camera, check for double-click
+            if (hovered_camera_id_ >= 0) {
+                if (is_double_click && hovered_camera_id_ == last_clicked_camera_id_) {
+                    LOG_INFO("Double-clicked on camera ID: {}", hovered_camera_id_);
+                    events::cmd::GoToCamView{.cam_id = hovered_camera_id_}.emit();
+
+                    // Reset click tracking to prevent triple-click
+                    last_click_time_ = std::chrono::steady_clock::time_point();
+                    last_click_pos_ = {-1000, -1000}; // Far away position
+                    last_clicked_camera_id_ = -1;
+                    return;
+                }
+                // First click on a camera - record it
+                last_click_time_ = now;
+                last_click_pos_ = {x, y};
+                last_clicked_camera_id_ = hovered_camera_id_; // Remember which camera was clicked
+                LOG_DEBUG("First click on camera ID: {} (time for double-click: {:.1f}s)",
+                          hovered_camera_id_, DOUBLE_CLICK_TIME);
+            } else {
+                last_click_time_ = std::chrono::steady_clock::time_point();
+                last_click_pos_ = {-1000, -1000};
+                last_clicked_camera_id_ = -1;
+            }
+
+            // Check for splitter drag
             if (isNearSplitter(x) && rendering_manager_) {
                 drag_mode_ = DragMode::Splitter;
                 splitter_start_pos_ = rendering_manager_->getSettings().split_position;
                 splitter_start_x_ = x;
-
-                // Change cursor to resize
-                glfwSetCursor(window_, glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR));
+                glfwSetCursor(window_, resize_cursor_);
                 LOG_TRACE("Started splitter drag");
                 return;
             }
@@ -272,6 +313,10 @@ namespace gs::visualizer {
     }
 
     void InputController::handleMouseMove(double x, double y) {
+        // Track if we moved significantly
+        glm::dvec2 current_pos{x, y};
+        double move_distance = glm::length(current_pos - last_mouse_pos_);
+
         // Handle splitter dragging
         if (drag_mode_ == DragMode::Splitter && rendering_manager_) {
             double delta = x - splitter_start_x_;
@@ -285,19 +330,83 @@ namespace gs::visualizer {
             return;
         }
 
-        // Determine if we should show resize cursor
+        // Camera frustum hover detection with improved throttling
+        if (rendering_manager_ &&
+            rendering_manager_->getSettings().show_camera_frustums &&
+            isInViewport(x, y) &&
+            drag_mode_ == DragMode::None &&
+            !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
+
+            // Additional throttling based on movement distance
+            static glm::dvec2 last_pick_pos{-1, -1};
+            static constexpr double MIN_PICK_DISTANCE = 3.0; // pixels
+
+            bool should_pick = false;
+
+            // Check if we moved enough from last pick position
+            if (last_pick_pos.x < 0) {
+                // First pick
+                should_pick = true;
+                last_pick_pos = current_pos;
+            } else {
+                double pick_distance = glm::length(current_pos - last_pick_pos);
+                if (pick_distance >= MIN_PICK_DISTANCE) {
+                    should_pick = true;
+                    last_pick_pos = current_pos;
+                }
+            }
+
+            if (should_pick) {
+                auto result = rendering_manager_->pickCameraFrustum(glm::vec2(x, y));
+                if (result >= 0) {
+                    const int cam_id = result;
+                    if (cam_id != hovered_camera_id_) {
+                        hovered_camera_id_ = cam_id;
+                        LOG_TRACE("Hovering over camera ID: {}", cam_id);
+
+                        // Change cursor to hand
+                        if (current_cursor_ != CursorType::Hand) {
+                            glfwSetCursor(window_, hand_cursor_);
+                            current_cursor_ = CursorType::Hand;
+                        }
+                    }
+                } else {
+                    // No camera under cursor
+                    if (hovered_camera_id_ != -1) {
+                        hovered_camera_id_ = -1;
+                        LOG_TRACE("No longer hovering over camera");
+                        if (current_cursor_ == CursorType::Hand) {
+                            glfwSetCursor(window_, nullptr);
+                            current_cursor_ = CursorType::Default;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Not in conditions for camera picking
+            if (hovered_camera_id_ != -1) {
+                hovered_camera_id_ = -1;
+                if (current_cursor_ == CursorType::Hand) {
+                    glfwSetCursor(window_, nullptr);
+                    current_cursor_ = CursorType::Default;
+                }
+            }
+        }
+
+        // Determine if we should show resize cursor for splitter
         bool should_show_resize = false;
         if (rendering_manager_ && rendering_manager_->getSettings().split_view_enabled) {
             should_show_resize = (drag_mode_ == DragMode::None &&
                                   isInViewport(x, y) &&
-                                  isNearSplitter(x));
+                                  isNearSplitter(x) &&
+                                  !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow));
         }
 
         // Only call glfwSetCursor when state actually changes
         if (should_show_resize && current_cursor_ != CursorType::Resize) {
             glfwSetCursor(window_, resize_cursor_);
             current_cursor_ = CursorType::Resize;
-        } else if (!should_show_resize && current_cursor_ != CursorType::Default) {
+        } else if (!should_show_resize && current_cursor_ == CursorType::Resize) {
             glfwSetCursor(window_, nullptr);
             current_cursor_ = CursorType::Default;
         }
@@ -312,7 +421,6 @@ namespace gs::visualizer {
         }
 
         glm::vec2 pos(x, y);
-        glm::dvec2 current_pos{x, y};
         last_mouse_pos_ = current_pos;
 
         // Handle camera dragging
