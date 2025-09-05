@@ -154,7 +154,7 @@ install(FILES ${CMAKE_SOURCE_DIR}/include/visualizer/visualizer.hpp
 
 # Optionally install resources
 install(DIRECTORY ${VISUALIZER_SOURCE_RESOURCE_DIR}/
-        DESTINATION share/gaussian_splatting/visualizer/resources
+        DESTINATION share/LichtFeld-Studio/visualizer/resources
         FILES_MATCHING
         PATTERN "*.vert"
         PATTERN "*.frag"

@@ -125,7 +125,7 @@ namespace gs::training {
                 "weights/lpips_vgg.pt",
                 "../weights/lpips_vgg.pt",
                 "../../weights/lpips_vgg.pt",
-                std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.cache/gaussian_splatting/lpips_vgg.pt"};
+                std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.cache/LichtFeld-Studio/lpips_vgg.pt"};
 
             for (const auto& path : default_paths) {
                 if (std::filesystem::exists(path)) {
