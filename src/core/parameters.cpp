@@ -350,7 +350,6 @@ namespace gs {
                 params.max_cap = json["max_cap"];
             }
 
-
             // Handle render mode
             if (json.contains("render_mode")) {
                 std::string mode = json["render_mode"];
