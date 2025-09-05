@@ -495,7 +495,7 @@ namespace gs::rendering {
                     }
                 }
             } // VAOBinder automatically unbinds here
-        } // ShaderScope automatically unbinds here
+        }     // ShaderScope automatically unbinds here
 
         LOG_TRACE("Rendered {} camera frustums", visible_instances.size());
         return {};

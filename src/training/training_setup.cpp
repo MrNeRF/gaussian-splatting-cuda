@@ -100,7 +100,7 @@ namespace gs::training {
                         std::format("Failed to initialize model: {}", splat_result.error()));
                 }
 
-                // 5. Create strategy
+                // 5. Create strategy based on strategy name
                 std::unique_ptr<IStrategy> strategy;
                 if (params.optimization.strategy == "mcmc") {
                     strategy = std::make_unique<MCMC>(std::move(*splat_result));

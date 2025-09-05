@@ -253,9 +253,7 @@ namespace {
                         strat));
                 }
 
-                // Unlike other parameters that will be set later as overrides,
-                // strategy must be set immediately to ensure correct JSON loading
-                // in `read_optim_params_from_json()`
+                // Set strategy immediately
                 params.optimization.strategy = strat;
             }
 
@@ -272,7 +270,7 @@ namespace {
             auto apply_cmd_overrides = [&params,
                                         // Capture values, not references
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
-                                        resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
+                                        resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1),
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
                                         project_name_val = project_name ? std::optional<std::string>(::args::get(project_name)) : std::optional<std::string>(),
                                         images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
@@ -305,56 +303,83 @@ namespace {
                                         gut_flag = bool(gut),
                                         save_sog_flag = bool(save_sog),
                                         enable_sparsity_flag = bool(enable_sparsity)]() {
-                auto& opt = params.optimization;
-                auto& ds = params.dataset;
+                // Build JSON overrides object
+                nlohmann::json overrides;
 
-                // Simple lambdas to apply if flag/value exists
-                auto setVal = [](const auto& flag, auto& target) {
-                    if (flag)
-                        target = *flag;
-                };
+                // Dataset overrides
+                if (resize_factor_val)
+                    params.dataset.resize_factor = *resize_factor_val;
+                if (project_name_val)
+                    params.dataset.project_path = *project_name_val;
+                if (images_folder_val)
+                    params.dataset.images = *images_folder_val;
+                if (test_every_val)
+                    params.dataset.test_every = *test_every_val;
+                if (timelapse_images_val)
+                    params.dataset.timelapse_images = *timelapse_images_val;
+                if (timelapse_every_val)
+                    params.dataset.timelapse_every = *timelapse_every_val;
 
-                auto setFlag = [](bool flag, auto& target) {
-                    if (flag)
-                        target = true;
-                };
-
-                // Apply all overrides
-                setVal(iterations_val, opt.iterations);
-                setVal(resize_factor_val, ds.resize_factor);
-                setVal(max_cap_val, opt.max_cap);
-                setVal(project_name_val, ds.project_path);
-                setVal(images_folder_val, ds.images);
-                setVal(test_every_val, ds.test_every);
-                setVal(steps_scaler_val, opt.steps_scaler);
-                setVal(sh_degree_interval_val, opt.sh_degree_interval);
-                setVal(sh_degree_val, opt.sh_degree);
-                setVal(min_opacity_val, opt.min_opacity);
-                setVal(render_mode_val, opt.render_mode);
-                setVal(init_num_pts_val, opt.init_num_pts);
-                setVal(init_extent_val, opt.init_extent);
-                setVal(pose_opt_val, opt.pose_optimization);
-                setVal(strategy_val, opt.strategy);
-                setVal(timelapse_images_val, ds.timelapse_images);
-                setVal(timelapse_every_val, ds.timelapse_every);
-                setVal(sog_iterations_val, opt.sog_iterations);
+                // Optimization parameter overrides
+                if (iterations_val)
+                    overrides["iterations"] = *iterations_val;
+                if (max_cap_val)
+                    overrides["max_cap"] = *max_cap_val;
+                if (steps_scaler_val)
+                    overrides["steps_scaler"] = *steps_scaler_val;
+                if (sh_degree_interval_val)
+                    overrides["sh_degree_interval"] = *sh_degree_interval_val;
+                if (sh_degree_val)
+                    overrides["sh_degree"] = *sh_degree_val;
+                if (min_opacity_val)
+                    overrides["min_opacity"] = *min_opacity_val;
+                if (render_mode_val)
+                    overrides["render_mode"] = *render_mode_val;
+                if (init_num_pts_val)
+                    overrides["init_num_pts"] = *init_num_pts_val;
+                if (init_extent_val)
+                    overrides["init_extent"] = *init_extent_val;
+                if (pose_opt_val)
+                    overrides["pose_optimization"] = *pose_opt_val;
+                if (strategy_val)
+                    overrides["strategy"] = *strategy_val;
+                if (sog_iterations_val)
+                    overrides["sog_iterations"] = *sog_iterations_val;
 
                 // Sparsity parameters
-                setVal(sparsify_steps_val, opt.sparsify_steps);
-                setVal(init_rho_val, opt.init_rho);
-                setVal(prune_ratio_val, opt.prune_ratio);
+                if (sparsify_steps_val)
+                    overrides["sparsify_steps"] = *sparsify_steps_val;
+                if (init_rho_val)
+                    overrides["init_rho"] = *init_rho_val;
+                if (prune_ratio_val)
+                    overrides["prune_ratio"] = *prune_ratio_val;
 
-                setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
-                setFlag(enable_eval_flag, opt.enable_eval);
-                setFlag(rc_flag, opt.rc);
-                setFlag(headless_flag, opt.headless);
-                setFlag(antialiasing_flag, opt.antialiasing);
-                setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);
-                setFlag(skip_intermediate_saving_flag, opt.skip_intermediate_saving);
-                setFlag(random_flag, opt.random);
-                setFlag(gut_flag, opt.gut);
-                setFlag(save_sog_flag, opt.save_sog);
-                setFlag(enable_sparsity_flag, opt.enable_sparsity);
+                // Flags
+                if (use_bilateral_grid_flag)
+                    overrides["use_bilateral_grid"] = true;
+                if (enable_eval_flag)
+                    overrides["enable_eval"] = true;
+                if (rc_flag)
+                    overrides["rc"] = true;
+                if (headless_flag)
+                    overrides["headless"] = true;
+                if (antialiasing_flag)
+                    overrides["antialiasing"] = true;
+                if (enable_save_eval_images_flag)
+                    overrides["enable_save_eval_images"] = true;
+                if (skip_intermediate_saving_flag)
+                    overrides["skip_intermediate"] = true;
+                if (random_flag)
+                    overrides["random"] = true;
+                if (gut_flag)
+                    overrides["gut"] = true;
+                if (save_sog_flag)
+                    overrides["save_sog"] = true;
+                if (enable_sparsity_flag)
+                    overrides["enable_sparsity"] = true;
+
+                // Apply overrides to parameters
+                params.optimization.params = params.optimization.params.with_overrides(overrides);
             };
 
             return std::make_tuple(ParseResult::Success, apply_cmd_overrides);
@@ -365,21 +390,38 @@ namespace {
     }
 
     void apply_step_scaling(gs::param::TrainingParameters& params) {
-        auto& opt = params.optimization;
-        const float scaler = opt.steps_scaler;
+        const float scaler = params.optimization.params.get<float>("steps_scaler", 0.0f);
 
         if (scaler > 0) {
             LOG_INFO("Scaling training steps by factor: {}", scaler);
 
-            opt.iterations *= scaler;
-            opt.start_refine *= scaler;
-            opt.reset_every *= scaler;
-            opt.stop_refine *= scaler;
-            opt.refine_every *= scaler;
-            opt.sh_degree_interval *= scaler;
+            // Build overrides
+            nlohmann::json overrides;
+            overrides["iterations"] = params.optimization.iterations() * scaler;
+            overrides["start_refine"] = params.optimization.params.get<size_t>("start_refine", 500) * scaler;
+            overrides["reset_every"] = params.optimization.params.get<size_t>("reset_every", 3000) * scaler;
+            overrides["stop_refine"] = params.optimization.params.get<size_t>("stop_refine", 15000) * scaler;
+            overrides["refine_every"] = params.optimization.params.get<size_t>("refine_every", 100) * scaler;
+            overrides["sh_degree_interval"] = params.optimization.params.get<size_t>("sh_degree_interval", 1000) * scaler;
 
-            scale_steps_vector(opt.eval_steps, scaler);
-            scale_steps_vector(opt.save_steps, scaler);
+            // Scale eval and save steps
+            auto eval_steps = params.optimization.eval_steps();
+            auto save_steps = params.optimization.save_steps();
+            scale_steps_vector(eval_steps, scaler);
+            scale_steps_vector(save_steps, scaler);
+
+            // Convert back to JSON array
+            nlohmann::json eval_json = nlohmann::json::array();
+            nlohmann::json save_json = nlohmann::json::array();
+            for (auto s : eval_steps)
+                eval_json.push_back(s);
+            for (auto s : save_steps)
+                save_json.push_back(s);
+            overrides["eval_steps"] = eval_json;
+            overrides["save_steps"] = save_json;
+
+            // Apply all overrides
+            params.optimization.params = params.optimization.params.with_overrides(overrides);
         }
     }
 
@@ -409,6 +451,11 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
     // Training mode - load JSON first
     if (!params->dataset.data_path.empty()) {
+        // Determine strategy (default if not set)
+        if (params->optimization.strategy.empty()) {
+            params->optimization.strategy = "default";
+        }
+
         auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
         if (!opt_params_result) {
             return std::unexpected(std::format("Failed to load optimization parameters: {}",

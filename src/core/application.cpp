@@ -54,12 +54,15 @@ namespace gs {
         LOG_INFO("Starting viewer mode...");
 
         // Create visualizer with options
-        auto viewer = visualizer::Visualizer::create({.title = "LichtFeld Studio",
-                                                      .width = 1280,
-                                                      .height = 720,
-                                                      .antialiasing = params->optimization.antialiasing,
-                                                      .enable_cuda_interop = true,
-                                                      .gut = params->optimization.gut});
+        visualizer::ViewerOptions options;
+        options.title = "LichtFeld Studio";
+        options.width = 1280;
+        options.height = 720;
+        options.antialiasing = params->optimization.antialiasing();
+        options.enable_cuda_interop = true;
+        options.gut = params->optimization.gut();
+
+        auto viewer = visualizer::Visualizer::create(options);
 
         if (!params->dataset.project_path.empty() &&
             !std::filesystem::exists(params->dataset.project_path)) {
@@ -122,7 +125,7 @@ namespace gs {
             }
         }
 
-        LOG_INFO("Anti-aliasing: {}", params->optimization.antialiasing ? "enabled" : "disabled");
+        LOG_INFO("Anti-aliasing: {}", params->optimization.antialiasing() ? "enabled" : "disabled");
 
         // Run the viewer
         viewer->run();
@@ -133,7 +136,7 @@ namespace gs {
 
     int Application::run(std::unique_ptr<param::TrainingParameters> params) {
         // no gui
-        if (params->optimization.headless) {
+        if (params->optimization.headless()) {
             return run_headless_app(std::move(params));
         }
         // gui app

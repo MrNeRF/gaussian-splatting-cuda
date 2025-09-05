@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "core/parameters.hpp"
 #include "istrategy.hpp"
 #include <memory>
 #include <torch/torch.h>
@@ -73,10 +74,10 @@ namespace gs::training {
         std::unique_ptr<torch::optim::Optimizer> _optimizer;
         std::unique_ptr<ExponentialLR> _scheduler;
         gs::SplatData _splat_data;
-        std::unique_ptr<const gs::param::OptimizationParameters> _params;
+        gs::param::StrategyParameters _params; // Changed from OptimizationParameters pointer
 
         // MCMC specific parameters
-        const float _noise_lr = 5e5;
+        float _noise_lr = 5e5f;
 
         // State variables
         torch::Tensor _binoms;

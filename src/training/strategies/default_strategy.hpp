@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "core/parameters.hpp"
 #include "istrategy.hpp"
 #include "optimizers/scheduler.hpp"
 #include <memory>
@@ -60,6 +61,6 @@ namespace gs::training {
         std::unique_ptr<torch::optim::Optimizer> _optimizer;
         std::unique_ptr<ExponentialLR> _scheduler;
         gs::SplatData _splat_data;
-        std::unique_ptr<const gs::param::OptimizationParameters> _params;
+        gs::param::StrategyParameters _params; // Changed from OptimizationParameters pointer
     };
 } // namespace gs::training

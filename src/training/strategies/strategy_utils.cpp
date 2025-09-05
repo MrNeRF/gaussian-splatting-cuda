@@ -19,7 +19,7 @@ namespace gs::training {
 
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(
         gs::SplatData& splat_data,
-        const gs::param::OptimizationParameters& params) {
+        const gs::param::StrategyParameters& params) {
         using Options = FusedAdam::Options;
         std::vector<torch::optim::OptimizerParamGroup> groups;
 
@@ -32,12 +32,12 @@ namespace gs::training {
                 std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options)));
         };
 
-        add_param_group(splat_data.means(), params.means_lr * splat_data.get_scene_scale());
-        add_param_group(splat_data.sh0(), params.shs_lr);
-        add_param_group(splat_data.shN(), params.shs_lr / 20.f);
-        add_param_group(splat_data.scaling_raw(), params.scaling_lr);
-        add_param_group(splat_data.rotation_raw(), params.rotation_lr);
-        add_param_group(splat_data.opacity_raw(), params.opacity_lr);
+        add_param_group(splat_data.means(), params.get<float>("means_lr", 0.00016f) * splat_data.get_scene_scale());
+        add_param_group(splat_data.sh0(), params.get<float>("shs_lr", 0.0025f));
+        add_param_group(splat_data.shN(), params.get<float>("shs_lr", 0.0025f) / 20.f);
+        add_param_group(splat_data.scaling_raw(), params.get<float>("scaling_lr", 0.005f));
+        add_param_group(splat_data.rotation_raw(), params.get<float>("rotation_lr", 0.001f));
+        add_param_group(splat_data.opacity_raw(), params.get<float>("opacity_lr", 0.05f));
 
         auto global_options = std::make_unique<Options>(0.f);
         global_options->eps(1e-15);
@@ -45,12 +45,12 @@ namespace gs::training {
     }
 
     std::unique_ptr<ExponentialLR> create_scheduler(
-        const gs::param::OptimizationParameters& params,
+        const gs::param::StrategyParameters& params,
         torch::optim::Optimizer* optimizer,
         int param_group_index) {
         // Python: gamma = 0.01^(1/max_steps)
         // This means after max_steps, lr will be 0.01 * initial_lr
-        const double gamma = std::pow(0.01, 1.0 / params.iterations);
+        const double gamma = std::pow(0.01, 1.0 / params.get<size_t>("iterations", 30000));
         return std::make_unique<ExponentialLR>(*optimizer, gamma, param_group_index);
     }
 

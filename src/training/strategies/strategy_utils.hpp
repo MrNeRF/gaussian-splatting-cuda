@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "core/parameters.hpp"
 #include "istrategy.hpp"
 #include "optimizers/scheduler.hpp"
 #include <memory>
@@ -14,10 +15,10 @@ namespace gs::training {
 
     std::unique_ptr<torch::optim::Optimizer> create_optimizer(
         gs::SplatData& splat_data,
-        const gs::param::OptimizationParameters& params);
+        const gs::param::StrategyParameters& params);
 
     std::unique_ptr<ExponentialLR> create_scheduler(
-        const gs::param::OptimizationParameters& params,
+        const gs::param::StrategyParameters& params,
         torch::optim::Optimizer* optimizer,
         int param_group_index = -1);
 

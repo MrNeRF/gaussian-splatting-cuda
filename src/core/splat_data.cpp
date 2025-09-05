@@ -497,9 +497,9 @@ namespace gs {
         try {
             // Generate positions and colors based on init type
             torch::Tensor positions, colors;
-            if (params.optimization.random) {
-                const int num_points = params.optimization.init_num_pts;
-                const float extent = params.optimization.init_extent;
+            if (params.optimization.params.get<bool>("random", false)) {
+                const int num_points = params.optimization.params.get<int>("init_num_pts", 100000);
+                const float extent = params.optimization.params.get<float>("init_extent", 3.0f);
                 const auto f32_cuda = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
 
                 positions = (torch::rand({num_points, 3}, f32_cuda) * 2.0f - 1.0f) * extent;
@@ -523,7 +523,7 @@ namespace gs {
 
             // 1. means
             torch::Tensor means;
-            if (params.optimization.random) {
+            if (params.optimization.params.get<bool>("random", false)) {
                 // Scale positions before setting requires_grad
                 means = (positions * scene_scale).to(torch::kCUDA).set_requires_grad(true);
             } else {
@@ -532,7 +532,7 @@ namespace gs {
 
             // 2. scaling (log(σ))
             auto nn_dist = torch::clamp_min(compute_mean_neighbor_distances(means), 1e-7);
-            auto scaling = torch::log(torch::sqrt(nn_dist) * params.optimization.init_scaling)
+            auto scaling = torch::log(torch::sqrt(nn_dist) * params.optimization.params.get<float>("init_scaling", 1.0f))
                                .unsqueeze(-1)
                                .repeat({1, 3})
                                .to(f32_cuda)
@@ -543,15 +543,17 @@ namespace gs {
             rotation.index_put_({torch::indexing::Slice(), 0}, 1);
             rotation = rotation.set_requires_grad(true);
 
-            // 4. opacity (inverse sigmoid of 0.5)
-            auto opacity = torch::logit(params.optimization.init_opacity * torch::ones({means.size(0), 1}, f32_cuda))
+            // 4. opacity (inverse sigmoid of init value)
+            float init_opacity = params.optimization.params.get<float>("init_opacity", 0.1f);
+            auto opacity = torch::logit(init_opacity * torch::ones({means.size(0), 1}, f32_cuda))
                                .set_requires_grad(true);
 
             // 5. shs (SH coefficients)
             auto colors_float = colors.to(torch::kCUDA);
             auto fused_color = rgb_to_sh(colors_float);
 
-            const int64_t feature_shape = static_cast<int64_t>(std::pow(params.optimization.sh_degree + 1, 2));
+            const int64_t feature_shape = static_cast<int64_t>(
+                std::pow(params.optimization.sh_degree() + 1, 2));
             auto shs = torch::zeros({fused_color.size(0), 3, feature_shape}, f32_cuda);
 
             // Set DC coefficients
@@ -577,13 +579,13 @@ namespace gs {
             std::println("Scene scale: {}", scene_scale);
             std::println("Initialized SplatData with:");
             std::println("  - {} points", means.size(0));
-            std::println("  - Max SH degree: {}", params.optimization.sh_degree);
+            std::println("  - Max SH degree: {}", params.optimization.sh_degree());
             std::println("  - Total SH coefficients: {}", feature_shape);
             std::cout << std::format("  - sh0 shape: {}\n", tensor_sizes_to_string(sh0.sizes()));
             std::cout << std::format("  - shN shape: {}\n", tensor_sizes_to_string(shN.sizes()));
 
             return SplatData(
-                params.optimization.sh_degree,
+                params.optimization.sh_degree(),
                 means.contiguous(),
                 sh0.contiguous(),
                 shN.contiguous(),

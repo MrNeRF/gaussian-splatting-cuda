@@ -290,7 +290,7 @@ namespace gs::training {
     // MetricsEvaluator Implementation
     MetricsEvaluator::MetricsEvaluator(const param::TrainingParameters& params)
         : _params(params) {
-        if (!params.optimization.enable_eval) {
+        if (!params.optimization.enable_eval()) {
             return;
         }
 
@@ -310,22 +310,23 @@ namespace gs::training {
     }
 
     bool MetricsEvaluator::should_evaluate(const int iteration) const {
-        if (!_params.optimization.enable_eval)
+        if (!_params.optimization.enable_eval())
             return false;
 
-        return std::find(_params.optimization.eval_steps.cbegin(), _params.optimization.eval_steps.cend(), iteration) !=
-               _params.optimization.eval_steps.cend();
+        auto eval_steps = _params.optimization.eval_steps();
+        return std::find(eval_steps.cbegin(), eval_steps.cend(), iteration) !=
+               eval_steps.cend();
     }
 
     bool MetricsEvaluator::has_rgb() const {
-        const auto render_mode = stringToRenderMode(_params.optimization.render_mode);
+        const auto render_mode = stringToRenderMode(_params.optimization.render_mode());
         return render_mode == RenderMode::RGB ||
                render_mode == RenderMode::RGB_D ||
                render_mode == RenderMode::RGB_ED;
     }
 
     bool MetricsEvaluator::has_depth() const {
-        return stringToRenderMode(_params.optimization.render_mode) != RenderMode::RGB;
+        return stringToRenderMode(_params.optimization.render_mode()) != RenderMode::RGB;
     }
 
     torch::Tensor MetricsEvaluator::apply_depth_colormap(const torch::Tensor& depth_normalized) const {
@@ -390,7 +391,7 @@ namespace gs::training {
                                            const SplatData& splatData,
                                            std::shared_ptr<CameraDataset> val_dataset,
                                            torch::Tensor& background) {
-        if (!_params.optimization.enable_eval) {
+        if (!_params.optimization.enable_eval()) {
             throw std::runtime_error("Evaluation is not enabled");
         }
 
@@ -406,13 +407,13 @@ namespace gs::training {
         // Create directory for evaluation images
         const std::filesystem::path eval_dir = _params.dataset.output_path /
                                                ("eval_step_" + std::to_string(iteration));
-        if (_params.optimization.enable_save_eval_images) {
+        if (_params.optimization.params.get<bool>("enable_save_eval_images", true)) {
             std::filesystem::create_directories(eval_dir);
         }
 
         // Create subdirectory for depth maps only if we're saving depth
         std::filesystem::path depth_dir;
-        if (has_depth() && _params.optimization.enable_save_eval_images) {
+        if (has_depth() && _params.optimization.params.get<bool>("enable_save_eval_images", true)) {
             depth_dir = eval_dir / "depth";
             std::filesystem::create_directories(depth_dir);
         }
@@ -450,7 +451,7 @@ namespace gs::training {
                 lpips_values.push_back(lpips);
 
                 // Save side-by-side RGB images asynchronously
-                if (_params.optimization.enable_save_eval_images) {
+                if (_params.optimization.params.get<bool>("enable_save_eval_images", true)) {
                     const std::vector<torch::Tensor> rgb_images = {gt_image.squeeze(0), r_output.image.squeeze(0)};
                     image_io::save_images_async(
                         eval_dir / (std::to_string(image_idx) + ".png"),
@@ -461,7 +462,7 @@ namespace gs::training {
             }
 
             // Only save depth if enabled and render mode includes depth
-            if (has_depth() && _params.optimization.enable_save_eval_images) {
+            if (has_depth() && _params.optimization.params.get<bool>("enable_save_eval_images", true)) {
                 if (r_output.depth.defined()) {
                     auto depth_vis = r_output.depth.clone().squeeze(0).to(torch::kCPU); // [H, W]
 
@@ -498,7 +499,7 @@ namespace gs::training {
         }
 
         // Wait for all images to be saved before computing final timing
-        if (_params.optimization.enable_save_eval_images) {
+        if (_params.optimization.params.get<bool>("enable_save_eval_images", true)) {
             const auto pending = image_io::BatchImageSaver::instance().pending_count();
             if (pending > 0) {
                 image_io::wait_for_pending_saves();
@@ -524,7 +525,7 @@ namespace gs::training {
         // Add metrics to reporter
         _reporter->add_metrics(result);
 
-        if (_params.optimization.enable_save_eval_images) {
+        if (_params.optimization.params.get<bool>("enable_save_eval_images", true)) {
             std::cout << "Saved " << image_idx << " evaluation images to: " << eval_dir << std::endl;
             if (has_depth()) {
                 std::cout << "Saved depth maps to: " << depth_dir << std::endl;

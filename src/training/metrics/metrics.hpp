@@ -125,7 +125,7 @@ namespace gs::training {
         explicit MetricsEvaluator(const param::TrainingParameters& params);
 
         // Check if evaluation is enabled
-        bool is_enabled() const { return _params.optimization.enable_eval; }
+        bool is_enabled() const { return _params.optimization.enable_eval(); }
 
         // Check if we should evaluate at this iteration
         bool should_evaluate(const int iteration) const;

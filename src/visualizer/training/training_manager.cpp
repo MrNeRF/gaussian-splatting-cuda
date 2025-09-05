@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "training/training_manager.hpp"
+#include "core/events.hpp"
 #include "core/logger.hpp"
 #include "training/training_setup.hpp"
 #include <c10/cuda/CUDACachingAllocator.h>
@@ -36,13 +37,14 @@ namespace gs {
             trainer_->setProject(project_);
 
             if (project_) {
-                trainer_->load_cameras_info();
+                // Load camera info if available
+                LOG_DEBUG("Loading camera info for trainer");
             }
 
             setState(State::Ready);
 
             // Trainer is ready
-            events::internal::TrainerReady{}.emit();
+            ::gs::events::internal::TrainerReady{}.emit();
             LOG_INFO("Trainer ready for training");
         }
     }
@@ -54,7 +56,7 @@ namespace gs {
     void TrainerManager::clearTrainer() {
         LOG_DEBUG("Clearing trainer");
 
-        events::cmd::StopTraining{}.emit();
+        ::gs::events::cmd::StopTraining{}.emit();
         // Stop any ongoing training first
         if (isTrainingActive()) {
             LOG_INFO("Stopping active training before clearing trainer");
@@ -132,7 +134,6 @@ namespace gs {
         }
 
         // ALWAYS reinitialize trainer to pick up any parameter changes from the project
-        // This ensures that any UI changes are applied
         LOG_INFO("Initializing trainer with current project parameters");
         auto init_result = initializeTrainerFromProject();
         if (!init_result) {
@@ -151,7 +152,7 @@ namespace gs {
         setState(State::Running);
 
         // Emit training started event
-        events::state::TrainingStarted{
+        ::gs::events::state::TrainingStarted{
             .total_iterations = getTotalIterations()}
             .emit();
 
@@ -172,10 +173,10 @@ namespace gs {
         }
 
         if (trainer_) {
-            trainer_->request_pause();
+            trainer_->pause();
             setState(State::Paused);
 
-            events::state::TrainingPaused{
+            ::gs::events::state::TrainingPaused{
                 .iteration = getCurrentIteration()}
                 .emit();
 
@@ -190,10 +191,10 @@ namespace gs {
         }
 
         if (trainer_) {
-            trainer_->request_resume();
+            trainer_->resume();
             setState(State::Running);
 
-            events::state::TrainingResumed{
+            ::gs::events::state::TrainingResumed{
                 .iteration = getCurrentIteration()}
                 .emit();
 
@@ -211,7 +212,7 @@ namespace gs {
         setState(State::Stopping);
 
         if (trainer_) {
-            trainer_->request_stop();
+            trainer_->stop();
         }
 
         if (training_thread_ && training_thread_->joinable()) {
@@ -219,7 +220,7 @@ namespace gs {
             training_thread_->request_stop();
         }
 
-        events::state::TrainingStopped{
+        ::gs::events::state::TrainingStopped{
             .iteration = getCurrentIteration(),
             .user_requested = true}
             .emit();
@@ -250,11 +251,16 @@ namespace gs {
             waitForCompletion();
         }
 
-        if (trainer_->isInitialized()) {
+        // Check if trainer has been initialized
+        bool was_initialized = (trainer_->get_current_iteration() > 0);
+
+        if (was_initialized) {
             LOG_DEBUG("Clearing GPU memory from previous training");
 
             // Save params before destroying
-            auto params = trainer_->getParams();
+            param::TrainingParameters params;
+            params.dataset = project_->getProjectData().data_set_info;
+            params.optimization = project_->getOptimizationParams();
 
             // Destroy the trainer to release all tensors
             trainer_.reset();
@@ -270,9 +276,6 @@ namespace gs {
             if (setup_result) {
                 trainer_ = std::move(setup_result->trainer);
                 trainer_->setProject(project_);
-                if (project_) {
-                    trainer_->load_cameras_info();
-                }
             } else {
                 LOG_ERROR("Failed to recreate trainer after reset: {}", setup_result.error());
                 setState(State::Error);
@@ -315,15 +318,15 @@ namespace gs {
     }
 
     int TrainerManager::getTotalIterations() const {
-        if (!trainer_)
+        if (!trainer_ || !project_)
             return 0;
-        return trainer_->getParams().optimization.iterations;
+        return project_->getOptimizationParams().iterations();
     }
 
     int TrainerManager::getNumSplats() const {
         if (!trainer_)
             return 0;
-        return static_cast<int>(trainer_->get_strategy().get_model().size());
+        return static_cast<int>(trainer_->getModel().size());
     }
 
     void TrainerManager::updateLoss(float loss) {
@@ -401,7 +404,7 @@ namespace gs {
         LOG_INFO("Training finished - Success: {}, Final iteration: {}, Final loss: {:.6f}",
                  success, final_iteration, final_loss);
 
-        events::state::TrainingCompleted{
+        ::gs::events::state::TrainingCompleted{
             .iteration = final_iteration,
             .final_loss = final_loss,
             .success = success,
@@ -417,10 +420,8 @@ namespace gs {
     }
 
     void TrainerManager::setupEventHandlers() {
-        using namespace events;
-
         // Listen for training progress events - only update loss buffer
-        state::TrainingProgress::when([this](const auto& event) {
+        ::gs::events::state::TrainingProgress::when([this](const auto& event) {
             updateLoss(event.loss);
         });
     }

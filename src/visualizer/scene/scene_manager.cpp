@@ -269,7 +269,7 @@ namespace gs {
 
             LOG_DEBUG("Setting up training with parameters");
             LOG_TRACE("Dataset path: {}", path.string());
-            LOG_TRACE("Iterations: {}", dataset_params.optimization.iterations);
+            LOG_TRACE("Iterations: {}", dataset_params.optimization.iterations());
 
             auto setup_result = gs::training::setupTraining(dataset_params);
             if (!setup_result) {
@@ -295,8 +295,7 @@ namespace gs {
 
             // Emit events
             const size_t num_gaussians = trainer_manager_->getTrainer()
-                                             ->get_strategy()
-                                             .get_model()
+                                             ->getModel()
                                              .size();
 
             LOG_INFO("Dataset loaded successfully - {} images, {} initial gaussians",
@@ -357,7 +356,7 @@ namespace gs {
             return scene_.getCombinedModel();
         } else if (content_type_ == ContentType::Dataset) {
             if (trainer_manager_ && trainer_manager_->getTrainer()) {
-                return &trainer_manager_->getTrainer()->get_strategy().get_model();
+                return &trainer_manager_->getTrainer()->getModel();
             }
         }
 
@@ -396,8 +395,7 @@ namespace gs {
             info.has_model = trainer_manager_ && trainer_manager_->getTrainer();
             if (info.has_model) {
                 info.num_gaussians = trainer_manager_->getTrainer()
-                                         ->get_strategy()
-                                         .get_model()
+                                         ->getModel()
                                          .size();
             }
             info.num_nodes = 1;

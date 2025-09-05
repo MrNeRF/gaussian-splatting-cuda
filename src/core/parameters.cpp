@@ -14,7 +14,6 @@
 #include <print>
 #include <sstream>
 #include <string>
-#include <variant>
 #include <vector>
 
 #ifdef _WIN32
@@ -72,412 +71,106 @@ namespace gs {
                     return std::unexpected(std::format("JSON parsing error in {}: {}", path.string(), e.what()));
                 }
             }
-
-            /**
-             * @brief Verify optimization parameters between JSON and struct defaults
-             *
-             * This function performs a comprehensive verification of optimization parameters:
-             * 1. Checks if all struct parameters exist in JSON
-             * 2. Verifies values match between JSON and struct defaults
-             * 3. Identifies unknown parameters in JSON (with warnings)
-             * 4. Provides detailed error reporting
-             *
-             * @param defaults The default parameters from the struct
-             * @param json The JSON configuration to verify
-             * @param strict If true, unknown parameters are treated as errors
-             * @return bool True if verification passed, false otherwise
-             */
-            bool verify_optimization_parameters(const OptimizationParameters& defaults,
-                                                const nlohmann::json& json,
-                                                bool strict = false) {
-                bool all_match = true;
-                std::vector<std::string> missing_in_json;
-                std::vector<std::string> unknown_params;
-                std::vector<std::string> mismatched_values;
-
-                // Define all expected parameters and their types
-                struct ParamInfo {
-                    std::string name;
-                    std::variant<int, size_t, float, int64_t, std::string, bool> value;
-                    std::string description; // Added for better documentation
-                };
-
-                const std::vector<ParamInfo> expected_params = {
-                    {"iterations", defaults.iterations, "Total number of training iterations"},
-                    {"means_lr", defaults.means_lr, "Initial learning rate for position updates"},
-                    {"shs_lr", defaults.shs_lr, "Learning rate for spherical harmonics updates"},
-                    {"opacity_lr", defaults.opacity_lr, "Learning rate for opacity updates"},
-                    {"scaling_lr", defaults.scaling_lr, "Learning rate for scaling updates"},
-                    {"rotation_lr", defaults.rotation_lr, "Learning rate for rotation updates"},
-                    {"lambda_dssim", defaults.lambda_dssim, "DSSIM loss weight"},
-                    {"min_opacity", defaults.min_opacity, "Minimum opacity threshold"},
-                    {"refine_every", defaults.refine_every, "Interval between densification steps"},
-                    {"start_refine", defaults.start_refine, "Starting iteration for densification"},
-                    {"stop_refine", defaults.stop_refine, "Ending iteration for densification"},
-                    {"grad_threshold", defaults.grad_threshold, "Gradient threshold for densification"},
-                    {"opacity_reg", defaults.opacity_reg, "Opacity L1 regularization weight"},
-                    {"scale_reg", defaults.scale_reg, "Scale L1 regularization weight"},
-                    {"init_opacity", defaults.init_opacity, "Initial opacity value for new Gaussians"},
-                    {"init_scaling", defaults.init_scaling, "Initial scaling value for new Gaussians"},
-                    {"sh_degree", defaults.sh_degree, "Spherical harmonics degree"},
-                    {"max_cap", defaults.max_cap, "Maximum number of Gaussians for MCMC strategy"},
-                    {"render_mode", defaults.render_mode, "Render mode: RGB, D, ED, RGB_D, RGB_ED"},
-                    {"strategy", defaults.strategy, "Optimization strategy: mcmc, default"},
-                    {"pose_optimization", defaults.pose_optimization, "Pose optimization type: none, direct, mlp"},
-                    {"enable_eval", defaults.enable_eval, "Enable evaluation during training"},
-                    {"enable_save_eval_images", defaults.enable_save_eval_images, "Save images during evaluation"},
-                    {"skip_intermediate", defaults.skip_intermediate_saving, "Skip saving intermediate results and only save final output"},
-                    {"use_bilateral_grid", defaults.use_bilateral_grid, "Enable bilateral grid for appearance modeling"},
-                    {"bilateral_grid_X", defaults.bilateral_grid_X, "Bilateral grid X dimension"},
-                    {"bilateral_grid_Y", defaults.bilateral_grid_Y, "Bilateral grid Y dimension"},
-                    {"bilateral_grid_W", defaults.bilateral_grid_W, "Bilateral grid W dimension"},
-                    {"bilateral_grid_lr", defaults.bilateral_grid_lr, "Learning rate for bilateral grid"},
-                    {"tv_loss_weight", defaults.tv_loss_weight, "Weight for total variation loss"},
-                    {"prune_opacity", defaults.prune_opacity, "Opacity pruning threshold"},
-                    {"grow_scale3d", defaults.grow_scale3d, "3D scale threshold for duplication"},
-                    {"grow_scale2d", defaults.grow_scale2d, "2D scale threshold for splitting"},
-                    {"prune_scale3d", defaults.prune_scale3d, "3D scale threshold for pruning"},
-                    {"prune_scale2d", defaults.prune_scale2d, "2D scale threshold for pruning"},
-                    {"reset_every", defaults.reset_every, "Reset opacity every this many iterations"},
-                    {"pause_refine_after_reset", defaults.pause_refine_after_reset, "Pause refinement after reset for N iterations"},
-                    {"revised_opacity", defaults.revised_opacity, "Use revised opacity heuristic"},
-                    {"steps_scaler", defaults.steps_scaler, "Scales the training steps and values"},
-                    {"antialiasing", defaults.antialiasing, "Enables antialiasing"},
-                    {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
-                    {"random", defaults.random, "Use random initialization instead of SfM"},
-                    {"init_num_pts", defaults.init_num_pts, "Number of random initialization points"},
-                    {"init_extent", defaults.init_extent, "Extent of random initialization"},
-                    {"enable_sparsity", defaults.enable_sparsity, "Enable sparsity optimization"},
-                    {"sparsify_steps", defaults.sparsify_steps, "Number of steps for sparsification"},
-                    {"init_rho", defaults.init_rho, "Initial ADMM penalty parameter"},
-                    {"prune_ratio", defaults.prune_ratio, "Final pruning ratio for sparsity"},
-                    {"init_extent", defaults.init_extent, "Extent of random initialization"},
-                    {"save_sog", defaults.save_sog, "Save in SOG format alongside PLY"},
-                    {"sog_iterations", defaults.sog_iterations, "K-means iterations for SOG compression"}};
-
-                // Check all expected parameters
-                for (const auto& param : expected_params) {
-                    if (!json.contains(param.name)) {
-                        // Skip eval_steps and save_steps as they are handled separately
-                        if (param.name != "eval_steps" && param.name != "save_steps") {
-                            missing_in_json.push_back(param.name);
-                            all_match = false;
-                        }
-                        continue;
-                    }
-
-                    // Compare values based on type
-                    std::visit([&](const auto& default_val) {
-                        using T = std::decay_t<decltype(default_val)>;
-                        try {
-                            if (json[param.name].get<T>() != default_val) {
-                                mismatched_values.push_back(param.name);
-                                all_match = false;
-                            }
-                        } catch (...) {
-                            // Type mismatch
-                            mismatched_values.push_back(param.name + " (type mismatch)");
-                            all_match = false;
-                        }
-                    },
-                               param.value);
-                }
-
-                // Check for any unknown parameters in JSON
-                for (const auto& [key, value] : json.items()) {
-                    bool found = false;
-                    for (const auto& param : expected_params) {
-                        if (key == param.name) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (key == "eval_steps" || key == "save_steps") {
-                        found = true;
-                    }
-                    if (!found) {
-                        unknown_params.push_back(key);
-                        if (strict) {
-                            all_match = false;
-                        }
-                    }
-                }
-
-                // Print report
-                if (!all_match || !unknown_params.empty()) {
-                    std::println(stderr, "\nParameter verification report:");
-
-                    if (!mismatched_values.empty()) {
-                        std::println(stderr, "\nMismatched values:");
-                        for (const auto& param : mismatched_values) {
-                            std::print(stderr, "  - {}: JSON={}", param, json[param].dump());
-                            // Find and print the default value and description
-                            for (const auto& p : expected_params) {
-                                if (p.name == param) {
-                                    std::print(stderr, ", Default=");
-                                    std::visit([&](const auto& val) {
-                                        std::print(stderr, "{}", val);
-                                    },
-                                               p.value);
-                                    std::println(stderr, " ({})", p.description);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!missing_in_json.empty()) {
-                        std::println(stderr, "\nParameters in struct but not in JSON:");
-                        for (const auto& param : missing_in_json) {
-                            // Find and print the description
-                            for (const auto& p : expected_params) {
-                                if (p.name == param) {
-                                    std::println(stderr, "  - {} ({})", param, p.description);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!unknown_params.empty()) {
-                        std::println(stderr, "\nUnknown parameters in JSON (will be ignored):");
-                        for (const auto& param : unknown_params) {
-                            std::println(stderr, "  - {}", param);
-                        }
-                    }
-                } else {
-                    std::println("Parameter verification passed successfully!");
-                }
-
-                return all_match;
-            }
         } // namespace
 
         nlohmann::json OptimizationParameters::to_json() const {
-
             nlohmann::json opt_json;
-            opt_json["iterations"] = iterations;
-            opt_json["means_lr"] = means_lr;
-            opt_json["shs_lr"] = shs_lr;
-            opt_json["opacity_lr"] = opacity_lr;
-            opt_json["scaling_lr"] = scaling_lr;
-            opt_json["rotation_lr"] = rotation_lr;
-            opt_json["lambda_dssim"] = lambda_dssim;
-            opt_json["min_opacity"] = min_opacity;
-            opt_json["refine_every"] = refine_every;
-            opt_json["start_refine"] = start_refine;
-            opt_json["stop_refine"] = stop_refine;
-            opt_json["grad_threshold"] = grad_threshold;
-            opt_json["sh_degree"] = sh_degree;
-            opt_json["opacity_reg"] = opacity_reg;
-            opt_json["scale_reg"] = scale_reg;
-            opt_json["init_opacity"] = init_opacity;
-            opt_json["init_scaling"] = init_scaling;
-            opt_json["max_cap"] = max_cap;
-            opt_json["render_mode"] = render_mode;
-            opt_json["pose_optimization"] = pose_optimization;
-            opt_json["eval_steps"] = eval_steps;
-            opt_json["save_steps"] = save_steps;
-            opt_json["enable_eval"] = enable_eval;
-            opt_json["enable_save_eval_images"] = enable_save_eval_images;
+
+            // Add all parameters from both common and specific
+            // Common parameters
+            opt_json["iterations"] = iterations();
+            opt_json["sh_degree_interval"] = params.get<size_t>("sh_degree_interval", 1000);
+            opt_json["lambda_dssim"] = lambda_dssim();
+            opt_json["sh_degree"] = sh_degree();
+            opt_json["render_mode"] = render_mode();
+            opt_json["enable_eval"] = enable_eval();
+            opt_json["enable_save_eval_images"] = params.get<bool>("enable_save_eval_images", true);
+            opt_json["skip_intermediate"] = params.get<bool>("skip_intermediate", false);
+            opt_json["use_bilateral_grid"] = params.get<bool>("use_bilateral_grid", false);
+            opt_json["bilateral_grid_X"] = params.get<int>("bilateral_grid_X", 16);
+            opt_json["bilateral_grid_Y"] = params.get<int>("bilateral_grid_Y", 16);
+            opt_json["bilateral_grid_W"] = params.get<int>("bilateral_grid_W", 8);
+            opt_json["bilateral_grid_lr"] = params.get<float>("bilateral_grid_lr", 0.002f);
+            opt_json["tv_loss_weight"] = params.get<float>("tv_loss_weight", 10.0f);
+            opt_json["steps_scaler"] = params.get<float>("steps_scaler", 0.0f);
+            opt_json["antialiasing"] = antialiasing();
+            opt_json["random"] = params.get<bool>("random", false);
+            opt_json["init_num_pts"] = params.get<int>("init_num_pts", 100000);
+            opt_json["init_extent"] = params.get<float>("init_extent", 3.0f);
+            opt_json["save_sog"] = save_sog();
+            opt_json["sog_iterations"] = sog_iterations();
+            opt_json["enable_sparsity"] = enable_sparsity();
+            opt_json["sparsify_steps"] = sparsify_steps();
+            opt_json["init_rho"] = init_rho();
+            opt_json["prune_ratio"] = prune_ratio();
+            opt_json["pose_optimization"] = params.get<std::string>("pose_optimization", "none");
             opt_json["strategy"] = strategy;
-            opt_json["skip_intermediate"] = skip_intermediate_saving;
-            opt_json["use_bilateral_grid"] = use_bilateral_grid;
-            opt_json["bilateral_grid_X"] = bilateral_grid_X;
-            opt_json["bilateral_grid_Y"] = bilateral_grid_Y;
-            opt_json["bilateral_grid_W"] = bilateral_grid_W;
-            opt_json["bilateral_grid_lr"] = bilateral_grid_lr;
-            opt_json["tv_loss_weight"] = tv_loss_weight;
-            opt_json["prune_opacity"] = prune_opacity;
-            opt_json["grow_scale3d"] = grow_scale3d;
-            opt_json["grow_scale2d"] = grow_scale2d;
-            opt_json["prune_scale3d"] = prune_scale3d;
-            opt_json["prune_scale2d"] = prune_scale2d;
-            opt_json["reset_every"] = reset_every;
-            opt_json["pause_refine_after_reset"] = pause_refine_after_reset;
-            opt_json["revised_opacity"] = revised_opacity;
-            opt_json["steps_scaler"] = steps_scaler;
-            opt_json["antialiasing"] = antialiasing;
-            opt_json["sh_degree_interval"] = sh_degree_interval;
-            opt_json["random"] = random;
-            opt_json["init_num_pts"] = init_num_pts;
-            opt_json["init_extent"] = init_extent;
-            opt_json["save_sog"] = save_sog;
-            opt_json["sog_iterations"] = sog_iterations;
-            opt_json["enable_sparsity"] = enable_sparsity;
-            opt_json["sparsify_steps"] = sparsify_steps;
-            opt_json["init_rho"] = init_rho;
-            opt_json["prune_ratio"] = prune_ratio;
+
+            // Strategy-specific parameters
+            opt_json["means_lr"] = params.get<float>("means_lr", 0.00016f);
+            opt_json["shs_lr"] = params.get<float>("shs_lr", 0.0025f);
+            opt_json["opacity_lr"] = params.get<float>("opacity_lr", 0.05f);
+            opt_json["scaling_lr"] = params.get<float>("scaling_lr", 0.005f);
+            opt_json["rotation_lr"] = params.get<float>("rotation_lr", 0.001f);
+            opt_json["min_opacity"] = params.get<float>("min_opacity", 0.005f);
+            opt_json["refine_every"] = params.get<size_t>("refine_every", 100);
+            opt_json["start_refine"] = params.get<size_t>("start_refine", 500);
+            opt_json["stop_refine"] = params.get<size_t>("stop_refine", 15000);
+            opt_json["grad_threshold"] = params.get<float>("grad_threshold", 0.0002f);
+            opt_json["opacity_reg"] = params.get<float>("opacity_reg", 0.0f);
+            opt_json["scale_reg"] = params.get<float>("scale_reg", 0.0f);
+            opt_json["init_opacity"] = params.get<float>("init_opacity", 0.1f);
+            opt_json["init_scaling"] = params.get<float>("init_scaling", 1.0f);
+            opt_json["max_cap"] = params.get<int>("max_cap", 1000000);
+
+            // Default-specific
+            if (strategy == "default") {
+                opt_json["prune_opacity"] = params.get<float>("prune_opacity", 0.005f);
+                opt_json["grow_scale3d"] = params.get<float>("grow_scale3d", 0.01f);
+                opt_json["grow_scale2d"] = params.get<float>("grow_scale2d", 0.05f);
+                opt_json["prune_scale3d"] = params.get<float>("prune_scale3d", 0.1f);
+                opt_json["prune_scale2d"] = params.get<float>("prune_scale2d", 0.15f);
+                opt_json["reset_every"] = params.get<size_t>("reset_every", 3000);
+                opt_json["pause_refine_after_reset"] = params.get<size_t>("pause_refine_after_reset", 0);
+                opt_json["revised_opacity"] = params.get<bool>("revised_opacity", false);
+            }
+
+            // Add eval and save steps
+            opt_json["eval_steps"] = eval_steps();
+            opt_json["save_steps"] = save_steps();
 
             return opt_json;
         }
 
-        OptimizationParameters OptimizationParameters::from_json(const nlohmann::json& json) {
-
-            OptimizationParameters params;
-            params.iterations = json["iterations"];
-            params.means_lr = json["means_lr"];
-            params.shs_lr = json["shs_lr"];
-            params.opacity_lr = json["opacity_lr"];
-            params.scaling_lr = json["scaling_lr"];
-            params.rotation_lr = json["rotation_lr"];
-            params.lambda_dssim = json["lambda_dssim"];
-            params.min_opacity = json["min_opacity"];
-            params.refine_every = json["refine_every"];
-            params.start_refine = json["start_refine"];
-            params.stop_refine = json["stop_refine"];
-            params.grad_threshold = json["grad_threshold"];
-            params.sh_degree = json["sh_degree"];
-
-            if (json.contains("opacity_reg")) {
-                params.opacity_reg = json["opacity_reg"];
-            }
-            if (json.contains("scale_reg")) {
-                params.scale_reg = json["scale_reg"];
-            }
-            if (json.contains("init_opacity")) {
-                params.init_opacity = json["init_opacity"];
-            }
-            if (json.contains("init_scaling")) {
-                params.init_scaling = json["init_scaling"];
-            }
-            if (json.contains("max_cap")) {
-                params.max_cap = json["max_cap"];
+        std::expected<OptimizationParameters, std::string>
+        OptimizationParameters::from_strategy(const std::string& strategy_name) {
+            // Load the single JSON file
+            auto json_path = get_config_path("optimization_params.json");
+            auto json_result = read_json_file(json_path);
+            if (!json_result) {
+                return std::unexpected(json_result.error());
             }
 
-            // Handle render mode
-            if (json.contains("render_mode")) {
-                std::string mode = json["render_mode"];
-                // Validate render mode
-                if (mode == "RGB" || mode == "D" || mode == "ED" ||
-                    mode == "RGB_D" || mode == "RGB_ED") {
-                    params.render_mode = mode;
-                } else {
-                    std::println(stderr, "Warning: Invalid render mode '{}' in JSON. Using default 'RGB'", mode);
-                }
+            auto& j = *json_result;
+
+            // Validate structure
+            if (!j.contains("common")) {
+                return std::unexpected("Invalid JSON structure: missing 'common' section");
+            }
+            if (!j.contains("strategies")) {
+                return std::unexpected("Invalid JSON structure: missing 'strategies' section");
+            }
+            if (!j["strategies"].contains(strategy_name)) {
+                return std::unexpected(std::format("Unknown strategy '{}' in configuration", strategy_name));
             }
 
-            if (json.contains("pose_optimization")) {
-                std::string pose_opt = json["pose_optimization"];
-                if (pose_opt == "none" || pose_opt == "direct" || pose_opt == "mlp") {
-                    params.pose_optimization = pose_opt;
-                } else {
-                    std::println(stderr, "Warning: Invalid pose optimization '{}' in JSON. Using default 'none'", pose_opt);
-                }
-            }
+            OptimizationParameters result;
+            result.strategy = strategy_name;
+            result.params = StrategyParameters(
+                j["common"],
+                j["strategies"][strategy_name]);
 
-            if (json.contains("strategy")) {
-                std::string strategy = json["strategy"];
-                if (strategy == "mcmc" || strategy == "default") {
-                    params.strategy = strategy;
-                } else {
-                    std::println(stderr, "Warning: Invalid optimization strategy '{}' in JSON. Using default 'default'", strategy);
-                }
-            }
-
-            if (json.contains("eval_steps")) {
-                params.eval_steps.clear();
-                for (const auto& step : json["eval_steps"]) {
-                    params.eval_steps.push_back(step.get<size_t>());
-                }
-            }
-
-            if (json.contains("save_steps")) {
-                params.save_steps.clear();
-                for (const auto& step : json["save_steps"]) {
-                    params.save_steps.push_back(step.get<size_t>());
-                }
-            }
-
-            if (json.contains("enable_eval")) {
-                params.enable_eval = json["enable_eval"];
-            }
-            if (json.contains("enable_save_eval_images")) {
-                params.enable_save_eval_images = json["enable_save_eval_images"];
-            }
-            if (json.contains("skip_intermediate")) {
-                params.skip_intermediate_saving = json["skip_intermediate"];
-            }
-            if (json.contains("use_bilateral_grid")) {
-                params.use_bilateral_grid = json["use_bilateral_grid"];
-            }
-            if (json.contains("bilateral_grid_X")) {
-                params.bilateral_grid_X = json["bilateral_grid_X"];
-            }
-            if (json.contains("bilateral_grid_Y")) {
-                params.bilateral_grid_Y = json["bilateral_grid_Y"];
-            }
-            if (json.contains("bilateral_grid_W")) {
-                params.bilateral_grid_W = json["bilateral_grid_W"];
-            }
-            if (json.contains("bilateral_grid_lr")) {
-                params.bilateral_grid_lr = json["bilateral_grid_lr"];
-            }
-            if (json.contains("tv_loss_weight")) {
-                params.tv_loss_weight = json["tv_loss_weight"];
-            }
-            if (json.contains("prune_opacity")) {
-                params.prune_opacity = json["prune_opacity"];
-            }
-            if (json.contains("grow_scale3d")) {
-                params.grow_scale3d = json["grow_scale3d"];
-            }
-            if (json.contains("grow_scale2d")) {
-                params.grow_scale2d = json["grow_scale2d"];
-            }
-            if (json.contains("prune_scale3d")) {
-                params.prune_scale3d = json["prune_scale3d"];
-            }
-            if (json.contains("prune_scale2d")) {
-                params.prune_scale2d = json["prune_scale2d"];
-            }
-            if (json.contains("reset_every")) {
-                params.reset_every = json["reset_every"];
-            }
-            if (json.contains("pause_refine_after_reset")) {
-                params.pause_refine_after_reset = json["pause_refine_after_reset"];
-            }
-            if (json.contains("revised_opacity")) {
-                params.revised_opacity = json["revised_opacity"];
-            }
-            if (json.contains("steps_scaler")) {
-                params.steps_scaler = json["steps_scaler"];
-            }
-            if (json.contains("antialiasing")) {
-                params.antialiasing = json["antialiasing"];
-            }
-            if (json.contains("sh_degree_interval")) {
-                params.sh_degree_interval = json["sh_degree_interval"];
-            }
-            if (json.contains("random")) {
-                params.random = json["random"];
-            }
-            if (json.contains("init_num_pts")) {
-                params.init_num_pts = json["init_num_pts"];
-            }
-            if (json.contains("init_extent")) {
-                params.init_extent = json["init_extent"];
-            }
-            if (json.contains("save_sog")) {
-                params.save_sog = json["save_sog"];
-            }
-            if (json.contains("sog_iterations")) {
-                params.sog_iterations = json["sog_iterations"];
-            }
-            if (json.contains("enable_sparsity")) {
-                params.enable_sparsity = json["enable_sparsity"];
-            }
-            if (json.contains("sparsify_steps")) {
-                params.sparsify_steps = json["sparsify_steps"];
-            }
-            if (json.contains("init_rho")) {
-                params.init_rho = json["init_rho"];
-            }
-            if (json.contains("prune_ratio")) {
-                params.prune_ratio = json["prune_ratio"];
-            }
-
-            return params;
+            return result;
         }
 
         /**
@@ -486,27 +179,7 @@ namespace gs {
          * @return Expected OptimizationParameters or error message
          */
         std::expected<OptimizationParameters, std::string> read_optim_params_from_json(const std::string strategy) {
-            auto json_result = read_json_file(get_config_path(strategy + "_optimization_params.json"));
-            if (!json_result) {
-                return std::unexpected(json_result.error());
-            }
-
-            auto json = *json_result;
-
-            // Create default parameters for verification
-            OptimizationParameters defaults;
-
-            // Verify parameters before reading
-            verify_optimization_parameters(defaults, json);
-
-            try {
-                OptimizationParameters params = OptimizationParameters::from_json(json);
-
-                return params;
-
-            } catch (const std::exception& e) {
-                return std::unexpected(std::format("Error parsing optimization parameters: {}", e.what()));
-            }
+            return OptimizationParameters::from_strategy(strategy);
         }
 
         /**
@@ -530,9 +203,7 @@ namespace gs {
                 json["dataset"]["test_every"] = params.dataset.test_every;
 
                 // Optimization configuration
-                nlohmann::json opt_json = params.optimization.to_json();
-
-                json["optimization"] = opt_json;
+                json["optimization"] = params.optimization.to_json();
 
                 // Add timestamp
                 auto now = std::chrono::system_clock::now();

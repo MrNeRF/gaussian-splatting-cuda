@@ -6,9 +6,11 @@
 #include "components/bilateral_grid.hpp"
 #include "components/poseopt.hpp"
 #include "components/sparsity_optimizer.hpp"
+#include "core/events.hpp"
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include "kernels/fused_ssim.cuh"
+#include "optimizers/scheduler.hpp"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
 #include <ATen/cuda/CUDAEvent.h>
@@ -64,24 +66,24 @@ namespace gs::training {
     }
 
     std::expected<void, std::string> Trainer::initialize_bilateral_grid() {
-        if (!params_.optimization.use_bilateral_grid) {
+        if (!params_.optimization.params.get<bool>("use_bilateral_grid", false)) {
             return {};
         }
 
         try {
             bilateral_grid_ = std::make_unique<BilateralGrid>(
                 train_dataset_size_,
-                params_.optimization.bilateral_grid_X,
-                params_.optimization.bilateral_grid_Y,
-                params_.optimization.bilateral_grid_W);
+                params_.optimization.params.get<int>("bilateral_grid_X", 16),
+                params_.optimization.params.get<int>("bilateral_grid_Y", 16),
+                params_.optimization.params.get<int>("bilateral_grid_W", 8));
 
             bilateral_grid_optimizer_ = std::make_unique<torch::optim::Adam>(
                 std::vector<torch::Tensor>{bilateral_grid_->parameters()},
-                torch::optim::AdamOptions(params_.optimization.bilateral_grid_lr)
+                torch::optim::AdamOptions(params_.optimization.params.get<float>("bilateral_grid_lr", 0.002f))
                     .eps(1e-15));
 
             // Create scheduler with warmup
-            const double gamma = std::pow(0.01, 1.0 / params_.optimization.iterations);
+            const double gamma = std::pow(0.01, 1.0 / params_.optimization.iterations());
             bilateral_grid_scheduler_ = std::make_unique<WarmupExponentialLR>(
                 *bilateral_grid_optimizer_,
                 gamma,
@@ -91,9 +93,9 @@ namespace gs::training {
             );
 
             LOG_DEBUG("Bilateral grid initialized with size {}x{}x{} and warmup scheduler",
-                      params_.optimization.bilateral_grid_X,
-                      params_.optimization.bilateral_grid_Y,
-                      params_.optimization.bilateral_grid_W);
+                      params_.optimization.params.get<int>("bilateral_grid_X", 16),
+                      params_.optimization.params.get<int>("bilateral_grid_Y", 16),
+                      params_.optimization.params.get<int>("bilateral_grid_W", 8));
             return {};
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Failed to initialize bilateral grid: {}", e.what()));
@@ -104,7 +106,7 @@ namespace gs::training {
         const RenderOutput& render_output,
         const torch::Tensor& gt_image,
         const SplatData& splatData,
-        const param::OptimizationParameters& opt_params) {
+        const param::StrategyParameters& opt_params) {
         try {
             // Ensure images have same dimensions
             torch::Tensor rendered = render_output.image;
@@ -121,8 +123,9 @@ namespace gs::training {
             // Base loss: L1 + SSIM
             auto l1_loss = torch::l1_loss(rendered, gt);
             auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
-            torch::Tensor loss = (1.f - opt_params.lambda_dssim) * l1_loss +
-                                 opt_params.lambda_dssim * ssim_loss;
+            float lambda_dssim = opt_params.get<float>("lambda_dssim", 0.2f);
+            torch::Tensor loss = (1.f - lambda_dssim) * l1_loss +
+                                 lambda_dssim * ssim_loss;
             return loss;
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Error computing photometric loss: {}", e.what()));
@@ -131,11 +134,12 @@ namespace gs::training {
 
     std::expected<torch::Tensor, std::string> Trainer::compute_scale_reg_loss(
         const SplatData& splatData,
-        const param::OptimizationParameters& opt_params) {
+        const param::StrategyParameters& opt_params) {
         try {
-            if (opt_params.scale_reg > 0.0f) {
+            float scale_reg = opt_params.get<float>("scale_reg", 0.0f);
+            if (scale_reg > 0.0f) {
                 auto scale_l1 = splatData.get_scaling().mean();
-                return opt_params.scale_reg * scale_l1;
+                return scale_reg * scale_l1;
             }
             return torch::zeros({1}, torch::kFloat32).requires_grad_();
         } catch (const std::exception& e) {
@@ -145,11 +149,12 @@ namespace gs::training {
 
     std::expected<torch::Tensor, std::string> Trainer::compute_opacity_reg_loss(
         const SplatData& splatData,
-        const param::OptimizationParameters& opt_params) {
+        const param::StrategyParameters& opt_params) {
         try {
-            if (opt_params.opacity_reg > 0.0f) {
+            float opacity_reg = opt_params.get<float>("opacity_reg", 0.0f);
+            if (opacity_reg > 0.0f) {
                 auto opacity_l1 = splatData.get_opacity().mean();
-                return opt_params.opacity_reg * opacity_l1;
+                return opacity_reg * opacity_l1;
             }
             return torch::zeros({1}, torch::kFloat32).requires_grad_();
         } catch (const std::exception& e) {
@@ -159,10 +164,11 @@ namespace gs::training {
 
     std::expected<torch::Tensor, std::string> Trainer::compute_bilateral_grid_tv_loss(
         const std::unique_ptr<BilateralGrid>& bilateral_grid,
-        const param::OptimizationParameters& opt_params) {
+        const param::StrategyParameters& opt_params) {
         try {
-            if (opt_params.use_bilateral_grid) {
-                return opt_params.tv_loss_weight * bilateral_grid->tv_loss();
+            if (opt_params.get<bool>("use_bilateral_grid", false)) {
+                float tv_loss_weight = opt_params.get<float>("tv_loss_weight", 10.0f);
+                return tv_loss_weight * bilateral_grid->tv_loss();
             }
             return torch::zeros({1}, torch::kFloat32).requires_grad_();
         } catch (const std::exception& e) {
@@ -233,8 +239,8 @@ namespace gs::training {
                 strategy_->remove_gaussians(prune_mask);
 
                 int n_after = splatData.size();
-                std::println("Sparsity pruning complete: {} -> {} Gaussians (removed {})",
-                             n_before, n_after, n_prune);
+                LOG_INFO("Sparsity pruning complete: {} -> {} Gaussians (removed {})",
+                         n_before, n_after, n_prune);
 
                 // Clear sparsity optimizer after pruning
                 sparsity_optimizer_.reset();
@@ -275,13 +281,13 @@ namespace gs::training {
             cleanup();
         }
 
-        LOG_INFO("Initializing trainer with {} iterations", params.optimization.iterations);
+        LOG_INFO("Initializing trainer with {} iterations", params.optimization.iterations());
 
         try {
             params_ = params;
 
             // Handle dataset split based on evaluation flag
-            if (params.optimization.enable_eval) {
+            if (params.optimization.enable_eval()) {
                 // Create train/val split
                 train_dataset_ = std::make_shared<CameraDataset>(
                     base_dataset_->get_cameras(), params.dataset, CameraDataset::Split::TRAIN);
@@ -300,7 +306,7 @@ namespace gs::training {
                          train_dataset_->size().value());
             }
 
-            // chage resize factor (change may comes from gui)
+            // change resize factor (change may comes from gui)
             if (train_dataset_) {
                 train_dataset_->set_resize_factor(params.dataset.resize_factor);
             }
@@ -327,19 +333,23 @@ namespace gs::training {
             }
 
             // Initialize sparsity optimizer if enabled
-            if (params.optimization.enable_sparsity) {
+            if (params.optimization.enable_sparsity()) {
                 // Calculate when sparsity should start
-                int base_iterations = params.optimization.iterations;
+                int base_iterations = params.optimization.iterations();
                 int sparsity_start = base_iterations; // Start after base training
-                int total_iterations = base_iterations + params.optimization.sparsify_steps;
+                int sparsify_steps = params.optimization.sparsify_steps();
+                int total_iterations = base_iterations + sparsify_steps;
 
                 // Extend the total training iterations
-                params_.optimization.iterations = total_iterations;
+                // Note: we need to update the params to reflect the new total iterations
+                nlohmann::json overrides;
+                overrides["iterations"] = total_iterations;
+                params_.optimization.params = params_.optimization.params.with_overrides(overrides);
 
                 ADMMSparsityOptimizer::Config sparsity_config{
-                    .sparsify_steps = params.optimization.sparsify_steps,
-                    .init_rho = params.optimization.init_rho,
-                    .prune_ratio = params.optimization.prune_ratio,
+                    .sparsify_steps = sparsify_steps,
+                    .init_rho = params.optimization.init_rho(),
+                    .prune_ratio = params.optimization.prune_ratio(),
                     .update_every = 50,
                     .start_iteration = sparsity_start // Start after base training completes
                 };
@@ -351,33 +361,34 @@ namespace gs::training {
                     LOG_INFO("=== Sparsity Optimization Configuration ===");
                     LOG_INFO("Base training iterations: {}", base_iterations);
                     LOG_INFO("Sparsification starts at: iteration {}", sparsity_start);
-                    LOG_INFO("Sparsification duration: {} iterations", params.optimization.sparsify_steps);
+                    LOG_INFO("Sparsification duration: {} iterations", sparsify_steps);
                     LOG_INFO("Total training iterations: {}", total_iterations);
-                    LOG_INFO("Pruning ratio: {}%", params.optimization.prune_ratio * 100);
-                    LOG_INFO("ADMM penalty (rho): {}", params.optimization.init_rho);
+                    LOG_INFO("Pruning ratio: {}%", params.optimization.prune_ratio() * 100);
+                    LOG_INFO("ADMM penalty (rho): {}", params.optimization.init_rho());
                 }
             }
 
             background_ = torch::tensor({0.f, 0.f, 0.f},
                                         torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
-            if (params.optimization.pose_optimization != "none") {
-                if (params.optimization.enable_eval) {
+            std::string pose_optimization = params.optimization.params.get<std::string>("pose_optimization", "none");
+            if (pose_optimization != "none") {
+                if (params.optimization.enable_eval()) {
                     return std::unexpected("Evaluating with pose optimization is not supported yet. "
                                            "Please disable pose optimization or evaluation.");
                 }
-                if (params.optimization.gut) {
+                if (params.optimization.gut()) {
                     return std::unexpected("The 3DGUT rasterizer doesn't have camera gradients yet. "
                                            "Please disable pose optimization or disable gut.");
                 }
-                if (params.optimization.pose_optimization == "direct") {
+                if (pose_optimization == "direct") {
                     poseopt_module_ = std::make_unique<DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
                     LOG_DEBUG("Direct pose optimization module created");
-                } else if (params.optimization.pose_optimization == "mlp") {
+                } else if (pose_optimization == "mlp") {
                     poseopt_module_ = std::make_unique<MLPPoseOptimizationModule>(train_dataset_->get_cameras().size());
                     LOG_DEBUG("MLP pose optimization module created");
                 } else {
-                    return std::unexpected("Invalid pose optimization type: " + params.optimization.pose_optimization);
+                    return std::unexpected("Invalid pose optimization type: " + pose_optimization);
                 }
                 poseopt_optimizer_ = std::make_unique<torch::optim::Adam>(
                     std::vector<torch::Tensor>{poseopt_module_->parameters()},
@@ -387,11 +398,11 @@ namespace gs::training {
             }
 
             // Create progress bar based on headless flag
-            if (params.optimization.headless) {
+            if (params.optimization.headless()) {
                 progress_ = std::make_unique<TrainingProgress>(
-                    params_.optimization.iterations, // This now includes sparsity steps if enabled
+                    params_.optimization.iterations(), // This now includes sparsity steps if enabled
                     /*update_frequency=*/100);
-                LOG_DEBUG("Progress bar initialized for {} total iterations", params_.optimization.iterations);
+                LOG_DEBUG("Progress bar initialized for {} total iterations", params_.optimization.iterations());
             }
 
             // Initialize the evaluator - it handles all metrics internally
@@ -399,8 +410,8 @@ namespace gs::training {
             LOG_DEBUG("Metrics evaluator initialized");
 
             // Print configuration
-            LOG_INFO("Render mode: {}", params.optimization.render_mode);
-            LOG_INFO("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
+            LOG_INFO("Render mode: {}", params.optimization.render_mode());
+            LOG_INFO("Visualization: {}", params.optimization.headless() ? "disabled" : "enabled");
             LOG_INFO("Strategy: {}", params.optimization.strategy);
 
             initialized_ = true;
@@ -476,13 +487,13 @@ namespace gs::training {
         RenderMode render_mode,
         std::stop_token stop_token) {
         try {
-            if (params_.optimization.gut) {
+            if (params_.optimization.gut()) {
                 if (cam->camera_model_type() == gsplat::CameraModelType::ORTHO) {
                     return std::unexpected("Training on cameras with ortho model is not supported yet.");
                 }
             } else {
                 // Flag is workaround for non-RC datasets with distortion. By default it is off.
-                if (!params_.optimization.rc) {
+                if (!params_.optimization.rc()) {
                     if (cam->radial_distortion().numel() != 0 ||
                         cam->tangential_distortion().numel() != 0) {
                         return std::unexpected("You must use --gut option to train on cameras with distortion.");
@@ -515,28 +526,28 @@ namespace gs::training {
             }
 
             // Add phase transition logging for sparsity
-            if (params_.optimization.enable_sparsity) {
+            if (params_.optimization.enable_sparsity()) {
                 // Calculate base iterations (original iterations before extension)
-                int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+                int base_iterations = params_.optimization.iterations() - params_.optimization.sparsify_steps();
 
                 // Log phase transition
                 if (iter == base_iterations + 1) {
                     LOG_INFO("=== Entering Sparsification Phase ===");
                     LOG_INFO("Base training complete at iteration {}", base_iterations);
                     LOG_INFO("Starting ADMM sparsification for {} iterations",
-                             params_.optimization.sparsify_steps);
+                             params_.optimization.sparsify_steps());
                     LOG_INFO("Current model size: {} Gaussians", strategy_->get_model().size());
-                    LOG_INFO("Target pruning: {}% of Gaussians", params_.optimization.prune_ratio * 100);
+                    LOG_INFO("Target pruning: {}% of Gaussians", params_.optimization.prune_ratio() * 100);
                 }
 
                 // Log when approaching pruning
-                if (iter == params_.optimization.iterations - 100) {
+                if (iter == params_.optimization.iterations() - 100) {
                     LOG_INFO("Approaching final pruning in 100 iterations (at iteration {})",
-                             params_.optimization.iterations);
+                             params_.optimization.iterations());
                 }
 
                 // Log when pruning will occur
-                if (iter == params_.optimization.iterations - 1) {
+                if (iter == params_.optimization.iterations() - 1) {
                     LOG_INFO("Final pruning will occur next iteration");
                 }
             }
@@ -546,7 +557,7 @@ namespace gs::training {
 
             RenderOutput r_output;
             // Use the render mode from parameters
-            if (!params_.optimization.gut) {
+            if (!params_.optimization.gut()) {
                 r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), background_);
             } else {
                 r_output = rasterize(adjusted_cam, strategy_->get_model(), background_, 1.0f, false, false, render_mode,
@@ -554,7 +565,7 @@ namespace gs::training {
             }
 
             // Apply bilateral grid if enabled
-            if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
+            if (bilateral_grid_ && params_.optimization.params.get<bool>("use_bilateral_grid", false)) {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
             }
 
@@ -562,7 +573,7 @@ namespace gs::training {
             auto loss_result = compute_photometric_loss(r_output,
                                                         gt_image,
                                                         strategy_->get_model(),
-                                                        params_.optimization);
+                                                        params_.optimization.params);
             if (!loss_result) {
                 return std::unexpected(loss_result.error());
             }
@@ -572,7 +583,7 @@ namespace gs::training {
             float loss_value = loss.item<float>();
 
             // Scale regularization loss
-            auto scale_loss_result = compute_scale_reg_loss(strategy_->get_model(), params_.optimization);
+            auto scale_loss_result = compute_scale_reg_loss(strategy_->get_model(), params_.optimization.params);
             if (!scale_loss_result) {
                 return std::unexpected(scale_loss_result.error());
             }
@@ -581,7 +592,7 @@ namespace gs::training {
             loss_value += loss.item<float>();
 
             // Opacity regularization loss
-            auto opacity_loss_result = compute_opacity_reg_loss(strategy_->get_model(), params_.optimization);
+            auto opacity_loss_result = compute_opacity_reg_loss(strategy_->get_model(), params_.optimization.params);
             if (!opacity_loss_result) {
                 return std::unexpected(opacity_loss_result.error());
             }
@@ -590,7 +601,7 @@ namespace gs::training {
             loss_value += loss.item<float>();
 
             // Bilateral grid TV loss
-            auto tv_loss_result = compute_bilateral_grid_tv_loss(bilateral_grid_, params_.optimization);
+            auto tv_loss_result = compute_bilateral_grid_tv_loss(bilateral_grid_, params_.optimization.params);
             if (!tv_loss_result) {
                 return std::unexpected(tv_loss_result.error());
             }
@@ -636,8 +647,8 @@ namespace gs::training {
 
                     // Execute strategy post-backward and step
                     // Only call post_backward during base training (not during sparsification)
-                    if (params_.optimization.enable_sparsity) {
-                        int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+                    if (params_.optimization.enable_sparsity()) {
+                        int base_iterations = params_.optimization.iterations() - params_.optimization.sparsify_steps();
                         if (iter <= base_iterations) {
                             strategy_->post_backward(iter, r_output);
                         }
@@ -649,12 +660,12 @@ namespace gs::training {
 
                     strategy_->step(iter);
 
-                    if (params_.optimization.use_bilateral_grid) {
+                    if (params_.optimization.params.get<bool>("use_bilateral_grid", false)) {
                         bilateral_grid_optimizer_->step();
                         bilateral_grid_optimizer_->zero_grad(true);
                         bilateral_grid_scheduler_->step();
                     }
-                    if (params_.optimization.pose_optimization != "none") {
+                    if (params_.optimization.params.get<std::string>("pose_optimization", "none") != "none") {
                         poseopt_optimizer_->step();
                         poseopt_optimizer_->zero_grad(true);
                     }
@@ -688,10 +699,10 @@ namespace gs::training {
                 }
 
                 // Save model at specified steps
-                if (!params_.optimization.skip_intermediate_saving) {
-                    for (size_t save_step : params_.optimization.save_steps) {
-                        if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
-                            const bool join_threads = (iter == params_.optimization.save_steps.back());
+                if (!params_.optimization.params.get<bool>("skip_intermediate", false)) {
+                    for (size_t save_step : params_.optimization.save_steps()) {
+                        if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations()) {
+                            const bool join_threads = (iter == params_.optimization.save_steps().back());
                             auto save_path = params_.dataset.output_path;
                             save_ply(save_path, iter, /*join=*/join_threads);
                             // Emit checkpoint saved event
@@ -739,7 +750,7 @@ namespace gs::training {
             }
 
             // Return Continue if we should continue training
-            if (iter < params_.optimization.iterations && !stop_requested_.load() && !stop_token.stop_requested()) {
+            if (iter < params_.optimization.iterations() && !stop_requested_.load() && !stop_token.stop_requested()) {
                 return StepResult::Continue;
             } else {
                 return StepResult::Stop;
@@ -760,7 +771,7 @@ namespace gs::training {
         ready_to_start_ = false; // Reset the flag
 
         // Event-based ready signaling
-        if (!params_.optimization.headless) {
+        if (!params_.optimization.headless()) {
             // Subscribe to start signal (no need to store handle)
             events::internal::TrainingReadyToStart::when([this](const auto&) {
                 ready_to_start_ = true;
@@ -782,7 +793,7 @@ namespace gs::training {
         try {
             int iter = 1;
             const int num_workers = 16;
-            const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
+            const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode());
 
             if (progress_) {
                 progress_->update(iter, current_loss_.load(),
@@ -796,7 +807,7 @@ namespace gs::training {
 
             LOG_DEBUG("Starting training iterations");
             // Single loop without epochs
-            while (iter <= params_.optimization.iterations) {
+            while (iter <= params_.optimization.iterations()) {
                 if (stop_token.stop_requested() || stop_requested_.load()) {
                     break;
                 }
@@ -851,10 +862,10 @@ namespace gs::training {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                save_ply(final_path, params_.optimization.iterations, /*join=*/true);
+                save_ply(final_path, params_.optimization.iterations(), /*join=*/true);
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
-                    static_cast<int>(params_.optimization.iterations),
+                    static_cast<int>(params_.optimization.iterations()),
                     final_path}
                     .emit();
             }
@@ -902,9 +913,9 @@ namespace gs::training {
         strategy_->get_model().save_ply(save_path, iter_num, join_threads);
 
         // Save SOG format if requested - ALWAYS synchronous
-        if (params_.optimization.save_sog) {
+        if (params_.optimization.save_sog()) {
             strategy_->get_model().save_sog(save_path, iter_num,
-                                            params_.optimization.sog_iterations,
+                                            params_.optimization.sog_iterations(),
                                             true); // Always synchronous
         }
 

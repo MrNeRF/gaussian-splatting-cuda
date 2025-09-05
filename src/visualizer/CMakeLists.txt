@@ -22,6 +22,7 @@ add_library(gs_visualizer STATIC
         gui/ui_widgets.cpp
         gui/panels/main_panel.cpp
         gui/panels/training_panel.cpp
+        gui/panels/parameter_editor.cpp
         gui/panels/crop_box_panel.cpp
         gui/panels/scene_panel.cpp
         gui/panels/tools_panel.cpp

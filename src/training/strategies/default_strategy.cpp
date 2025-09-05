@@ -17,21 +17,56 @@ namespace gs::training {
     }
 
     void DefaultStrategy::initialize(const gs::param::OptimizationParameters& optimParams) {
-        _params = std::make_unique<const gs::param::OptimizationParameters>(optimParams);
+        _params = optimParams.params; // Store the StrategyParameters
 
-        initialize_gaussians(_splat_data);
+        // Initialize gaussians
+        const auto dev = torch::kCUDA;
+        _splat_data.means() = _splat_data.means().to(dev).set_requires_grad(true);
+        _splat_data.scaling_raw() = _splat_data.scaling_raw().to(dev).set_requires_grad(true);
+        _splat_data.rotation_raw() = _splat_data.rotation_raw().to(dev).set_requires_grad(true);
+        _splat_data.opacity_raw() = _splat_data.opacity_raw().to(dev).set_requires_grad(true);
+        _splat_data.sh0() = _splat_data.sh0().to(dev).set_requires_grad(true);
+        _splat_data.shN() = _splat_data.shN().to(dev).set_requires_grad(true);
+        _splat_data._densification_info = torch::zeros({2, _splat_data.means().size(0)}, _splat_data.means().options()).set_requires_grad(false);
 
         // Initialize optimizer
-        _optimizer = create_optimizer(_splat_data, *_params);
+        using Options = FusedAdam::Options;
+        std::vector<torch::optim::OptimizerParamGroup> groups;
+
+        // Create groups with proper unique_ptr<Options>
+        auto add_param_group = [&groups](const torch::Tensor& param, double lr) {
+            auto options = std::make_unique<Options>(lr);
+            options->eps(1e-15).betas(std::make_tuple(0.9, 0.999));
+            groups.emplace_back(
+                std::vector<torch::Tensor>{param},
+                std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options)));
+        };
+
+        add_param_group(_splat_data.means(), _params.get<float>("means_lr", 0.00016f) * _splat_data.get_scene_scale());
+        add_param_group(_splat_data.sh0(), _params.get<float>("shs_lr", 0.0025f));
+        add_param_group(_splat_data.shN(), _params.get<float>("shs_lr", 0.0025f) / 20.f);
+        add_param_group(_splat_data.scaling_raw(), _params.get<float>("scaling_lr", 0.005f));
+        add_param_group(_splat_data.rotation_raw(), _params.get<float>("rotation_lr", 0.001f));
+        add_param_group(_splat_data.opacity_raw(), _params.get<float>("opacity_lr", 0.05f));
+
+        auto global_options = std::make_unique<Options>(0.f);
+        global_options->eps(1e-15);
+        _optimizer = std::make_unique<FusedAdam>(std::move(groups), std::move(global_options));
 
         // Initialize exponential scheduler
-        _scheduler = create_scheduler(*_params, _optimizer.get(), 0);
+        const double gamma = std::pow(0.01, 1.0 / _params.get<size_t>("iterations", 30000));
+        _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma, 0);
     }
 
     bool DefaultStrategy::is_refining(int iter) const {
-        return (iter > _params->start_refine &&
-                iter % _params->refine_every == 0 &&
-                iter % _params->reset_every >= _params->pause_refine_after_reset);
+        size_t start_refine = _params.get<size_t>("start_refine", 500);
+        size_t refine_every = _params.get<size_t>("refine_every", 100);
+        size_t reset_every = _params.get<size_t>("reset_every", 3000);
+        size_t pause_refine_after_reset = _params.get<size_t>("pause_refine_after_reset", 0);
+
+        return (iter > start_refine &&
+                iter % refine_every == 0 &&
+                iter % reset_every >= pause_refine_after_reset);
     }
 
     void DefaultStrategy::remove_gaussians(const torch::Tensor& mask) {
@@ -116,7 +151,7 @@ namespace gs::training {
             } else if (i == 3) {
                 // scaling
                 split_param = torch::log(sampled_scales / 1.6).repeat({split_size, 1}); // [split_size * N, 3]
-            } else if (i == 5 && _params->revised_opacity) {
+            } else if (i == 5 && _params.get<bool>("revised_opacity", false)) {
                 // opacity
                 const torch::Tensor new_opacities = 1.0 - torch::sqrt(1.0 - torch::sigmoid(sampled_param));
                 split_param = torch::logit(new_opacities).repeat(repeats); // [split_size * N]
@@ -168,9 +203,9 @@ namespace gs::training {
                                                                              _splat_data._densification_info[0], 1.0f);
         const c10::Device device = grads.device();
 
-        const torch::Tensor is_grad_high = grads > _params->grad_threshold;
+        const torch::Tensor is_grad_high = grads > _params.get<float>("grad_threshold", 0.0002f);
         const auto max_values = std::get<0>(torch::max(_splat_data.get_scaling(), -1));
-        const torch::Tensor is_small = max_values <= _params->grow_scale3d * _splat_data.get_scene_scale();
+        const torch::Tensor is_small = max_values <= _params.get<float>("grow_scale3d", 0.01f) * _splat_data.get_scene_scale();
         const torch::Tensor is_duplicated = is_grad_high & is_small;
         const auto num_duplicates = is_duplicated.sum().item<int64_t>();
 
@@ -230,15 +265,15 @@ namespace gs::training {
         torch::NoGradGuard no_grad;
 
         // Check for low opacity
-        torch::Tensor is_prune = _splat_data.get_opacity() < _params->prune_opacity;
+        torch::Tensor is_prune = _splat_data.get_opacity() < _params.get<float>("prune_opacity", 0.005f);
 
         auto rotation_raw = _splat_data.rotation_raw();
         is_prune |= (rotation_raw * rotation_raw).sum(-1) < 1e-8f;
 
         // Check for too large Gaussians
-        if (iter > _params->reset_every) {
+        if (iter > _params.get<size_t>("reset_every", 3000)) {
             const auto max_values = std::get<0>(torch::max(_splat_data.get_scaling(), -1));
-            torch::Tensor is_too_big = max_values > _params->prune_scale3d * _splat_data.get_scene_scale();
+            torch::Tensor is_too_big = max_values > _params.get<float>("prune_scale3d", 0.1f) * _splat_data.get_scene_scale();
             is_prune |= is_too_big;
         }
 
@@ -251,7 +286,7 @@ namespace gs::training {
     void DefaultStrategy::reset_opacity() {
         torch::NoGradGuard no_grad;
 
-        const auto threshold = 2.0f * _params->prune_opacity;
+        const auto threshold = 2.0f * _params.get<float>("prune_opacity", 0.005f);
 
         const auto param_fn = [&threshold](const int i, const torch::Tensor& param) {
             if (i == 5) {
@@ -292,16 +327,17 @@ namespace gs::training {
     void DefaultStrategy::post_backward(int iter, RenderOutput& render_output) {
         // Increment SH degree every 1000 iterations
         torch::NoGradGuard no_grad;
-        if (iter % _params->sh_degree_interval == 0) {
+        if (iter % _params.get<size_t>("sh_degree_interval", 1000) == 0) {
             _splat_data.increment_sh_degree();
         }
 
-        if (iter == _params->stop_refine) {
-            // Reset densification info at the end of refinement.Saves memory and processing time.
+        size_t stop_refine = _params.get<size_t>("stop_refine", 15000);
+        if (iter == stop_refine) {
+            // Reset densification info at the end of refinement. Saves memory and processing time.
             _splat_data._densification_info = torch::empty({0});
         }
 
-        if (iter >= _params->stop_refine) {
+        if (iter >= stop_refine) {
             return;
         }
 
@@ -314,7 +350,7 @@ namespace gs::training {
                                                   .set_requires_grad(false);
         }
 
-        if (iter % _params->reset_every == 0 && iter > 0) {
+        if (iter % _params.get<size_t>("reset_every", 3000) == 0 && iter > 0) {
             reset_opacity();
         }
 
@@ -326,7 +362,7 @@ namespace gs::training {
     }
 
     void DefaultStrategy::step(int iter) {
-        if (iter < _params->iterations) {
+        if (iter < _params.get<size_t>("iterations", 30000)) {
             auto* fused_adam = dynamic_cast<FusedAdam*>(_optimizer.get());
             fused_adam->step(iter);
             fused_adam->zero_grad(true, iter);

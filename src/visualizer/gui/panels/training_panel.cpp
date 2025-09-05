@@ -4,12 +4,12 @@
 
 #include "gui/panels/training_panel.hpp"
 #include "core/events.hpp"
+#include "gui/panels/parameter_editor.hpp"
 #include "gui/ui_widgets.hpp"
 #include "visualizer_impl.hpp"
 #include <imgui.h>
 
 namespace gs::gui::panels {
-
     void SaveProjectButton(const UIContext& ctx, TrainingPanelState& state) {
         // Add Save Project button
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.9f, 1.0f));
@@ -57,9 +57,13 @@ namespace gs::gui::panels {
             if (!trainer) {
                 return;
             }
-            const auto& params = trainer->getParams();
-            opt_params = params.optimization;
-            dataset_params = params.dataset;
+            // Get parameters from the project since trainer doesn't expose them
+            auto project = ctx.viewer->getProject();
+            if (!project) {
+                return;
+            }
+            opt_params = project->getOptimizationParams();
+            dataset_params = project->getProjectData().data_set_info;
         }
 
         // Track changes separately for optimization and dataset parameters
@@ -67,6 +71,45 @@ namespace gs::gui::panels {
         bool dataset_params_changed = false;
 
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 12.0f);
+
+        // Strategy Selector
+        if (can_edit) {
+            ImGui::Text("Strategy:");
+            ImGui::SameLine();
+            const char* strategies[] = {"default", "mcmc"};
+            int current_strategy_idx = (opt_params.strategy == "mcmc") ? 1 : 0;
+            int original_idx = current_strategy_idx;
+
+            ImGui::PushItemWidth(150);
+            if (ImGui::Combo("##strategy", &current_strategy_idx, strategies, IM_ARRAYSIZE(strategies))) {
+                if (current_strategy_idx != original_idx) {
+                    std::string new_strategy = strategies[current_strategy_idx];
+
+                    // Load the new strategy's base parameters
+                    auto new_params_result = param::OptimizationParameters::from_strategy(new_strategy);
+                    if (new_params_result) {
+                        // Get current parameters as JSON to preserve user edits
+                        nlohmann::json current_overrides = opt_params.params.common();
+                        for (const auto& [key, value] : opt_params.params.specific().items()) {
+                            current_overrides[key] = value;
+                        }
+
+                        // Apply current values as overrides to new strategy
+                        opt_params = *new_params_result;
+                        opt_params.params = opt_params.params.with_overrides(current_overrides);
+                        opt_params_changed = true;
+                    }
+                }
+            }
+            ImGui::PopItemWidth();
+            ImGui::Separator();
+        } else {
+            ImGui::Text("Strategy: %s", opt_params.strategy.c_str());
+            ImGui::Separator();
+        }
+
+        // Create parameter editor
+        ParameterEditor editor(opt_params, can_edit);
 
         // Dataset Parameters
         if (ImGui::TreeNode("Dataset")) {
@@ -116,7 +159,7 @@ namespace gs::gui::panels {
                 }
 
                 // Test Every - EDITABLE (only shown if evaluation is enabled)
-                if (opt_params.enable_eval) {
+                if (opt_params.enable_eval()) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("Test Every:");
@@ -147,242 +190,165 @@ namespace gs::gui::panels {
             ImGui::TreePop();
         }
 
-        // Optimization Parameters
-        if (ImGui::TreeNode("Optimization")) {
-            if (ImGui::BeginTable("OptimizationTable", 2, ImGuiTableFlags_SizingStretchProp)) {
-                ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        // Core Training Parameters
+        if (ImGui::TreeNode("Core Training")) {
+            static const char* render_modes[] = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
 
-                // Iterations - EDITABLE
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Iterations:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    int iterations = static_cast<int>(opt_params.iterations);
-                    if (ImGui::InputInt("##iterations", &iterations, 1000, 5000)) {
-                        if (iterations > 0 && iterations <= 1000000) {
-                            opt_params.iterations = static_cast<size_t>(iterations);
-                            opt_params_changed = true;
-                        }
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%zu", opt_params.iterations);
-                }
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Strategy:");
-                ImGui::TableNextColumn();
-                ImGui::Text("%s", opt_params.strategy.c_str());
-
-                // Learning Rates section - ALL EDITABLE
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Learning Rates:");
-                ImGui::TableNextColumn();
-
-                // Position LR
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Position:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::InputFloat("##means_lr", &opt_params.means_lr, 0.000001f, 0.00001f, "%.6f")) {
-                        opt_params_changed = true;
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%.6f", opt_params.means_lr);
-                }
-
-                // SH Coeff LR
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  SH Coeff:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::InputFloat("##shs_lr", &opt_params.shs_lr, 0.0001f, 0.001f, "%.4f")) {
-                        opt_params_changed = true;
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%.4f", opt_params.shs_lr);
-                }
-
-                // Opacity LR
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Opacity:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::InputFloat("##opacity_lr", &opt_params.opacity_lr, 0.001f, 0.01f, "%.4f")) {
-                        opt_params_changed = true;
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%.4f", opt_params.opacity_lr);
-                }
-
-                // Scaling LR
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Scaling:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::InputFloat("##scaling_lr", &opt_params.scaling_lr, 0.0001f, 0.001f, "%.4f")) {
-                        opt_params_changed = true;
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%.4f", opt_params.scaling_lr);
-                }
-
-                // Rotation LR
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Rotation:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::InputFloat("##rotation_lr", &opt_params.rotation_lr, 0.0001f, 0.001f, "%.4f")) {
-                        opt_params_changed = true;
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%.4f", opt_params.rotation_lr);
-                }
-
-                // Refinement section - ALL EDITABLE
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Refinement:");
-                ImGui::TableNextColumn();
-
-                // Refine Every
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Refine Every:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    int refine_every = static_cast<int>(opt_params.refine_every);
-                    if (ImGui::InputInt("##refine_every", &refine_every, 10, 100)) {
-                        if (refine_every > 0) {
-                            opt_params.refine_every = static_cast<size_t>(refine_every);
-                            opt_params_changed = true;
-                        }
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%zu", opt_params.refine_every);
-                }
-
-                // Start Refine
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Start Refine:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    int start_refine = static_cast<int>(opt_params.start_refine);
-                    if (ImGui::InputInt("##start_refine", &start_refine, 100, 500)) {
-                        if (start_refine >= 0) {
-                            opt_params.start_refine = static_cast<size_t>(start_refine);
-                            opt_params_changed = true;
-                        }
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%zu", opt_params.start_refine);
-                }
-
-                // Stop Refine
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Stop Refine:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    int stop_refine = static_cast<int>(opt_params.stop_refine);
-                    if (ImGui::InputInt("##stop_refine", &stop_refine, 1000, 5000)) {
-                        if (stop_refine >= 0) {
-                            opt_params.stop_refine = static_cast<size_t>(stop_refine);
-                            opt_params_changed = true;
-                        }
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%zu", opt_params.stop_refine);
-                }
-
-                // Gradient Threshold
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Gradient Thr:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::InputFloat("##grad_threshold", &opt_params.grad_threshold, 0.000001f, 0.00001f, "%.6f")) {
-                        opt_params_changed = true;
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%.6f", opt_params.grad_threshold);
-                }
-
-                // Reset Every
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("  Reset Every:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    int reset_every = static_cast<int>(opt_params.reset_every);
-                    if (ImGui::InputInt("##reset_every", &reset_every, 100, 1000)) {
-                        if (reset_every >= 0) {
-                            opt_params.reset_every = static_cast<size_t>(reset_every);
-                            opt_params_changed = true;
-                        }
-                    }
-                    ImGui::PopItemWidth();
-                } else if (opt_params.reset_every > 0) {
-                    ImGui::Text("%zu", opt_params.reset_every);
-                } else {
-                    ImGui::Text("Disabled");
-                }
-
-                // Strategy-specific parameters
-                if (opt_params.strategy == "mcmc") {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Max Gaussians:");
-                    ImGui::TableNextColumn();
-                    if (can_edit) {
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::InputInt("##max_cap", &opt_params.max_cap, 10000, 100000)) {
-                            if (opt_params.max_cap > 0) {
-                                opt_params_changed = true;
-                            }
-                        }
-                        ImGui::PopItemWidth();
-                    } else {
-                        ImGui::Text("%d", opt_params.max_cap);
-                    }
-                }
-
-                ImGui::EndTable();
-            }
+            editor.BeginSection("CoreTable")
+                .Row("Iterations:")
+                .Int("##iterations", "iterations", 30000, 1000, 5000, 1, 1000000)
+                .Row("SH Degree:")
+                .SliderInt("##sh_degree", "sh_degree", 3, 1, 3)
+                .Row("SH Interval:")
+                .Int("##sh_degree_interval", "sh_degree_interval", 1000, 100, 500, 1)
+                .Row("Lambda DSSIM:")
+                .Slider("##lambda_dssim", "lambda_dssim", 0.2f, 0.0f, 1.0f)
+                .Row("Render Mode:")
+                .Combo("##render_mode", "render_mode", render_modes, 5, "RGB");
+            editor.EndSection();
             ImGui::TreePop();
         }
 
-        // Save Steps - FULLY EDITABLE
+        // Learning Rates
+        if (ImGui::TreeNode("Learning Rates")) {
+            editor.BeginSection("LRTable")
+                .Row("Position:")
+                .Float("##means_lr", "means_lr", 0.00016f, 0.000001f, 0.00001f, "%.6f")
+                .Row("SH Coeff:")
+                .Float("##shs_lr", "shs_lr", 0.0025f, 0.0001f, 0.001f, "%.4f")
+                .Row("Opacity:")
+                .Float("##opacity_lr", "opacity_lr", 0.05f, 0.001f, 0.01f, "%.4f")
+                .Row("Scaling:")
+                .Float("##scaling_lr", "scaling_lr", 0.005f, 0.0001f, 0.001f, "%.4f")
+                .Row("Rotation:")
+                .Float("##rotation_lr", "rotation_lr", 0.001f, 0.0001f, 0.001f, "%.4f");
+            editor.EndSection();
+            ImGui::TreePop();
+        }
+
+        // Refinement Parameters
+        if (ImGui::TreeNode("Refinement")) {
+            editor.BeginSection("RefineTable")
+                .Row("Refine Every:")
+                .Int("##refine_every", "refine_every", 100, 10, 100, 1)
+                .Row("Start Refine:")
+                .Int("##start_refine", "start_refine", 500, 100, 500, 0)
+                .Row("Stop Refine:")
+                .Int("##stop_refine", "stop_refine", 15000, 1000, 5000, 0)
+                .Row("Gradient Thr:")
+                .Float("##grad_threshold", "grad_threshold", 0.0002f, 0.000001f, 0.00001f, "%.6f")
+                .Row("Max Gaussians:")
+                .Int("##max_cap", "max_cap", 1000000, 10000, 100000, 1);
+            editor.EndSection();
+            ImGui::TreePop();
+        }
+
+        // Regularization Parameters
+        if (ImGui::TreeNode("Regularization")) {
+            editor.BeginSection("RegTable")
+                .Row("Opacity Reg:")
+                .Float("##opacity_reg", "opacity_reg", 0.0f, 0.001f, 0.01f, "%.4f", 0.0f)
+                .Row("Scale Reg:")
+                .Float("##scale_reg", "scale_reg", 0.0f, 0.001f, 0.01f, "%.4f", 0.0f)
+                .Row("Min Opacity:")
+                .Float("##min_opacity", "min_opacity", 0.005f, 0.001f, 0.01f, "%.4f", 0.0f);
+            editor.EndSection();
+            ImGui::TreePop();
+        }
+
+        // Initialization Parameters
+        if (ImGui::TreeNode("Initialization")) {
+            bool random_init = opt_params.params.get<bool>("random", false);
+
+            editor.BeginSection("InitTable")
+                .Row("Init Opacity:")
+                .Slider("##init_opacity", "init_opacity", 0.1f, 0.0f, 1.0f)
+                .Row("Init Scaling:")
+                .Float("##init_scaling", "init_scaling", 1.0f, 0.01f, 0.1f, "%.3f", 0.0f)
+                .Row("Random Init:")
+                .Bool("##random", "random", false);
+
+            if (random_init) {
+                editor.Row("  Num Points:").Int("##init_num_pts", "init_num_pts", 100000, 1000, 10000, 1).Row("  Extent:").Float("##init_extent", "init_extent", 3.0f, 0.1f, 0.5f, "%.2f", 0.0f);
+            }
+
+            editor.EndSection();
+            ImGui::TreePop();
+        }
+
+        // Strategy-Specific Parameters
+        if (opt_params.strategy == "default" && ImGui::TreeNode("Default Strategy")) {
+            editor.BeginSection("DefaultTable")
+                .Row("Prune Opacity:")
+                .Float("##prune_opacity", "prune_opacity", 0.005f, 0.001f, 0.01f, "%.4f")
+                .Row("Grow Scale 3D:")
+                .Float("##grow_scale3d", "grow_scale3d", 0.01f, 0.001f, 0.01f, "%.4f")
+                .Row("Grow Scale 2D:")
+                .Float("##grow_scale2d", "grow_scale2d", 0.05f, 0.001f, 0.01f, "%.4f")
+                .Row("Prune Scale 3D:")
+                .Float("##prune_scale3d", "prune_scale3d", 0.1f, 0.01f, 0.1f, "%.3f")
+                .Row("Prune Scale 2D:")
+                .Float("##prune_scale2d", "prune_scale2d", 0.15f, 0.01f, 0.1f, "%.3f");
+
+            // Reset Every special case
+            size_t reset_every = opt_params.params.get<size_t>("reset_every", 3000);
+            if (can_edit) {
+                editor.Row("Reset Every:");
+                ImGui::PushItemWidth(-1);
+                int reset_every_int = static_cast<int>(reset_every);
+                if (ImGui::InputInt("##reset_every", &reset_every_int, 100, 1000)) {
+                    if (reset_every_int >= 0) {
+                        nlohmann::json overrides;
+                        overrides["reset_every"] = reset_every_int;
+                        opt_params.params = opt_params.params.with_overrides(overrides);
+                        opt_params_changed = true;
+                    }
+                }
+                ImGui::PopItemWidth();
+            } else {
+                editor.Row("Reset Every:");
+                if (reset_every > 0) {
+                    ImGui::Text("%zu", reset_every);
+                } else {
+                    ImGui::Text("Disabled");
+                }
+            }
+
+            editor.Row("Pause After Reset:").Int("##pause_refine_after_reset", "pause_refine_after_reset", 0, 10, 100, 0).Row("Revised Opacity:").Bool("##revised_opacity", "revised_opacity", false);
+
+            editor.EndSection();
+            ImGui::TreePop();
+        }
+
+        // Advanced Features
+        if (ImGui::TreeNode("Advanced Features")) {
+            static const char* pose_opts[] = {"none", "direct", "mlp"};
+            bool enable_sparsity = opt_params.enable_sparsity();
+
+            editor.BeginSection("AdvancedTable")
+                .Row("Enable Eval:")
+                .Bool("##enable_eval", "enable_eval", false)
+                .Row("Pose Opt:")
+                .Combo("##pose_optimization", "pose_optimization", pose_opts, 3, "none")
+                .Row("Bilateral Grid:")
+                .Bool("##use_bilateral_grid", "use_bilateral_grid", false)
+                .Row("Antialiasing:")
+                .Bool("##antialiasing", "antialiasing", false)
+                .Row("GUT Mode:")
+                .Bool("##gut", "gut", false)
+                .Row("Enable Sparsity:")
+                .Bool("##enable_sparsity", "enable_sparsity", false);
+
+            if (enable_sparsity) {
+                editor.Row("  Sparsify Steps:").Int("##sparsify_steps", "sparsify_steps", 15000, 1000, 5000, 1).Row("  Init Rho:").Float("##init_rho", "init_rho", 0.0005f, 0.0001f, 0.001f, "%.6f", 0.0f).Row("  Prune Ratio:").Slider("##prune_ratio", "prune_ratio", 0.6f, 0.0f, 1.0f);
+            }
+
+            editor.Row("Save SOG:").Bool("##save_sog", "save_sog", false);
+            editor.EndSection();
+            ImGui::TreePop();
+        }
+
+        // Save Steps
         if (ImGui::TreeNode("Save Steps")) {
             if (can_edit) {
                 // Add new save step
@@ -390,11 +356,21 @@ namespace gs::gui::panels {
                 ImGui::InputInt("New Step", &new_step, 100, 1000);
                 ImGui::SameLine();
                 if (ImGui::Button("Add")) {
-                    if (new_step > 0 && std::find(opt_params.save_steps.begin(),
-                                                  opt_params.save_steps.end(),
-                                                  new_step) == opt_params.save_steps.end()) {
-                        opt_params.save_steps.push_back(new_step);
-                        std::sort(opt_params.save_steps.begin(), opt_params.save_steps.end());
+                    auto save_steps = opt_params.save_steps();
+                    if (new_step > 0 && std::find(save_steps.begin(),
+                                                  save_steps.end(),
+                                                  new_step) == save_steps.end()) {
+                        save_steps.push_back(new_step);
+                        std::sort(save_steps.begin(), save_steps.end());
+
+                        // Convert to JSON array and update
+                        nlohmann::json save_json = nlohmann::json::array();
+                        for (auto s : save_steps) {
+                            save_json.push_back(s);
+                        }
+                        nlohmann::json overrides;
+                        overrides["save_steps"] = save_json;
+                        opt_params.params = opt_params.params.with_overrides(overrides);
                         opt_params_changed = true;
                     }
                 }
@@ -402,39 +378,59 @@ namespace gs::gui::panels {
                 ImGui::Separator();
 
                 // List existing save steps with remove buttons
-                for (size_t i = 0; i < opt_params.save_steps.size(); ++i) {
+                auto save_steps = opt_params.save_steps();
+                for (size_t i = 0; i < save_steps.size(); ++i) {
                     ImGui::PushID(static_cast<int>(i));
 
-                    int step = static_cast<int>(opt_params.save_steps[i]);
+                    int step = static_cast<int>(save_steps[i]);
                     ImGui::SetNextItemWidth(100);
                     if (ImGui::InputInt("##step", &step, 0, 0)) {
                         if (step > 0) {
-                            opt_params.save_steps[i] = static_cast<size_t>(step);
-                            std::sort(opt_params.save_steps.begin(), opt_params.save_steps.end());
+                            save_steps[i] = static_cast<size_t>(step);
+                            std::sort(save_steps.begin(), save_steps.end());
+
+                            // Convert to JSON array and update
+                            nlohmann::json save_json = nlohmann::json::array();
+                            for (auto s : save_steps) {
+                                save_json.push_back(s);
+                            }
+                            nlohmann::json overrides;
+                            overrides["save_steps"] = save_json;
+                            opt_params.params = opt_params.params.with_overrides(overrides);
                             opt_params_changed = true;
                         }
                     }
 
                     ImGui::SameLine();
                     if (ImGui::Button("Remove")) {
-                        opt_params.save_steps.erase(opt_params.save_steps.begin() + i);
+                        save_steps.erase(save_steps.begin() + i);
+
+                        // Convert to JSON array and update
+                        nlohmann::json save_json = nlohmann::json::array();
+                        for (auto s : save_steps) {
+                            save_json.push_back(s);
+                        }
+                        nlohmann::json overrides;
+                        overrides["save_steps"] = save_json;
+                        opt_params.params = opt_params.params.with_overrides(overrides);
                         opt_params_changed = true;
                     }
 
                     ImGui::PopID();
                 }
 
-                if (opt_params.save_steps.empty()) {
+                if (save_steps.empty()) {
                     ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No save steps configured");
                 }
             } else {
                 // Read-only display
-                if (!opt_params.save_steps.empty()) {
+                auto save_steps = opt_params.save_steps();
+                if (!save_steps.empty()) {
                     std::string steps_str;
-                    for (size_t i = 0; i < opt_params.save_steps.size(); ++i) {
+                    for (size_t i = 0; i < save_steps.size(); ++i) {
                         if (i > 0)
                             steps_str += ", ";
-                        steps_str += std::to_string(opt_params.save_steps[i]);
+                        steps_str += std::to_string(save_steps[i]);
                     }
                     ImGui::Text("%s", steps_str.c_str());
                 } else {
@@ -444,99 +440,100 @@ namespace gs::gui::panels {
             ImGui::TreePop();
         }
 
-        // Active Features - only show if any are enabled
-        bool has_active_features = opt_params.use_bilateral_grid ||
-                                   opt_params.pose_optimization != "none" ||
-                                   opt_params.enable_eval ||
-                                   opt_params.antialiasing ||
-                                   opt_params.gut;
+        // Eval Steps
+        if (opt_params.enable_eval() && ImGui::TreeNode("Eval Steps")) {
+            if (can_edit) {
+                // Add new eval step
+                static int new_eval_step = 1000;
+                ImGui::InputInt("New Step", &new_eval_step, 100, 1000);
+                ImGui::SameLine();
+                if (ImGui::Button("Add")) {
+                    auto eval_steps = opt_params.eval_steps();
+                    if (new_eval_step > 0 && std::find(eval_steps.begin(),
+                                                       eval_steps.end(),
+                                                       new_eval_step) == eval_steps.end()) {
+                        eval_steps.push_back(new_eval_step);
+                        std::sort(eval_steps.begin(), eval_steps.end());
 
-        if (has_active_features && ImGui::TreeNode("Active Features")) {
-            if (ImGui::BeginTable("FeaturesTable", 2, ImGuiTableFlags_SizingStretchProp)) {
-                ImGui::TableSetupColumn("Feature", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-                ImGui::TableSetupColumn("Configuration", ImGuiTableColumnFlags_WidthStretch);
-
-                if (opt_params.use_bilateral_grid) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Bilateral Grid:");
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%dx%dx%d (LR: %.4f)",
-                                opt_params.bilateral_grid_X,
-                                opt_params.bilateral_grid_Y,
-                                opt_params.bilateral_grid_W,
-                                opt_params.bilateral_grid_lr);
-                }
-
-                if (opt_params.pose_optimization != "none") {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Pose Optimization:");
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%s", opt_params.pose_optimization.c_str());
-                }
-
-                if (opt_params.enable_eval) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Evaluation:");
-                    ImGui::TableNextColumn();
-                    if (!opt_params.eval_steps.empty()) {
-                        std::string steps_str = "Steps: ";
-                        for (size_t i = 0; i < opt_params.eval_steps.size(); ++i) {
-                            if (i > 0)
-                                steps_str += ", ";
-                            steps_str += std::to_string(opt_params.eval_steps[i]);
+                        // Convert to JSON array and update
+                        nlohmann::json eval_json = nlohmann::json::array();
+                        for (auto s : eval_steps) {
+                            eval_json.push_back(s);
                         }
-                        ImGui::Text("%s", steps_str.c_str());
-                    } else {
-                        ImGui::Text("Enabled");
+                        nlohmann::json overrides;
+                        overrides["eval_steps"] = eval_json;
+                        opt_params.params = opt_params.params.with_overrides(overrides);
+                        opt_params_changed = true;
                     }
                 }
 
-                if (opt_params.antialiasing) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Antialiasing:");
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Enabled");
+                ImGui::Separator();
+
+                // List existing eval steps with remove buttons
+                auto eval_steps = opt_params.eval_steps();
+                for (size_t i = 0; i < eval_steps.size(); ++i) {
+                    ImGui::PushID(static_cast<int>(i));
+
+                    int step = static_cast<int>(eval_steps[i]);
+                    ImGui::SetNextItemWidth(100);
+                    if (ImGui::InputInt("##step", &step, 0, 0)) {
+                        if (step > 0) {
+                            eval_steps[i] = static_cast<size_t>(step);
+                            std::sort(eval_steps.begin(), eval_steps.end());
+
+                            // Convert to JSON array and update
+                            nlohmann::json eval_json = nlohmann::json::array();
+                            for (auto s : eval_steps) {
+                                eval_json.push_back(s);
+                            }
+                            nlohmann::json overrides;
+                            overrides["eval_steps"] = eval_json;
+                            opt_params.params = opt_params.params.with_overrides(overrides);
+                            opt_params_changed = true;
+                        }
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Remove")) {
+                        eval_steps.erase(eval_steps.begin() + i);
+
+                        // Convert to JSON array and update
+                        nlohmann::json eval_json = nlohmann::json::array();
+                        for (auto s : eval_steps) {
+                            eval_json.push_back(s);
+                        }
+                        nlohmann::json overrides;
+                        overrides["eval_steps"] = eval_json;
+                        opt_params.params = opt_params.params.with_overrides(overrides);
+                        opt_params_changed = true;
+                    }
+
+                    ImGui::PopID();
                 }
 
-                if (opt_params.gut) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("GUT Rasterizer:");
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Enabled");
+                if (eval_steps.empty()) {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No eval steps configured");
                 }
-
-                ImGui::EndTable();
+            } else {
+                // Read-only display
+                auto eval_steps = opt_params.eval_steps();
+                if (!eval_steps.empty()) {
+                    std::string steps_str;
+                    for (size_t i = 0; i < eval_steps.size(); ++i) {
+                        if (i > 0)
+                            steps_str += ", ";
+                        steps_str += std::to_string(eval_steps[i]);
+                    }
+                    ImGui::Text("%s", steps_str.c_str());
+                } else {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No eval steps");
+                }
             }
             ImGui::TreePop();
         }
 
-        // Render Settings
-        if (ImGui::TreeNode("Render Settings")) {
-            if (ImGui::BeginTable("RenderTable", 2, ImGuiTableFlags_SizingStretchProp)) {
-                ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Render Mode:");
-                ImGui::TableNextColumn();
-                ImGui::Text("%s", opt_params.render_mode.c_str());
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("SH Degree:");
-                ImGui::TableNextColumn();
-                ImGui::Text("%d", opt_params.sh_degree);
-
-                ImGui::EndTable();
-            }
-            ImGui::TreePop();
-        }
+        // Check if editor had any changes
+        opt_params_changed |= editor.changed();
 
         // Apply changes if any were made and we can edit
         if ((opt_params_changed || dataset_params_changed) && can_edit) {
@@ -727,5 +724,4 @@ namespace gs::gui::panels {
             state.save_browser.render(&state.show_save_browser);
         }
     }
-
 } // namespace gs::gui::panels

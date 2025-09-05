@@ -8,87 +8,137 @@
 #include <filesystem>
 #include <string>
 #include <vector>
-
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
 
 namespace gs {
     namespace param {
+        // New parameter container that wraps JSON data
+        class StrategyParameters {
+        public:
+            StrategyParameters() = default;
+
+            StrategyParameters(nlohmann::json common, nlohmann::json strategy_specific)
+                : common_(std::move(common))
+                , specific_(std::move(strategy_specific)) {}
+
+            // Type-safe getter that checks strategy-specific first, then common
+            template<typename T>
+            T get(const std::string& key, T default_value = T{}) const {
+                // First check strategy-specific
+                if (auto it = specific_.find(key); it != specific_.end()) {
+                    try {
+                        return it->get<T>();
+                    } catch (const nlohmann::json::type_error&) {
+                        // Fall through to check common
+                    }
+                }
+                // Then check common
+                if (auto it = common_.find(key); it != common_.end()) {
+                    try {
+                        return it->get<T>();
+                    } catch (const nlohmann::json::type_error&) {
+                        // Fall through to return default
+                    }
+                }
+                return default_value;
+            }
+
+            // Check if parameter exists
+            bool has(const std::string& key) const {
+                return specific_.contains(key) || common_.contains(key);
+            }
+
+            // Get strategy name
+            std::string strategy_name() const {
+                return get<std::string>("strategy", "default");
+            }
+
+            // For backward compatibility and special access
+            const nlohmann::json& common() const { return common_; }
+            const nlohmann::json& specific() const { return specific_; }
+
+            // Create a mutable copy with overrides
+            StrategyParameters with_overrides(const nlohmann::json& overrides) const {
+                auto new_common = common_;
+                auto new_specific = specific_;
+
+                // Apply overrides to both common and specific
+                for (const auto& [key, value] : overrides.items()) {
+                    if (specific_.contains(key)) {
+                        new_specific[key] = value;
+                    } else {
+                        new_common[key] = value;
+                    }
+                }
+
+                return StrategyParameters(new_common, new_specific);
+            }
+
+        private:
+            nlohmann::json common_;
+            nlohmann::json specific_;
+        };
+
         struct OptimizationParameters {
-            size_t iterations = 30'000;
-            size_t sh_degree_interval = 1'000;
-            float means_lr = 0.00016f;
-            float shs_lr = 0.0025f;
-            float opacity_lr = 0.05f;
-            float scaling_lr = 0.005f;
-            float rotation_lr = 0.001f;
-            float lambda_dssim = 0.2f;
-            float min_opacity = 0.005f;
-            size_t refine_every = 100;
-            size_t start_refine = 500;
-            size_t stop_refine = 25'000;
-            float grad_threshold = 0.0002f;
-            int sh_degree = 3;
-            float opacity_reg = 0.01f;
-            float scale_reg = 0.01f;
-            float init_opacity = 0.5f;
-            float init_scaling = 0.1f;
-            int max_cap = 1000000;
-            std::vector<size_t> eval_steps = {7'000, 30'000}; // Steps to evaluate the model
-            std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
-            bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
-            bool enable_eval = false;                         // Only evaluate when explicitly enabled
-            bool rc = false;                                  // Workaround for reality captures - doesn't properly convert COLMAP camera model
-            bool enable_save_eval_images = true;              // Save during evaluation images
-            bool headless = false;                            // Disable visualization during training
-            std::string render_mode = "RGB";                  // Render mode: RGB, D, ED, RGB_D, RGB_ED
-            std::string strategy = "mcmc";                    // Optimization strategy: mcmc, default.
-            bool preload_to_ram = false;                      // If true, the entire dataset will be loaded into RAM at startup
-            std::string pose_optimization = "none";           // Pose optimization type: none, direct, mlp
+            std::string strategy;
+            StrategyParameters params;
 
-            // Bilateral grid parameters
-            bool use_bilateral_grid = false;
-            int bilateral_grid_X = 16;
-            int bilateral_grid_Y = 16;
-            int bilateral_grid_W = 8;
-            float bilateral_grid_lr = 2e-3f;
-            float tv_loss_weight = 10.f;
+            // Convenience getters for commonly accessed parameters
+            size_t iterations() const { return params.get<size_t>("iterations", 30000); }
+            float lambda_dssim() const { return params.get<float>("lambda_dssim", 0.2f); }
+            int sh_degree() const { return params.get<int>("sh_degree", 3); }
+            std::string render_mode() const { return params.get<std::string>("render_mode", "RGB"); }
+            bool enable_eval() const { return params.get<bool>("enable_eval", false); }
+            bool headless() const { return params.get<bool>("headless", false); }
+            bool antialiasing() const { return params.get<bool>("antialiasing", false); }
+            bool gut() const { return params.get<bool>("gut", false); }
+            bool rc() const { return params.get<bool>("rc", false); }
+            bool save_sog() const { return params.get<bool>("save_sog", false); }
+            int sog_iterations() const { return params.get<int>("sog_iterations", 10); }
+            bool enable_sparsity() const { return params.get<bool>("enable_sparsity", false); }
+            int sparsify_steps() const { return params.get<int>("sparsify_steps", 15000); }
+            float init_rho() const { return params.get<float>("init_rho", 0.0005f); }
+            float prune_ratio() const { return params.get<float>("prune_ratio", 0.6f); }
 
-            // Default strategy specific parameters
-            float prune_opacity = 0.005f;
-            float grow_scale3d = 0.01f;
-            float grow_scale2d = 0.05f;
-            float prune_scale3d = 0.1f;
-            float prune_scale2d = 0.15f;
-            size_t reset_every = 3'000;
-            size_t pause_refine_after_reset = 0;
-            bool revised_opacity = false;
-            bool gut = false;
-            float steps_scaler = 0.f;  // If < 0, step size scaling is disabled
-            bool antialiasing = false; // Enable antialiasing in rendering
+            // Get eval/save steps
+            std::vector<size_t> eval_steps() const {
+                std::vector<size_t> steps;
+                try {
+                    auto json_steps = params.get<nlohmann::json>("eval_steps", nlohmann::json::array());
+                    for (const auto& s : json_steps) {
+                        steps.push_back(s.get<size_t>());
+                    }
+                } catch (...) {
+                    steps = {7000, 30000}; // defaults
+                }
+                return steps;
+            }
 
-            // Random initialization parameters
-            bool random = false;        // Use random initialization instead of SfM
-            int init_num_pts = 100'000; // Number of random points to initialize
-            float init_extent = 3.0f;   // Extent of random point cloud
+            std::vector<size_t> save_steps() const {
+                std::vector<size_t> steps;
+                try {
+                    auto json_steps = params.get<nlohmann::json>("save_steps", nlohmann::json::array());
+                    for (const auto& s : json_steps) {
+                        steps.push_back(s.get<size_t>());
+                    }
+                } catch (...) {
+                    steps = {7000, 30000}; // defaults
+                }
+                return steps;
+            }
 
-            // SOG format parameters
-            bool save_sog = false;   // Save in SOG format alongside PLY
-            int sog_iterations = 10; // K-means iterations for SOG compression
-
-            // Sparsity optimization parameters
-            bool enable_sparsity = false;
-            int sparsify_steps = 15000;
-            float init_rho = 0.0005f;
-            float prune_ratio = 0.6f;
-
+            // Convert back to old format for compatibility
             nlohmann::json to_json() const;
-            static OptimizationParameters from_json(const nlohmann::json& j);
+
+            // Factory method
+            static std::expected<OptimizationParameters, std::string>
+            from_strategy(const std::string& strategy_name);
         };
 
         struct DatasetConfig {
             std::filesystem::path data_path = "";
             std::filesystem::path output_path = "";
-            std::filesystem::path project_path = ""; // if path is relative it will be saved to output_path/project_name.ls
+            std::filesystem::path project_path = "";
             std::string images = "images";
             int resize_factor = -1;
             int test_every = 8;
@@ -107,10 +157,9 @@ namespace gs {
             std::optional<std::string> init_ply = std::nullopt;
         };
 
-        // Modern C++23 functions returning expected values
+        // Functions
         std::expected<OptimizationParameters, std::string> read_optim_params_from_json(const std::string strategy);
 
-        // Save training parameters to JSON
         std::expected<void, std::string> save_training_parameters_to_json(
             const TrainingParameters& params,
             const std::filesystem::path& output_path);

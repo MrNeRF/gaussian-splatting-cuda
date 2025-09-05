@@ -263,47 +263,94 @@ namespace gs::management {
     ProjectData Project::parseProjectData(const nlohmann::json& json) const {
         ProjectData data;
 
-        data.version = Version(json["version"].get<std::string>());
-        data.project_name = json["project_name"].get<std::string>();
-        data.project_creation_time = json["project_creation_time"].get<std::string>();
-        data.project_last_update_time = json["project_last_update_time"].get<std::string>();
-        data.data_set_info.output_path = std::filesystem::path(json["project_output_folder"].get<std::string>());
-
-        // Parse data section
-        const auto& dataJson = json["data"];
-        data.data_set_info.data_path = dataJson["data_path"].get<std::string>();
-        data.data_set_info.images = dataJson["images"].get<std::string>();
-        data.data_set_info.resize_factor = dataJson["resize_factor"].get<int>();
-        data.data_set_info.test_every = dataJson["test_every"].get<int>();
-        data.data_set_info.data_type = dataJson["data_type"].get<std::string>();
-
-        if (json.contains("training") && json["training"].contains("optimization")) {
-            data.optimization = param::OptimizationParameters::from_json(json["training"]["optimization"]);
+        // Parse version
+        if (json.contains("version")) {
+            data.version = Version(json["version"].get<std::string>());
         }
 
-        // Parse outputs section
-        const auto& outputsJson = json["outputs"];
-        if (outputsJson.contains("plys") && outputsJson["plys"].is_array()) {
-            for (const auto& plyJson : outputsJson["plys"]) {
-                PlyData plyData;
-                plyData.is_imported = plyJson["is_imported"].get<bool>();
-                plyData.ply_path = plyJson["ply_path"].get<std::string>();
-                plyData.ply_training_iter_number = plyJson["ply_training_iter_number"].get<int>();
-                plyData.ply_name = plyJson["ply_name"].get<std::string>();
-                data.outputs.plys.push_back(plyData);
+        // Parse metadata
+        if (json.contains("project_name")) {
+            data.project_name = json["project_name"].get<std::string>();
+        }
+        if (json.contains("project_creation_time")) {
+            data.project_creation_time = json["project_creation_time"].get<std::string>();
+        }
+        if (json.contains("project_last_update_time")) {
+            data.project_last_update_time = json["project_last_update_time"].get<std::string>();
+        }
+
+        // Parse dataset info
+        if (json.contains("data_set_info")) {
+            const auto& ds = json["data_set_info"];
+            if (ds.contains("data_path")) {
+                data.data_set_info.data_path = ds["data_path"].get<std::string>();
+            }
+            if (ds.contains("output_path")) {
+                data.data_set_info.output_path = ds["output_path"].get<std::string>();
+            }
+            if (ds.contains("project_path")) {
+                data.data_set_info.project_path = ds["project_path"].get<std::string>();
+            }
+            if (ds.contains("images")) {
+                data.data_set_info.images = ds["images"].get<std::string>();
+            }
+            if (ds.contains("resize_factor")) {
+                data.data_set_info.resize_factor = ds["resize_factor"].get<int>();
+            }
+            if (ds.contains("test_every")) {
+                data.data_set_info.test_every = ds["test_every"].get<int>();
+            }
+            if (ds.contains("data_type")) {
+                data.data_set_info.data_type = ds["data_type"].get<std::string>();
+            }
+        }
+
+        if (json.contains("training") && json["training"].contains("optimization")) {
+            // The optimization JSON should contain a "strategy" field
+            const auto& opt_json = json["training"]["optimization"];
+            std::string strategy = opt_json.value("strategy", "default");
+
+            // Load the base parameters for the strategy
+            auto opt_params_result = param::read_optim_params_from_json(strategy);
+            if (opt_params_result) {
+                // Apply overrides from the saved JSON
+                data.optimization.params = opt_params_result->params.with_overrides(opt_json);
+                data.optimization.strategy = strategy;
+            } else {
+                // Fallback: create default parameters
+                data.optimization = param::OptimizationParameters();
+                data.optimization.strategy = strategy;
+            }
+        }
+
+        // Parse outputs
+        if (json.contains("outputs") && json["outputs"].contains("plys")) {
+            for (const auto& ply : json["outputs"]["plys"]) {
+                PlyData ply_data;
+                if (ply.contains("is_imported")) {
+                    ply_data.is_imported = ply["is_imported"].get<bool>();
+                }
+                if (ply.contains("ply_path")) {
+                    ply_data.ply_path = ply["ply_path"].get<std::string>();
+                }
+                if (ply.contains("ply_training_iter_number")) {
+                    ply_data.ply_training_iter_number = ply["ply_training_iter_number"].get<int>();
+                }
+                if (ply.contains("ply_name")) {
+                    ply_data.ply_name = ply["ply_name"].get<std::string>();
+                }
+                data.outputs.plys.push_back(ply_data);
             }
         }
 
         // Store any additional fields for future compatibility
-        data.additional_fields = json;
-        // Remove known fields to keep only unknown ones
-        data.additional_fields.erase("project_info");
-        data.additional_fields.erase("version");
-        data.additional_fields.erase("project_name");
-        data.additional_fields.erase("project_creation_time");
-        data.additional_fields.erase("project_last_update_time");
-        data.additional_fields.erase("data");
-        data.additional_fields.erase("outputs");
+        for (auto& [key, value] : json.items()) {
+            if (key != "version" && key != "project_name" && key != "project_creation_time" &&
+                key != "project_last_update_time" && key != "data_set_info" &&
+                key != "training" && key != "outputs") {
+                data.additional_fields[key] = value;
+            }
+        }
 
         return data;
     }

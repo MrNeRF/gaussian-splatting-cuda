@@ -118,7 +118,7 @@ namespace gs::training {
         }
 
         auto rotation_raw = _splat_data.rotation_raw();
-        auto dead_mask = opacities <= _params->min_opacity | (rotation_raw * rotation_raw).sum(-1) < 1e-8f;
+        auto dead_mask = opacities <= _params.get<float>("min_opacity", 0.005f) | (rotation_raw * rotation_raw).sum(-1) < 1e-8f;
         auto dead_indices = dead_mask.nonzero().squeeze(-1);
         int n_dead = dead_indices.numel();
 
@@ -161,7 +161,7 @@ namespace gs::training {
         auto new_scales = std::get<1>(relocation_result);
 
         // Clamp new opacities
-        new_opacities = torch::clamp_(new_opacities, _params->min_opacity, 1.0f - 1e-7f);
+        new_opacities = torch::clamp_(new_opacities, _params.get<float>("min_opacity", 0.005f), 1.0f - 1e-7f);
 
         // Update parameters for sampled indices
         // Handle opacity shape properly
@@ -198,7 +198,8 @@ namespace gs::training {
         }
 
         const int current_n = _splat_data.size();
-        const int n_target = std::min(_params->max_cap, static_cast<int>(1.05f * current_n));
+        const int max_cap = _params.get<int>("max_cap", 1000000);
+        const int n_target = std::min(max_cap, static_cast<int>(1.05f * current_n));
         const int n_new = std::max(0, n_target - current_n);
 
         if (n_new == 0)
@@ -239,7 +240,7 @@ namespace gs::training {
         auto new_scales = std::get<1>(relocation_result);
 
         // Clamp new opacities
-        new_opacities = torch::clamp(new_opacities, _params->min_opacity, 1.0f - 1e-7f);
+        new_opacities = torch::clamp(new_opacities, _params.get<float>("min_opacity", 0.005f), 1.0f - 1e-7f);
 
         // Update existing Gaussians FIRST (before concatenation)
         if (_splat_data.opacity_raw().dim() == 2) {
@@ -285,6 +286,7 @@ namespace gs::training {
             auto state_it = _optimizer->state().find(old_param_key);
             if (state_it == _optimizer->state().end()) {
                 saved_states.push_back(nullptr);
+                continue;
             }
 
             auto* fused_adam_state = static_cast<FusedAdam::AdamParamState*>(state_it->second.get());
@@ -369,7 +371,7 @@ namespace gs::training {
     void MCMC::post_backward(int iter, RenderOutput& render_output) {
         // Increment SH degree every 1000 iterations
         torch::NoGradGuard no_grad;
-        if (iter % _params->sh_degree_interval == 0) {
+        if (iter % _params.get<size_t>("sh_degree_interval", 1000) == 0) {
             _splat_data.increment_sh_degree();
         }
 
@@ -393,7 +395,7 @@ namespace gs::training {
     }
 
     void MCMC::step(int iter) {
-        if (iter < _params->iterations) {
+        if (iter < _params.get<size_t>("iterations", 30000)) {
             auto* fused_adam = dynamic_cast<FusedAdam*>(_optimizer.get());
             fused_adam->step(iter);
             fused_adam->zero_grad(true, iter);
@@ -444,7 +446,8 @@ namespace gs::training {
     }
 
     void MCMC::initialize(const gs::param::OptimizationParameters& optimParams) {
-        _params = std::make_unique<const gs::param::OptimizationParameters>(optimParams);
+        _params = optimParams.params;                     // Store the StrategyParameters
+        _noise_lr = _params.get<float>("noise_lr", 5e5f); // Cache frequently used param
 
         const auto dev = torch::kCUDA;
         _splat_data.means() = _splat_data.means().to(dev).set_requires_grad(true);
@@ -484,23 +487,23 @@ namespace gs::training {
                 std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options)));
         };
 
-        add_param_group(_splat_data.means(), _params->means_lr * _splat_data.get_scene_scale());
-        add_param_group(_splat_data.sh0(), _params->shs_lr);
-        add_param_group(_splat_data.shN(), _params->shs_lr / 20.f);
-        add_param_group(_splat_data.scaling_raw(), _params->scaling_lr);
-        add_param_group(_splat_data.rotation_raw(), _params->rotation_lr);
-        add_param_group(_splat_data.opacity_raw(), _params->opacity_lr);
+        add_param_group(_splat_data.means(), _params.get<float>("means_lr", 0.00016f) * _splat_data.get_scene_scale());
+        add_param_group(_splat_data.sh0(), _params.get<float>("shs_lr", 0.0025f));
+        add_param_group(_splat_data.shN(), _params.get<float>("shs_lr", 0.0025f) / 20.f);
+        add_param_group(_splat_data.scaling_raw(), _params.get<float>("scaling_lr", 0.005f));
+        add_param_group(_splat_data.rotation_raw(), _params.get<float>("rotation_lr", 0.001f));
+        add_param_group(_splat_data.opacity_raw(), _params.get<float>("opacity_lr", 0.05f));
 
         auto global_options = std::make_unique<Options>(0.f);
         global_options->eps(1e-15);
         _optimizer = std::make_unique<FusedAdam>(std::move(groups), std::move(global_options));
-        const double gamma = std::pow(0.01, 1.0 / _params->iterations);
+        const double gamma = std::pow(0.01, 1.0 / _params.get<size_t>("iterations", 30000));
         _scheduler = std::make_unique<ExponentialLR>(*_optimizer, gamma, 0);
     }
 
     bool MCMC::is_refining(int iter) const {
-        return (iter < _params->stop_refine &&
-                iter > _params->start_refine &&
-                iter % _params->refine_every == 0);
+        return (iter < _params.get<size_t>("stop_refine", 25000) &&
+                iter > _params.get<size_t>("start_refine", 500) &&
+                iter % _params.get<size_t>("refine_every", 100) == 0);
     }
 } // namespace gs::training
