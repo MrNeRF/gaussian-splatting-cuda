@@ -324,7 +324,7 @@ namespace {
                 // Apply all overrides
                 setVal(iterations_val, opt.iterations);
                 setVal(resize_factor_val, ds.resize_factor);
-                setVal(num_workers_val, opt.num_threads);
+                setVal(num_workers_val, opt.num_workers);
                 setVal(max_cap_val, opt.max_cap);
                 setVal(project_name_val, ds.project_path);
                 setVal(images_folder_val, ds.images);
