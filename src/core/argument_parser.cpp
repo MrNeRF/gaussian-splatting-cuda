@@ -95,6 +95,15 @@ namespace {
             ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
             ::args::ValueFlagList<std::string> timelapse_images(parser, "timelapse_images", "Image filenames to render timelapse images for", {"timelapse-images"});
             ::args::ValueFlag<int> timelapse_every(parser, "timelapse_every", "Render timelapse image every N iterations (default: 50)", {"timelapse-every"});
+            ::args::ValueFlag<std::string> init_ply(parser, "init_ply", "Optional PLY splat file for initialization", {"init-ply"});
+
+            // Sparsity optimization arguments
+            ::args::ValueFlag<int> sparsify_steps(parser, "sparsify_steps", "Number of steps for sparsification (default: 15000)", {"sparsify-steps"});
+            ::args::ValueFlag<float> init_rho(parser, "init_rho", "Initial ADMM penalty parameter (default: 0.0005)", {"init-rho"});
+            ::args::ValueFlag<float> prune_ratio(parser, "prune_ratio", "Final pruning ratio for sparsity (default: 0.6)", {"prune-ratio"});
+
+            // SOG format arguments
+            ::args::ValueFlag<int> sog_iterations(parser, "sog_iterations", "K-means iterations for SOG compression (default: 10)", {"sog-iterations"});
 
             // Logging options
             ::args::ValueFlag<std::string> log_level(parser, "level", "Log level: trace, debug, info, warn, error, critical, off (default: info)", {"log-level"});
@@ -111,7 +120,9 @@ namespace {
             ::args::Flag bg_modulation(parser, "bg_modulation", "Enable sinusoidal background modulation mixed with base background", {"bg-modulation"});
             ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
             ::args::Flag gut(parser, "gut", "Enable GUT mode", {"gut"});
+            ::args::Flag enable_sparsity(parser, "enable_sparsity", "Enable sparsity optimization", {"enable-sparsity"});
             ::args::Flag rc(parser, "rc", "Workaround for reality captures - doesn't properly convert COLMAP camera model", {"rc"});
+            ::args::Flag save_sog(parser, "sog", "Save in SOG format alongside PLY", {"sog"});
 
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
                                                             "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
@@ -184,6 +195,16 @@ namespace {
                 }
 
                 return std::make_tuple(ParseResult::Success, std::function<void()>{});
+            }
+
+            if (init_ply) {
+                const auto ply_path = ::args::get(init_ply);
+                params.init_ply = ply_path;
+
+                // Check if PLY file exists
+                if (!std::filesystem::exists(ply_path)) {
+                    return std::unexpected(std::format("Initialization PLY file does not exist: {}", ply_path));
+                }
             }
 
             // Training mode
@@ -268,6 +289,11 @@ namespace {
                                         strategy_val = strategy ? std::optional<std::string>(::args::get(strategy)) : std::optional<std::string>(),
                                         timelapse_images_val = timelapse_images ? std::optional<std::vector<std::string>>(::args::get(timelapse_images)) : std::optional<std::vector<std::string>>(),
                                         timelapse_every_val = timelapse_every ? std::optional<int>(::args::get(timelapse_every)) : std::optional<int>(),
+                                        sog_iterations_val = sog_iterations ? std::optional<int>(::args::get(sog_iterations)) : std::optional<int>(),
+                                        // Sparsity parameters
+                                        sparsify_steps_val = sparsify_steps ? std::optional<int>(::args::get(sparsify_steps)) : std::optional<int>(),
+                                        init_rho_val = init_rho ? std::optional<float>(::args::get(init_rho)) : std::optional<float>(),
+                                        prune_ratio_val = prune_ratio ? std::optional<float>(::args::get(prune_ratio)) : std::optional<float>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
@@ -278,7 +304,9 @@ namespace {
                                         skip_intermediate_saving_flag = bool(skip_intermediate_saving),
                                         bg_modulation_flag = bool(bg_modulation),
                                         random_flag = bool(random),
-                                        gut_flag = bool(gut)]() {
+                                        gut_flag = bool(gut),
+                                        save_sog_flag = bool(save_sog),
+                                        enable_sparsity_flag = bool(enable_sparsity)]() {
                 auto& opt = params.optimization;
                 auto& ds = params.dataset;
 
@@ -311,6 +339,12 @@ namespace {
                 setVal(strategy_val, opt.strategy);
                 setVal(timelapse_images_val, ds.timelapse_images);
                 setVal(timelapse_every_val, ds.timelapse_every);
+                setVal(sog_iterations_val, opt.sog_iterations);
+
+                // Sparsity parameters
+                setVal(sparsify_steps_val, opt.sparsify_steps);
+                setVal(init_rho_val, opt.init_rho);
+                setVal(prune_ratio_val, opt.prune_ratio);
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
@@ -322,6 +356,8 @@ namespace {
                 setFlag(bg_modulation_flag, opt.bg_modulation);
                 setFlag(random_flag, opt.random);
                 setFlag(gut_flag, opt.gut);
+                setFlag(save_sog_flag, opt.save_sog);
+                setFlag(enable_sparsity_flag, opt.enable_sparsity);
             };
 
             return std::make_tuple(ParseResult::Success, apply_cmd_overrides);
@@ -353,7 +389,6 @@ namespace {
     std::vector<std::string> convert_args(int argc, const char* const argv[]) {
         return std::vector<std::string>(argv, argv + argc);
     }
-
 } // anonymous namespace
 
 // Public interface

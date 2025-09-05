@@ -72,6 +72,16 @@ namespace gs {
             int init_num_pts = 100'000; // Number of random points to initialize
             float init_extent = 3.0f;   // Extent of random point cloud
 
+            // SOG format parameters
+            bool save_sog = false;   // Save in SOG format alongside PLY
+            int sog_iterations = 10; // K-means iterations for SOG compression
+
+            // Sparsity optimization parameters
+            bool enable_sparsity = false;
+            int sparsify_steps = 15000;
+            float init_rho = 0.0005f;
+            float prune_ratio = 0.6f;
+
             nlohmann::json to_json() const;
             static OptimizationParameters from_json(const nlohmann::json& j);
         };
@@ -93,6 +103,9 @@ namespace gs {
 
             // Viewer mode specific
             std::filesystem::path ply_path = "";
+
+            // Optional PLY splat file for initialization
+            std::optional<std::string> init_ply = std::nullopt;
         };
 
         // Modern C++23 functions returning expected values

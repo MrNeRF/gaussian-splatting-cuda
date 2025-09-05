@@ -355,6 +355,46 @@ namespace gs::rendering {
         return camera_frustum_renderer_.render(cameras, view, proj, scale, train_color, eval_color);
     }
 
+    Result<void> RenderingEngineImpl::renderCameraFrustumsWithHighlight(
+        const std::vector<std::shared_ptr<const Camera>>& cameras,
+        const ViewportData& viewport,
+        float scale,
+        const glm::vec3& train_color,
+        const glm::vec3& eval_color,
+        int highlight_index) {
+
+        if (!camera_frustum_renderer_.isInitialized()) {
+            return {}; // Silent fail if not initialized
+        }
+
+        // Set the highlight before rendering
+        camera_frustum_renderer_.setHighlightedCamera(highlight_index);
+
+        auto view = createViewMatrix(viewport);
+        auto proj = createProjectionMatrix(viewport);
+
+        return camera_frustum_renderer_.render(cameras, view, proj, scale, train_color, eval_color);
+    }
+
+    Result<int> RenderingEngineImpl::pickCameraFrustum(
+        const std::vector<std::shared_ptr<const Camera>>& cameras,
+        const glm::vec2& mouse_pos,
+        const glm::vec2& viewport_pos,
+        const glm::vec2& viewport_size,
+        const ViewportData& viewport,
+        float scale) {
+
+        if (!camera_frustum_renderer_.isInitialized()) {
+            return -1;
+        }
+
+        auto view = createViewMatrix(viewport);
+        auto proj = createProjectionMatrix(viewport);
+
+        return camera_frustum_renderer_.pickCamera(
+            cameras, mouse_pos, viewport_pos, viewport_size, view, proj, scale);
+    }
+
     std::shared_ptr<GizmoInteraction> RenderingEngineImpl::getGizmoInteraction() {
         return gizmo_interaction_;
     }
