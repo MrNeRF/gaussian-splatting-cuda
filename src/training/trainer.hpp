@@ -110,6 +110,9 @@ namespace gs::training {
             Error
         };
 
+        // Returns the background color to use at a given iteration
+        torch::Tensor& background_for_step(int iter);
+
         // Protected method for processing a single training step
         std::expected<StepResult, std::string> train_step(
             int iter,
@@ -168,6 +171,7 @@ namespace gs::training {
         param::TrainingParameters params_;
 
         torch::Tensor background_{};
+        torch::Tensor bg_mix_buffer_;
         std::unique_ptr<TrainingProgress> progress_;
         size_t train_dataset_size_ = 0;
 

@@ -36,6 +36,7 @@ namespace gs {
             std::vector<size_t> eval_steps = {7'000, 30'000}; // Steps to evaluate the model
             std::vector<size_t> save_steps = {7'000, 30'000}; // Steps to save the model
             bool skip_intermediate_saving = false;            // Skip saving intermediate results and only save final output
+            bool bg_modulation = false;                       // Enable sinusoidal background modulation
             bool enable_eval = false;                         // Only evaluate when explicitly enabled
             bool rc = false;                                  // Workaround for reality captures - doesn't properly convert COLMAP camera model
             bool enable_save_eval_images = true;              // Save during evaluation images
