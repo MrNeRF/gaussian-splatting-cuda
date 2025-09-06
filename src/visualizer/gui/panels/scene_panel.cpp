@@ -544,13 +544,6 @@ namespace gs::gui {
             .type = "Images",
             .metadata = {{"filename", imagePath.filename().string()}, {"path", imagePath.string()}}}
             .emit();
-
-        // Sync with camera navigation - emit GoToCamView
-        auto cam_data_it = m_PathToCamId.find(imagePath);
-        if (cam_data_it != m_PathToCamId.end()) {
-            events::cmd::GoToCamView{.cam_id = cam_data_it->second}.emit();
-            LOG_TRACE("Emitting GoToCamView for camera ID: {}", cam_data_it->second);
-        }
     }
 
     void ScenePanel::onImageDoubleClicked(size_t imageIndex) {
