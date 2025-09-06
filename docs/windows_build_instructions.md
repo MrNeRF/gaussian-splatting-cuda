@@ -111,18 +111,14 @@ Note: Installation of dependencies and compiling of LichtFeld Studio will take a
 
 		git clone https://github.com/microsoft/vcpkg.git
   		cd vcpkg && .\bootstrap-vcpkg.bat -disableMetrics && cd ..
-
-- set environment variable
-
-		set VCPKG_ROOT=%CD%\vcpkg
   
 - Clone repository
   
-		git clone https://github.com/MrNeRF/gaussian-splatting-cuda
+		git clone https://github.com/MrNeRF/LichtFeld-Studio
   
 - Create directories
   
-		cd gaussian-splatting-cuda
+		cd LichtFeld-Studio
 		if not exist external mkdir external
 		if not exist external\debug mkdir external\debug
 		if not exist external\release mkdir external\release
@@ -141,15 +137,13 @@ Note: Installation of dependencies and compiling of LichtFeld Studio will take a
 
 - Build configuration files and download dependancies
  
-		cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
-		## Or if you want you can specify your own vcpkg
-		# cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
+		cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja -DCMAKE_TOOLCHAIN_FILE="../vcpkg/scripts/buildsystems/vcpkg.cmake"
 
 - build LichtFeld Studio
  
 		cmake --build build -j
 
-After the last step is complete, you should have a new directory "\build\releases" where you can find "gaussian_splatting_cuda.exe" and you can execute that file to run LichtFeld Studio.
+After the last step is complete, you should have a new directory "\build" where you can find "LichtFeld-Studio.exe" and you can execute that file to run LichtFeld Studio.
 
 <img width="1110" height="683" alt="image" src="https://github.com/user-attachments/assets/605c5b3a-53b3-4f16-85e2-05e9af2327cd" />
 
@@ -183,7 +177,7 @@ After the last step is complete, you should have a new directory "\build\release
 - Possible cause: build files not up-to date with latest changes
 - Solution: Re-generate the configuration files using in the command prompt and rebuild LichtFeld Studio
         
-			cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
+			cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja -DCMAKE_TOOLCHAIN_FILE="../vcpkg/scripts/buildsystems/vcpkg.cmake"
 			cmake --build build -j
 
 #### Other things to check
