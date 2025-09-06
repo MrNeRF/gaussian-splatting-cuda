@@ -256,7 +256,6 @@ find_package(imgui REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(args REQUIRED)
 find_package(spdlog REQUIRED)
-find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(Freetype REQUIRED)
 find_package(WebP REQUIRED)
 find_package(LibArchive REQUIRED)
@@ -358,7 +357,6 @@ if(KERNEL_SOURCES)
             ${CUDAToolkit_INCLUDE_DIRS}
             ${OPENGL_INCLUDE_DIRS}
             PRIVATE
-            ${Python3_INCLUDE_DIRS}
     )
 
     target_link_libraries(gs_kernels
@@ -407,7 +405,7 @@ target_include_directories(${PROJECT_NAME}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include
-        ${Python3_INCLUDE_DIRS}
+        
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
@@ -424,7 +422,7 @@ target_link_libraries(${PROJECT_NAME}
         gs_kernels
         gsplat_backend
         fastgs_backend
-        ${Python3_LIBRARIES}
+        
         ${OPENGL_LIBRARIES}
         CUDA::cudart
         spdlog::spdlog
@@ -520,7 +518,7 @@ if(BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${CMAKE_CURRENT_BINARY_DIR}/include
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
-            ${Python3_INCLUDE_DIRS}
+            
             ${CUDAToolkit_INCLUDE_DIRS}
             ${OPENGL_INCLUDE_DIRS}
     )
@@ -538,7 +536,7 @@ if(BUILD_TESTS)
             fastgs_backend
             GTest::gtest
             GTest::gtest_main
-            Python3::Python
+            
             ${OPENGL_LIBRARIES}
             CUDA::cudart
             spdlog::spdlog
@@ -586,7 +584,6 @@ message(STATUS "Build Configuration:")
 message(STATUS "  CUDA Version: ${CUDAToolkit_VERSION}")
 message(STATUS "  CUDA Archs: ${CMAKE_CUDA_ARCHITECTURES}")
 message(STATUS "  Torch Version: ${Torch_VERSION}")
-message(STATUS "  Python Version: ${Python3_VERSION}")
 message(STATUS "  OpenGL Found: ${OPENGL_FOUND}")
 message(STATUS "  FreeType Found: ${FREETYPE_FOUND}")
 message(STATUS "  WebP Found: ${WebP_FOUND}")

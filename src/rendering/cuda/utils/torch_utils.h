@@ -5,7 +5,7 @@
 #pragma once
 
 #include <functional>
-#include <torch/extension.h>
+#include <torch/torch.h>
 
 inline std::function<char*(size_t N)> resize_function_wrapper(torch::Tensor& t) {
     auto lambda = [&t](const size_t N) {

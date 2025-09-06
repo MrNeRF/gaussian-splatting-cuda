@@ -59,7 +59,6 @@ target_include_directories(gs_training_kernels
         ${CMAKE_SOURCE_DIR}/gsplat
         ${CMAKE_SOURCE_DIR}/fastgs
         ${CUDAToolkit_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(gs_training_kernels
@@ -89,7 +88,6 @@ target_include_directories(gs_training
         ${CMAKE_SOURCE_DIR}/gsplat
         ${CMAKE_SOURCE_DIR}/fastgs
         ${CUDAToolkit_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
 
@@ -106,7 +104,6 @@ target_link_libraries(gs_training
         nlohmann_json::nlohmann_json
         glm::glm
         Threads::Threads
-        Python3::Python
         CUDA::cudart
         spdlog::spdlog
         PRIVATE

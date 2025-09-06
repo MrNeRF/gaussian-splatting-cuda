@@ -42,7 +42,6 @@ target_include_directories(fastgs_backend
         ${OPENGL_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
         PRIVATE
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(fastgs_backend
