@@ -517,8 +517,7 @@ namespace gs::visualizer {
                     .cam_id = last_camview}
                     .emit();
             return;
-        }    
-
+        }
 
         // Speed control works even when GUI has focus
         if (key_ctrl_pressed_ && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
@@ -718,7 +717,7 @@ namespace gs::visualizer {
             last_camview--;
             return;
         }
-        
+
         LOG_DEBUG("Moving camera to view ID: {}", event.cam_id);
 
         // Transform from WorldToCam to CamToWorld
