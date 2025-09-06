@@ -59,7 +59,7 @@ Previous winner: [Florian Hahlbohm](https://github.com/MrNeRF/LichtFeld-Studio/p
 ```bash
 # Clone and build (Linux)
 git clone https://github.com/MrNeRF/LichtFeld-Studio
-cd gaussian-splatting-cuda
+cd LichtFeld-Studio
 
 # Download LibTorch
 wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip  
@@ -106,7 +106,7 @@ export VCPKG_ROOT=/path/to/vcpkg  # Add to ~/.bashrc
 
 # Clone repository
 git clone https://github.com/MrNeRF/LichtFeld-Studio
-cd gaussian-splatting-cuda
+cd LichtFeld-Studio
 
 # Download LibTorch 2.7.0 with CUDA 12.8
 wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip  
@@ -139,7 +139,7 @@ set VCPKG_ROOT=%CD%\vcpkg
 
 # Clone repository
 git clone https://github.com/MrNeRF/LichtFeld-Studio
-cd gaussian-splatting-cuda
+cd LichtFeld-Studio
 
 # Create directories
 if not exist external mkdir external
