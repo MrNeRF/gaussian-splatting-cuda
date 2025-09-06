@@ -496,6 +496,48 @@ namespace gs::visualizer {
             return;
         }
 
+        if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
+            if (!training_manager_) {
+                LOG_WARN("Training manager is not set; cannot cycle camera view.");
+                return;
+            }
+            int num_cams = training_manager_->getCamList().size();
+            if (num_cams == 0) {
+                return;
+            }
+
+            last_camview++;
+            if (last_camview >= num_cams) {
+                last_camview = 0; // Wrap to beginning
+            }
+
+            events::cmd::GoToCamView{
+                .cam_id = last_camview}
+                .emit();
+            return;
+        }
+
+        if (key == GLFW_KEY_LEFT && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
+            if (!training_manager_) {
+                LOG_WARN("Training manager is not set; cannot cycle camera view.");
+                return;
+            }
+            int num_cams = training_manager_->getCamList().size();
+            if (num_cams == 0) {
+                return;
+            }
+
+            last_camview--;
+            if (last_camview < 0) {
+                last_camview = num_cams - 1; // Wrap to end
+            }
+
+            events::cmd::GoToCamView{
+                .cam_id = last_camview}
+                .emit();
+            return;
+        }
+
         // Speed control works even when GUI has focus
         if (key_ctrl_pressed_ && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
             if (key == GLFW_KEY_EQUAL || key == GLFW_KEY_KP_ADD) {
@@ -735,8 +777,7 @@ namespace gs::visualizer {
             .translation = viewport_.getTranslation()}
             .emit();
 
-        LOG_INFO("Camera moved to view: {} (ID: {})",
-                 cam_data->image_name(), cam_data->uid());
+        last_camview = event.cam_id;
     }
 
     // Helpers
