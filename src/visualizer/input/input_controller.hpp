@@ -157,7 +157,7 @@ namespace gs::visualizer {
         // Camera frustum interaction
         int last_camview = -1;
         int hovered_camera_id_ = -1;
-        int last_clicked_camera_id_ = -1;        
+        int last_clicked_camera_id_ = -1;
         std::chrono::steady_clock::time_point last_click_time_;
         glm::dvec2 last_click_pos_{0, 0};
         static constexpr double DOUBLE_CLICK_TIME = 0.3;     // seconds
