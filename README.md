@@ -82,7 +82,7 @@ cmake --build build -- -j$(nproc)
 - **CMake**: 3.24 or higher
 - **Compiler**: C++23 compatible (GCC 14+ or Clang 17+)
 - **CUDA**: 12.8 or higher (required)
-- **Python**: With development headers
+  
 - **LibTorch**: 2.7.0 (setup instructions below)
 - **vcpkg**: For dependency management
 

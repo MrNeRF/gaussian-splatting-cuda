@@ -26,7 +26,6 @@ target_include_directories(gs_core
     PRIVATE
         ${CMAKE_SOURCE_DIR}/src       # For inter-module includes (training/, visualizer/, etc.)
         ${CMAKE_SOURCE_DIR}/external  # For tinyply and STB headers
-        ${Python3_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
 
@@ -61,7 +60,6 @@ target_link_libraries(gs_core
         nlohmann_json::nlohmann_json
         glm::glm
         Threads::Threads
-        Python3::Python
         CUDA::cudart    # For Camera CUDA operations
         spdlog::spdlog
         ${WEBP_LIB}     # WebP for SOG compression
