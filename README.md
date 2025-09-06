@@ -50,15 +50,15 @@ Join our growing community for discussions, support, and updates:
 ### Second Bounty: Better 3DGS Initialization and Training without Densification
 **$2,600 + $500 Bonus Challenge**
 
-Details: [Issue #284](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/284)
+Details: [Issue #284](https://github.com/MrNeRF/LichtFeld-Studio/issues/284)
 
-Previous winner: [Florian Hahlbohm](https://github.com/MrNeRF/gaussian-splatting-cuda/pull/245) (2.4x rasterizer speedup)
+Previous winner: [Florian Hahlbohm](https://github.com/MrNeRF/LichtFeld-Studio/pull/245) (2.4x rasterizer speedup)
 
 ## Quick Start
 
 ```bash
 # Clone and build (Linux)
-git clone https://github.com/MrNeRF/gaussian-splatting-cuda
+git clone https://github.com/MrNeRF/LichtFeld-Studio
 cd gaussian-splatting-cuda
 
 # Download LibTorch
@@ -105,7 +105,7 @@ cd vcpkg && ./bootstrap-vcpkg.sh -disableMetrics && cd ..
 export VCPKG_ROOT=/path/to/vcpkg  # Add to ~/.bashrc
 
 # Clone repository
-git clone https://github.com/MrNeRF/gaussian-splatting-cuda
+git clone https://github.com/MrNeRF/LichtFeld-Studio
 cd gaussian-splatting-cuda
 
 # Download LibTorch 2.7.0 with CUDA 12.8
@@ -138,7 +138,7 @@ cd vcpkg && .\bootstrap-vcpkg.bat -disableMetrics && cd ..
 set VCPKG_ROOT=%CD%\vcpkg
 
 # Clone repository
-git clone https://github.com/MrNeRF/gaussian-splatting-cuda
+git clone https://github.com/MrNeRF/LichtFeld-Studio
 cd gaussian-splatting-cuda
 
 # Create directories
@@ -303,7 +303,7 @@ The implementation uses `weights/lpips_vgg.pt`, exported from `torchmetrics` wit
 ## Project Architecture
 
 ```
-gaussian-splatting-cuda/
+LichtFeld-Studio/
 ├── src/
 │   ├── core/          # Foundation (data structures, utilities)
 │   ├── geometry/      # Geometric operations
