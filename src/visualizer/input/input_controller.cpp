@@ -714,7 +714,6 @@ namespace gs::visualizer {
         auto cam_data = training_manager_->getCamById(event.cam_id);
         if (!cam_data) {
             LOG_ERROR("Camera ID {} not found", event.cam_id);
-            last_camview--;
             return;
         }
 
