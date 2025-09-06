@@ -43,7 +43,7 @@ set(TRAINING_KERNEL_SOURCES
 add_library(gs_training_kernels STATIC ${TRAINING_KERNEL_SOURCES})
 
 set_target_properties(gs_training_kernels PROPERTIES
-        CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
+        CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}"
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON

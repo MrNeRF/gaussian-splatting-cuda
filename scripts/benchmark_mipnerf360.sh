@@ -32,7 +32,7 @@ do
     echo "========================================="
 
     # Run training with evaluation
-    ./build/gaussian_splatting_cuda \
+    ./build/LichtFeld-Studio \
         -d $SCENE_DIR/$SCENE/ \
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
