@@ -56,7 +56,7 @@ jobs:
 
       - name: Configure with CMake
         run: |
-          cmake -S . -B build
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 
       - name: Build
-        run: cmake --build build --config Release --parallel 1
+        run: cmake --build build --parallel 1
