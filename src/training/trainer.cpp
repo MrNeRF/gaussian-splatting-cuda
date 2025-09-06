@@ -985,7 +985,7 @@ namespace gs::training {
         }
     }
 
-    std::shared_ptr<const Camera> Trainer::getCamById(int camId) const {
+    std::shared_ptr<const Camera> Trainer::getCamById(int camId) const {        
         const auto it = m_cam_id_to_cam.find(camId);
         if (it == m_cam_id_to_cam.end()) {
             LOG_ERROR("getCamById - could not find cam with cam id {}", camId);

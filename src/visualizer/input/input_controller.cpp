@@ -496,6 +496,30 @@ namespace gs::visualizer {
             return;
         }
 
+        if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
+            int num_cams = training_manager_->getCamList().size();
+            last_camview++;
+            if (last_camview == num_cams)
+                last_camview = num_cams - 1;
+            else
+                events::cmd::GoToCamView{
+                    .cam_id = last_camview}
+                    .emit();
+            return;
+        }    
+
+        if (key == GLFW_KEY_LEFT && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
+            last_camview--;
+            if (last_camview < 0)
+                last_camview = 0;
+            else
+                events::cmd::GoToCamView{
+                    .cam_id = last_camview}
+                    .emit();
+            return;
+        }    
+
+
         // Speed control works even when GUI has focus
         if (key_ctrl_pressed_ && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
             if (key == GLFW_KEY_EQUAL || key == GLFW_KEY_KP_ADD) {
@@ -691,9 +715,10 @@ namespace gs::visualizer {
         auto cam_data = training_manager_->getCamById(event.cam_id);
         if (!cam_data) {
             LOG_ERROR("Camera ID {} not found", event.cam_id);
+            last_camview--;
             return;
         }
-
+        
         LOG_DEBUG("Moving camera to view ID: {}", event.cam_id);
 
         // Transform from WorldToCam to CamToWorld
@@ -737,6 +762,8 @@ namespace gs::visualizer {
 
         LOG_INFO("Camera moved to view: {} (ID: {})",
                  cam_data->image_name(), cam_data->uid());
+
+        last_camview = event.cam_id;
     }
 
     // Helpers
