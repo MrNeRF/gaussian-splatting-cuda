@@ -65,11 +65,11 @@ jobs:
       - name: Configure with CMake
         shell: cmd
         run: |
-          call "%VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+          call "%VS_PATH%\VC\Auxiliary\Build\vcvars64.bat" x64
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 
       - name: Build
         shell: cmd
         run: |
-          call "%VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+          call "%VS_PATH%\VC\Auxiliary\Build\vcvars64.bat" x64
           cmake --build build --parallel 1
