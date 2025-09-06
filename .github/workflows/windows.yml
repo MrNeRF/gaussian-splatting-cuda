@@ -33,6 +33,15 @@ jobs:
           echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\libnvvp" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Find Visual Studio
+        id: find-vs
+        shell: cmd
+        run: |
+          set "vswhere=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq tokens=*" %%i in (`"%vswhere%" -latest -property installationPath`) do (
+            echo VS_PATH=%%i >> %GITHUB_ENV%
+          )
+
       - name: Setup vcpkg
         run: |
           cd ..
@@ -55,8 +64,13 @@ jobs:
           Expand-Archive libtorch.zip -DestinationPath $env:GITHUB_WORKSPACE\external\release
 
       - name: Configure with CMake
+        shell: cmd
         run: |
+          call "%VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 
       - name: Build
-        run: cmake --build build --parallel 1
+        shell: cmd
+        run: |
+          call "%VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+          cmake --build build --parallel 1
