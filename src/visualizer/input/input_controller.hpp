@@ -155,6 +155,7 @@ namespace gs::visualizer {
         GLFWcursor* hand_cursor_ = nullptr;
 
         // Camera frustum interaction
+        int last_camview = -1;
         int hovered_camera_id_ = -1;
         int last_clicked_camera_id_ = -1;
         std::chrono::steady_clock::time_point last_click_time_;
