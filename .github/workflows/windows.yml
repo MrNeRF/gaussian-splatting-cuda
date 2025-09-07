@@ -54,6 +54,14 @@ jobs:
           Invoke-WebRequest -Uri https://download.pytorch.org/libtorch/cu128/libtorch-win-shared-with-deps-2.7.0%2Bcu128.zip -OutFile libtorch.zip -Verbose
           Expand-Archive libtorch.zip -DestinationPath $env:GITHUB_WORKSPACE\external\release
 
+      - name: Cache vcpkg binary archives
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          key: vcpkg-binary-archives-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-binary-archives-${{ runner.os }}
+
       - name: Configure with CMake
         shell: cmd
         run: |
