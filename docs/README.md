@@ -1,7 +1,10 @@
-# Website
+# Documentation
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+The documentation is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
 
+## Prerequisites
+- [Node.js](https://nodejs.org/) (>=18.0)
+- [pnpm](https://pnpm.io/installation) (Package manager)
 
 ## Local Development
 
