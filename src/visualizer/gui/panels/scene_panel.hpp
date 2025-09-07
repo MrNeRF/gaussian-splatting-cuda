@@ -36,6 +36,7 @@ namespace gs {
             std::map<std::filesystem::path, CamId> m_PathToCamId;
             int m_selectedImageIndex = -1;
             std::filesystem::path m_currentDatasetPath;
+            bool m_needsScrollToSelection = false;
 
             // PLY scene graph data for PLY mode
             struct PLYNode {
@@ -83,6 +84,7 @@ namespace gs {
             void handleSceneCleared();
             void handlePLYAdded(const events::state::PLYAdded& event);
             void handlePLYRemoved(const events::state::PLYRemoved& event);
+            void handleGoToCamView(const events::cmd::GoToCamView& event);
             void loadImageCams(const std::filesystem::path& path);
             void onImageSelected(const std::filesystem::path& imagePath);
             void onImageDoubleClicked(size_t imageIndex);

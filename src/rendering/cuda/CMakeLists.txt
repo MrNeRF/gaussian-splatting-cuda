@@ -26,7 +26,6 @@ target_include_directories(rendering_cuda_backend
         ${CMAKE_SOURCE_DIR}/include
         ${CUDAToolkit_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(rendering_cuda_backend

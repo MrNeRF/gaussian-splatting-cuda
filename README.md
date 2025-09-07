@@ -59,7 +59,7 @@ Previous winner: [Florian Hahlbohm](https://github.com/MrNeRF/LichtFeld-Studio/p
 ```bash
 # Clone and build (Linux)
 git clone https://github.com/MrNeRF/LichtFeld-Studio
-cd gaussian-splatting-cuda
+cd LichtFeld-Studio
 
 # Download LibTorch
 wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip  
@@ -82,7 +82,7 @@ cmake --build build -- -j$(nproc)
 - **CMake**: 3.24 or higher
 - **Compiler**: C++23 compatible (GCC 14+ or Clang 17+)
 - **CUDA**: 12.8 or higher (required)
-- **Python**: With development headers
+  
 - **LibTorch**: 2.7.0 (setup instructions below)
 - **vcpkg**: For dependency management
 
@@ -106,7 +106,7 @@ export VCPKG_ROOT=/path/to/vcpkg  # Add to ~/.bashrc
 
 # Clone repository
 git clone https://github.com/MrNeRF/LichtFeld-Studio
-cd gaussian-splatting-cuda
+cd LichtFeld-Studio
 
 # Download LibTorch 2.7.0 with CUDA 12.8
 wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip  
@@ -126,6 +126,8 @@ cmake --build build -- -j$(nproc)
 
 <details>
 <summary><b>Windows Build</b></summary>
+    
+note: [Detailed instructions here](https://github.com/MrNeRF/LichtFeld-Studio/blob/master/docs/windows_build_instructions.md)
 
 Run in <u>**x64 native tools command prompt for VS**</u>:
 
@@ -139,7 +141,7 @@ set VCPKG_ROOT=%CD%\vcpkg
 
 # Clone repository
 git clone https://github.com/MrNeRF/LichtFeld-Studio
-cd gaussian-splatting-cuda
+cd LichtFeld-Studio
 
 # Create directories
 if not exist external mkdir external

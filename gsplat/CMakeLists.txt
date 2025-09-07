@@ -59,7 +59,6 @@ target_include_directories(gsplat_backend
         ${TORCH_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
         PRIVATE
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(gsplat_backend

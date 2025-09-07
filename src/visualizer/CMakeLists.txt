@@ -55,7 +55,6 @@ target_include_directories(gs_visualizer
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/src
         ${OPENGL_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
 )
 
 # Link dependencies
@@ -76,7 +75,6 @@ target_link_libraries(gs_visualizer
         TBB::tbb
         spdlog::spdlog
         nlohmann_json::nlohmann_json
-        Python3::Python
         CUDA::cudart
         ${OPENGL_LIBRARIES}
 )
