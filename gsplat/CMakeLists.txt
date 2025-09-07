@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24...3.30)
+cmake_minimum_required(VERSION 3.30)
 
 # Get torch from parent
 if(NOT DEFINED TORCH_INCLUDE_DIRS)

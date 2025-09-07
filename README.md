@@ -79,7 +79,7 @@ cmake --build build -- -j$(nproc)
 
 #### Software
 - **OS**: Linux (Ubuntu 22.04+) or Windows
-- **CMake**: 3.24 or higher
+- **CMake**: 3.30 or higher
 - **Compiler**: C++23 compatible (GCC 14+ or Clang 17+)
 - **CUDA**: 12.8 or higher (required)
   

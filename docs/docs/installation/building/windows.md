@@ -80,7 +80,7 @@
 	
 	Python --version
 	```
-- Cmake: Must be 3.24 or higher
+- Cmake: Must be 3.30 or higher
 - nvcc: Verify that 12.8 is being used
 - git: Verify that git shows version information
 - python: Verify that 3.10 or above is used
