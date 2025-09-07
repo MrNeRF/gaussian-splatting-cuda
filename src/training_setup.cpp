@@ -61,10 +61,12 @@ namespace gs {
                 }
 
                 // Initialize model directly with point cloud
+
                 auto splat_result = SplatData::init_model_from_pointcloud(
                     params,
                     load_result->scene_center,
-                    point_cloud_to_use);
+                    point_cloud_to_use,
+                    data.cameras);
 
                 if (!splat_result) {
                     return std::unexpected(std::format("Failed to initialize model: {}", splat_result.error()));

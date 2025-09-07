@@ -65,6 +65,9 @@ namespace gs {
             bool random = false;        // Use random initialization instead of SfM
             int init_num_pts = 100'000; // Number of random points to initialize
             float init_extent = 3.0f;   // Extent of random point cloud
+
+            // Dense point cloud initialization
+            bool dense_point_cloud = true;
         };
 
         struct DatasetConfig {

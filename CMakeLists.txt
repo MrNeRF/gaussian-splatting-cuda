@@ -172,11 +172,14 @@ target_include_directories(gaussian_host
         ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat  # Add gsplat headers
         ${CMAKE_CURRENT_SOURCE_DIR}/fastgs  # Add fastgs headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/densepoints # Add dense point cloud headers
         ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
         PRIVATE
         ${Python3_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
+
+add_subdirectory(densepoints) # Circular dependency with gaussian_host. Not ideal.
 
 target_link_libraries(gaussian_host
         PUBLIC
@@ -188,6 +191,7 @@ target_link_libraries(gaussian_host
         Python3::Python
         gsplat_backend  # Link to gsplat
         fastgs_backend  # Link to fastgs
+        dense_points    # Link to densepoints
         CUDA::cudart    # Add CUDA runtime for interop
         spdlog::spdlog
 )

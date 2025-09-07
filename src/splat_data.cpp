@@ -1,6 +1,7 @@
 #include "core/splat_data.hpp"
 #include "core/parameters.hpp"
 #include "core/point_cloud.hpp"
+#include "dense_point_cloud.h"
 
 #include "external/nanoflann.hpp"
 #include "external/tinyply.hpp"
@@ -345,7 +346,8 @@ namespace gs {
     std::expected<SplatData, std::string> SplatData::init_model_from_pointcloud(
         const param::TrainingParameters& params,
         torch::Tensor scene_center,
-        const PointCloud& pcd) {
+        const PointCloud& pcd,
+        const std::shared_ptr<CameraDataset> cameras) {
 
         try {
             // Generate positions and colors based on init type
@@ -357,7 +359,14 @@ namespace gs {
 
                 positions = (torch::rand({num_points, 3}, f32_cuda) * 2.0f - 1.0f) * extent;
                 colors = torch::rand({num_points, 3}, f32_cuda);
-            } else {
+            } 
+            else if (params.optimization.dense_point_cloud && cameras != nullptr) {
+                PointCloud densePcd;
+                densepcd::get_dense_points(cameras, densePcd);
+                positions = densePcd.means;
+                colors = densePcd.colors / 255.0f;
+            }
+            else {
                 positions = pcd.means;
                 colors = pcd.colors / 255.0f; // Normalize directly
             }

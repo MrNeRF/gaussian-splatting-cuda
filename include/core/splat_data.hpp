@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/point_cloud.hpp"
+#include "core/dataset.hpp"
 #include <expected>
 #include <filesystem>
 #include <mutex>
@@ -38,7 +39,8 @@ namespace gs {
         static std::expected<SplatData, std::string> init_model_from_pointcloud(
             const gs::param::TrainingParameters& params,
             torch::Tensor scene_center,
-            const PointCloud& point_cloud);
+            const PointCloud& point_cloud,
+            const std::shared_ptr<CameraDataset> cameras);
 
         // Computed getters (implemented in cpp)
         torch::Tensor get_means() const;
