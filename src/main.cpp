@@ -9,8 +9,31 @@
 #include <c10/cuda/CUDAAllocatorConfig.h>
 #include <iostream>
 #include <print>
+#include <cstdlib>
+#include <string>
 
 int main(int argc, char* argv[]) {
+//----------------------------------------------------------------------
+// Pre-init: on Linux PRIME/GLVND systems, request NVIDIA GL driver
+// so the OpenGL context lands on the same GPU as CUDA.
+// Must be done before any GL/GLFW initialization.
+//----------------------------------------------------------------------
+#ifndef _WIN32
+    auto request_nvidia_gl = []() {
+        bool changed = false;
+        const char* offload = std::getenv("__NV_PRIME_RENDER_OFFLOAD");
+        const char* vendor = std::getenv("__GLX_VENDOR_LIBRARY_NAME");
+        if (!offload || std::string(offload) != "1") {
+            setenv("__NV_PRIME_RENDER_OFFLOAD", "1", 1);
+            changed = true;
+        }
+        if (!vendor || std::string(vendor) != "nvidia") {
+            setenv("__GLX_VENDOR_LIBRARY_NAME", "nvidia", 1);
+            changed = true;
+        }
+        return changed;
+    }();
+#endif
 //----------------------------------------------------------------------
 // 0. Set CUDA caching allocator settings to avoid fragmentation issues
 // This avoids the need to repeatedly call emptyCache() after
@@ -35,6 +58,17 @@ int main(int argc, char* argv[]) {
         std::println(stderr, "Error: {}", params_result.error());
         return -1;
     }
+
+#ifndef _WIN32
+    // Informative log after logger init
+    {
+        const char* offload = std::getenv("__NV_PRIME_RENDER_OFFLOAD");
+        const char* vendor = std::getenv("__GLX_VENDOR_LIBRARY_NAME");
+        if (offload && std::string(offload) == "1" && vendor && std::string(vendor) == "nvidia") {
+            LOG_INFO("Requested NVIDIA OpenGL via PRIME offload (__GLX_VENDOR_LIBRARY_NAME=nvidia)");
+        }
+    }
+#endif
 
     // Logger is now ready to use
     LOG_INFO("========================================");
