@@ -538,6 +538,13 @@ namespace gs::visualizer {
             return;
         }
 
+        if (key == GLFW_KEY_SPACE && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
+            events::cmd::ToggleEnableCamera{
+                .cam_id = last_camview}
+                .emit();
+            return;
+        }
+
         // Speed control works even when GUI has focus
         if (key_ctrl_pressed_ && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
             if (key == GLFW_KEY_EQUAL || key == GLFW_KEY_KP_ADD) {
