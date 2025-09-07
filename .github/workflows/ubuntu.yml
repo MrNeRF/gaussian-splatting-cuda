@@ -61,6 +61,14 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-
 
+      - name: Cache vcpkg binary archives
+        uses: actions/cache@v4
+        with:
+          path: /github/home/.cache/vcpkg/archives
+          key: vcpkg-binary-archives-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-binary-archives-${{ runner.os }}
+
       - name: Configure with CMake
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
