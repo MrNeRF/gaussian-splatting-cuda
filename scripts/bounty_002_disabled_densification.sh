@@ -1,7 +1,7 @@
 #!/bin/bash
 
-SCENE_DIR="data"
-RESULT_DIR="results/benchmark"
+SCENE_DIR="/data0/sebastian.cavada/datasets/360_v2"
+RESULT_DIR="results/benchmark_018"
 SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
 
 # Check if results directory exists and prompt for deletion
@@ -31,6 +31,16 @@ do
     echo "Running $SCENE with images_${DATA_FACTOR}"
     echo "========================================="
 
+    DUP_FACTOR=30
+    # Adding more/less dup factor based on the scene complexity/initial density
+    if [ "$SCENE" = "stump" ]; then
+        DUP_FACTOR=$((DUP_FACTOR+30))
+    elif [ "$SCENE" = "bicycle" ]; then
+        DUP_FACTOR=$((DUP_FACTOR+30))
+    fi
+    
+    echo "Using duplication factor: $DUP_FACTOR"    
+
     # Run training with evaluation
     ./build/gaussian_splatting_cuda \
         -d $SCENE_DIR/$SCENE/ \
@@ -39,10 +49,12 @@ do
         --test-every 8 \
         --eval \
         --headless \
-        --save-eval-images \
+        --disable-densification \
         --strategy mcmc \
         --iter 30000 \
-        --disable-densification
+        --dup-factor $DUP_FACTOR \
+        --dup-jitter 1 \
+        --max-cap 4000000 \
 
     echo "Completed $SCENE"
     echo

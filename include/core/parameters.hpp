@@ -65,6 +65,12 @@ namespace gs {
             bool random = false;        // Use random initialization instead of SfM
             int init_num_pts = 100'000; // Number of random points to initialize
             float init_extent = 3.0f;   // Extent of random point cloud
+
+            // Point-cloud augmentation at init (for SfM init)
+            // Duplicate each input point by this factor (1 = disabled)
+            int dup_factor = 1;
+            // Jitter magnitude as a fraction of each point's mean kNN distance
+            float dup_jitter = 0.25f;            
         };
 
         struct DatasetConfig {

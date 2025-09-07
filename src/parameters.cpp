@@ -145,7 +145,9 @@ namespace gs {
                     {"sh_degree_interval", defaults.sh_degree_interval, "Interval for increasing SH degree"},
                     {"random", defaults.random, "Use random initialization instead of SfM"},
                     {"init_num_pts", defaults.init_num_pts, "Number of random initialization points"},
-                    {"init_extent", defaults.init_extent, "Extent of random initialization"}};
+                    {"init_extent", defaults.init_extent, "Extent of random initialization"},
+                    {"dup_factor", defaults.dup_factor, "Duplicate each input point N times (1=off)"},
+                    {"dup_jitter", defaults.dup_jitter, "Jitter as fraction of local kNN dist"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -317,6 +319,14 @@ namespace gs {
                     }
                 }
 
+                // Init duplication/jitter options (optional)
+                if (json.contains("dup_factor")) {
+                    params.dup_factor = json["dup_factor"];
+                }
+                if (json.contains("dup_jitter")) {
+                    params.dup_jitter = json["dup_jitter"];
+                }                
+
                 if (json.contains("eval_steps")) {
                     params.eval_steps.clear();
                     for (const auto& step : json["eval_steps"]) {
@@ -482,6 +492,8 @@ namespace gs {
                 opt_json["random"] = params.optimization.random;
                 opt_json["init_num_pts"] = params.optimization.init_num_pts;
                 opt_json["init_extent"] = params.optimization.init_extent;
+                opt_json["dup_factor"] = params.optimization.dup_factor;
+                opt_json["dup_jitter"] = params.optimization.dup_jitter;                
 
                 json["optimization"] = opt_json;
 

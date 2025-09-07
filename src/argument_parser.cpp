@@ -66,6 +66,10 @@ namespace {
             ::args::ValueFlag<int> init_num_pts(parser, "init_num_pts", "Number of random initialization points", {"init-num-pts"});
             ::args::ValueFlag<float> init_extent(parser, "init_extent", "Extent of random initialization", {"init-extent"});
 
+            // Init duplication options
+            ::args::ValueFlag<int> dup_factor(parser, "dup_factor", "Duplicate each COLMAP point N times (1=off)", {"dup-factor"});
+            ::args::ValueFlag<float> dup_jitter(parser, "dup_jitter", "Jitter as fraction of local kNN distance", {"dup-jitter"});            
+
             // Optional flag arguments
             ::args::Flag use_bilateral_grid(parser, "bilateral_grid", "Enable bilateral grid filtering", {"bilateral-grid"});
             ::args::Flag enable_eval(parser, "eval", "Enable evaluation during training", {"eval"});
@@ -195,6 +199,8 @@ namespace {
                                         render_mode_val = render_mode ? std::optional<std::string>(::args::get(render_mode)) : std::optional<std::string>(),
                                         init_num_pts_val = init_num_pts ? std::optional<int>(::args::get(init_num_pts)) : std::optional<int>(),
                                         init_extent_val = init_extent ? std::optional<float>(::args::get(init_extent)) : std::optional<float>(),
+                                        dup_factor_val = dup_factor ? std::optional<int>(::args::get(dup_factor)) : std::optional<int>(),
+                                        dup_jitter_val = dup_jitter ? std::optional<float>(::args::get(dup_jitter)) : std::optional<float>(),
                                         // Capture flag states
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         enable_eval_flag = bool(enable_eval),
@@ -231,6 +237,8 @@ namespace {
                 setVal(render_mode_val, opt.render_mode);
                 setVal(init_num_pts_val, opt.init_num_pts);
                 setVal(init_extent_val, opt.init_extent);
+                setVal(dup_factor_val, opt.dup_factor);
+                setVal(dup_jitter_val, opt.dup_jitter);
 
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);

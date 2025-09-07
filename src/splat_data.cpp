@@ -357,9 +357,61 @@ namespace gs {
 
                 positions = (torch::rand({num_points, 3}, f32_cuda) * 2.0f - 1.0f) * extent;
                 colors = torch::rand({num_points, 3}, f32_cuda);
-            } else {
-                positions = pcd.means;
-                colors = pcd.colors / 255.0f; // Normalize directly
+            } else {                
+                // Start from COLMAP / provided point cloud
+                positions = pcd.means.to(torch::kFloat32).contiguous();
+                colors = pcd.colors; // normalize later
+
+                // Optional: duplicate each point with small jitter to increase near-edge support
+                const int dup = std::max(1, params.optimization.dup_factor);
+                if (dup > 1 && positions.size(0) > 0) {
+                    // Compute local scale via mean distance to nearest neighbors on the base set
+                    auto base_nn = compute_mean_neighbor_distances(positions);
+                    // Jitter magnitude per point: dup_jitter * local mean kNN distance
+                    const float jitter_ratio = params.optimization.dup_jitter;
+                    auto sigma = (base_nn * jitter_ratio).clamp_min(1e-8f);
+                    auto sigma3d = sigma.unsqueeze(1).expand_as(positions);
+
+                    std::vector<torch::Tensor> pos_list;
+                    pos_list.reserve(static_cast<size_t>(dup));
+                    pos_list.push_back(positions);
+
+                    for (int i = 1; i < dup; ++i) {
+                        auto noise = torch::randn_like(positions) * sigma3d;
+                        pos_list.push_back(positions + noise);
+                    }
+
+                    positions = torch::cat(pos_list, 0);
+
+                    // Duplicate colors accordingly (keep dtype; normalize later)
+                    if (colors.defined() && colors.numel() > 0) {
+                        std::vector<torch::Tensor> col_list;
+                        col_list.reserve(static_cast<size_t>(dup));
+                        for (int i = 0; i < dup; ++i) col_list.push_back(colors);
+                        colors = torch::cat(col_list, 0);
+                    }
+
+                    // Optionally clamp to max_cap to avoid excessive overfitting/VRAM
+                    if (positions.size(0) > params.optimization.max_cap) {
+                        const auto N = positions.size(0);
+                        const auto K = static_cast<int64_t>(params.optimization.max_cap);
+                        auto perm = torch::randperm(N, torch::TensorOptions().dtype(torch::kInt64));
+                        auto sel = perm.index({torch::indexing::Slice(0, K)});
+                        positions = positions.index_select(0, sel);
+                        if (colors.defined() && colors.size(0) == N) {
+                            colors = colors.index_select(0, sel);
+                        }
+                        std::println("Clamped duplicated init points from {} to max_cap {}", N, K);
+                    }
+                }
+
+                // Normalize colors to [0,1]
+                if (colors.defined()) {
+                    colors = (colors.dtype() == torch::kUInt8) ? colors.to(torch::kFloat32) / 255.0f
+                                                               : colors.to(torch::kFloat32);
+                } else {
+                    colors = torch::rand({positions.size(0), 3});
+                }
             }
 
             scene_center = scene_center.to(positions.device());
