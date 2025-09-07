@@ -8,6 +8,8 @@
 #include "components/sparsity_optimizer.hpp"
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
+#include "dataloader.hpp"
+
 #include "kernels/fused_ssim.cuh"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
@@ -898,7 +900,7 @@ namespace gs::training {
             }
 
             // Use infinite dataloader to avoid epoch restarts
-            auto train_dataloader = create_infinite_dataloader_from_dataset(train_dataset_, num_workers);
+            auto train_dataloader = create_efficient_infinite_dataloader(train_dataset_, num_workers);
             auto loader = train_dataloader->begin();
 
             LOG_DEBUG("Starting training iterations");
@@ -913,10 +915,9 @@ namespace gs::training {
                     callback_stream_.synchronize();
                 }
 
-                auto& batch = *loader;
-                auto camera_with_image = batch[0].data;
-                Camera* cam = camera_with_image.camera;
-                torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA, /*non_blocking=*/true);
+                auto sample = *loader;
+                Camera* cam = sample.data.camera;
+                torch::Tensor gt_image = std::move(sample.data.image); // Already on CUDA!
 
                 auto step_result = train_step(iter, cam, gt_image, render_mode, stop_token);
                 if (!step_result) {
