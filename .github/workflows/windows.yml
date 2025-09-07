@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: vcpkg-binary-archives-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-binary-archives-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             vcpkg-binary-archives-${{ runner.os }}
 
