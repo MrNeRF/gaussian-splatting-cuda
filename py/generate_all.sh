@@ -5,16 +5,15 @@
 # - Print an aligned table at the end.
 # - Save a TSV with results to SCRIPT_DIR/timings.tsv
 #
-# 1) Pre-pass: in ALL subfolders, rename any points3D.bin -> points3D_sparse.bin (no overwrite).
-# 2) For each top-level scene, run tester.py with the given args (timed).
-# 3) Post-run per scene: rename any points3D_dense.bin -> points3D.bin.
+# 1) For each top-level scene, run tester.py with the given args (timed).
+# 2) Post-run per scene: rename any points3D_dense.bin -> points3D.bin.
 
 set -u -o pipefail
 
 # Location of this script and tester.py
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TESTER_PY="$SCRIPT_DIR/reconstruct_roma.py"
-DATA_DIR="$SCRIPT_DIR/../data/extra"
+DATA_DIR="$SCRIPT_DIR/../data/original"
 TSV_OUT="$SCRIPT_DIR/timings.tsv"
 
 if [[ ! -f "$TESTER_PY" ]]; then
@@ -26,18 +25,6 @@ if [[ ! -d "$DATA_DIR" ]]; then
   echo "ERROR: Data directory not found at: $DATA_DIR" >&2
   exit 1
 fi
-
-# echo "=== Pre-pass: renaming points3D.bin -> points3D_sparse.bin across $DATA_DIR ==="
-# # Rename all existing points3D.bin to points3D_sparse.bin (skip if destination exists)
-# while IFS= read -r -d '' f; do
-#   dst="$(dirname "$f")/points3D_sparse.bin"
-#   if [[ -e "$dst" ]]; then
-#     echo "[skip] $dst already exists; not overwriting"
-#   else
-#     echo "[mv]   $f -> $dst"
-#     mv -v -- "$f" "$dst"
-#   fi
-# done < <(find "$DATA_DIR" -type f -name 'points3D.bin' -print0)
 
 echo "=== Running tester.py for each top-level scene under $DATA_DIR ==="
 
@@ -54,17 +41,6 @@ while IFS= read -r -d '' scene_dir; do
   scene_name="$(basename "$scene_dir")"
   echo ""
   echo ">>> Scene: $scene_name"
-
-  # Safety: per-scene pre-check in case new points3D.bin appeared
-  # while IFS= read -r -d '' f; do
-  #   dst="$(dirname "$f")/points3D_sparse.bin"
-  #   if [[ -e "$dst" ]]; then
-  #     echo "[skip] $dst already exists; not overwriting"
-  #   else
-  #     echo "[mv]   $f -> $dst"
-  #     mv -v -- "$f" "$dst"
-  #   fi
-  # done < <(find "$scene_dir" -type f -name 'points3D.bin' -print0)
 
   # Time the python script with /usr/bin/time (outputs seconds with -f '%e')
   echo "[run] python3 reconstruct_roma.py --scene_root \"$scene_dir\" --images_subdir images_4 --roma_model outdoor"

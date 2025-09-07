@@ -1,9 +1,9 @@
 #!/bin/bash
 
-SCENE_DIR="data"
-RESULT_DIR="results/benchmark"
-SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
-
+SCENE_DIR="data/original"
+RESULT_DIR="results/benchmark_git_head_training_params"
+# SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
+SCENE_LIST="bonsai counter kitchen room"
 # Check if results directory exists and prompt for deletion
 if [ -d "$RESULT_DIR" ]; then
     echo "Results directory '$RESULT_DIR' already exists."
@@ -75,6 +75,7 @@ total_ssim=0
 total_lpips=0
 total_gaussians=0
 valid_scenes=0
+SCENE_LIST="garden bicycle stump bonsai counter kitchen room" # treehill flowers
 
 for SCENE in $SCENE_LIST;
 do
