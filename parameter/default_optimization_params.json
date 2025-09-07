@@ -44,5 +44,7 @@
   "antialiasing": false,
   "random": false,
   "init_num_pts": 100000,
-  "init_extent": 3.0
+  "init_extent": 3.0,
+  "dup_factor": 10,
+  "dup_jitter": 1.0
 }
