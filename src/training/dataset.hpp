@@ -106,7 +106,10 @@ namespace gs::training {
             }
             return std::nullopt;
         }
+
         void set_resize_factor(int resize_factor) { _datasetConfig.resize_factor = resize_factor; }
+
+        int get_resize_factor() const { return _datasetConfig.resize_factor; }
 
     private:
         std::vector<std::shared_ptr<Camera>> _cameras;
@@ -258,4 +261,13 @@ namespace gs::training {
                 .workers(num_workers)
                 .enforce_ordering(false));
     }
+
+    // Forward declaration for the efficient dataloader
+    class InfiniteDataLoaderWrapper;
+
+    std::unique_ptr<InfiniteDataLoaderWrapper>
+    create_efficient_infinite_dataloader(
+        std::shared_ptr<CameraDataset> dataset,
+        int num_workers = 4);
+
 } // namespace gs::training
