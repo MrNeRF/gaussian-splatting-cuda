@@ -7,6 +7,7 @@ The documentation is built using [Docusaurus](https://docusaurus.io/), a modern 
 - [pnpm](https://pnpm.io/installation) (Package manager)
 
 ## Local Development
+All commands are run from the `docs` directory.
 
 ```bash
 pnpm start
