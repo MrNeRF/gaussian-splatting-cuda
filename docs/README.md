@@ -10,6 +10,12 @@ The documentation is built using [Docusaurus](https://docusaurus.io/), a modern 
 All commands are run from the `docs` directory.
 
 ```bash
+pnpm install
+```
+
+This command installs all dependencies.
+
+```bash
 pnpm start
 ```
 
