@@ -55,6 +55,7 @@ namespace gs {
             EVENT(SetPLYVisibility, std::string name; bool visible;);
             EVENT(CyclePLY, );
             EVENT(ToggleSplitView, );
+            EVENT(ToggleGTComparison, );
         } // namespace cmd
 
         // ============================================================================
@@ -154,7 +155,8 @@ namespace gs {
             EVENT(CropBoxVisibilityChanged, bool visible;);
             EVENT(ConsoleResult, std::string command; std::string result;);
             EVENT(SplitPositionChanged, float position;);
-        } // namespace ui
+            EVENT(GTComparisonModeChanged, bool enabled;); // NEW: GT comparison mode changed
+        }                                                  // namespace ui
 
         // ============================================================================
         // Internal - System coordination events (minimal)
@@ -164,7 +166,7 @@ namespace gs {
             EVENT(TrainingReadyToStart, );
             EVENT(WindowFocusLost, );
         } // namespace internal
-    } // namespace events
+    }     // namespace events
 
     // ============================================================================
     // Convenience functions

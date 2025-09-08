@@ -172,7 +172,7 @@ namespace gs::visualizer {
     }
 
     bool InputController::isNearSplitter(double x) const {
-        if (!rendering_manager_ || !rendering_manager_->getSettings().split_view_enabled) {
+        if (!rendering_manager_ || rendering_manager_->getSettings().split_view_mode == SplitViewMode::Disabled) {
             return false;
         }
 
@@ -315,7 +315,6 @@ namespace gs::visualizer {
     void InputController::handleMouseMove(double x, double y) {
         // Track if we moved significantly
         glm::dvec2 current_pos{x, y};
-        double move_distance = glm::length(current_pos - last_mouse_pos_);
 
         // Handle splitter dragging
         if (drag_mode_ == DragMode::Splitter && rendering_manager_) {
@@ -395,7 +394,7 @@ namespace gs::visualizer {
 
         // Determine if we should show resize cursor for splitter
         bool should_show_resize = false;
-        if (rendering_manager_ && rendering_manager_->getSettings().split_view_enabled) {
+        if (rendering_manager_ && rendering_manager_->getSettings().split_view_mode != SplitViewMode::Disabled) {
             should_show_resize = (drag_mode_ == DragMode::None &&
                                   isInViewport(x, y) &&
                                   isNearSplitter(x) &&
@@ -493,6 +492,12 @@ namespace gs::visualizer {
 
         if (key == GLFW_KEY_V && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
             events::cmd::ToggleSplitView{}.emit();
+            return;
+        }
+
+        if (key == GLFW_KEY_G && action == GLFW_PRESS && !ImGui::GetIO().WantCaptureKeyboard) {
+            events::cmd::ToggleGTComparison{}.emit();
+            LOG_DEBUG("Toggled GT comparison mode");
             return;
         }
 
@@ -736,7 +741,7 @@ namespace gs::visualizer {
             return;
         }
 
-        LOG_DEBUG("Moving camera to view ID: {}", event.cam_id);
+        LOG_DEBUG("Moving camera to view ID: {} ({})", event.cam_id, cam_data->image_name());
 
         // Transform from WorldToCam to CamToWorld
         glm::mat3 world_to_cam_R;
@@ -756,26 +761,45 @@ namespace gs::visualizer {
         viewport_.camera.R = cam_to_world_R;
         viewport_.camera.t = cam_to_world_T;
 
-        // Update FOV
-        float focal_x = cam_data->focal_x();
-        float width = cam_data->image_width();
-        if (focal_x > 0.0f && width > 0) {
-            float fov_rad = 2.0f * std::atan(width / (2.0f * focal_x));
-            float fov_deg = glm::degrees(fov_rad);
-            LOG_TRACE("Setting FOV to {:.2f} degrees", fov_deg);
-            events::ui::RenderSettingsChanged{
-                .fov = fov_deg,
-                .scaling_modifier = std::nullopt,
-                .antialiasing = std::nullopt,
-                .background_color = std::nullopt}
-                .emit();
+        // Get camera intrinsics using the proper method
+        auto [focal_x, focal_y, center_x, center_y] = cam_data->get_intrinsics();
+        const float width = static_cast<float>(cam_data->image_width());
+        const float height = static_cast<float>(cam_data->image_height());
+
+        // Calculate vertical FOV using the actual focal length
+        const float fov_y_rad = 2.0f * std::atan(height / (2.0f * focal_y));
+        const float fov_y_deg = glm::degrees(fov_y_rad);
+
+        LOG_DEBUG("Camera params - focal: ({:.1f}, {:.1f}), center: ({:.1f}, {:.1f}), image: {}x{}, FOV: {:.2f}°",
+                  focal_x, focal_y, center_x, center_y, width, height, fov_y_deg);
+
+        // Check for principal point offset (should be near center)
+        const float cx_expected = width / 2.0f;
+        const float cy_expected = height / 2.0f;
+
+        if (std::abs(center_x - cx_expected) > 1.0f || std::abs(center_y - cy_expected) > 1.0f) {
+            LOG_WARN("Camera has non-centered principal point: ({:.1f}, {:.1f}) vs expected ({:.1f}, {:.1f})",
+                     center_x, center_y, cx_expected, cy_expected);
         }
+
+        // Set the FOV
+        events::ui::RenderSettingsChanged{
+            .fov = fov_y_deg,
+            .scaling_modifier = std::nullopt,
+            .antialiasing = std::nullopt,
+            .background_color = std::nullopt}
+            .emit();
 
         // Force immediate camera update
         events::ui::CameraMove{
             .rotation = viewport_.getRotationMatrix(),
             .translation = viewport_.getTranslation()}
             .emit();
+
+        // Set this as the current camera for GT comparison
+        if (rendering_manager_) {
+            rendering_manager_->setCurrentCameraId(event.cam_id);
+        }
 
         last_camview = event.cam_id;
     }
