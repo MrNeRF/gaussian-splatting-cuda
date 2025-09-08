@@ -6,6 +6,7 @@
 set(TRAINING_HOST_SOURCES
         trainer.cpp
         training_setup.cpp
+        dataloader.cpp
 
         # Rasterization
         rasterization/rasterizer.cpp

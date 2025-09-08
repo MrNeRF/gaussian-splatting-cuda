@@ -40,6 +40,7 @@ do
         --eval \
         --headless \
         --save-eval-images \
+        --num-workers 8 \
         --strategy mcmc
 
     echo "Completed $SCENE"
