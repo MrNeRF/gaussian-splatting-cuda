@@ -291,15 +291,15 @@ namespace gs::training {
                     base_dataset_->get_cameras(), params.dataset, CameraDataset::Split::VAL);
 
                 LOG_INFO("Created train/val split: {} train, {} val images",
-                         train_dataset_->size().value(),
-                         val_dataset_->size().value());
+                         train_dataset_->size(),
+                         val_dataset_->size());
             } else {
                 // Use all images for training
                 train_dataset_ = base_dataset_;
                 val_dataset_ = nullptr;
 
                 LOG_INFO("Using all {} images for training (no evaluation)",
-                         train_dataset_->size().value());
+                         train_dataset_->size());
             }
 
             // chage resize factor (change may comes from gui)
@@ -310,7 +310,7 @@ namespace gs::training {
                 val_dataset_->set_resize_factor(params.dataset.resize_factor);
             }
 
-            train_dataset_size_ = train_dataset_->size().value();
+            train_dataset_size_ = train_dataset_->size();
 
             m_cam_id_to_cam.clear();
             // Setup camera cache
@@ -916,8 +916,8 @@ namespace gs::training {
                 }
 
                 auto sample = *loader;
-                Camera* cam = sample.data.camera;
-                torch::Tensor gt_image = std::move(sample.data.image); // Already on CUDA!
+                Camera* cam = sample.camera;
+                torch::Tensor gt_image = std::move(sample.image); // Already on CUDA!
 
                 auto step_result = train_step(iter, cam, gt_image, render_mode, stop_token);
                 if (!step_result) {

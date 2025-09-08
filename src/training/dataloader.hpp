@@ -6,7 +6,6 @@
 
 #include "dataset.hpp"
 #include <atomic>
-#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -16,7 +15,7 @@
 
 namespace gs::training {
 
-    // Internal efficient implementation
+    // Internal efficient implementation for training
     class EfficientDataLoader {
     public:
         EfficientDataLoader(
@@ -25,7 +24,7 @@ namespace gs::training {
 
         ~EfficientDataLoader();
 
-        CameraExample get_next();
+        CameraWithImage get_next();
 
     private:
         std::shared_ptr<CameraDataset> dataset_;
@@ -45,10 +44,10 @@ namespace gs::training {
         std::atomic<bool> should_stop_{false};
 
         // Ready queue with bounded size
-        std::deque<CameraExample> ready_queue_;
+        std::deque<CameraWithImage> ready_queue_;
         mutable std::mutex queue_mutex_;
         std::condition_variable queue_cv_;
-        std::condition_variable space_cv_; // Signal when space available
+        std::condition_variable space_cv_;
 
         // Random sampling
         std::vector<size_t> indices_;
@@ -61,10 +60,10 @@ namespace gs::training {
         void release_buffer(BufferSlot* buffer);
     };
 
-    // Wrapper that matches existing interface exactly
+    // Wrapper for infinite training dataloader
     class InfiniteDataLoaderWrapper {
         std::unique_ptr<EfficientDataLoader> loader_;
-        CameraExample current_;
+        CameraWithImage current_;
 
     public:
         InfiniteDataLoaderWrapper(std::unique_ptr<EfficientDataLoader> loader);
@@ -72,7 +71,7 @@ namespace gs::training {
         struct Iterator {
             InfiniteDataLoaderWrapper* parent;
 
-            CameraExample operator*() const { return parent->current_; }
+            CameraWithImage operator*() const { return parent->current_; }
             Iterator& operator++() {
                 parent->current_ = parent->loader_->get_next();
                 return *this;
@@ -86,9 +85,36 @@ namespace gs::training {
         }
     };
 
+    // Simple evaluation dataloader
+    class EvalDataLoader {
+    public:
+        explicit EvalDataLoader(std::shared_ptr<CameraDataset> dataset);
+
+        struct Iterator {
+            EvalDataLoader* parent;
+            size_t index;
+
+            CameraWithImage operator*() const;
+            Iterator& operator++();
+            bool operator!=(const Iterator& other) const;
+        };
+
+        Iterator begin();
+        Iterator end();
+
+    private:
+        std::shared_ptr<CameraDataset> dataset_;
+        size_t dataset_size_;
+    };
+
+    // Factory functions
     std::unique_ptr<InfiniteDataLoaderWrapper>
     create_efficient_infinite_dataloader(
         std::shared_ptr<CameraDataset> dataset,
         int num_workers);
+
+    std::unique_ptr<EvalDataLoader>
+    create_eval_dataloader(
+        std::shared_ptr<CameraDataset> dataset);
 
 } // namespace gs::training

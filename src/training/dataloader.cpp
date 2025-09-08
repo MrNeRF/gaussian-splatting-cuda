@@ -11,6 +11,10 @@
 
 namespace gs::training {
 
+    // =============================================================================
+    // Efficient Training DataLoader Implementation
+    // =============================================================================
+
     EfficientDataLoader::EfficientDataLoader(
         std::shared_ptr<CameraDataset> dataset,
         int num_workers)
@@ -18,7 +22,7 @@ namespace gs::training {
           num_workers_(num_workers) {
 
         // Get the actual dataset size (respects train/val split)
-        size_t dataset_size = dataset_->size().value();
+        size_t dataset_size = dataset_->size();
 
         // Initialize indices for the dataset (not all cameras!)
         indices_.resize(dataset_size);
@@ -37,7 +41,7 @@ namespace gs::training {
         if (dataset_size > 0) {
             // Get first camera through the dataset to respect the split
             auto first_example = dataset_->get(0);
-            Camera* first_camera = first_example.data.camera;
+            Camera* first_camera = first_example.camera;
 
             auto [w, h, c] = get_image_info(first_camera->image_path());
             int resize = dataset_->get_resize_factor();
@@ -97,7 +101,7 @@ namespace gs::training {
                 }
             }
             // If no buffer available, wait a bit
-            std::this_thread::sleep_for(std::chrono::microseconds(50));
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
         return nullptr;
     }
@@ -141,7 +145,7 @@ namespace gs::training {
 
             // This ensures we only get images that belong to this dataset's split
             auto dataset_example = dataset_->get(dataset_idx);
-            Camera* camera = dataset_example.data.camera;
+            Camera* camera = dataset_example.camera;
 
             // Acquire a buffer slot
             BufferSlot* slot = acquire_buffer();
@@ -194,10 +198,8 @@ namespace gs::training {
             // Free CPU memory using image_io's function
             free_image(data);
 
-            // Create the example - clone() here is cheap as it just increments ref count
-            CameraExample example{
-                {camera, slot->gpu_buffer.clone()},
-                torch::empty({})};
+        // Create the example - clone() here is cheap as it just increments ref count
+            CameraWithImage example{camera, slot->gpu_buffer.clone()};
 
             // Release buffer back to pool
             release_buffer(slot);
@@ -213,7 +215,7 @@ namespace gs::training {
         LOG_TRACE("Worker {} thread exiting", worker_id);
     }
 
-    CameraExample EfficientDataLoader::get_next() {
+    CameraWithImage EfficientDataLoader::get_next() {
         std::unique_lock<std::mutex> lock(queue_mutex_);
         queue_cv_.wait(lock, [this] {
             return !ready_queue_.empty() || should_stop_;
@@ -223,7 +225,7 @@ namespace gs::training {
             throw std::runtime_error("DataLoader stopped");
         }
 
-        CameraExample example = std::move(ready_queue_.front());
+        CameraWithImage example = std::move(ready_queue_.front());
         ready_queue_.pop_front();
 
         // Signal that there's space in queue
@@ -232,7 +234,10 @@ namespace gs::training {
         return example;
     }
 
-    // Factory function
+    InfiniteDataLoaderWrapper::InfiniteDataLoaderWrapper(
+        std::unique_ptr<EfficientDataLoader> loader)
+        : loader_(std::move(loader)) {}
+
     std::unique_ptr<InfiniteDataLoaderWrapper>
     create_efficient_infinite_dataloader(
         std::shared_ptr<CameraDataset> dataset,
@@ -242,8 +247,41 @@ namespace gs::training {
         return std::make_unique<InfiniteDataLoaderWrapper>(std::move(loader));
     }
 
-    InfiniteDataLoaderWrapper::InfiniteDataLoaderWrapper(
-        std::unique_ptr<EfficientDataLoader> loader)
-        : loader_(std::move(loader)) {}
+    // =============================================================================
+    // Simple Evaluation DataLoader Implementation
+    // =============================================================================
+
+    EvalDataLoader::EvalDataLoader(std::shared_ptr<CameraDataset> dataset)
+        : dataset_(dataset),
+          dataset_size_(dataset->size()) {
+        LOG_DEBUG("Created evaluation dataloader with {} images", dataset_size_);
+    }
+
+    CameraWithImage EvalDataLoader::Iterator::operator*() const {
+        // Simply get the example from the dataset (uses Camera::load_and_get_image)
+        return parent->dataset_->get(index);
+    }
+
+    EvalDataLoader::Iterator& EvalDataLoader::Iterator::operator++() {
+        ++index;
+        return *this;
+    }
+
+    bool EvalDataLoader::Iterator::operator!=(const Iterator& other) const {
+        return index != other.index;
+    }
+
+    EvalDataLoader::Iterator EvalDataLoader::begin() {
+        return Iterator{this, 0};
+    }
+
+    EvalDataLoader::Iterator EvalDataLoader::end() {
+        return Iterator{this, dataset_size_};
+    }
+
+    std::unique_ptr<EvalDataLoader> create_eval_dataloader(
+        std::shared_ptr<CameraDataset> dataset) {
+        return std::make_unique<EvalDataLoader>(dataset);
+    }
 
 } // namespace gs::training

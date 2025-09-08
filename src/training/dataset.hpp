@@ -13,16 +13,13 @@
 #include <torch/torch.h>
 #include <vector>
 
-// Camera with loaded image
 namespace gs::training {
     struct CameraWithImage {
         Camera* camera;
         torch::Tensor image;
     };
 
-    using CameraExample = torch::data::Example<CameraWithImage, torch::Tensor>;
-
-    class CameraDataset : public torch::data::Dataset<CameraDataset, CameraExample> {
+    class CameraDataset {
     public:
         enum class Split {
             TRAIN,
@@ -52,16 +49,8 @@ namespace gs::training {
                       << " images (split: " << static_cast<int>(_split) << ")" << std::endl;
         }
 
-        // Default copy constructor works with shared_ptr
-        CameraDataset(const CameraDataset&) = default;
-
-        CameraDataset(CameraDataset&&) noexcept = default;
-
-        CameraDataset& operator=(CameraDataset&&) noexcept = default;
-
-        CameraDataset& operator=(const CameraDataset&) = default;
-
-        CameraExample get(size_t index) override {
+        // Simple get method - returns our struct directly
+        CameraWithImage get(size_t index) {
             if (index >= _indices.size()) {
                 throw std::out_of_range("Dataset index out of range");
             }
@@ -70,12 +59,10 @@ namespace gs::training {
             auto& cam = _cameras[camera_idx];
 
             torch::Tensor image = cam->load_and_get_image(_datasetConfig.resize_factor);
-            return {{cam.get(), std::move(image)}, torch::empty({})};
+            return {cam.get(), std::move(image)};
         }
 
-        torch::optional<size_t> size() const override {
-            return _indices.size();
-        }
+        size_t size() const { return _indices.size(); }
 
         const std::vector<std::shared_ptr<Camera>>& get_cameras() const {
             return _cameras;
@@ -98,7 +85,7 @@ namespace gs::training {
             return total_bytes;
         }
 
-        [[nodiscard]] std::optional<Camera*> get_camera_by_filename(const std::string& filename) const {
+        std::optional<Camera*> get_camera_by_filename(const std::string& filename) const {
             for (const auto& cam : _cameras) {
                 if (cam->image_name() == filename) {
                     return cam.get();
@@ -108,7 +95,6 @@ namespace gs::training {
         }
 
         void set_resize_factor(int resize_factor) { _datasetConfig.resize_factor = resize_factor; }
-
         int get_resize_factor() const { return _datasetConfig.resize_factor; }
 
     private:
@@ -212,26 +198,18 @@ namespace gs::training {
         }
     }
 
-    inline auto create_dataloader_from_dataset(
-        std::shared_ptr<CameraDataset> dataset,
-        int num_workers = 4) {
-        const size_t dataset_size = dataset->size().value();
-
-        return torch::data::make_data_loader(
-            *dataset,
-            torch::data::samplers::RandomSampler(dataset_size),
-            torch::data::DataLoaderOptions()
-                .batch_size(1)
-                .workers(num_workers)
-                .enforce_ordering(false));
-    }
-
-    // Forward declaration for the efficient dataloader
+    // Forward declarations for our dataloaders
     class InfiniteDataLoaderWrapper;
+    class EvalDataLoader;
 
+    // Factory functions
     std::unique_ptr<InfiniteDataLoaderWrapper>
     create_efficient_infinite_dataloader(
         std::shared_ptr<CameraDataset> dataset,
         int num_workers = 4);
+
+    std::unique_ptr<EvalDataLoader>
+    create_eval_dataloader(
+        std::shared_ptr<CameraDataset> dataset);
 
 } // namespace gs::training
