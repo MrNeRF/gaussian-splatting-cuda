@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iostream>
 #include <numeric>
+#include <c10/cuda/CUDACachingAllocator.h>
 
 namespace gs {
     namespace metrics {
@@ -415,7 +416,9 @@ namespace gs {
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera; // rasterize needs non-const Camera&
                 torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA);
-
+                // Clear cache to avoid OOM
+                cudaDeviceSynchronize();
+                c10::cuda::CUDACachingAllocator::emptyCache();
                 // Render with configured mode
                 auto r_output = gs::rasterize(
                     *cam,

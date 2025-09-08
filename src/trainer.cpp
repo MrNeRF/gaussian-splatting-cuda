@@ -3,6 +3,7 @@
 #include "core/rasterizer.hpp"
 #include "kernels/fused_ssim.cuh"
 #include <ATen/cuda/CUDAEvent.h>
+#include <c10/cuda/CUDACachingAllocator.h>
 #include <atomic>
 #include <chrono>
 #include <cuda_runtime.h>
@@ -372,6 +373,9 @@ namespace gs {
                 // Clean evaluation - let the evaluator handle everything
                 if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
                     evaluator_->print_evaluation_header(iter);
+                    cudaDeviceSynchronize();
+                    c10::cuda::CUDACachingAllocator::emptyCache();
+                    
                     auto metrics = evaluator_->evaluate(iter,
                                                         strategy_->get_model(),
                                                         val_dataset_,
@@ -435,7 +439,7 @@ namespace gs {
 
         try {
             int iter = 1;
-            const int num_workers = 16;
+            const int num_workers = 8;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
             if (progress_) {
