@@ -1,5 +1,5 @@
 pycolmap 
-romatch 
+roma
 Pillow 
 numpy 
 scipy 
