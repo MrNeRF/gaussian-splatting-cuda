@@ -198,7 +198,7 @@ namespace gs::training {
             // Free CPU memory using image_io's function
             free_image(data);
 
-        // Create the example - clone() here is cheap as it just increments ref count
+            // Create the example - clone() here is cheap as it just increments ref count
             CameraWithImage example{camera, slot->gpu_buffer.clone()};
 
             // Release buffer back to pool
