@@ -164,8 +164,5 @@ namespace gs::training {
         bool has_rgb() const;
 
         bool has_depth() const;
-
-        // Create dataloader from dataset
-        auto make_dataloader(std::shared_ptr<CameraDataset> dataset, const int workers = 1) const;
     };
 } // namespace gs::training
