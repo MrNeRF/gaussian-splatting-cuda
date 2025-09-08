@@ -41,13 +41,19 @@ namespace gs {
 
         // Handle PLY cycling with proper event emission for UI updates
         cmd::CyclePLY::when([this](const auto&) {
-            // Check if rendering manager has split view enabled
-            if (rendering_manager_ && rendering_manager_->getSettings().split_view_enabled) {
-                // In split mode: advance the offset
-                rendering_manager_->advanceSplitOffset();
-                LOG_DEBUG("Advanced split view offset");
-            } else if (content_type_ == ContentType::SplatFiles) {
-                // Normal mode: existing cycle code
+            // Check if rendering manager has split view enabled (in PLY comparison mode)
+            if (rendering_manager_) {
+                auto settings = rendering_manager_->getSettings();
+                if (settings.split_view_mode == visualizer::SplitViewMode::PLYComparison) {
+                    // In split mode: advance the offset
+                    rendering_manager_->advanceSplitOffset();
+                    LOG_DEBUG("Advanced split view offset");
+                    return; // Don't cycle visibility when in split view
+                }
+            }
+
+            // Normal mode: existing cycle code
+            if (content_type_ == ContentType::SplatFiles) {
                 auto [hidden, shown] = scene_.cycleVisibilityWithNames();
 
                 if (!hidden.empty()) {

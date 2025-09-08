@@ -56,8 +56,22 @@ namespace gs::rendering {
     };
 
     // Split view support
+    enum class PanelContentType {
+        Model3D,     // Regular 3D model rendering
+        Image2D,     // GT image display
+        CachedRender // Previously rendered frame
+    };
+
     struct SplitViewPanel {
-        const SplatData* model;
+        PanelContentType content_type = PanelContentType::Model3D;
+
+        // For Model3D
+        const SplatData* model = nullptr;
+
+        // For Image2D or CachedRender
+        unsigned int texture_id = 0;
+
+        // Common fields
         std::string label;
         float start_position; // 0.0 to 1.0
         float end_position;   // 0.0 to 1.0

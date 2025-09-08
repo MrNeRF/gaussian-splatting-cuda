@@ -9,15 +9,23 @@
 #include "rendering/rendering.hpp"
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <unordered_map>
 
 namespace gs {
     class SceneManager;
 } // namespace gs
 
 namespace gs::visualizer {
+
+    enum class SplitViewMode {
+        Disabled,
+        PLYComparison,
+        GTComparison
+    };
 
     struct RenderSettings {
         // Core rendering settings
@@ -65,7 +73,7 @@ namespace gs::visualizer {
         glm::vec3 eval_camera_color = glm::vec3(1.0f, 0.0f, 0.0f);
 
         // Split view
-        bool split_view_enabled = false;
+        SplitViewMode split_view_mode = SplitViewMode::Disabled;
         float split_position = 0.5f;
         size_t split_view_offset = 0;
 
@@ -80,6 +88,31 @@ namespace gs::visualizer {
 
     struct ViewportRegion {
         float x, y, width, height;
+    };
+
+    // GT Image Cache for efficient GPU-resident texture management
+    class GTTextureCache {
+    public:
+        GTTextureCache();
+        ~GTTextureCache();
+
+        // Get or load GT texture for a camera
+        unsigned int getGTTexture(int cam_id, const std::filesystem::path& image_path);
+
+        // Clear cache
+        void clear();
+
+    private:
+        struct CacheEntry {
+            unsigned int texture_id;
+            std::chrono::steady_clock::time_point last_access;
+        };
+
+        std::unordered_map<int, CacheEntry> texture_cache_;
+        static constexpr size_t MAX_CACHE_SIZE = 20;
+
+        void evictOldest();
+        unsigned int loadTexture(const std::filesystem::path& path);
     };
 
     class RenderingManager {
@@ -124,6 +157,13 @@ namespace gs::visualizer {
         void advanceSplitOffset();
         SplitViewInfo getSplitViewInfo() const;
 
+        // Current camera tracking for GT comparison
+        void setCurrentCameraId(int cam_id) {
+            current_camera_id_ = cam_id;
+            markDirty();
+        }
+        int getCurrentCameraId() const { return current_camera_id_; }
+
         // FPS monitoring
         float getCurrentFPS() const { return framerate_controller_.getCurrentFPS(); }
         float getAverageFPS() const { return framerate_controller_.getAverageFPS(); }
@@ -140,6 +180,7 @@ namespace gs::visualizer {
         void doFullRender(const RenderContext& context, SceneManager* scene_manager, const SplatData* model);
         void renderOverlays(const RenderContext& context);
         void setupEventHandlers();
+        void renderToTexture(const RenderContext& context, SceneManager* scene_manager, const SplatData* model);
 
         std::optional<gs::rendering::SplitViewRequest> createSplitViewRequest(
             const RenderContext& context,
@@ -148,6 +189,13 @@ namespace gs::visualizer {
         // Core components
         std::unique_ptr<gs::rendering::RenderingEngine> engine_;
         FramerateController framerate_controller_;
+
+        // GT texture cache
+        GTTextureCache gt_texture_cache_;
+
+        // Cached render texture for reuse in split view
+        unsigned int cached_render_texture_ = 0;
+        bool render_texture_valid_ = false;
 
         // State tracking
         std::atomic<bool> needs_render_{true};
@@ -159,6 +207,9 @@ namespace gs::visualizer {
         // Split view state
         mutable std::mutex split_info_mutex_;
         SplitViewInfo current_split_info_;
+
+        // Current camera for GT comparison
+        int current_camera_id_ = -1;
 
         // Settings
         RenderSettings settings_;
