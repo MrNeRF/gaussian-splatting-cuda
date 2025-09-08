@@ -443,11 +443,18 @@ namespace gs::gui {
         ImGui::BeginChild("ImageList", ImVec2(0, 0), true);
 
         if (!m_imagePaths.empty()) {
-            ImGui::Text("Images (%zu):", m_imagePaths.size());
+
+            
+
+            ImGui::Text("Images (%zu / %zu):", m_numEnabledImages, m_imagePaths.size());
+
+
             ImGui::Separator();
 
             // Track if we need to scroll to the selected item
             bool should_scroll = false;
+            m_numEnabledImages = 0;
+
 
             for (size_t i = 0; i < m_imagePaths.size(); ++i) {
                 const auto& imagePath = m_imagePaths[i];
@@ -459,6 +466,10 @@ namespace gs::gui {
                 // Check if this item is selected
                 bool is_selected = (m_selectedImageIndex == static_cast<int>(i));
                 bool is_enabled = m_enabledStatus[imagePath];
+
+                if (is_enabled)
+                    m_numEnabledImages++;
+
 
                 // Push a different color for selected items to make them more visible
                 if (is_selected) {

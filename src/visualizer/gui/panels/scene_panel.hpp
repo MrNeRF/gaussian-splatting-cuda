@@ -39,6 +39,7 @@ namespace gs {
             int m_selectedImageIndex = -1;
             std::filesystem::path m_currentDatasetPath;
             bool m_needsScrollToSelection = false;
+            int m_numEnabledImages = 0;
 
             // PLY scene graph data for PLY mode
             struct PLYNode {
