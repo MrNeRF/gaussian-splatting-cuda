@@ -15,17 +15,15 @@ What it does (in short)
 5) Aggregates neighbors with per-pixel argmax certainty.
 6) EDGS-style sampling: cap certainty → multinomial sampling + coverage-grid fill.
 7) Geometry gating:
-   - optional Sampson epipolar error (fast pre-triangulation gate)
-   - triangulation (DLT)
+   - optional Sampson epipolar error 
+   - triangulation 
    - reprojection error in both views
-   - cheirality in both views
-   - minimum parallax (deg)
 8) Colors are taken from the reference image (bilinear).
 9) Writes:
    - COLMAP-compatible points3D_dense.bin (under sparse/0) 
 Dependencies
 ------------
-pip install pycolmap romatch Pillow numpy scipy tqdm open3d  # (open3d optional for --viz)
+pip install pycolmap roma Pillow numpy scipy tqdm open3d  # (open3d optional for --viz)
 
 Notes
 -----
@@ -38,10 +36,22 @@ Notes
 
 import os, argparse, struct, time
 from typing import Dict, Tuple, List, Optional
-
+from functools import lru_cache
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
+
+# --- add near the imports ---
+from functools import lru_cache
+
+# cache: key = (abs_path, (W,H))
+@lru_cache(maxsize=4096)
+def load_rgb_resized(path: str, size: tuple[int,int]) -> Image.Image:
+    # Pillow-SIMD (if installed) will make this much faster too
+    im = Image.open(path).convert("RGB")
+    if im.size != size:
+        im = im.resize(size, Image.BILINEAR)
+    return im
 
 # --------- IO / deps ----------
 import pycolmap
@@ -92,7 +102,13 @@ def find_image(root: str, name: str) -> str:
     if os.path.isfile(q): return q
     raise FileNotFoundError(f"Image '{name}' not found under {root}")
 
-
+@lru_cache(maxsize=4096)
+def load_rgb_resized(path: str, size: tuple[int,int]) -> Image.Image:
+    # Pillow-SIMD (if installed) will make this much faster too
+    im = Image.open(path).convert("RGB")
+    if im.size != size:
+        im = im.resize(size, Image.BILINEAR)
+    return im
 # ==========================
 # COLMAP helpers
 # ==========================
@@ -447,6 +463,7 @@ def dense_init(args):
     all_xyz, all_rgb, all_err = [], [], []
     t0 = time.time()
 
+
     for ref_local in tqdm(range(len(img_ids)), desc="Dense init"):
         ref_id = img_ids[ref_local]
         if ref_id not in refs:
@@ -454,25 +471,30 @@ def dense_init(args):
 
         ref_name = name_by[ref_id]
         ref_path = find_image(images_dir, ref_name)
-        imA = Image.open(ref_path).convert("RGB")
+        w_match, h_match = matcher.model.w_resized, matcher.model.h_resized
+        imA = load_rgb_resized(ref_path, (w_match, h_match))
         wA_img, hA_img = imA.size
         wA_cam, hA_cam = size_by[ref_id]
-        w_match, h_match = matcher.model.w_resized, matcher.model.h_resized
 
         # Collect K-NN flows for argmax aggregation
         local_nns = nn_table[ref_local][:args.nns_per_ref]
-        if len(local_nns) == 0: continue
+        if len(local_nns) == 0:
+            continue
 
         warp_list, cert_list, nn_ids = [], [], []
         for nn_local in local_nns:
             nbr_id = img_ids[nn_local]
-            if nbr_id == ref_id: continue
-            imB = Image.open(find_image(images_dir, name_by[nbr_id])).convert("RGB")
+            if nbr_id == ref_id:
+                continue
+            imB = load_rgb_resized(find_image(images_dir, name_by[nbr_id]), (w_match, h_match))
             warp_hw, cert_hw = matcher.match_grids(imA, imB)  # [H,W,4], [H,W]
             cert_hw = torch.clamp(cert_hw, min=args.certainty_thresh)  # mild floor
             warp_list.append(warp_hw)
             cert_list.append(cert_hw)
             nn_ids.append(nbr_id)
+
+        if not cert_list:
+            continue
 
         H, W = cert_list[0].shape
         cert_stack = torch.stack(cert_list, dim=0)                 # [K,H,W]
