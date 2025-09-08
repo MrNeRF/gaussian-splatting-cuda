@@ -75,7 +75,6 @@ target_include_directories(gs_visualizer
         ${CMAKE_SOURCE_DIR}/gsplat                       # For gsplat headers
         ${CUDAToolkit_INCLUDE_DIRS}                      # CUDA headers
         ${OPENGL_INCLUDE_DIRS}                           # OpenGL headers
-        ${Python3_INCLUDE_DIRS}                          # Python headers
 )
 
 # Link dependencies - ALL PRIVATE to hide from consumers
@@ -89,7 +88,6 @@ target_link_libraries(gs_visualizer
         TBB::tbb
         spdlog::spdlog
         nlohmann_json::nlohmann_json
-        Python3::Python
         CUDA::cudart
         Freetype::Freetype
         ${OPENGL_LIBRARIES}

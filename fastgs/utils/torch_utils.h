@@ -1,6 +1,6 @@
 #pragma once
 
-#include <torch/extension.h>
+#include <torch/torch.h>
 #include <functional>
 
 inline std::function<char*(size_t N)> resize_function_wrapper(torch::Tensor& t) {

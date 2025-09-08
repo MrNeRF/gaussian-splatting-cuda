@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.24...3.30)
 
+set(DensePointsDir "${CMAKE_CURRENT_SOURCE_DIR}")
+add_compile_definitions(DENSE_POINTS_DIR="${DensePointsDir}")
 
 # Get torch from parent
 if(NOT DEFINED TORCH_INCLUDE_DIRS)

@@ -2,7 +2,7 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <cooperative_groups.h>
 #include <iostream>
-#include <torch/extension.h>
+#include <torch/torch.h>
 
 namespace cg = cooperative_groups;
 

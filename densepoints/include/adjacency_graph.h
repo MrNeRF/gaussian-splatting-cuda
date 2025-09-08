@@ -6,18 +6,21 @@
 #include <utility>
 
 namespace densepcd {
+    struct Node {
+        gs::CameraWithImage camImage;
+        std::unordered_set<int> adj; // idx
+
+        std::vector<torch::Tensor> frustumCorners;
+
+        torch::Tensor kpts;
+        torch::Tensor desc;
+
+        Node(gs::CameraWithImage camWithImage) { camImage = camWithImage; }
+        Node() = default;
+    };
+
     class AdjacencyGraph {
     private:
-        struct Node {
-            gs::CameraWithImage camImage;
-            std::unordered_set<int> adj; // idx 
-            
-            std::vector<torch::Tensor> frustumCorners;
-
-            Node(gs::CameraWithImage camWithImage) { camImage = camWithImage; }
-            Node() = default;
-        };
-
         std::unordered_map<int, Node> _graph;
         std::vector<int> _idxs;
 
@@ -34,6 +37,8 @@ namespace densepcd {
         void add_camera(gs::CameraWithImage camWithImage);
 
         void compute_adjancency(int n_nearest_neighbors = 5);
+
+         std::unordered_map<int, Node>& graph() { return _graph; }
     };
 
     bool point_in_frustum(const gs::Camera& cam, torch::Tensor X, float nearPlane, float farPlane);

@@ -363,8 +363,8 @@ namespace gs {
             else if (params.optimization.dense_point_cloud && cameras != nullptr) {
                 PointCloud densePcd;
                 densepcd::get_dense_points(cameras, densePcd);
-                positions = densePcd.means;
-                colors = densePcd.colors / 255.0f;
+                positions = torch::cat({pcd.means.to(torch::kCUDA), densePcd.means});
+                colors = torch::cat({pcd.colors.to(torch::kCUDA), densePcd.colors}) / 255.0f;
             }
             else {
                 positions = pcd.means;

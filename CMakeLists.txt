@@ -88,7 +88,6 @@ find_package(imgui REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(args REQUIRED)
 find_package(spdlog REQUIRED)
-find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(Freetype REQUIRED)
 
 if(WIN32)
@@ -175,7 +174,6 @@ target_include_directories(gaussian_host
         ${CMAKE_CURRENT_SOURCE_DIR}/densepoints # Add dense point cloud headers
         ${CUDAToolkit_INCLUDE_DIRS}         # Add CUDA headers for interop
         PRIVATE
-        ${Python3_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
 
@@ -188,7 +186,6 @@ target_link_libraries(gaussian_host
         nlohmann_json::nlohmann_json
         glm::glm
         Threads::Threads
-        Python3::Python
         gsplat_backend  # Link to gsplat
         fastgs_backend  # Link to fastgs
         dense_points    # Link to densepoints
@@ -263,8 +260,6 @@ target_include_directories(gaussian_kernels
         ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
-        PRIVATE
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(gaussian_kernels
@@ -309,7 +304,6 @@ target_include_directories(${PROJECT_NAME}
         ${CMAKE_CURRENT_BINARY_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
         ${CMAKE_CURRENT_SOURCE_DIR}/fastgs
-        ${Python3_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
@@ -322,7 +316,6 @@ target_link_libraries(${PROJECT_NAME}
         gs_visualizer    # Visualizer module
         gsplat_backend
         fastgs_backend
-        Python3::Python
         ${OPENGL_LIBRARIES}
         CUDA::cudart
         spdlog::spdlog
@@ -417,7 +410,6 @@ if(BUILD_TESTS)
             ${CMAKE_CURRENT_BINARY_DIR}/include
             ${CMAKE_CURRENT_SOURCE_DIR}/gsplat
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
-            ${Python3_INCLUDE_DIRS}
             ${CUDAToolkit_INCLUDE_DIRS}
             ${OPENGL_INCLUDE_DIRS}
     )
@@ -430,7 +422,6 @@ if(BUILD_TESTS)
             gsplat_backend
             GTest::gtest
             GTest::gtest_main
-            Python3::Python
             ${OPENGL_LIBRARIES}
             CUDA::cudart
             spdlog::spdlog
@@ -477,7 +468,6 @@ message(STATUS "===========================================")
 message(STATUS "Build Configuration:")
 message(STATUS "  CUDA Version: ${CUDAToolkit_VERSION}")
 message(STATUS "  Torch Version: ${Torch_VERSION}")
-message(STATUS "  Python Version: ${Python3_VERSION}")
 message(STATUS "  OpenGL Found: ${OPENGL_FOUND}")
 message(STATUS "  FreeType Found: ${FREETYPE_FOUND}")
 message(STATUS "  CUDA-GL Interop Option: ${ENABLE_CUDA_GL_INTEROP}")

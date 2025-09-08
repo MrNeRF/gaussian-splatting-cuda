@@ -37,8 +37,6 @@ target_include_directories(fastgs_backend
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
-        PRIVATE
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(fastgs_backend

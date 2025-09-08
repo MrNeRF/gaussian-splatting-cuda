@@ -3,6 +3,7 @@
 #include "core/Dataset.hpp"
 #include "core/point_cloud.hpp"
 #include "adjacency_graph.h"
+#include "track_handler.h"
 
 #include <torch/torch.h>
 #include <tuple>

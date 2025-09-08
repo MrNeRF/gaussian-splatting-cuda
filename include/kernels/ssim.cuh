@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdio>
 #include <string>
-#include <torch/extension.h>
+#include <torch/torch.h>
 #include <tuple>
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>

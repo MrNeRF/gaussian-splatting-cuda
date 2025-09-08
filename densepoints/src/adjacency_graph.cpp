@@ -10,15 +10,17 @@ void densepcd::AdjacencyGraph::compute_adjancency(int n_nearest_neighbors) {
         distNeighbors.reserve(_idxs.size() - i);
         for (int j = i + 1; j < _idxs.size(); j++) {
             int idx2 = _idxs[j];
-            auto& node2 = _graph[idx2];            
-            auto sqDist = torch::pow(node1.camImage.camera->cam_position() - node2.camImage.camera->cam_position(), 2).sum().item<float>(); // Can use sq dist instead of dist
-            distNeighbors.emplace_back(sqDist, idx2);
+            if (node1.adj.find(idx2) == node1.adj.end()) { // If it's already in the adj set, don't consider it (find new neighbors)
+                auto& node2 = _graph[idx2];
+                auto sqDist = torch::pow(node1.camImage.camera->cam_position() - node2.camImage.camera->cam_position(), 2).sum().item<float>(); // Can use sq dist instead of dist
+                distNeighbors.emplace_back(sqDist, idx2);
+            }
         }
 
         std::sort(distNeighbors.begin(), distNeighbors.end(), [](const std::pair<float, int>& a, const std::pair<float, int>& b) {
             return a.first < b.first;
         });
-        for (int j = 0; j < n_nearest_neighbors; j++) {
+        for (int j = 0; j < std::min((int)distNeighbors.size(), n_nearest_neighbors); j++) {
             auto& node2 = _graph[distNeighbors[j].second];
             auto overlaps = frustums_overlap(node1, node2);
             if (overlaps) {
@@ -26,12 +28,6 @@ void densepcd::AdjacencyGraph::compute_adjancency(int n_nearest_neighbors) {
                 node2.adj.insert(node1.camImage.camera->uid());
             }
         }
-    }
-
-    auto node1 = _graph[_idxs[0]];
-    printf("%s\n", node1.camImage.camera->image_name());
-    for (auto& n : node1.adj) {
-        printf("%s\n", _graph[n].camImage.camera->image_name());
     }
 }
 
