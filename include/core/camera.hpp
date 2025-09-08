@@ -79,9 +79,6 @@ namespace gs {
         float FoVx() const noexcept { return _FoVx; }
         float FoVy() const noexcept { return _FoVy; }
 
-        int _image_width = 0;
-        int _image_height = 0;
-
     private:
         // IDs
         float _FoVx = 0.f;
@@ -105,6 +102,8 @@ namespace gs {
         std::filesystem::path _image_path;
         int _camera_width = 0;
         int _camera_height = 0;
+        int _image_width = 0;
+        int _image_height = 0;
 
         // GPU tensors (computed on demand)
         torch::Tensor _world_view_transform;
