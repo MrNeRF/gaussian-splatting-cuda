@@ -63,7 +63,6 @@ namespace gs::gui {
         events::cmd::ToggleEnableCamera::when([this](const auto& event) {
             handleToggleEnableCamera(event);
         });
-
     }
 
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
@@ -442,19 +441,14 @@ namespace gs::gui {
         // Image list view
         ImGui::BeginChild("ImageList", ImVec2(0, 0), true);
 
-        if (!m_imagePaths.empty()) {
-
-            
+        if (!m_imagePaths.empty()) {            
 
             ImGui::Text("Images (%zu / %zu):", m_numEnabledImages, m_imagePaths.size());
-
-
             ImGui::Separator();
 
             // Track if we need to scroll to the selected item
             bool should_scroll = false;
             m_numEnabledImages = 0;
-
 
             for (size_t i = 0; i < m_imagePaths.size(); ++i) {
                 const auto& imagePath = m_imagePaths[i];
@@ -466,10 +460,6 @@ namespace gs::gui {
                 // Check if this item is selected
                 bool is_selected = (m_selectedImageIndex == static_cast<int>(i));
                 bool is_enabled = m_enabledStatus[imagePath];
-
-                if (is_enabled)
-                    m_numEnabledImages++;
-
 
                 // Push a different color for selected items to make them more visible
                 if (is_selected) {
@@ -500,6 +490,9 @@ namespace gs::gui {
                 }
 
                 if (!is_enabled) {
+                    m_numEnabledImages++;
+                    
+                    // draw a line over the text
                     ImVec2 cursorScreenPos = ImGui::GetCursorScreenPos();
                     ImVec2 textSize = ImGui::CalcTextSize(unique_id.c_str());
                     cursorScreenPos.y -= 10;
@@ -567,6 +560,7 @@ namespace gs::gui {
         m_enabledStatus.clear();
         m_PathToCamId.clear();
         m_selectedImageIndex = -1;
+        m_numEnabledImages = 0;
 
         if (!m_trainer_manager) {
             LOG_ERROR("m_trainer_manager was not set");
