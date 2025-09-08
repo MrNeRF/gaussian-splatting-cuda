@@ -34,6 +34,9 @@ namespace gs::rendering {
         // Split view compositing shader
         ManagedShader split_shader_;
 
+        // Simple texture blit shader for GT images
+        ManagedShader texture_blit_shader_;
+
         // Quad VAO for rendering
         VAO quad_vao_;
         VBO quad_vbo_;
@@ -48,6 +51,18 @@ namespace gs::rendering {
             float split_position,
             const glm::vec4& divider_color,
             int viewport_width);
+
+        // New method for rendering different content types
+        Result<void> renderPanelContent(
+            FrameBuffer* framebuffer,
+            const SplitViewPanel& panel,
+            const SplitViewRequest& request,
+            RenderingPipeline& pipeline,
+            ScreenQuadRenderer& screen_renderer,
+            ManagedShader& quad_shader);
+
+        // Helper to blit a texture to current framebuffer
+        Result<void> blitTextureToFramebuffer(GLuint texture_id);
     };
 
 } // namespace gs::rendering
