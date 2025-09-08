@@ -496,7 +496,7 @@ namespace gs::gui {
                     cursorScreenPos.y -= 10;
                     ImGui::GetWindowDrawList()->AddLine(cursorScreenPos, ImVec2(cursorScreenPos.x + textSize.x, cursorScreenPos.y), IM_COL32(0, 0, 0, 255), 1.0f);
                 } else {
-                    m_numEnabledImages++
+                    m_numEnabledImages++;
                 }
 
                 // Context menu for right-click - use unique ID
