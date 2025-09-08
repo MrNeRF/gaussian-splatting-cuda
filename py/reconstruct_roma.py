@@ -1,63 +1,43 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Dense, accurate COLMAP pointcloud initializer (EDGS-inspired, RoMa-driven)
+with pipelined GPU (matching) ↔ CPU (filtering/triangulation) overlap.
 
-Goal
------
-Take an existing COLMAP reconstruction (poses + intrinsics + images) and build a
-dense-but-accurate point cloud to seed a 3DGS densification stage.
+Pipeline
+--------
+- Main thread (producer): for each reference view, runs RoMa on GPU against its K nearest
+  neighbors, collects all (warp, certainty) maps, converts them to CPU tensors, and pushes
+  a 'job' (one per reference) onto a queue.
+- CPU worker thread (consumer): pulls jobs and performs:
+    * argmax aggregation across neighbors
+    * EDGS-style sampling (cap + multinomial + coverage)
+    * per-neighbor grouping
+    * optional Sampson gating
+    * DLT triangulation, reprojection/cheirality/parallax filters
+    * bilinear color reading from the reference image
+  It returns (xyz, rgb, err) arrays per job on a results queue.
 
-What it does (in short)
------------------------
-1) Loads COLMAP cameras/poses from scene_root/sparse/0 and images from images_*.
-2) Picks reference views (visibility-aware if a sparse cloud exists; else k-centers on poses).
-3) For each reference, finds pose-nearest neighbors.
-4) Runs RoMa dense matching to get (xA,yA)↔(xB,yB) at grid resolution + per-pixel certainty.
-5) Aggregates neighbors with per-pixel argmax certainty.
-6) EDGS-style sampling: cap certainty → multinomial sampling + coverage-grid fill.
-7) Geometry gating:
-   - optional Sampson epipolar error 
-   - triangulation 
-   - reprojection error in both views
-8) Colors are taken from the reference image (bilinear).
-9) Writes:
-   - COLMAP-compatible points3D_dense.bin (under sparse/0) 
+Effect
+------
+While the GPU is busy computing RoMa for reference r+1, the CPU processes and triangulates
+the previously enqueued reference r, keeping both devices utilized.
+
 Dependencies
 ------------
 pip install pycolmap roma Pillow numpy scipy tqdm open3d  # (open3d optional for --viz)
-
-Notes
------
-- This is self-contained and only needs a valid COLMAP workspace:
-     scene_root/
-       images*/               (images or images_2/images_4/images_8)
-       sparse/0/              (cameras.bin, images.bin, points3D.bin)
-- If your images are elsewhere, set --images_subdir accordingly.
 """
 
-import os, argparse, struct, time
+import os, argparse, struct, time, threading
+from queue import Queue
 from typing import Dict, Tuple, List, Optional
 from functools import lru_cache
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-# --- add near the imports ---
-from functools import lru_cache
-
-# cache: key = (abs_path, (W,H))
-@lru_cache(maxsize=4096)
-def load_rgb_resized(path: str, size: tuple[int,int]) -> Image.Image:
-    # Pillow-SIMD (if installed) will make this much faster too
-    im = Image.open(path).convert("RGB")
-    if im.size != size:
-        im = im.resize(size, Image.BILINEAR)
-    return im
-
 # --------- IO / deps ----------
 import pycolmap
-
-# SciPy for k-means pose clustering
-from scipy.cluster.vq import kmeans, vq
 from scipy.spatial.distance import cdist
 
 # Optional viz
@@ -104,11 +84,12 @@ def find_image(root: str, name: str) -> str:
 
 @lru_cache(maxsize=4096)
 def load_rgb_resized(path: str, size: tuple[int,int]) -> Image.Image:
-    # Pillow-SIMD (if installed) will make this much faster too
     im = Image.open(path).convert("RGB")
     if im.size != size:
         im = im.resize(size, Image.BILINEAR)
     return im
+
+
 # ==========================
 # COLMAP helpers
 # ==========================
@@ -138,7 +119,6 @@ def K_from_camera(cam: pycolmap.Camera) -> np.ndarray:
     return K
 
 def pose_world2cam(im: pycolmap.Image) -> Tuple[np.ndarray, np.ndarray]:
-    # world->cam rotation & translation
     if hasattr(im, "cam_from_world"):
         cfw = im.cam_from_world
         cfw = cfw() if callable(cfw) else cfw
@@ -212,7 +192,7 @@ def nearest_neighbors(flat_poses: np.ndarray, k: int) -> np.ndarray:
 
 
 # ==========================
-# RoMa wrapper (returns grid tensors)
+# RoMa wrapper (GPU)
 # ==========================
 
 class RomaMatcher:
@@ -232,13 +212,10 @@ class RomaMatcher:
     @torch.inference_mode()
     def match_grids(self, imA: Image.Image, imB: Image.Image):
         flow_or_warp, cert = self.model.match(imA, imB, device=self.device)
-        def TT(x):
-            if isinstance(x, np.ndarray): x = torch.from_numpy(x)
-            return x.to(self.device)
-        FW, C = TT(flow_or_warp), TT(cert)
 
-        # normalize shapes to [H,W,C] / [H,W]
         def to_hwC(t, cset=(2,4)):
+            if isinstance(t, np.ndarray):
+                t = torch.from_numpy(t).to(self.device)
             if t.ndim == 4 and t.shape[0] == 1 and t.shape[1] in cset:
                 t = t[0].permute(1,2,0)
             elif t.ndim == 3 and t.shape[0] in cset:
@@ -251,7 +228,10 @@ class RomaMatcher:
             else:
                 raise RuntimeError(f"Unexpected flow/warp shape {tuple(t.shape)}")
             return t
+
         def to_hw1(c):
+            if isinstance(c, np.ndarray):
+                c = torch.from_numpy(c).to(self.device)
             if c.ndim == 4 and c.shape[0] == 1 and c.shape[1] == 1:
                 c = c[0,0]
             elif c.ndim == 2:
@@ -263,8 +243,8 @@ class RomaMatcher:
                 raise RuntimeError(f"Unexpected certainty shape {tuple(c.shape)}")
             return c
 
-        FW = to_hwC(FW)          # [H,W,2] or [H,W,4]
-        C  = to_hw1(C).sigmoid() # [H,W] in [0,1]
+        FW = to_hwC(flow_or_warp)         # [H,W,2] or [H,W,4]
+        C  = to_hw1(cert).sigmoid()       # [H,W] in [0,1]
 
         H, W = C.shape
         yy = torch.linspace(-1 + 1/H, 1 - 1/H, H, device=self.device)
@@ -272,7 +252,7 @@ class RomaMatcher:
         yy, xx = torch.meshgrid(yy, xx, indexing="ij")
         base = torch.stack([xx, yy], dim=-1)  # [H,W,2]
 
-        if FW.shape[-1] == 4:      # already absolute (xA,yA,xB,yB)
+        if FW.shape[-1] == 4:      # absolute (xA,yA,xB,yB)
             warp = FW
         else:                       # delta flow: (dx,dy)
             warp = torch.cat([base, base + FW], dim=-1)
@@ -348,24 +328,23 @@ def sampson_error(F: np.ndarray, uv1: np.ndarray, uv2: np.ndarray) -> np.ndarray
 
 def select_samples_with_coverage(cert_map: torch.Tensor, M: int, cap: float = 0.9,
                                  border: int = 2, tiles: int = 24) -> np.ndarray:
-    cert = cert_map.clone()
+    cert = cert_map.clone().to("cpu")
     cert = torch.clamp(cert, max=cap)
     H, W = cert.shape
-    yy, xx = torch.meshgrid(torch.arange(H, device=cert.device), torch.arange(W, device=cert.device), indexing="ij")
+    yy, xx = torch.meshgrid(torch.arange(H), torch.arange(W), indexing="ij")
     inside = (xx >= border) & (xx <= W - 1 - border) & (yy >= border) & (yy <= H - 1 - border)
     weights = (cert * inside.float()).reshape(-1)
     s = weights.sum()
     if s <= 0:
         return np.zeros((0,), dtype=np.int64)
-    weights = (weights / s).detach().cpu().numpy()
+    weights = (weights / s).numpy()
 
     m_main = int(M * 0.7)
     idx_main = np.random.choice(weights.size, size=min(m_main, weights.size), replace=False, p=weights)
 
-    # coverage fill (tile top-1)
     tile = max(1, W // tiles)
-    gx = (xx // tile).reshape(-1).cpu().numpy()
-    gy = (yy // tile).reshape(-1).cpu().numpy()
+    gx = (xx // tile).reshape(-1).numpy()
+    gy = (yy // tile).reshape(-1).numpy()
     bins = gx * 100000 + gy
     order = np.argsort(-weights)  # descending by weight
     seen = set(); idx_cov = []
@@ -378,6 +357,7 @@ def select_samples_with_coverage(cert_map: torch.Tensor, M: int, cap: float = 0.
 
     sel_idx = np.unique(np.concatenate([idx_main, np.asarray(idx_cov, dtype=np.int64)]))
     return sel_idx
+
 
 # ==========================
 # Writers
@@ -396,8 +376,164 @@ def write_points3D_bin(path_out: str, xyz: np.ndarray, rgb_uint8: np.ndarray, er
             f.write(struct.pack("<d", float(errors[i])))
             f.write(struct.pack("<Q", 0))  # empty track
 
+
 # ==========================
-# Main pipeline
+# CPU worker (consumer)
+# ==========================
+
+def make_cpu_worker(job_q: Queue, res_q: Queue,
+                    K_by, R_by, t_by, P_by, C_by, name_by, size_by,
+                    args, matcher_sample_cap: float):
+    """
+    job: dict with keys:
+        ref_id, nn_ids (list[int]), warp_list (list[torch.Tensor CPU [H,W,4]]),
+        cert_list (list[torch.Tensor CPU [H,W]]), imA_np (Himg,Wimg,3 uint8),
+        w_match, h_match, wA_cam, hA_cam
+    Puts (xyz, rgb, err) per job onto res_q.
+    """
+    def worker():
+        while True:
+            job = job_q.get()
+            if job is None:
+                job_q.task_done()
+                break
+
+            try:
+                ref_id = job["ref_id"]
+                nn_ids: List[int] = job["nn_ids"]
+                warp_list: List[torch.Tensor] = job["warp_list"]
+                cert_list: List[torch.Tensor] = job["cert_list"]
+                imA_np: np.ndarray = job["imA_np"]
+                w_match, h_match = job["w_match"], job["h_match"]
+                wA_cam, hA_cam = job["wA_cam"], job["hA_cam"]
+
+                device_cpu = torch.device("cpu")
+
+                # --- Argmax aggregation across neighbors (CPU tensors) ---
+                H, W = cert_list[0].shape
+                cert_stack = torch.stack(cert_list, dim=0).to(device_cpu)            # [K,H,W]
+                best_cert, best_k = torch.max(cert_stack, dim=0)                     # [H,W], [H,W]
+                warp_stack = torch.stack(warp_list, dim=0).to(device_cpu)            # [K,H,W,4]
+
+                ys = torch.arange(H, device=device_cpu).unsqueeze(1).expand(H, W)
+                xs = torch.arange(W, device=device_cpu).unsqueeze(0).expand(H, W)
+                agg = warp_stack[best_k, ys, xs]                                     # [H,W,4]
+                agg = agg.reshape(-1, 4).numpy()                                     # (H*W,4)
+
+                # --- EDGS sampling ---
+                sel_idx = select_samples_with_coverage(best_cert, args.matches_per_ref,
+                                                       cap=matcher_sample_cap, border=2, tiles=24)
+                if sel_idx.size == 0:
+                    res_q.put((None, None, None))
+                    job_q.task_done()
+                    continue
+
+                # Selected warps / winner-NN for each sample
+                nn_idx_flat = best_k.reshape(-1).numpy()[sel_idx]                    # [S]
+                sel = agg[sel_idx]                                                   # [S,4]
+
+                xA = (sel[:,0] + 1.0)*0.5*(w_match-1)
+                yA = (sel[:,1] + 1.0)*0.5*(h_match-1)
+                xB_norm = sel[:,2]; yB_norm = sel[:,3]  # in [-1,1]
+
+                # --- Colors from reference (bilinear) ---
+                hA_img, wA_img = imA_np.shape[0], imA_np.shape[1]
+                sxA_img = wA_img / float(w_match)
+                syA_img = hA_img / float(h_match)
+                xA_img = xA * sxA_img
+                yA_img = yA * syA_img
+                xa0 = np.clip(np.floor(xA_img).astype(np.int32), 0, wA_img-1)
+                ya0 = np.clip(np.floor(yA_img).astype(np.int32), 0, hA_img-1)
+                xa1 = np.clip(xa0+1, 0, wA_img-1)
+                ya1 = np.clip(ya0+1, 0, hA_img-1)
+                wa = (xa1 - xA_img)*(ya1 - yA_img)
+                wb = (xA_img - xa0)*(ya1 - yA_img)
+                wc = (xa1 - xA_img)*(yA_img - ya0)
+                wd = (xA_img - xa0)*(yA_img - ya0)
+                Ia = imA_np[ya0, xa0].astype(np.float32)
+                Ib = imA_np[ya0, xa1].astype(np.float32)
+                Ic = imA_np[ya1, xa0].astype(np.float32)
+                Id = imA_np[ya1, xa1].astype(np.float32)
+                rgb_ref = (Ia*wa[:,None] + Ib*wb[:,None] + Ic*wc[:,None] + Id*wd[:,None]) / 255.0  # [S,3]
+
+                # --- Scale A to camera intrinsics resolution for triangulation ---
+                sxA = wA_cam / float(w_match)
+                syA = hA_cam / float(h_match)
+                uvA_full = np.stack([xA * sxA, yA * syA], axis=1)  # [S,2]
+
+                # --- Group by neighbor for correct B sizing ---
+                groups: Dict[int, List[int]] = {}
+                for i, kidx in enumerate(nn_idx_flat):
+                    nbr_id = nn_ids[int(kidx)]
+                    groups.setdefault(nbr_id, []).append(i)
+
+                job_xyz, job_rgb, job_err = [], [], []
+
+                for nbr_id, idxs in groups.items():
+                    idxs = np.asarray(idxs, dtype=np.int64)
+                    wB_cam, hB_cam = size_by[nbr_id]
+                    sxB = wB_cam / float(w_match)
+                    syB = hB_cam / float(h_match)
+
+                    xB = (xB_norm[idxs] + 1.0)*0.5*(w_match-1)
+                    yB = (yB_norm[idxs] + 1.0)*0.5*(h_match-1)
+                    uvB = np.stack([xB * sxB, yB * syB], axis=1)
+
+                    # Optional Sampson pre-triangulation
+                    if args.sampson_thresh > 0:
+                        F = fundamental_from_world2cam(K_by[ref_id], R_by[ref_id], t_by[ref_id],
+                                                       K_by[nbr_id], R_by[nbr_id], t_by[nbr_id])
+                        se = sampson_error(F, uvA_full[idxs], uvB)
+                        good = (se < float(args.sampson_thresh))
+                        if not np.any(good):
+                            continue
+                        idxs = idxs[good]
+                        xB = xB[good]; yB = yB[good]
+                        uvB = uvB[good]
+                    if idxs.size == 0:
+                        continue
+
+                    P1, P2 = P_by[ref_id], P_by[nbr_id]
+                    uvA = uvA_full[idxs]
+                    Xi = dlt_triangulate_batch(P1, P2, uvA, uvB)     # [Mi,4]
+
+                    err1 = reprojection_errors(P1, Xi, uvA)
+                    err2 = reprojection_errors(P2, Xi, uvB)
+                    err  = np.maximum(err1, err2)
+                    keep = (err <= float(args.reproj_thresh))
+
+                    keep &= cheirality_mask(P1, Xi)
+                    keep &= cheirality_mask(P2, Xi)
+                    if args.min_parallax_deg > 0:
+                        keep &= parallax_mask(C_by[ref_id], C_by[nbr_id], Xi, min_deg=args.min_parallax_deg)
+
+                    if not np.any(keep):
+                        continue
+
+                    Xw = Xi[keep][:,:3].astype(np.float64)
+                    col = rgb_ref[idxs][keep].astype(np.float32)
+                    e   = err[keep].astype(np.float64)
+
+                    job_xyz.append(Xw); job_rgb.append(col); job_err.append(e)
+
+                if job_xyz:
+                    xyz = np.concatenate(job_xyz, axis=0)
+                    rgb = np.concatenate(job_rgb, axis=0)
+                    err = np.concatenate(job_err, axis=0)
+                    res_q.put((xyz, rgb, err))
+                else:
+                    res_q.put((None, None, None))
+
+            except Exception as ex:
+                log(f"CPU worker error: {ex}")
+                res_q.put((None, None, None))
+            finally:
+                job_q.task_done()
+    return worker
+
+
+# ==========================
+# Main pipeline (producer)
 # ==========================
 
 def dense_init(args):
@@ -417,14 +553,14 @@ def dense_init(args):
     img_ids = sorted(list(imgs.keys()))
     log(f"Loaded {len(cams)} cameras, {len(imgs)} images.")
 
-    # Build camera dicts
+    # Camera / pose dicts
     K_by: Dict[int,np.ndarray] = {}
     R_by: Dict[int,np.ndarray] = {}
     t_by: Dict[int,np.ndarray] = {}
     P_by: Dict[int,np.ndarray] = {}
     C_by: Dict[int,np.ndarray] = {}
     name_by: Dict[int,str] = {}
-    size_by: Dict[int,Tuple[int,int]] = {}  # (w,h) from camera intrinsics
+    size_by: Dict[int,Tuple[int,int]] = {}
 
     flat_poses = []
     for iid in img_ids:
@@ -455,152 +591,95 @@ def dense_init(args):
 
     nn_table = nearest_neighbors(flat_poses, max(1, args.nns_per_ref))  # local indices
 
-    # RoMa matcher
+    # RoMa matcher (GPU if available)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     matcher = RomaMatcher(device=device, mode=args.roma_model)
     log(f"RoMa: {args.roma_model} on {device}")
 
-    all_xyz, all_rgb, all_err = [], [], []
+    # Queues & worker
+    job_q: Queue = Queue(maxsize=2)   # small buffer to bound memory
+    res_q: Queue = Queue()
+    worker_fn = make_cpu_worker(job_q, res_q,
+                                K_by, R_by, t_by, P_by, C_by, name_by, size_by,
+                                args, matcher.sample_thresh)
+    worker_thread = threading.Thread(target=worker_fn, daemon=True)
+    worker_thread.start()
+
+    # Producer loop (GPU stage) — enqueue one job per reference
+    jobs_enqueued = 0
     t0 = time.time()
 
-
-    for ref_local in tqdm(range(len(img_ids)), desc="Dense init"):
+    # Only iterate selected refs (not all frames)
+    for ref_local in tqdm(refs_local, desc="GPU matching / enqueue"):
         ref_id = img_ids[ref_local]
-        if ref_id not in refs:
-            continue
-
         ref_name = name_by[ref_id]
         ref_path = find_image(images_dir, ref_name)
         w_match, h_match = matcher.model.w_resized, matcher.model.h_resized
         imA = load_rgb_resized(ref_path, (w_match, h_match))
-        wA_img, hA_img = imA.size
+        imA_np = np.asarray(imA, dtype=np.uint8)          # for CPU bilinear/color
         wA_cam, hA_cam = size_by[ref_id]
-
-        # Collect K-NN flows for argmax aggregation
         local_nns = nn_table[ref_local][:args.nns_per_ref]
         if len(local_nns) == 0:
             continue
 
-        warp_list, cert_list, nn_ids = [], [], []
+        warp_list_cpu: List[torch.Tensor] = []
+        cert_list_cpu: List[torch.Tensor] = []
+        nn_ids: List[int] = []
+
+        # Run RoMa against neighbors (GPU). Convert outputs to CPU tensors and store.
         for nn_local in local_nns:
             nbr_id = img_ids[nn_local]
             if nbr_id == ref_id:
                 continue
             imB = load_rgb_resized(find_image(images_dir, name_by[nbr_id]), (w_match, h_match))
-            warp_hw, cert_hw = matcher.match_grids(imA, imB)  # [H,W,4], [H,W]
-            cert_hw = torch.clamp(cert_hw, min=args.certainty_thresh)  # mild floor
-            warp_list.append(warp_hw)
-            cert_list.append(cert_hw)
+            warp_hw, cert_hw = matcher.match_grids(imA, imB)  # GPU tensors
+            cert_hw = torch.clamp(cert_hw, min=args.certainty_thresh)  # mild floor (on GPU)
+            # Move to CPU for the worker and free GPU ASAP
+            warp_list_cpu.append(warp_hw.detach().to("cpu"))
+            cert_list_cpu.append(cert_hw.detach().to("cpu"))
             nn_ids.append(nbr_id)
 
-        if not cert_list:
+        if not cert_list_cpu:
             continue
 
-        H, W = cert_list[0].shape
-        cert_stack = torch.stack(cert_list, dim=0)                 # [K,H,W]
-        best_cert, best_k = torch.max(cert_stack, dim=0)           # [H,W], [H,W]
-        warp_stack = torch.stack(warp_list, dim=0)                 # [K,H,W,4]
-        agg = warp_stack[best_k, torch.arange(H, device=device).unsqueeze(1), torch.arange(W, device=device)]  # [H,W,4]
-        agg = agg.reshape(-1, 4)                                   # (H*W,4)
+        # Enqueue one job per reference (CPU will aggregate+filter+triangulate)
+        job = dict(
+            ref_id=ref_id,
+            nn_ids=nn_ids,
+            warp_list=warp_list_cpu,
+            cert_list=cert_list_cpu,
+            imA_np=imA_np,
+            w_match=w_match, h_match=h_match,
+            wA_cam=wA_cam, hA_cam=hA_cam,
+        )
+        job_q.put(job)
+        jobs_enqueued += 1
 
-        # EDGS sampling (cap + multinomial + coverage)
-        sel_idx = select_samples_with_coverage(best_cert, args.matches_per_ref, cap=matcher.sample_thresh,
-                                               border=2, tiles=24)
-        if sel_idx.size == 0:
+    # Signal worker to finish and wait
+    job_q.put(None)
+    job_q.join()
+    worker_thread.join(timeout=1.0)
+
+    # Collect results
+    all_xyz, all_rgb, all_err = [], [], []
+    results_collected = 0
+    while results_collected < jobs_enqueued:
+        try:
+            xyz, rgb, err = res_q.get_nowait()
+        except Exception:
+            break
+        results_collected += 1
+        if xyz is None:
             continue
-
-        # Selected warps / winner-NN for each sample
-        nn_idx_flat = best_k.reshape(-1).detach().cpu().numpy()[sel_idx]   # [S]
-        sel = agg.detach().cpu().numpy()[sel_idx]                          # [S,4]
-        xA = (sel[:,0] + 1.0)*0.5*(w_match-1)
-        yA = (sel[:,1] + 1.0)*0.5*(h_match-1)
-        xB_norm = sel[:,2]; yB_norm = sel[:,3]  # in [-1,1]
-
-        # Colors from reference (bilinear)
-        imA_np = np.asarray(imA, dtype=np.uint8)
-        sxA_img = wA_img / float(w_match)
-        syA_img = hA_img / float(h_match)
-        xA_img = xA * sxA_img
-        yA_img = yA * syA_img
-        xa0 = np.clip(np.floor(xA_img).astype(np.int32), 0, wA_img-1)
-        ya0 = np.clip(np.floor(yA_img).astype(np.int32), 0, hA_img-1)
-        xa1 = np.clip(xa0+1, 0, wA_img-1)
-        ya1 = np.clip(ya0+1, 0, hA_img-1)
-        wa = (xa1 - xA_img)*(ya1 - yA_img)
-        wb = (xA_img - xa0)*(ya1 - yA_img)
-        wc = (xa1 - xA_img)*(yA_img - ya0)
-        wd = (xA_img - xa0)*(yA_img - ya0)
-        Ia = imA_np[ya0, xa0].astype(np.float32)
-        Ib = imA_np[ya0, xa1].astype(np.float32)
-        Ic = imA_np[ya1, xa0].astype(np.float32)
-        Id = imA_np[ya1, xa1].astype(np.float32)
-        rgb_ref = (Ia*wa[:,None] + Ib*wb[:,None] + Ic*wc[:,None] + Id*wd[:,None]) / 255.0  # [S,3]
-
-        # Scale A to camera intrinsics resolution for triangulation
-        sxA = wA_cam / float(w_match)
-        syA = hA_cam / float(h_match)
-        uvA = np.stack([xA * sxA, yA * syA], axis=1)  # [S,2]
-
-        # Group by neighbor for correct B sizing
-        groups: Dict[int, List[int]] = {}
-        for i,(kidx) in enumerate(nn_idx_flat):
-            nbr_id = nn_ids[kidx]
-            groups.setdefault(nbr_id, []).append(i)
-
-        for nbr_id, idxs in groups.items():
-            idxs = np.asarray(idxs, dtype=np.int64)
-            wB_cam, hB_cam = size_by[nbr_id]
-            sxB = wB_cam / float(w_match)
-            syB = hB_cam / float(h_match)
-
-            xB = (xB_norm[idxs] + 1.0)*0.5*(w_match-1)
-            yB = (yB_norm[idxs] + 1.0)*0.5*(h_match-1)
-            uvB = np.stack([xB * sxB, yB * syB], axis=1)
-
-            # Pre-triangulation Sampson (optional)
-            if args.sampson_thresh > 0:
-                F = fundamental_from_world2cam(K_by[ref_id], R_by[ref_id], t_by[ref_id],
-                                               K_by[nbr_id], R_by[nbr_id], t_by[nbr_id])
-                se = sampson_error(F, uvA[idxs], uvB)
-                good = (se < float(args.sampson_thresh))
-                if not np.any(good):
-                    continue
-                idxs = idxs[good]
-                xB = xB[good]; yB = yB[good]
-                uvB = uvB[good]
-            if idxs.size == 0:
-                continue
-
-            P1, P2 = P_by[ref_id], P_by[nbr_id]
-            Xi = dlt_triangulate_batch(P1, P2, uvA[idxs], uvB)     # [Mi,4]
-
-            err1 = reprojection_errors(P1, Xi, uvA[idxs])
-            err2 = reprojection_errors(P2, Xi, uvB)
-            err  = np.maximum(err1, err2)
-            keep = (err <= float(args.reproj_thresh))
-
-            # cheirality + optional parallax
-            keep &= cheirality_mask(P1, Xi)
-            keep &= cheirality_mask(P2, Xi)
-            if args.min_parallax_deg > 0:
-                keep &= parallax_mask(C_by[ref_id], C_by[nbr_id], Xi, min_deg=args.min_parallax_deg)
-
-            if not np.any(keep):
-                continue
-
-            Xw = Xi[keep][:,:3].astype(np.float64)
-            col = rgb_ref[idxs][keep].astype(np.float32)
-            e   = err[keep].astype(np.float64)
-
-            all_xyz.append(Xw); all_rgb.append(col); all_err.append(e)
+        all_xyz.append(xyz); all_rgb.append(rgb); all_err.append(err)
 
     if not all_xyz:
-        raise RuntimeError("No points triangulated. Try increasing --num_refs / --nns_per_ref / --matches_per_ref or lowering thresholds.")
+        raise RuntimeError("No points triangulated. Try increasing --num_refs/--nns_per_ref/--matches_per_ref or lowering thresholds.")
 
     xyz = np.concatenate(all_xyz, axis=0)
     rgb = np.concatenate(all_rgb, axis=0)
     err = np.concatenate(all_err, axis=0)
-    log(f"Triangulated points: {xyz.shape[0]} in {time.time()-t0:.1f}s.")
+    log(f"Triangulated points: {xyz.shape[0]} in {time.time()-t0:.1f}s (pipelined GPU↔CPU).")
 
     # Optional cap
     if args.max_points > 0 and xyz.shape[0] > args.max_points:
@@ -618,7 +697,7 @@ def dense_init(args):
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(xyz.astype(np.float64))
         pcd.colors = o3d.utility.Vector3dVector((rgb.astype(np.float32)))
-        o3d.visualization.draw_geometries([pcd], window_name="Dense init (EDGS-like)")
+        o3d.visualization.draw_geometries([pcd], window_name="Dense init (EDGS-like, pipelined)")
 
     return 0
 
@@ -628,14 +707,14 @@ def dense_init(args):
 # ==========================
 
 def build_argparser():
-    ap = argparse.ArgumentParser("Dense COLMAP initializer (EDGS-style + RoMa)")
+    ap = argparse.ArgumentParser("Dense COLMAP initializer (EDGS-style + RoMa) with GPU↔CPU pipelining")
     ap.add_argument("--scene_root", type=str, required=True, help="Path containing images*/ and sparse/0/")
     ap.add_argument("--images_subdir", type=str, default="images_2", help="Which images dir to read under scene_root")
     ap.add_argument("--out_name", type=str, default="points3D_dense.bin", help="Output filename under sparse/0/")
     ap.add_argument("--roma_model", type=str, default="outdoor", choices=["outdoor","indoor"], help="RoMa model variant")
 
     # Selection
-    ap.add_argument("--num_refs", type=float, default=0.8, help="Fraction (<=1) or count (>1) of frames to use as references")
+    ap.add_argument("--num_refs", type=float, default=0.75, help="Fraction (<=1) or count (>1) of frames to use as references")
     ap.add_argument("--nns_per_ref", type=int, default=4, help="Nearest neighbors per reference (3-5 is robust)")
 
     # Sampling / gating
