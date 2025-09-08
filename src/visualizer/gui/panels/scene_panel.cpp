@@ -490,13 +490,13 @@ namespace gs::gui {
                 }
 
                 if (!is_enabled) {
-                    m_numEnabledImages++;
-                    
                     // draw a line over the text
                     ImVec2 cursorScreenPos = ImGui::GetCursorScreenPos();
                     ImVec2 textSize = ImGui::CalcTextSize(unique_id.c_str());
                     cursorScreenPos.y -= 10;
                     ImGui::GetWindowDrawList()->AddLine(cursorScreenPos, ImVec2(cursorScreenPos.x + textSize.x, cursorScreenPos.y), IM_COL32(0, 0, 0, 255), 1.0f);
+                } else {
+                    m_numEnabledImages++
                 }
 
                 // Context menu for right-click - use unique ID
