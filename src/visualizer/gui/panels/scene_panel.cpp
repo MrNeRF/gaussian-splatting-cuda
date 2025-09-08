@@ -155,7 +155,11 @@ namespace gs::gui {
                     m_selectedImageIndex = static_cast<int>(std::distance(m_imagePaths.begin(), it));
                     m_needsScrollToSelection = true; // Mark that we need to scroll
                     m_enabledStatus[m_imagePaths[m_selectedImageIndex]] = !m_enabledStatus[m_imagePaths[m_selectedImageIndex]];
-                    LOG_TRACE("Selected and disabled camera ID {} (index {})",
+                    if (m_enabledStatus[m_imagePaths[m_selectedImageIndex]])
+                        m_numEnabledImages++;
+                    else
+                        m_numEnabledImages--;
+                    LOG_TRACE("Toggle enabled status camera ID {} (New status: {})",
                               event.cam_id, m_selectedImageIndex);
                 }
                 break;
@@ -448,7 +452,6 @@ namespace gs::gui {
 
             // Track if we need to scroll to the selected item
             bool should_scroll = false;
-            m_numEnabledImages = 0;
 
             for (size_t i = 0; i < m_imagePaths.size(); ++i) {
                 const auto& imagePath = m_imagePaths[i];
@@ -495,9 +498,7 @@ namespace gs::gui {
                     ImVec2 textSize = ImGui::CalcTextSize(unique_id.c_str());
                     cursorScreenPos.y -= 10;
                     ImGui::GetWindowDrawList()->AddLine(cursorScreenPos, ImVec2(cursorScreenPos.x + textSize.x, cursorScreenPos.y), IM_COL32(0, 0, 0, 255), 1.0f);
-                } else {
-                    m_numEnabledImages++;
-                }
+                } 
 
                 // Context menu for right-click - use unique ID
                 std::string context_menu_id = std::format("context_menu_{}", i);
@@ -521,20 +522,38 @@ namespace gs::gui {
                     }
                     if (is_enabled && ImGui::MenuItem("Disable image")) {
                         // Get the camera data for this image
-                        m_enabledStatus[imagePath] = !m_enabledStatus[imagePath];
+                        auto cam_data_it = m_PathToCamId.find(imagePath);
+                        if (cam_data_it != m_PathToCamId.end()) {
+                            // Emit the new GoToCamView command event with camera data
+                            events::cmd::ToggleEnableCamera{
+                                .cam_id = cam_data_it->second}
+                                .emit();
 
-                        LOG_INFO("Disable camera for: {} (Status ID: {})",
-                                    imagePath.filename().string(),
-                                 m_enabledStatus[imagePath]);
+                            LOG_INFO("Set status disabled for camera: {} (Status : {})",
+                                     imagePath.filename().string(),
+                                     m_enabledStatus[imagePath]);
+                        } else {
+                            // Log warning if camera data not found
+                            LOG_WARN("Camera data not found for: {}", imagePath.filename().string());
+                        }
                     } 
 
                     if (!is_enabled && ImGui::MenuItem("Enable image")) {
                         // Get the camera data for this image
-                        m_enabledStatus[imagePath] = !m_enabledStatus[imagePath];
+                        auto cam_data_it = m_PathToCamId.find(imagePath);
+                        if (cam_data_it != m_PathToCamId.end()) {
+                            // Emit the new GoToCamView command event with camera data
+                            events::cmd::ToggleEnableCamera{
+                                .cam_id = cam_data_it->second}
+                                .emit();
 
-                        LOG_INFO("Disable camera for: {} (Status ID: {})",
-                                 imagePath.filename().string(),
-                                 m_enabledStatus[imagePath]);
+                            LOG_INFO("Set status enabled for camera : {} (Status : {})",
+                                     imagePath.filename().string(),
+                                     m_enabledStatus[imagePath]);
+                        } else {
+                            // Log warning if camera data not found
+                            LOG_WARN("Camera data not found for: {}", imagePath.filename().string());
+                        }
                     } 
 
                     ImGui::EndPopup();
@@ -582,6 +601,8 @@ namespace gs::gui {
         std::ranges::sort(m_imagePaths, [](const auto& a, const auto& b) {
             return a.filename() < b.filename();
         });
+
+        m_numEnabledImages = m_imagePaths.size();
 
         LOG_INFO("Loaded {} images from dataset: {}", m_imagePaths.size(), path.string());
     }
