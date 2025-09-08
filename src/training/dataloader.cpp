@@ -7,7 +7,7 @@
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include <algorithm>
-#include <c10/cuda/CUDAGuard.h> // Add this include for CUDAStreamGuard
+#include <c10/cuda/CUDAGuard.h>
 
 namespace gs::training {
 
@@ -17,11 +17,11 @@ namespace gs::training {
         : dataset_(dataset),
           num_workers_(num_workers) {
 
-        // Get cameras
-        const auto& cameras = dataset_->get_cameras();
+        // Get the actual dataset size (respects train/val split)
+        size_t dataset_size = dataset_->size().value();
 
-        // Initialize indices for random sampling
-        indices_.resize(cameras.size());
+        // Initialize indices for the dataset (not all cameras!)
+        indices_.resize(dataset_size);
         std::iota(indices_.begin(), indices_.end(), 0);
         std::shuffle(indices_.begin(), indices_.end(), rng_);
 
@@ -31,10 +31,15 @@ namespace gs::training {
         buffer_pool_.reserve(buffer_count);
 
         LOG_INFO("Pre-allocating {} GPU buffers for efficient dataloader", buffer_count);
+        LOG_INFO("Dataset size: {} images", dataset_size);
 
         // Estimate size from first image
-        if (!cameras.empty()) {
-            auto [w, h, c] = get_image_info(cameras[0]->image_path());
+        if (dataset_size > 0) {
+            // Get first camera through the dataset to respect the split
+            auto first_example = dataset_->get(0);
+            Camera* first_camera = first_example.data.camera;
+
+            auto [w, h, c] = get_image_info(first_camera->image_path());
             int resize = dataset_->get_resize_factor();
             if (resize > 1) {
                 w /= resize;
@@ -92,7 +97,7 @@ namespace gs::training {
                 }
             }
             // If no buffer available, wait a bit
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
         }
         return nullptr;
     }
@@ -104,7 +109,6 @@ namespace gs::training {
     }
 
     void EfficientDataLoader::worker_thread(int worker_id) {
-        const auto& cameras = dataset_->get_cameras();
         const int resize_factor = dataset_->get_resize_factor();
 
         // Create a dedicated CUDA stream for this worker
@@ -123,7 +127,7 @@ namespace gs::training {
             }
 
             // Get next index
-            size_t cam_idx;
+            size_t dataset_idx;
             {
                 std::lock_guard<std::mutex> lock(index_mutex_);
                 if (next_index_ >= indices_.size()) {
@@ -132,22 +136,23 @@ namespace gs::training {
                     next_index_ = 0;
                     LOG_TRACE("Worker {} reshuffled dataset for new epoch", worker_id);
                 }
-                cam_idx = indices_[next_index_++];
+                dataset_idx = indices_[next_index_++];
             }
 
-            Camera* camera = cameras[cam_idx].get();
+            // This ensures we only get images that belong to this dataset's split
+            auto dataset_example = dataset_->get(dataset_idx);
+            Camera* camera = dataset_example.data.camera;
 
             // Acquire a buffer slot
             BufferSlot* slot = acquire_buffer();
             if (!slot)
                 continue;
 
-            // Load image data
+            // Load image data using image_io's standard function
             auto [data, w, h, c] = load_image(camera->image_path(), resize_factor);
 
             // Update camera dimensions
-            camera->_image_width = w;
-            camera->_image_height = h;
+            camera->update_image_dimensions(w, h);
 
             // Check if buffer needs resize
             if (slot->last_width != w || slot->last_height != h) {
@@ -162,11 +167,11 @@ namespace gs::training {
                 slot->last_height = h;
             }
 
-            // Use stream for this worker - FIXED: use c10::cuda::CUDAStreamGuard
+            // Use stream for this worker
             c10::cuda::CUDAStreamGuard guard(stream);
 
             // Transfer to GPU with minimal allocations
-            // Create pinned tensor without copying
+            // Create pinned tensor WITHOUT copying - just wrapping the existing data
             auto pinned = torch::from_blob(
                 data,
                 {h, w, c},
@@ -186,7 +191,7 @@ namespace gs::training {
             // Synchronize this stream
             stream.synchronize();
 
-            // Free CPU memory
+            // Free CPU memory using image_io's function
             free_image(data);
 
             // Create the example - clone() here is cheap as it just increments ref count
@@ -227,7 +232,7 @@ namespace gs::training {
         return example;
     }
 
-    // Factory function - new efficient implementation
+    // Factory function
     std::unique_ptr<InfiniteDataLoaderWrapper>
     create_efficient_infinite_dataloader(
         std::shared_ptr<CameraDataset> dataset,
