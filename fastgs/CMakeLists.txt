@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-cmake_minimum_required(VERSION 3.24...3.30)
+cmake_minimum_required(VERSION 3.30)
 
 # TODO: This file is a bit of a mess and needs to be cleaned up.
 
