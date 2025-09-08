@@ -1,4 +1,4 @@
-# Tutorial: Add a New Tool to 3DGS Visualizer
+# Tools
 
 1. **Create tool files**: `src/visualizer/tools/your_tool.hpp` and `.cpp`
    - Inherit from `ToolBase`, implement: `getName()`, `getDescription()`, `renderUI()`
