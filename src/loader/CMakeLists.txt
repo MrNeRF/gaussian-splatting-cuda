@@ -85,8 +85,8 @@ target_compile_features(gs_loader PUBLIC cxx_std_23)
 
 # Compiler options
 target_compile_options(gs_loader PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
-        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        $<$<CXX_COMPILER_FRONTEND_VARIANT:GNU>:-Wall -Wextra -Wpedantic>
+        $<$<CXX_COMPILER_FRONTEND_VARIANT:MSVC>:/W4>
 )
 
 # AVX2 support for ply.cpp
