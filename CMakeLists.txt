@@ -308,7 +308,13 @@ target_include_directories(${PROJECT_NAME}
         ${OPENGL_INCLUDE_DIRS}
 )
 
-target_link_libraries(${PROJECT_NAME}
+target_include_directories(gaussian_kernels
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/include  # For generated config.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/kernels
+        ${CUDAToolkit_INCLUDE_DIRS}
+        ${OPENGL_INCLUDE_DIRS}
         PRIVATE
         gaussian_host
         gaussian_kernels

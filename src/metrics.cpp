@@ -285,6 +285,7 @@ namespace gs {
             if (!params.optimization.enable_eval) {
                 return;
             }
+
             // Initialize metrics
             _psnr_metric = std::make_unique<PSNR>(1.0f);
             _ssim_metric = std::make_unique<SSIM>(11, 3);

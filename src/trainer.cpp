@@ -161,7 +161,6 @@ namespace gs {
         // Initialize the evaluator - it handles all metrics internally
         evaluator_ = std::make_unique<metrics::MetricsEvaluator>(params);
 
-        printf("After making eval\n");
         // setup camera cache
         for (const auto& cam : dataset->get_cameras()) {
             m_cam_id_to_cam[cam->uid()] = cam;
