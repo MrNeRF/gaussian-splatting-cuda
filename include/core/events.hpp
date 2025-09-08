@@ -156,7 +156,7 @@ namespace gs {
             EVENT(ConsoleResult, std::string command; std::string result;);
             EVENT(SplitPositionChanged, float position;);
             EVENT(GTComparisonModeChanged, bool enabled;); // NEW: GT comparison mode changed
-        }                                                  // namespace ui
+        } // namespace ui
 
         // ============================================================================
         // Internal - System coordination events (minimal)
@@ -166,7 +166,7 @@ namespace gs {
             EVENT(TrainingReadyToStart, );
             EVENT(WindowFocusLost, );
         } // namespace internal
-    }     // namespace events
+    } // namespace events
 
     // ============================================================================
     // Convenience functions
