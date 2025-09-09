@@ -2,12 +2,15 @@
 
 3DGUT (3D Gaussian Unscented Transform) is an alternative method of rendering proposed by NVIDIA Reasearch that uses raytracing instead of rasterization. Most significantly, it allows rendering and training with nonlinear projections, like camera models with distortion.
 
-## When to use 3DGUT
+## When to Use
 Use 3DGUT when your COLMAP camera model is not PINHOLE or SIMPLE_PINHOLE.
 
 :::warning
 RealityScan (formerly RealityCapture) may export datasets with a camera model that has distortion with images that are undistorted. If you attempt to use 3DGUT with a dataset like this, the results will be incorrect. The `--rc` flag can be used to ignore the distortion parameters in this case.
 :::
+
+## How to Use
+To enable 3DGUT, use the `--gut` flag.
 
 ## Supported Camera Models
 - SIMPLE_PINHOLE
