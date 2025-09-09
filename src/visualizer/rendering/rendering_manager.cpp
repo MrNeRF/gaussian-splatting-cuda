@@ -201,36 +201,39 @@ namespace gs::visualizer {
         events::cmd::ToggleSplitView::when([this](const auto&) {
             std::lock_guard<std::mutex> lock(settings_mutex_);
 
-            // Cycle through modes: Disabled -> PLY -> GT -> Disabled
-            switch (settings_.split_view_mode) {
-            case SplitViewMode::Disabled:
-                settings_.split_view_mode = SplitViewMode::PLYComparison;
-                LOG_INFO("Split view: PLY comparison mode");
-                break;
-            case SplitViewMode::PLYComparison:
-                settings_.split_view_mode = SplitViewMode::GTComparison;
-                LOG_INFO("Split view: GT comparison mode");
-                break;
-            case SplitViewMode::GTComparison:
+            // V key toggles between Disabled and PLYComparison only
+            if (settings_.split_view_mode == SplitViewMode::PLYComparison) {
                 settings_.split_view_mode = SplitViewMode::Disabled;
                 LOG_INFO("Split view: disabled");
-                break;
+            } else {
+                // From Disabled or GTComparison, go to PLYComparison
+                settings_.split_view_mode = SplitViewMode::PLYComparison;
+                LOG_INFO("Split view: PLY comparison mode");
             }
 
             settings_.split_view_offset = 0; // Reset when toggling
             markDirty();
         });
 
-        // Listen for GT comparison toggle
+        // Listen for GT comparison toggle (G key - for camera/GT comparison)
         events::cmd::ToggleGTComparison::when([this](const auto&) {
             std::lock_guard<std::mutex> lock(settings_mutex_);
 
+            // G key toggles between Disabled and GTComparison only
             if (settings_.split_view_mode == SplitViewMode::GTComparison) {
                 settings_.split_view_mode = SplitViewMode::Disabled;
                 LOG_INFO("GT comparison disabled");
             } else {
+                // Check if we can actually do GT comparison
+                if (current_camera_id_ < 0) {
+                    LOG_WARN("Cannot enable GT comparison: no camera selected. Use arrow keys or click a camera to select one.");
+                    // Don't change the mode
+                    return;
+                }
+
+                // From Disabled or PLYComparison, go to GTComparison
                 settings_.split_view_mode = SplitViewMode::GTComparison;
-                LOG_INFO("GT comparison enabled");
+                LOG_INFO("GT comparison enabled for camera {}", current_camera_id_);
             }
 
             markDirty();
@@ -245,6 +248,12 @@ namespace gs::visualizer {
         events::cmd::GoToCamView::when([this](const auto& event) {
             setCurrentCameraId(event.cam_id);
             LOG_DEBUG("Current camera ID set to: {}", event.cam_id);
+
+            // If GT comparison was waiting for a camera, re-enable rendering
+            if (settings_.split_view_mode == SplitViewMode::GTComparison && event.cam_id >= 0) {
+                LOG_INFO("Camera {} selected, GT comparison now active", event.cam_id);
+                markDirty();
+            }
         });
 
         // Listen for split position changes
@@ -303,6 +312,15 @@ namespace gs::visualizer {
             LOG_DEBUG("Scene loaded, marking render dirty");
             markDirty();
             gt_texture_cache_.clear(); // Clear GT cache when scene changes
+
+            // Reset current camera ID when loading a new scene
+            current_camera_id_ = -1;
+
+            // If GT comparison is enabled but we lost the camera, disable it
+            if (settings_.split_view_mode == SplitViewMode::GTComparison) {
+                LOG_INFO("Scene loaded, disabling GT comparison (camera selection reset)");
+                settings_.split_view_mode = SplitViewMode::Disabled;
+            }
         });
 
         events::state::SceneChanged::when([this](const auto&) {
@@ -780,7 +798,13 @@ namespace gs::visualizer {
         // Handle GT comparison mode
         if (settings_.split_view_mode == SplitViewMode::GTComparison) {
             if (current_camera_id_ < 0) {
-                LOG_WARN("GT comparison mode but no camera selected");
+                // Log this only once per second to avoid spam
+                static auto last_log_time = std::chrono::steady_clock::now();
+                auto now = std::chrono::steady_clock::now();
+                if (now - last_log_time > std::chrono::seconds(1)) {
+                    LOG_INFO("GT comparison enabled but no camera selected. Use arrow keys or click a camera to select one.");
+                    last_log_time = now;
+                }
                 return std::nullopt;
             }
 
@@ -794,6 +818,7 @@ namespace gs::visualizer {
             auto cam = trainer_manager->getCamById(current_camera_id_);
             if (!cam) {
                 LOG_WARN("Camera {} not found", current_camera_id_);
+                current_camera_id_ = -1; // Reset invalid camera ID
                 return std::nullopt;
             }
 
@@ -817,6 +842,8 @@ namespace gs::visualizer {
                 LOG_ERROR("Failed to get cached render for GT comparison");
                 return std::nullopt;
             }
+
+            LOG_TRACE("Creating GT comparison split view for camera {}", current_camera_id_);
 
             return gs::rendering::SplitViewRequest{
                 .panels = {
@@ -849,12 +876,16 @@ namespace gs::visualizer {
         if (settings_.split_view_mode == SplitViewMode::PLYComparison) {
             auto visible_nodes = scene_manager->getScene().getVisibleNodes();
             if (visible_nodes.size() < 2) {
+                LOG_TRACE("PLY comparison needs at least 2 visible nodes, have {}", visible_nodes.size());
                 return std::nullopt;
             }
 
             // Calculate which pair to show
             size_t left_idx = settings_.split_view_offset % visible_nodes.size();
             size_t right_idx = (settings_.split_view_offset + 1) % visible_nodes.size();
+
+            LOG_TRACE("Creating PLY comparison split view: {} vs {}",
+                      visible_nodes[left_idx]->name, visible_nodes[right_idx]->name);
 
             return gs::rendering::SplitViewRequest{
                 .panels = {

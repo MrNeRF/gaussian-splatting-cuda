@@ -275,6 +275,12 @@ namespace gs::rendering {
                   request.panels[1].label, static_cast<int>(request.panels[1].content_type),
                   request.panels[0].end_position);
 
+        // Always create/resize framebuffers if needed
+        if (auto result = createFramebuffers(request.viewport.size.x, request.viewport.size.y); !result) {
+            LOG_ERROR("Failed to create framebuffers: {}", result.error());
+            return std::unexpected(result.error());
+        }
+
         // Save current OpenGL state
         GLint current_viewport[4];
         glGetIntegerv(GL_VIEWPORT, current_viewport);
@@ -308,10 +314,10 @@ namespace gs::rendering {
                     // Need to render the model - use framebuffer
                     auto* framebuffer = (i == 0) ? left_framebuffer_.get() : right_framebuffer_.get();
 
-                    // Create/resize framebuffer if needed
-                    if (framebuffer->getWidth() != request.viewport.size.x ||
-                        framebuffer->getHeight() != request.viewport.size.y) {
-                        framebuffer->resize(request.viewport.size.x, request.viewport.size.y);
+                    // Ensure framebuffer exists
+                    if (!framebuffer) {
+                        LOG_ERROR("Framebuffer for panel {} is null", i);
+                        return std::unexpected("Framebuffer not initialized");
                     }
 
                     if (auto result = renderPanelContent(framebuffer, panel, request,
@@ -324,14 +330,10 @@ namespace gs::rendering {
             }
         } else {
             // For PLY comparison, render both models to framebuffers
-            // Create/resize framebuffers if needed
-            if (left_framebuffer_->getWidth() != request.viewport.size.x ||
-                left_framebuffer_->getHeight() != request.viewport.size.y) {
-                left_framebuffer_->resize(request.viewport.size.x, request.viewport.size.y);
-            }
-            if (right_framebuffer_->getWidth() != request.viewport.size.x ||
-                right_framebuffer_->getHeight() != request.viewport.size.y) {
-                right_framebuffer_->resize(request.viewport.size.x, request.viewport.size.y);
+            // Ensure framebuffers exist before using them
+            if (!left_framebuffer_ || !right_framebuffer_) {
+                LOG_ERROR("Framebuffers not initialized for PLY comparison");
+                return std::unexpected("Framebuffers not initialized");
             }
 
             // Render left panel
