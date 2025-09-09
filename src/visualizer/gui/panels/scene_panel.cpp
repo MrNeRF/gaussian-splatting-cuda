@@ -529,7 +529,7 @@ namespace gs::gui {
                                 .cam_id = cam_data_it->second}
                                 .emit();
 
-                            LOG_INFO("Set status disabled for camera: {} (Status : {})",
+                            LOG_INFO("Set status enabled for camera: {} (Status : {})",
                                      imagePath.filename().string(),
                                      m_enabledStatus[imagePath]);
                         } else {
