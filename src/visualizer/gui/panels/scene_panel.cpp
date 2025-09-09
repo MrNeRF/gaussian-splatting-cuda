@@ -160,7 +160,7 @@ namespace gs::gui {
                     else
                         m_numEnabledImages--;
                     LOG_TRACE("Toggle enabled status camera ID {} (New status: {})",
-                              event.cam_id, m_selectedImageIndex);
+                              event.cam_id, m_enabledStatus[m_imagePaths[m_selectedImageIndex]]);
                 }
                 break;
             }
