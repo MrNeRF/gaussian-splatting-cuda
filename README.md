@@ -50,16 +50,16 @@ Join our growing community for discussions, support, and updates:
 ### Second Bounty: Better 3DGS Initialization and Training without Densification
 **$2,600 + $500 Bonus Challenge**
 
-Details: [Issue #284](https://github.com/MrNeRF/gaussian-splatting-cuda/issues/284)
+Details: [Issue #284](https://github.com/MrNeRF/LichtFeld-Studio/issues/284)
 
-Previous winner: [Florian Hahlbohm](https://github.com/MrNeRF/gaussian-splatting-cuda/pull/245) (2.4x rasterizer speedup)
+Previous winner: [Florian Hahlbohm](https://github.com/MrNeRF/LichtFeld-Studio/pull/245) (2.4x rasterizer speedup)
 
 ## Quick Start
 
 ```bash
 # Clone and build (Linux)
-git clone https://github.com/MrNeRF/gaussian-splatting-cuda
-cd gaussian-splatting-cuda
+git clone https://github.com/MrNeRF/LichtFeld-Studio
+cd LichtFeld-Studio
 
 # Download LibTorch
 wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip  
@@ -79,10 +79,10 @@ cmake --build build -- -j$(nproc)
 
 #### Software
 - **OS**: Linux (Ubuntu 22.04+) or Windows
-- **CMake**: 3.24 or higher
+- **CMake**: 3.30 or higher
 - **Compiler**: C++23 compatible (GCC 14+ or Clang 17+)
 - **CUDA**: 12.8 or higher (required)
-- **Python**: With development headers
+  
 - **LibTorch**: 2.7.0 (setup instructions below)
 - **vcpkg**: For dependency management
 
@@ -105,8 +105,8 @@ cd vcpkg && ./bootstrap-vcpkg.sh -disableMetrics && cd ..
 export VCPKG_ROOT=/path/to/vcpkg  # Add to ~/.bashrc
 
 # Clone repository
-git clone https://github.com/MrNeRF/gaussian-splatting-cuda
-cd gaussian-splatting-cuda
+git clone https://github.com/MrNeRF/LichtFeld-Studio
+cd LichtFeld-Studio
 
 # Download LibTorch 2.7.0 with CUDA 12.8
 wget https://download.pytorch.org/libtorch/cu128/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu128.zip  
@@ -126,8 +126,10 @@ cmake --build build -- -j$(nproc)
 
 <details>
 <summary><b>Windows Build</b></summary>
+    
+note: [Detailed instructions here](https://github.com/MrNeRF/LichtFeld-Studio/blob/master/docs/docs/installation/building/windows.md)
 
-Run in **VS Developer Command Prompt**:
+Run in <u>**x64 native tools command prompt for VS**</u>:
 
 ```bash
 # Set up vcpkg (one-time setup)
@@ -138,8 +140,8 @@ cd vcpkg && .\bootstrap-vcpkg.bat -disableMetrics && cd ..
 set VCPKG_ROOT=%CD%\vcpkg
 
 # Clone repository
-git clone https://github.com/MrNeRF/gaussian-splatting-cuda
-cd gaussian-splatting-cuda
+git clone https://github.com/MrNeRF/LichtFeld-Studio
+cd LichtFeld-Studio
 
 # Create directories
 if not exist external mkdir external
@@ -156,13 +158,17 @@ curl -L -o libtorch-release.zip https://download.pytorch.org/libtorch/cu128/libt
 tar -xf libtorch-release.zip -C external\release
 del libtorch-release.zip
 
-# Build
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+# Build 
 
 ## Or if you want you can specify your own vcpkg 
-# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
+# cmake -B build -DCMAKE_BUILD_TYPE=Release -G ninja -DCMAKE_TOOLCHAIN_FILE="<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake"
 
-cmake --build build --config Release -j
+# Ninja should be included with Visual Studio installation, 
+# if not you can either install it, 
+# or ignore this flag and use native generator - Building time might be extended
+cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
+
+cmake --build build -j
 ```
 
 </details>
@@ -299,7 +305,7 @@ The implementation uses `weights/lpips_vgg.pt`, exported from `torchmetrics` wit
 ## Project Architecture
 
 ```
-gaussian-splatting-cuda/
+LichtFeld-Studio/
 ├── src/
 │   ├── core/          # Foundation (data structures, utilities)
 │   ├── geometry/      # Geometric operations

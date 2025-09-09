@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24...3.30)
+cmake_minimum_required(VERSION 3.30)
 
 # Get torch from parent
 if(NOT DEFINED TORCH_INCLUDE_DIRS)
@@ -59,7 +59,6 @@ target_include_directories(gsplat_backend
         ${TORCH_INCLUDE_DIRS}
         ${CUDAToolkit_INCLUDE_DIRS}
         PRIVATE
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(gsplat_backend

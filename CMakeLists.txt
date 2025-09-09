@@ -11,8 +11,8 @@ if ("${CMAKE_TOOLCHAIN_FILE}" STREQUAL "")
     set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
 endif()
 
-cmake_minimum_required(VERSION 3.24)
-project(gaussian_splatting_cuda LANGUAGES CUDA CXX C)
+cmake_minimum_required(VERSION 3.30)
+project(LichtFeld-Studio LANGUAGES CUDA CXX C)
 
 # Setup
 get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
@@ -97,11 +97,11 @@ if(NVIDIA_SMI)
     )
 
     message(STATUS "Detected GPU compute capability: ${DETECTED_COMPUTE_CAP}")
-    set(gaussian_splatting_cuda_CUDA_ARCH "native")
+    set(LichtFeld-Studio_CUDA_ARCH "native")
 else()
     message(WARNING "nvidia-smi not found! We are likely in CI, default to 8.6.")
     set(DETECTED_COMPUTE_CAP 8.6)
-    set(gaussian_splatting_cuda_CUDA_ARCH "86")
+    set(LichtFeld-Studio_CUDA_ARCH "86")
 endif()
 
 
@@ -199,15 +199,15 @@ if(BUILD_CUDA_ALL_SM)
         set(TORCH_CUDA_ARCH_LIST "${TORCH_CUDA_ARCH_LIST}" CACHE STRING "Torch CUDA arch list" FORCE)
 
         # Per target CUDA architectures for CMake to be set after find_package(Torch)
-        set(gaussian_splatting_cuda_CUDA_ARCH "${CUDA_SMS};${_max_sm}-virtual")
-        message(STATUS "CUDA architectures (auto >=${BUILD_CUDA_ALL_MIN_SM}): ${gaussian_splatting_cuda_CUDA_ARCH}")
+        set(LichtFeld-Studio_CUDA_ARCH "${CUDA_SMS};${_max_sm}-virtual")
+        message(STATUS "CUDA architectures (auto >=${BUILD_CUDA_ALL_MIN_SM}): ${LichtFeld-Studio_CUDA_ARCH}")
         message(STATUS "TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST}")
     else()
         message(FATAL_ERROR "Failed to detect any CUDA architecture >= ${BUILD_CUDA_ALL_MIN_SM}. Please check your CUDA toolkit installation.")
     endif()
 else()
     # Native NVidia family only
-    message(STATUS "CUDA architectures: ${gaussian_splatting_cuda_CUDA_ARCH} (native)")
+    message(STATUS "CUDA architectures: ${LichtFeld-Studio_CUDA_ARCH} (native)")
     # Set Torch to the detected compute capability
     set(TORCH_CUDA_ARCH_LIST "${DETECTED_COMPUTE_CAP}" CACHE STRING "Torch CUDA arch list" FORCE)
     message(STATUS "TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST}")
@@ -256,13 +256,14 @@ find_package(imgui REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(args REQUIRED)
 find_package(spdlog REQUIRED)
-find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 find_package(Freetype REQUIRED)
+find_package(WebP REQUIRED)
+find_package(LibArchive REQUIRED)
 
 # TORCH_CUDA_ARCH_LIST is already defined by Torch
 # use it here as the global default CUDA architecture list too
-if(gaussian_splatting_cuda_CUDA_ARCH)
-    set(CMAKE_CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}" CACHE STRING "CUDA architectures" FORCE)
+if(LichtFeld-Studio_CUDA_ARCH)
+    set(CMAKE_CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}" CACHE STRING "CUDA architectures" FORCE)
 endif()
 
 if(WIN32)
@@ -320,8 +321,8 @@ endif()
 add_subdirectory(gsplat)
 add_subdirectory(fastgs)
 
-set_target_properties(gsplat_backend PROPERTIES CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
-set_target_properties(fastgs_backend PROPERTIES CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}")
+set_target_properties(gsplat_backend PROPERTIES CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}")
+set_target_properties(fastgs_backend PROPERTIES CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}")
 
 # =============================================================================
 # SHARED CUDA KERNELS (only if needed)
@@ -331,12 +332,18 @@ if(CUDA_GL_INTEROP_FOUND)
     list(APPEND KERNEL_SOURCES kernels/cuda_gl_interop.cu)
 endif()
 
+# Add SOG-related kernels
+list(APPEND KERNEL_SOURCES
+        kernels/morton_encoding.cu
+        kernels/kmeans.cu
+)
+
 # Only create gaussian_kernels if there are kernels
 if(KERNEL_SOURCES)
     add_library(gs_kernels STATIC ${KERNEL_SOURCES})
 
     set_target_properties(gs_kernels PROPERTIES
-            CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
+            CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}"
             CUDA_SEPARABLE_COMPILATION ON
             POSITION_INDEPENDENT_CODE ON
             CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -350,7 +357,6 @@ if(KERNEL_SOURCES)
             ${CUDAToolkit_INCLUDE_DIRS}
             ${OPENGL_INCLUDE_DIRS}
             PRIVATE
-            ${Python3_INCLUDE_DIRS}
     )
 
     target_link_libraries(gs_kernels
@@ -390,7 +396,7 @@ add_subdirectory(src/visualizer)  # GUI and visualization
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
-        CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
+        CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}"
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
@@ -399,7 +405,7 @@ target_include_directories(${PROJECT_NAME}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_BINARY_DIR}/include
-        ${Python3_INCLUDE_DIRS}
+        
         ${CUDAToolkit_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
@@ -416,7 +422,7 @@ target_link_libraries(${PROJECT_NAME}
         gs_kernels
         gsplat_backend
         fastgs_backend
-        Python3::Python
+        
         ${OPENGL_LIBRARIES}
         CUDA::cudart
         spdlog::spdlog
@@ -500,24 +506,24 @@ if(BUILD_TESTS)
             tests/test_management.cpp
     )
 
-    add_executable(gaussian_tests ${TEST_SOURCES})
+    add_executable(lichtfeld_tests ${TEST_SOURCES})
 
-    set_target_properties(gaussian_tests PROPERTIES
-            CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
+    set_target_properties(lichtfeld_tests PROPERTIES
+            CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}"
             CUDA_SEPARABLE_COMPILATION ON
             CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
 
-    target_include_directories(gaussian_tests PRIVATE
+    target_include_directories(lichtfeld_tests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${CMAKE_CURRENT_BINARY_DIR}/include
             ${CMAKE_CURRENT_SOURCE_DIR}/tests
-            ${Python3_INCLUDE_DIRS}
+            
             ${CUDAToolkit_INCLUDE_DIRS}
             ${OPENGL_INCLUDE_DIRS}
     )
 
-    target_link_libraries(gaussian_tests PRIVATE
+    target_link_libraries(lichtfeld_tests PRIVATE
             gs_core
             gs_geometry
             gs_project
@@ -530,44 +536,44 @@ if(BUILD_TESTS)
             fastgs_backend
             GTest::gtest
             GTest::gtest_main
-            Python3::Python
+            
             ${OPENGL_LIBRARIES}
             CUDA::cudart
             spdlog::spdlog
     )
 
-    target_compile_options(gaussian_tests PRIVATE
+    target_compile_options(lichtfeld_tests PRIVATE
             $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Debug>>:-G -lineinfo -Xcudafe --device-debug>
     )
 
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_data")
-        add_custom_command(TARGET gaussian_tests POST_BUILD
+        add_custom_command(TARGET lichtfeld_tests POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${CMAKE_CURRENT_SOURCE_DIR}/test_data"
-                "$<TARGET_FILE_DIR:gaussian_tests>/test_data"
+                "$<TARGET_FILE_DIR:lichtfeld_tests>/test_data"
         )
     endif()
 
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt")
-        add_custom_command(TARGET gaussian_tests POST_BUILD
+        add_custom_command(TARGET lichtfeld_tests POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory
-                "$<TARGET_FILE_DIR:gaussian_tests>/tests/data"
+                "$<TARGET_FILE_DIR:lichtfeld_tests>/tests/data"
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/test_garden_data.pt"
-                "$<TARGET_FILE_DIR:gaussian_tests>/tests/data/"
+                "$<TARGET_FILE_DIR:lichtfeld_tests>/tests/data/"
         )
     endif()
 
     include(GoogleTest)
-    gtest_discover_tests(gaussian_tests)
+    gtest_discover_tests(lichtfeld_tests)
 
     add_custom_target(run_tests
             COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-            DEPENDS gaussian_tests
+            DEPENDS lichtfeld_tests
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
 
-    message(STATUS "Tests enabled. Build with 'make gaussian_tests' and run with 'make run_tests' or 'ctest'")
+    message(STATUS "Tests enabled. Build with 'make lichtfeld_tests' and run with 'make run_tests' or 'ctest'")
 endif()
 
 # =============================================================================
@@ -578,9 +584,10 @@ message(STATUS "Build Configuration:")
 message(STATUS "  CUDA Version: ${CUDAToolkit_VERSION}")
 message(STATUS "  CUDA Archs: ${CMAKE_CUDA_ARCHITECTURES}")
 message(STATUS "  Torch Version: ${Torch_VERSION}")
-message(STATUS "  Python Version: ${Python3_VERSION}")
 message(STATUS "  OpenGL Found: ${OPENGL_FOUND}")
 message(STATUS "  FreeType Found: ${FREETYPE_FOUND}")
+message(STATUS "  WebP Found: ${WebP_FOUND}")
+message(STATUS "  LibArchive Found: ${LibArchive_FOUND}")
 message(STATUS "  CUDA-GL Interop Option: ${ENABLE_CUDA_GL_INTEROP}")
 message(STATUS "  CUDA-GL Interop Available: ${CUDA_GL_INTEROP_FOUND}")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")

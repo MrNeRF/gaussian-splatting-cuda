@@ -55,6 +55,7 @@ namespace gs {
             EVENT(SetPLYVisibility, std::string name; bool visible;);
             EVENT(CyclePLY, );
             EVENT(ToggleSplitView, );
+            EVENT(ToggleGTComparison, );
         } // namespace cmd
 
         // ============================================================================
@@ -84,7 +85,7 @@ namespace gs {
             EVENT(SceneLoaded,
                   Scene* scene;
                   std::filesystem::path path;
-                  enum class Type{PLY, Dataset} type;
+                  enum class Type{PLY, Dataset, SOG} type;
                   size_t num_gaussians;);
             EVENT(SceneCleared, );
             EVENT(ModelUpdated, int iteration; size_t num_gaussians;);
@@ -154,6 +155,7 @@ namespace gs {
             EVENT(CropBoxVisibilityChanged, bool visible;);
             EVENT(ConsoleResult, std::string command; std::string result;);
             EVENT(SplitPositionChanged, float position;);
+            EVENT(GTComparisonModeChanged, bool enabled;); // NEW: GT comparison mode changed
         } // namespace ui
 
         // ============================================================================

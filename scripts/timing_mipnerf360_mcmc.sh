@@ -27,11 +27,12 @@ do
     scene_start=$(date +%s)
     
     # Run training with evaluation
-    ./build/gaussian_splatting_cuda \
+    ./build/LichtFeld-Studio \
         -d $SCENE_DIR/$SCENE/ \
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
         --iter 30000 \
+        --num-workers 8 \
         --headless \
 	--strategy mcmc
 

@@ -55,7 +55,6 @@ target_include_directories(gs_visualizer
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/src
         ${OPENGL_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
 )
 
 # Link dependencies
@@ -76,7 +75,6 @@ target_link_libraries(gs_visualizer
         TBB::tbb
         spdlog::spdlog
         nlohmann_json::nlohmann_json
-        Python3::Python
         CUDA::cudart
         ${OPENGL_LIBRARIES}
 )
@@ -86,8 +84,8 @@ target_compile_features(gs_visualizer PUBLIC cxx_std_23)
 
 # Compiler options
 target_compile_options(gs_visualizer PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
-        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        $<$<CXX_COMPILER_FRONTEND_VARIANT:GNU>:-Wall -Wextra -Wpedantic>
+        $<$<CXX_COMPILER_FRONTEND_VARIANT:MSVC>:/W4>
         $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:GNU,Clang>>:-O0 -g>
         $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O3>
 )
@@ -154,7 +152,7 @@ install(FILES ${CMAKE_SOURCE_DIR}/include/visualizer/visualizer.hpp
 
 # Optionally install resources
 install(DIRECTORY ${VISUALIZER_SOURCE_RESOURCE_DIR}/
-        DESTINATION share/gaussian_splatting/visualizer/resources
+        DESTINATION share/LichtFeld-Studio/visualizer/resources
         FILES_MATCHING
         PATTERN "*.vert"
         PATTERN "*.frag"

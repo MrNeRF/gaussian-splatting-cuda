@@ -12,16 +12,32 @@ out vec4 FragColor;
 // Uniforms
 uniform vec3 viewPos;
 uniform bool enableShading;
-uniform int highlightIndex = -1;  // Default value for when not highlighting
-uniform vec3 highlightColor = vec3(1.0, 1.0, 0.0);  // Default yellow highlight
+uniform int highlightIndex = -1;
+uniform vec3 highlightColor = vec3(1.0, 0.85, 0.0);
+uniform bool pickingMode = false;
+uniform float minimumPickDistance = 0.5;
 
 void main() {
+    // Calculate distance from camera to fragment
+    float distance = length(viewPos - FragPos);
+    
+    // In picking mode, discard fragments that are too close
+    if (pickingMode) {
+        if (distance < minimumPickDistance) {
+            discard;  // Don't render this fragment for picking
+        }
+        // In picking mode, just output the encoded color
+        FragColor = vertexColor;
+        return;
+    }
+    
+    // Normal rendering mode
     vec4 finalColor = vertexColor;
 
     // Apply highlight if this instance is selected
     if (instanceID == highlightIndex) {
         finalColor.rgb = highlightColor;
-        finalColor.a = 1.0;  // Make highlighted frustum more opaque
+        finalColor.a = min(1.0, finalColor.a + 0.3);  // Make highlighted frustum more opaque
     }
 
     if (enableShading) {
@@ -36,8 +52,9 @@ void main() {
 
         finalColor.rgb *= lighting;
     } else {
-        // Wireframe - darker for contrast
-        finalColor = vec4(0.0, 0.0, 0.0, 1.0);
+        // Wireframe - use the instance color but darker
+        finalColor.rgb *= 0.3;
+        finalColor.a = 1.0;
     }
 
     FragColor = finalColor;

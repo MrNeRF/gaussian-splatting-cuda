@@ -26,5 +26,8 @@ namespace gs::training {
         virtual gs::SplatData& get_model() = 0;
 
         virtual const gs::SplatData& get_model() const = 0;
+
+        // Remove Gaussians based on mask
+        virtual void remove_gaussians(const torch::Tensor& mask) = 0;
     };
 } // namespace gs::training

@@ -26,7 +26,7 @@ foreach ($SCENE in $SCENE_LIST) {
     $scene_start = Get-Date
     
     # Run training with evaluation
-    & ./build/Release/gaussian_splatting_cuda.exe `
+    & ./build/Release/LichtFeld-Studio.exe `
         -d "$SCENE_DIR/$SCENE/" `
         -o "$RESULT_DIR/$SCENE/" `
         --images "images_$DATA_FACTOR" `

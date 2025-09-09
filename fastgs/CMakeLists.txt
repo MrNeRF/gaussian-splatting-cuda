@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-cmake_minimum_required(VERSION 3.24...3.30)
+cmake_minimum_required(VERSION 3.30)
 
 # TODO: This file is a bit of a mess and needs to be cleaned up.
 
@@ -42,7 +42,6 @@ target_include_directories(fastgs_backend
         ${OPENGL_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
         PRIVATE
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(fastgs_backend

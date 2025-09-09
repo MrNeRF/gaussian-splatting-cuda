@@ -6,6 +6,7 @@
 set(TRAINING_HOST_SOURCES
         trainer.cpp
         training_setup.cpp
+        dataloader.cpp
 
         # Rasterization
         rasterization/rasterizer.cpp
@@ -28,6 +29,7 @@ set(TRAINING_HOST_SOURCES
         # Components
         components/bilateral_grid.cpp
         components/poseopt.cpp
+        components/sparsity_optimizer.cpp
 )
 
 # CUDA kernel sources
@@ -42,7 +44,7 @@ set(TRAINING_KERNEL_SOURCES
 add_library(gs_training_kernels STATIC ${TRAINING_KERNEL_SOURCES})
 
 set_target_properties(gs_training_kernels PROPERTIES
-        CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
+        CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}"
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -58,7 +60,6 @@ target_include_directories(gs_training_kernels
         ${CMAKE_SOURCE_DIR}/gsplat
         ${CMAKE_SOURCE_DIR}/fastgs
         ${CUDAToolkit_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(gs_training_kernels
@@ -88,16 +89,15 @@ target_include_directories(gs_training
         ${CMAKE_SOURCE_DIR}/gsplat
         ${CMAKE_SOURCE_DIR}/fastgs
         ${CUDAToolkit_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIRS}
 )
 
 target_link_libraries(gs_training
         PUBLIC
-        gs_core              # CHANGED: Use modular core library instead of gaussian_host
-        gs_training_kernels  # Training-specific kernels
-        gs_kernels           # CHANGED: Use modular kernels instead of gaussian_kernels
-        gs_loader           # For loading datasets
+        gs_core
+        gs_training_kernels
+        gs_kernels
+        gs_loader
         gsplat_backend
         fastgs_backend
         ${TORCH_LIBRARIES}
@@ -105,7 +105,6 @@ target_link_libraries(gs_training
         nlohmann_json::nlohmann_json
         glm::glm
         Threads::Threads
-        Python3::Python
         CUDA::cudart
         spdlog::spdlog
         PRIVATE

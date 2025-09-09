@@ -56,8 +56,22 @@ namespace gs::rendering {
     };
 
     // Split view support
+    enum class PanelContentType {
+        Model3D,     // Regular 3D model rendering
+        Image2D,     // GT image display
+        CachedRender // Previously rendered frame
+    };
+
     struct SplitViewPanel {
-        const SplatData* model;
+        PanelContentType content_type = PanelContentType::Model3D;
+
+        // For Model3D
+        const SplatData* model = nullptr;
+
+        // For Image2D or CachedRender
+        unsigned int texture_id = 0;
+
+        // Common fields
         std::string label;
         float start_position; // 0.0 to 1.0
         float end_position;   // 0.0 to 1.0
@@ -248,6 +262,24 @@ namespace gs::rendering {
             float scale = 0.1f,
             const glm::vec3& train_color = glm::vec3(0.0f, 1.0f, 0.0f),
             const glm::vec3& eval_color = glm::vec3(1.0f, 0.0f, 0.0f)) = 0;
+
+        // Camera frustum rendering with highlighting
+        virtual Result<void> renderCameraFrustumsWithHighlight(
+            const std::vector<std::shared_ptr<const Camera>>& cameras,
+            const ViewportData& viewport,
+            float scale = 0.1f,
+            const glm::vec3& train_color = glm::vec3(0.0f, 1.0f, 0.0f),
+            const glm::vec3& eval_color = glm::vec3(1.0f, 0.0f, 0.0f),
+            int highlight_index = -1) = 0;
+
+        // Camera frustum picking
+        virtual Result<int> pickCameraFrustum(
+            const std::vector<std::shared_ptr<const Camera>>& cameras,
+            const glm::vec2& mouse_pos,
+            const glm::vec2& viewport_pos,
+            const glm::vec2& viewport_size,
+            const ViewportData& viewport,
+            float scale = 0.1f) = 0;
 
         // Get gizmo interaction interface
         virtual std::shared_ptr<GizmoInteraction> getGizmoInteraction() = 0;

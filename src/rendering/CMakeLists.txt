@@ -61,7 +61,6 @@ target_include_directories(gs_rendering
         ${CMAKE_CURRENT_SOURCE_DIR}/cuda/utils
         ${CMAKE_SOURCE_DIR}/src
         ${OPENGL_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
 )
 
 # Handle shaders

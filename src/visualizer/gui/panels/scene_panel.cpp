@@ -54,6 +54,11 @@ namespace gs::gui {
                 LOG_TRACE("Updated PLY '{}' visibility in scene panel to: {}", event.name, event.visible);
             }
         });
+
+        // Listen for GoToCamView to sync selection
+        events::cmd::GoToCamView::when([this](const auto& event) {
+            handleGoToCamView(event);
+        });
     }
 
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
@@ -135,6 +140,22 @@ namespace gs::gui {
 
         // Update current mode based on active tab
         updateModeFromTab();
+    }
+
+    void ScenePanel::handleGoToCamView(const events::cmd::GoToCamView& event) {
+        // Find the image path for this camera ID
+        for (const auto& [path, cam_id] : m_PathToCamId) {
+            if (cam_id == event.cam_id) {
+                // Find index in sorted image list
+                if (auto it = std::find(m_imagePaths.begin(), m_imagePaths.end(), path); it != m_imagePaths.end()) {
+                    m_selectedImageIndex = static_cast<int>(std::distance(m_imagePaths.begin(), it));
+                    m_needsScrollToSelection = true; // Mark that we need to scroll
+                    LOG_TRACE("Synced image selection to camera ID {} (index {})",
+                              event.cam_id, m_selectedImageIndex);
+                }
+                break;
+            }
+        }
     }
 
     void ScenePanel::updatePLYNodes() {
@@ -333,7 +354,7 @@ namespace gs::gui {
 
                 // Show gaussian count
                 ImGui::SameLine();
-                ImGui::TextDisabled("(%zu)", node.gaussian_count);
+                ImGui::TextColored(ImVec4(0.2f, 0.2f, 0.2f, 1), "(%zu)", node.gaussian_count);
 
                 // Selection
                 if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
@@ -403,6 +424,9 @@ namespace gs::gui {
             ImGui::Text("Images (%zu):", m_imagePaths.size());
             ImGui::Separator();
 
+            // Track if we need to scroll to the selected item
+            bool should_scroll = false;
+
             for (size_t i = 0; i < m_imagePaths.size(); ++i) {
                 const auto& imagePath = m_imagePaths[i];
                 std::string filename = imagePath.filename().string();
@@ -413,9 +437,27 @@ namespace gs::gui {
                 // Check if this item is selected
                 bool is_selected = (m_selectedImageIndex == static_cast<int>(i));
 
+                // Push a different color for selected items to make them more visible
+                if (is_selected) {
+                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.6f, 0.9f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                }
+
                 if (ImGui::Selectable(unique_id.c_str(), is_selected)) {
                     m_selectedImageIndex = static_cast<int>(i);
                     onImageSelected(imagePath);
+                }
+
+                // Scroll to this item if it's selected and we need to scroll
+                if (is_selected && m_needsScrollToSelection) {
+                    ImGui::SetScrollHereY(0.5f); // Center the selected item
+                    m_needsScrollToSelection = false;
+                    should_scroll = true;
+                }
+
+                if (is_selected) {
+                    ImGui::PopStyleColor(3);
                 }
 
                 // Handle double-click to open image preview
@@ -445,6 +487,10 @@ namespace gs::gui {
                     }
                     ImGui::EndPopup();
                 }
+            }
+
+            if (should_scroll) {
+                LOG_TRACE("Scrolled to selected image at index {}", m_selectedImageIndex);
             }
         } else {
             ImGui::Text("No images loaded.");

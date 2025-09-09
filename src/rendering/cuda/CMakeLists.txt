@@ -12,7 +12,7 @@ set(CUDA_RASTERIZER_SOURCES
 add_library(rendering_cuda_backend STATIC ${CUDA_RASTERIZER_SOURCES})
 
 set_target_properties(rendering_cuda_backend PROPERTIES
-        CUDA_ARCHITECTURES "${gaussian_splatting_cuda_CUDA_ARCH}"
+        CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}"
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
@@ -26,7 +26,6 @@ target_include_directories(rendering_cuda_backend
         ${CMAKE_SOURCE_DIR}/include
         ${CUDAToolkit_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
-        ${Python3_INCLUDE_DIRS}
 )
 
 target_link_libraries(rendering_cuda_backend

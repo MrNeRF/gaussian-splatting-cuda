@@ -243,7 +243,7 @@ namespace gs::gui {
         if (rendering_manager) {
             auto split_info = rendering_manager->getSplitViewInfo();
             if (split_info.enabled) {
-                // Create a small overlay showing which PLYs are being compared
+                // Create a small overlay showing what is being compared
                 const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
                 // Position at top center
@@ -272,12 +272,24 @@ namespace gs::gui {
                 if (ImGui::Begin("##SplitViewIndicator", nullptr, overlay_flags)) {
                     ImGui::SetCursorPos(ImVec2(10, 10));
 
-                    // Draw the split view info
-                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "Split View: %s | %s", split_info.left_name.c_str(), split_info.right_name.c_str());
-
-                    // Add instructions
-                    ImGui::SameLine();
-                    ImGui::TextDisabled(" (T: cycle, V: exit)");
+                    // Draw the split view info - check mode
+                    const auto& settings = rendering_manager->getSettings();
+                    if (settings.split_view_mode == visualizer::SplitViewMode::GTComparison) {
+                        // GT comparison mode
+                        int cam_id = rendering_manager->getCurrentCameraId();
+                        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f),
+                                           "GT Comparison - Camera %d", cam_id);
+                        ImGui::SameLine();
+                        ImGui::TextDisabled(" (G: toggle, V: cycle modes, arrows: change camera)");
+                    } else {
+                        // PLY comparison mode
+                        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f),
+                                           "Split View: %s | %s",
+                                           split_info.left_name.c_str(),
+                                           split_info.right_name.c_str());
+                        ImGui::SameLine();
+                        ImGui::TextDisabled(" (T: cycle, V: exit)");
+                    }
                 }
                 ImGui::End();
 
@@ -563,7 +575,7 @@ namespace gs::gui {
             showWindow(e.window_name, e.show);
         });
 
-        // Handle speed change events (you'll need to add this event type)
+        // Handle speed change events
         ui::SpeedChanged::when([this](const auto& e) {
             showSpeedOverlay(e.current_speed, e.max_speed);
         });

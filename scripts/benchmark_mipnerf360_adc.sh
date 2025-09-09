@@ -32,7 +32,7 @@ do
     echo "========================================="
 
     # Run training with evaluation
-    ./build/gaussian_splatting_cuda \
+    ./build/LichtFeld-Studio \
         -d $SCENE_DIR/$SCENE/ \
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
@@ -40,6 +40,7 @@ do
         --eval \
         --headless \
         --save-eval-images \
+        --num-workers 8 \
         --strategy default
 
     echo "Completed $SCENE"

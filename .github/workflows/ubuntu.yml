@@ -5,10 +5,12 @@ on:
     branches: [ master ]
     paths-ignore:
       - '**.md'
+      - 'docs/**'
   pull_request:
     branches: [ master ]
     paths-ignore:
       - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 jobs:
@@ -26,7 +28,23 @@ jobs:
       - name: Install GCC 14 and dependencies
         run: |
           apt-get update
-          apt-get install -y git curl unzip cmake gcc-14 g++-14 ccache
+
+          # install cmake from https://apt.kitware.com to get cmake 3.30+
+          
+          apt-get install -y ca-certificates gpg wget 
+
+          test -f /usr/share/doc/kitware-archive-keyring/copyright ||
+          wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+          
+          echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ noble main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
+          apt-get update
+
+          test -f /usr/share/doc/kitware-archive-keyring/copyright ||
+          rm /usr/share/keyrings/kitware-archive-keyring.gpg
+
+          apt-get install -y kitware-archive-keyring
+
+          apt-get install -y git curl unzip cmake gcc-14 g++-14 ccache ninja-build
           update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100 \
                               --slave /usr/bin/g++ g++ /usr/bin/g++-14
 
@@ -61,9 +79,17 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-
 
+      - name: Cache vcpkg binary archives
+        uses: actions/cache@v4
+        with:
+          path: /github/home/.cache/vcpkg/archives
+          key: vcpkg-binary-archives-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-binary-archives-${{ runner.os }}
+
       - name: Configure with CMake
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 
       - name: Build
         run: cmake --build build --parallel 1

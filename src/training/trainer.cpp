@@ -5,8 +5,11 @@
 #include "trainer.hpp"
 #include "components/bilateral_grid.hpp"
 #include "components/poseopt.hpp"
+#include "components/sparsity_optimizer.hpp"
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
+#include "dataloader.hpp"
+
 #include "kernels/fused_ssim.cuh"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
@@ -39,6 +42,7 @@ namespace gs::training {
         bilateral_grid_scheduler_.reset();
         poseopt_module_.reset();
         poseopt_optimizer_.reset();
+        sparsity_optimizer_.reset();
         evaluator_.reset();
 
         // Clear datasets (will be recreated)
@@ -363,6 +367,82 @@ namespace gs::training {
         }
     }
 
+    std::expected<torch::Tensor, std::string> Trainer::compute_sparsity_loss(
+        int iter,
+        const SplatData& splatData) {
+        try {
+            if (sparsity_optimizer_ && sparsity_optimizer_->should_apply_loss(iter)) {
+                // Initialize on first use (lazy initialization)
+                if (!sparsity_optimizer_->is_initialized()) {
+                    auto init_result = sparsity_optimizer_->initialize(splatData.opacity_raw());
+                    if (!init_result) {
+                        return std::unexpected(init_result.error());
+                    }
+                    LOG_INFO("Sparsity optimizer initialized at iteration {}", iter);
+                }
+
+                auto loss_result = sparsity_optimizer_->compute_loss(splatData.opacity_raw());
+                if (!loss_result) {
+                    return std::unexpected(loss_result.error());
+                }
+                return *loss_result;
+            }
+            return torch::zeros({1}, torch::kFloat32).to(torch::kCUDA).requires_grad_();
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Error computing sparsity loss: {}", e.what()));
+        }
+    }
+
+    std::expected<void, std::string> Trainer::handle_sparsity_update(
+        int iter,
+        SplatData& splatData) {
+        try {
+            if (sparsity_optimizer_ && sparsity_optimizer_->should_update(iter)) {
+                LOG_TRACE("Updating sparsity state at iteration {}", iter);
+                auto result = sparsity_optimizer_->update_state(splatData.opacity_raw());
+                if (!result) {
+                    return std::unexpected(result.error());
+                }
+            }
+            return {};
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Error updating sparsity state: {}", e.what()));
+        }
+    }
+
+    std::expected<void, std::string> Trainer::apply_sparsity_pruning(
+        int iter,
+        SplatData& splatData) {
+        try {
+            if (sparsity_optimizer_ && sparsity_optimizer_->should_prune(iter)) {
+                LOG_INFO("Applying sparsity-based pruning at iteration {}", iter);
+
+                auto mask_result = sparsity_optimizer_->get_prune_mask(splatData.opacity_raw());
+                if (!mask_result) {
+                    return std::unexpected(mask_result.error());
+                }
+
+                auto prune_mask = *mask_result;
+                int n_prune = prune_mask.sum().item<int>();
+                int n_before = splatData.size();
+
+                // Use strategy's remove functionality
+                strategy_->remove_gaussians(prune_mask);
+
+                int n_after = splatData.size();
+                std::println("Sparsity pruning complete: {} -> {} Gaussians (removed {})",
+                             n_before, n_after, n_prune);
+
+                // Clear sparsity optimizer after pruning
+                sparsity_optimizer_.reset();
+                LOG_DEBUG("Sparsity optimizer cleared after pruning");
+            }
+            return {};
+        } catch (const std::exception& e) {
+            return std::unexpected(std::format("Error applying sparsity pruning: {}", e.what()));
+        }
+    }
+
     Trainer::Trainer(std::shared_ptr<CameraDataset> dataset,
                      std::unique_ptr<IStrategy> strategy)
         : base_dataset_(std::move(dataset)),
@@ -374,7 +454,6 @@ namespace gs::training {
     }
 
     void Trainer::load_cameras_info() {
-
         m_cam_id_to_cam.clear();
         // Setup camera cache
         for (const auto& cam : base_dataset_->get_cameras()) {
@@ -407,15 +486,15 @@ namespace gs::training {
                     base_dataset_->get_cameras(), params.dataset, CameraDataset::Split::VAL);
 
                 LOG_INFO("Created train/val split: {} train, {} val images",
-                         train_dataset_->size().value(),
-                         val_dataset_->size().value());
+                         train_dataset_->size(),
+                         val_dataset_->size());
             } else {
                 // Use all images for training
                 train_dataset_ = base_dataset_;
                 val_dataset_ = nullptr;
 
                 LOG_INFO("Using all {} images for training (no evaluation)",
-                         train_dataset_->size().value());
+                         train_dataset_->size());
             }
 
             // chage resize factor (change may comes from gui)
@@ -426,7 +505,7 @@ namespace gs::training {
                 val_dataset_->set_resize_factor(params.dataset.resize_factor);
             }
 
-            train_dataset_size_ = train_dataset_->size().value();
+            train_dataset_size_ = train_dataset_->size();
 
             m_cam_id_to_cam.clear();
             // Setup camera cache
@@ -442,6 +521,38 @@ namespace gs::training {
             // Initialize bilateral grid if enabled
             if (auto result = initialize_bilateral_grid(); !result) {
                 return std::unexpected(result.error());
+            }
+
+            // Initialize sparsity optimizer if enabled
+            if (params.optimization.enable_sparsity) {
+                // Calculate when sparsity should start
+                int base_iterations = params.optimization.iterations;
+                int sparsity_start = base_iterations; // Start after base training
+                int total_iterations = base_iterations + params.optimization.sparsify_steps;
+
+                // Extend the total training iterations
+                params_.optimization.iterations = total_iterations;
+
+                ADMMSparsityOptimizer::Config sparsity_config{
+                    .sparsify_steps = params.optimization.sparsify_steps,
+                    .init_rho = params.optimization.init_rho,
+                    .prune_ratio = params.optimization.prune_ratio,
+                    .update_every = 50,
+                    .start_iteration = sparsity_start // Start after base training completes
+                };
+
+                sparsity_optimizer_ = SparsityOptimizerFactory::create("admm", sparsity_config);
+
+                if (sparsity_optimizer_) {
+                    // Don't initialize yet - will initialize when we reach start_iteration
+                    LOG_INFO("=== Sparsity Optimization Configuration ===");
+                    LOG_INFO("Base training iterations: {}", base_iterations);
+                    LOG_INFO("Sparsification starts at: iteration {}", sparsity_start);
+                    LOG_INFO("Sparsification duration: {} iterations", params.optimization.sparsify_steps);
+                    LOG_INFO("Total training iterations: {}", total_iterations);
+                    LOG_INFO("Pruning ratio: {}%", params.optimization.prune_ratio * 100);
+                    LOG_INFO("ADMM penalty (rho): {}", params.optimization.init_rho);
+                }
             }
 
             background_ = torch::tensor({0.f, 0.f, 0.f},
@@ -475,9 +586,9 @@ namespace gs::training {
             // Create progress bar based on headless flag
             if (params.optimization.headless) {
                 progress_ = std::make_unique<TrainingProgress>(
-                    params.optimization.iterations,
+                    params_.optimization.iterations, // This now includes sparsity steps if enabled
                     /*update_frequency=*/100);
-                LOG_DEBUG("Progress bar initialized for headless mode");
+                LOG_DEBUG("Progress bar initialized for {} total iterations", params_.optimization.iterations);
             }
 
             // Initialize the evaluator - it handles all metrics internally
@@ -561,7 +672,7 @@ namespace gs::training {
 
         const float limit_hi = 1.0f / 4.0f;  // start limit
         const float limit_mid = 2.0f / 4.0f; // middle limit
-        const float limit_lo = 3.0f / 4.0;   // final limit
+        const float limit_lo = 3.0f / 4.0f;  // final limit
 
         const float weight_hi = 1.0f;  // start weight
         const float weight_mid = 0.5f; // middle weight
@@ -619,7 +730,16 @@ namespace gs::training {
 
     // Helper to ensure buf matches base (defined, dtype, device, shape)
     static inline void ensure_like(torch::Tensor& buf, const torch::Tensor& base) {
-        bool need = !buf.defined() || buf.dtype() != base.dtype() || buf.device() != base.device() || buf.sizes().vec() != base.sizes().vec();
+        bool is_undefined = !buf.defined();
+        bool dtype_mismatch = (buf.dtype() != base.dtype());
+
+        bool need = (is_undefined || dtype_mismatch);
+        if (!need) {
+            bool device_mismatch = (buf.device() != base.device());
+            bool shape_mismatch = (buf.sizes().vec() != base.sizes().vec());
+            need = (device_mismatch || shape_mismatch);
+        }
+
         if (need)
             buf = torch::empty_like(base);
     }
@@ -696,6 +816,33 @@ namespace gs::training {
             // Check stop again after potential pause
             if (stop_requested_.load() || stop_token.stop_requested()) {
                 return StepResult::Stop;
+            }
+
+            // Add phase transition logging for sparsity
+            if (params_.optimization.enable_sparsity) {
+                // Calculate base iterations (original iterations before extension)
+                int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+
+                // Log phase transition
+                if (iter == base_iterations + 1) {
+                    LOG_INFO("=== Entering Sparsification Phase ===");
+                    LOG_INFO("Base training complete at iteration {}", base_iterations);
+                    LOG_INFO("Starting ADMM sparsification for {} iterations",
+                             params_.optimization.sparsify_steps);
+                    LOG_INFO("Current model size: {} Gaussians", strategy_->get_model().size());
+                    LOG_INFO("Target pruning: {}% of Gaussians", params_.optimization.prune_ratio * 100);
+                }
+
+                // Log when approaching pruning
+                if (iter == params_.optimization.iterations - 100) {
+                    LOG_INFO("Approaching final pruning in 100 iterations (at iteration {})",
+                             params_.optimization.iterations);
+                }
+
+                // Log when pruning will occur
+                if (iter == params_.optimization.iterations - 1) {
+                    LOG_INFO("Final pruning will occur next iteration");
+                }
             }
 
             auto adjusted_cam_pos = poseopt_module_->forward(cam->world_view_transform(), torch::tensor({cam->uid()}));
@@ -787,6 +934,15 @@ namespace gs::training {
             loss.backward();
             loss_value += loss.item<float>();
 
+            // Add sparsity loss
+            auto sparsity_loss_result = compute_sparsity_loss(iter, strategy_->get_model());
+            if (!sparsity_loss_result) {
+                return std::unexpected(sparsity_loss_result.error());
+            }
+            loss = *sparsity_loss_result;
+            loss.backward();
+            loss_value += loss.item<float>();
+
             // Store the loss value immediately
             current_loss_ = loss_value;
 
@@ -815,7 +971,18 @@ namespace gs::training {
                     std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
                     // Execute strategy post-backward and step
-                    strategy_->post_backward(iter, r_output);
+                    // Only call post_backward during base training (not during sparsification)
+                    if (params_.optimization.enable_sparsity) {
+                        int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+                        if (iter <= base_iterations) {
+                            strategy_->post_backward(iter, r_output);
+                        }
+                        // During sparsification phase, skip post_backward entirely
+                    } else {
+                        // No sparsity, always call post_backward
+                        strategy_->post_backward(iter, r_output);
+                    }
+
                     strategy_->step(iter);
 
                     if (params_.optimization.use_bilateral_grid) {
@@ -835,6 +1002,16 @@ namespace gs::training {
                 } // Lock released here
 
                 // Events automatically emitted here when deferred destructs
+
+                // Handle sparsity updates
+                if (auto result = handle_sparsity_update(iter, strategy_->get_model()); !result) {
+                    LOG_ERROR("Sparsity update failed: {}", result.error());
+                }
+
+                // Apply sparsity pruning if needed
+                if (auto result = apply_sparsity_pruning(iter, strategy_->get_model()); !result) {
+                    LOG_ERROR("Sparsity pruning failed: {}", result.error());
+                }
 
                 // Clean evaluation - let the evaluator handle everything
                 if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
@@ -936,11 +1113,11 @@ namespace gs::training {
         }
 
         is_running_ = true; // Now we can start
-        LOG_INFO("Starting training loop");
+        LOG_INFO("Starting training loop with {} workers", params_.optimization.num_workers);
 
         try {
             int iter = 1;
-            const int num_workers = 16;
+            const int num_workers = params_.optimization.num_workers;
             const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
 
             if (progress_) {
@@ -950,7 +1127,7 @@ namespace gs::training {
             }
 
             // Use infinite dataloader to avoid epoch restarts
-            auto train_dataloader = create_infinite_dataloader_from_dataset(train_dataset_, num_workers);
+            auto train_dataloader = create_efficient_infinite_dataloader(train_dataset_, num_workers);
             auto loader = train_dataloader->begin();
 
             LOG_DEBUG("Starting training iterations");
@@ -965,10 +1142,9 @@ namespace gs::training {
                     callback_stream_.synchronize();
                 }
 
-                auto& batch = *loader;
-                auto camera_with_image = batch[0].data;
-                Camera* cam = camera_with_image.camera;
-                torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA, /*non_blocking=*/true);
+                auto sample = *loader;
+                Camera* cam = sample.camera;
+                torch::Tensor gt_image = std::move(sample.image); // Already on CUDA!
 
 
                 std::expected<Trainer::StepResult, std::string> step_result;
@@ -1024,11 +1200,11 @@ namespace gs::training {
             // Final save if not already saved by stop request
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                save_ply(final_path, iter, /*join=*/true);
+                save_ply(final_path, params_.optimization.iterations, /*join=*/true);
                 // Emit final checkpoint saved event
                 events::state::CheckpointSaved{
-                    .iteration = iter,
-                    .path = final_path}
+                    static_cast<int>(params_.optimization.iterations),
+                    final_path}
                     .emit();
             }
 
@@ -1223,12 +1399,23 @@ namespace gs::training {
     }
     
     void Trainer::save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads) {
-        strategy_->get_model().save_ply(save_path, iter_num, /*join=*/join_threads);
+        // Save PLY format - join_threads controls sync vs async
+        strategy_->get_model().save_ply(save_path, iter_num, join_threads);
+
+        // Save SOG format if requested - ALWAYS synchronous
+        if (params_.optimization.save_sog) {
+            strategy_->get_model().save_sog(save_path, iter_num,
+                                            params_.optimization.sog_iterations,
+                                            true); // Always synchronous
+        }
+
+        // Update project with PLY info
         if (lf_project_) {
-            const std::string ply_name = "splat_" + std::to_string(iter_num + 1);
+            const std::string ply_name = "splat_" + std::to_string(iter_num);
             const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
         }
-        LOG_DEBUG("PLY saved: {}", save_path.string());
+
+        LOG_DEBUG("PLY save initiated: {} (sync={}), SOG always sync", save_path.string(), join_threads);
     }
 } // namespace gs::training
