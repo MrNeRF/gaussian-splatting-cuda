@@ -30,14 +30,9 @@ namespace gs::training {
         std::shared_ptr<CameraDataset> dataset_;
         int num_workers_;
 
-        // Pre-allocated GPU buffer pool
-        struct BufferSlot {
-            torch::Tensor gpu_buffer;
-            std::atomic<bool> in_use{false};
-            int last_width = 0;
-            int last_height = 0;
-        };
-        std::vector<std::unique_ptr<BufferSlot>> buffer_pool_;
+        // Queue size scales with worker count
+        static constexpr size_t QUEUE_BUFFER_FACTOR = 3; // Each worker can have ~3 images in flight
+        const size_t max_queue_size_;                    // Computed as num_workers * QUEUE_BUFFER_FACTOR
 
         // Worker threads
         std::vector<std::thread> workers_;
@@ -56,8 +51,6 @@ namespace gs::training {
         std::mutex index_mutex_;
 
         void worker_thread(int worker_id);
-        BufferSlot* acquire_buffer();
-        void release_buffer(BufferSlot* buffer);
     };
 
     // Wrapper for infinite training dataloader
