@@ -2,6 +2,7 @@
   "builtin-baseline": "120deac3062162151622ca4860575a33844ba10b",
   "dependencies": [
     "args",
+    "freetype",
     "glad",
     "glfw3",
     "glm",
@@ -14,11 +15,11 @@
         "opengl3-binding"
       ]
     },
-    "nlohmann-json",
-    "spdlog",
-    "tbb",
-    "freetype",
+    "libarchive",
     "libwebp",
-    "libarchive"
+    "nlohmann-json",
+    "openimageio",
+    "spdlog",
+    "tbb"
   ]
 }
