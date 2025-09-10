@@ -10,15 +10,15 @@
 
 namespace gs::training {
     /**
-     * @brief FusedAdam optimizer
+     * @brief FusedAdam optimizer with memory-efficient operations
      *
-     * The implementation uses fused CUDA kernels for better performance.
+     * The implementation uses fused CUDA kernels for better performance
+     * and includes memory management optimizations.
      */
     class FusedAdam : public torch::optim::Optimizer {
     public:
         struct Options : public torch::optim::OptimizerCloneableOptions<Options> {
-            Options(double lr = 1e-3) : lr_(lr) {
-            }
+            Options(double lr = 1e-3) : lr_(lr) {}
 
             Options& lr(double lr) {
                 lr_ = lr;
@@ -71,23 +71,32 @@ namespace gs::training {
         explicit FusedAdam(std::vector<torch::optim::OptimizerParamGroup> param_groups,
                            std::unique_ptr<Options> options)
             : Optimizer(std::move(param_groups),
-                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {
-        }
+                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
 
         explicit FusedAdam(std::vector<torch::Tensor> params, std::unique_ptr<Options> options)
             : Optimizer({torch::optim::OptimizerParamGroup(std::move(params))},
-                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {
-        }
+                        std::unique_ptr<torch::optim::OptimizerOptions>(std::move(options))) {}
 
         // Override the base class step() with proper signature
         torch::Tensor step(LossClosure closure) override;
 
         /**
-         * @brief Perform optimization step
+         * @brief Perform optimization step with memory-efficient operations
          */
         void step(int iteration);
 
+        /**
+         * @brief Zero gradients with forced memory deallocation
+         * @param set_to_none Force set to None (always true for memory efficiency)
+         * @param iteration Current iteration for conditional zeroing
+         */
         void zero_grad(bool set_to_none, int iteration);
+
+        /**
+         * @brief Compact optimizer state to reduce fragmentation
+         * Call periodically (e.g., every 100-500 iterations)
+         */
+        void compact_state();
 
     private:
         const Options& options() const {

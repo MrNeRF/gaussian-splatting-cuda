@@ -9,6 +9,7 @@
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include "dataloader.hpp"
+#include "memory_tracker.hpp"
 
 #include "kernels/fused_ssim.cuh"
 #include "rasterization/fast_rasterizer.hpp"
@@ -65,6 +66,7 @@ namespace gs::training {
         LOG_DEBUG("Trainer cleanup complete");
     }
 
+
     std::expected<void, std::string> Trainer::initialize_bilateral_grid() {
         if (!params_.optimization.use_bilateral_grid) {
             return {};
@@ -103,28 +105,36 @@ namespace gs::training {
     }
 
     std::expected<torch::Tensor, std::string> Trainer::compute_photometric_loss(
-        const RenderOutput& render_output,
-        const torch::Tensor& gt_image,
-        const SplatData& splatData,
-        const param::OptimizationParameters& opt_params) {
+    const RenderOutput& render_output,
+    const torch::Tensor& gt_image,
+    const SplatData& splatData,
+    const param::OptimizationParameters& opt_params) {
         try {
-            // Ensure images have same dimensions
-            torch::Tensor rendered = render_output.image;
-            torch::Tensor gt = gt_image;
-
-            // Ensure both tensors are 4D (batch, height, width, channels)
-            rendered = rendered.dim() == 3 ? rendered.unsqueeze(0) : rendered;
-            gt = gt.dim() == 3 ? gt.unsqueeze(0) : gt;
+            // Work with 3D tensors directly to avoid 4D conversion
+            const torch::Tensor& rendered = render_output.image;
+            const torch::Tensor& gt = gt_image;
 
             TORCH_CHECK(rendered.sizes() == gt.sizes(),
                         "ERROR: size mismatch – rendered ", rendered.sizes(),
                         " vs. ground truth ", gt.sizes());
 
-            // Base loss: L1 + SSIM
-            auto l1_loss = torch::l1_loss(rendered, gt);
-            auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
-            torch::Tensor loss = (1.f - opt_params.lambda_dssim) * l1_loss +
-                                 opt_params.lambda_dssim * ssim_loss;
+            // Compute L1 loss - NO NoGradGuard here!
+            torch::Tensor l1_loss;
+            // Compute L1 directly without disabling gradients
+            l1_loss = torch::abs(rendered - gt).mean();
+
+            // SSIM computation - this needs 4D
+            torch::Tensor ssim_loss;
+            // Only convert to 4D for SSIM
+            auto rendered_4d = rendered.unsqueeze(0);
+            auto gt_4d = gt.unsqueeze(0);
+            auto ssim_val = fused_ssim(rendered_4d, gt_4d, "valid", /*train=*/true);
+            ssim_loss = 1.0f - ssim_val;
+
+            // Final loss combination - this must maintain gradients
+            torch::Tensor loss = (1.0f - opt_params.lambda_dssim) * l1_loss +
+                                opt_params.lambda_dssim * ssim_loss;
+
             return loss;
         } catch (const std::exception& e) {
             return std::unexpected(std::format("Error computing photometric loss: {}", e.what()));
@@ -132,71 +142,79 @@ namespace gs::training {
     }
 
     std::expected<torch::Tensor, std::string> Trainer::compute_scale_reg_loss(
-        const SplatData& splatData,
-        const param::OptimizationParameters& opt_params) {
-        try {
-            if (opt_params.scale_reg > 0.0f) {
-                auto scale_l1 = splatData.get_scaling().mean();
-                return opt_params.scale_reg * scale_l1;
-            }
-            return torch::zeros({1}, torch::kFloat32).requires_grad_();
-        } catch (const std::exception& e) {
-            return std::unexpected(std::format("Error computing scale regularization loss: {}", e.what()));
+    const SplatData& splatData,
+    const param::OptimizationParameters& opt_params) {
+    try {
+        if (opt_params.scale_reg > 0.0f) {
+            auto scale_l1 = splatData.get_scaling().mean();
+            return opt_params.scale_reg * scale_l1;
         }
+        // Return a zero loss connected to the model
+        // Use a parameter from the model multiplied by 0 to maintain gradient flow
+        return splatData.get_scaling().sum() * 0.0f;
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Error computing scale regularization loss: {}", e.what()));
     }
+}
 
-    std::expected<torch::Tensor, std::string> Trainer::compute_opacity_reg_loss(
-        const SplatData& splatData,
-        const param::OptimizationParameters& opt_params) {
-        try {
-            if (opt_params.opacity_reg > 0.0f) {
-                auto opacity_l1 = splatData.get_opacity().mean();
-                return opt_params.opacity_reg * opacity_l1;
-            }
-            return torch::zeros({1}, torch::kFloat32).requires_grad_();
-        } catch (const std::exception& e) {
-            return std::unexpected(std::format("Error computing opacity regularization loss: {}", e.what()));
+std::expected<torch::Tensor, std::string> Trainer::compute_opacity_reg_loss(
+    const SplatData& splatData,
+    const param::OptimizationParameters& opt_params) {
+    try {
+        if (opt_params.opacity_reg > 0.0f) {
+            auto opacity_l1 = splatData.get_opacity().mean();
+            return opt_params.opacity_reg * opacity_l1;
         }
+        // Return a zero loss connected to the model
+        return splatData.get_opacity().sum() * 0.0f;
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Error computing opacity regularization loss: {}", e.what()));
     }
+}
 
-    std::expected<torch::Tensor, std::string> Trainer::compute_bilateral_grid_tv_loss(
-        const std::unique_ptr<BilateralGrid>& bilateral_grid,
-        const param::OptimizationParameters& opt_params) {
-        try {
-            if (opt_params.use_bilateral_grid) {
-                return opt_params.tv_loss_weight * bilateral_grid->tv_loss();
-            }
-            return torch::zeros({1}, torch::kFloat32).requires_grad_();
-        } catch (const std::exception& e) {
-            return std::unexpected(std::format("Error computing bilateral grid TV loss: {}", e.what()));
+std::expected<torch::Tensor, std::string> Trainer::compute_bilateral_grid_tv_loss(
+    const std::unique_ptr<BilateralGrid>& bilateral_grid,
+    const param::OptimizationParameters& opt_params) {
+    try {
+        if (opt_params.use_bilateral_grid && bilateral_grid) {
+            return opt_params.tv_loss_weight * bilateral_grid->tv_loss();
         }
+        // Return a zero loss that won't break gradient computation
+        // Use the first model parameter if available
+        return torch::tensor(0.0f, torch::TensorOptions()
+            .dtype(torch::kFloat32)
+            .device(torch::kCUDA));
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Error computing bilateral grid TV loss: {}", e.what()));
     }
+}
 
-    std::expected<torch::Tensor, std::string> Trainer::compute_sparsity_loss(
-        int iter,
-        const SplatData& splatData) {
-        try {
-            if (sparsity_optimizer_ && sparsity_optimizer_->should_apply_loss(iter)) {
-                // Initialize on first use (lazy initialization)
-                if (!sparsity_optimizer_->is_initialized()) {
-                    auto init_result = sparsity_optimizer_->initialize(splatData.opacity_raw());
-                    if (!init_result) {
-                        return std::unexpected(init_result.error());
-                    }
-                    LOG_INFO("Sparsity optimizer initialized at iteration {}", iter);
+std::expected<torch::Tensor, std::string> Trainer::compute_sparsity_loss(
+    int iter,
+    const SplatData& splatData) {
+    try {
+        if (sparsity_optimizer_ && sparsity_optimizer_->should_apply_loss(iter)) {
+            // Initialize on first use (lazy initialization)
+            if (!sparsity_optimizer_->is_initialized()) {
+                auto init_result = sparsity_optimizer_->initialize(splatData.opacity_raw());
+                if (!init_result) {
+                    return std::unexpected(init_result.error());
                 }
-
-                auto loss_result = sparsity_optimizer_->compute_loss(splatData.opacity_raw());
-                if (!loss_result) {
-                    return std::unexpected(loss_result.error());
-                }
-                return *loss_result;
+                LOG_INFO("Sparsity optimizer initialized at iteration {}", iter);
             }
-            return torch::zeros({1}, torch::kFloat32).to(torch::kCUDA).requires_grad_();
-        } catch (const std::exception& e) {
-            return std::unexpected(std::format("Error computing sparsity loss: {}", e.what()));
+
+            auto loss_result = sparsity_optimizer_->compute_loss(splatData.opacity_raw());
+            if (!loss_result) {
+                return std::unexpected(loss_result.error());
+            }
+            return *loss_result;
         }
+        // Return a zero loss connected to model parameters
+        return splatData.opacity_raw().sum() * 0.0f;
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Error computing sparsity loss: {}", e.what()));
     }
+}
 
     std::expected<void, std::string> Trainer::handle_sparsity_update(
         int iter,
@@ -282,6 +300,15 @@ namespace gs::training {
         try {
             params_ = params;
 
+            // Enable memory tracking if requested
+            if (params_.optimization.debug_memory || params_.optimization.debug_memory_detailed) {
+                MemoryTracker::get().enable(params_.optimization.debug_memory_detailed);
+                LOG_INFO("Memory tracking enabled (detailed: {})", params_.optimization.debug_memory_detailed);
+
+                // Log initial memory state
+                MemoryTracker::get().capture(0, "initialization_start");
+            }
+
             // Handle dataset split based on evaluation flag
             if (params.optimization.enable_eval) {
                 // Create train/val split
@@ -322,6 +349,12 @@ namespace gs::training {
             // Re-initialize strategy with new parameters
             strategy_->initialize(params.optimization);
             LOG_DEBUG("Strategy initialized");
+
+            // Log model memory after initialization
+            if (params_.optimization.debug_memory) {
+                MemoryTracker::get().log_model_memory(strategy_->get_model());
+                MemoryTracker::get().capture(0, "model_initialized");
+            }
 
             // Initialize bilateral grid if enabled
             if (auto result = initialize_bilateral_grid(); !result) {
@@ -400,10 +433,17 @@ namespace gs::training {
             evaluator_ = std::make_unique<MetricsEvaluator>(params_);
             LOG_DEBUG("Metrics evaluator initialized");
 
+            // Final memory snapshot after full initialization
+            if (params_.optimization.debug_memory) {
+                MemoryTracker::get().capture(0, "initialization_complete");
+                MemoryTracker::get().check_memory_pressure();
+            }
+
             // Print configuration
             LOG_INFO("Render mode: {}", params.optimization.render_mode);
             LOG_INFO("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
             LOG_INFO("Strategy: {}", params.optimization.strategy);
+            LOG_INFO("Memory tracking: {}", params.optimization.debug_memory ? "enabled" : "disabled");
 
             initialized_ = true;
             LOG_INFO("Trainer initialization complete");
@@ -421,6 +461,12 @@ namespace gs::training {
         if (callback_busy_.load()) {
             callback_stream_.synchronize();
         }
+
+        // Save memory report if tracking was enabled
+        if (params_.optimization.debug_memory) {
+            MemoryTracker::get().save_report(params_.dataset.output_path);
+        }
+
         LOG_DEBUG("Trainer destroyed");
     }
 
@@ -576,98 +622,128 @@ namespace gs::training {
         return bg_mix_buffer_; // const ref to mixed background
     }
 
-    std::expected<Trainer::StepResult, std::string> Trainer::train_step(
-        int iter,
-        Camera* cam,
-        torch::Tensor gt_image,
-        RenderMode render_mode,
-        std::stop_token stop_token) {
-        try {
-            if (params_.optimization.gut) {
-                if (cam->camera_model_type() == gsplat::CameraModelType::ORTHO) {
-                    return std::unexpected("Training on cameras with ortho model is not supported yet.");
+std::expected<Trainer::StepResult, std::string> Trainer::train_step(
+    int iter,
+    Camera* cam,
+    torch::Tensor gt_image,
+    RenderMode render_mode,
+    std::stop_token stop_token) {
+    try {
+        // Track memory at key points
+        ScopedMemoryTracker step_tracker(iter, "train_step", false);
+
+        if (params_.optimization.gut) {
+            if (cam->camera_model_type() == gsplat::CameraModelType::ORTHO) {
+                return std::unexpected("Training on cameras with ortho model is not supported yet.");
+            }
+        } else {
+            // Flag is workaround for non-RC datasets with distortion. By default it is off.
+            if (!params_.optimization.rc) {
+                if (cam->radial_distortion().numel() != 0 ||
+                    cam->tangential_distortion().numel() != 0) {
+                    return std::unexpected("You must use --gut option to train on cameras with distortion.");
                 }
-            } else {
-                // Flag is workaround for non-RC datasets with distortion. By default it is off.
-                if (!params_.optimization.rc) {
-                    if (cam->radial_distortion().numel() != 0 ||
-                        cam->tangential_distortion().numel() != 0) {
-                        return std::unexpected("You must use --gut option to train on cameras with distortion.");
-                    }
-                    if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
-                        return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
-                    }
+                if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
+                    return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
                 }
             }
+        }
 
-            current_iteration_ = iter;
+        current_iteration_ = iter;
 
-            // Check control requests at the beginning
+        // Check control requests at the beginning
+        handle_control_requests(iter, stop_token);
+
+        // If stop requested, return Stop
+        if (stop_requested_.load() || stop_token.stop_requested()) {
+            return StepResult::Stop;
+        }
+
+        // If paused, wait
+        while (is_paused_.load() && !stop_requested_.load() && !stop_token.stop_requested()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             handle_control_requests(iter, stop_token);
+        }
 
-            // If stop requested, return Stop
-            if (stop_requested_.load() || stop_token.stop_requested()) {
-                return StepResult::Stop;
+        // Check stop again after potential pause
+        if (stop_requested_.load() || stop_token.stop_requested()) {
+            return StepResult::Stop;
+        }
+
+        // Track memory before rendering
+        if (params_.optimization.debug_memory && iter % 100 == 0) {
+            MemoryTracker::get().capture(iter, "pre_render");
+        }
+
+        // Add phase transition logging for sparsity
+        if (params_.optimization.enable_sparsity) {
+            // Calculate base iterations (original iterations before extension)
+            int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+
+            // Log phase transition
+            if (iter == base_iterations + 1) {
+                LOG_INFO("=== Entering Sparsification Phase ===");
+                LOG_INFO("Base training complete at iteration {}", base_iterations);
+                LOG_INFO("Starting ADMM sparsification for {} iterations",
+                         params_.optimization.sparsify_steps);
+                LOG_INFO("Current model size: {} Gaussians", strategy_->get_model().size());
+                LOG_INFO("Target pruning: {}% of Gaussians", params_.optimization.prune_ratio * 100);
             }
 
-            // If paused, wait
-            while (is_paused_.load() && !stop_requested_.load() && !stop_token.stop_requested()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                handle_control_requests(iter, stop_token);
+            // Log when approaching pruning
+            if (iter == params_.optimization.iterations - 100) {
+                LOG_INFO("Approaching final pruning in 100 iterations (at iteration {})",
+                         params_.optimization.iterations);
             }
 
-            // Check stop again after potential pause
-            if (stop_requested_.load() || stop_token.stop_requested()) {
-                return StepResult::Stop;
+            // Log when pruning will occur
+            if (iter == params_.optimization.iterations - 1) {
+                LOG_INFO("Final pruning will occur next iteration");
             }
+        }
 
-            // Add phase transition logging for sparsity
-            if (params_.optimization.enable_sparsity) {
-                // Calculate base iterations (original iterations before extension)
-                int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+        auto adjusted_cam_pos = poseopt_module_->forward(cam->world_view_transform(), torch::tensor({cam->uid()}));
+        auto adjusted_cam = Camera(*cam, adjusted_cam_pos);
 
-                // Log phase transition
-                if (iter == base_iterations + 1) {
-                    LOG_INFO("=== Entering Sparsification Phase ===");
-                    LOG_INFO("Base training complete at iteration {}", base_iterations);
-                    LOG_INFO("Starting ADMM sparsification for {} iterations",
-                             params_.optimization.sparsify_steps);
-                    LOG_INFO("Current model size: {} Gaussians", strategy_->get_model().size());
-                    LOG_INFO("Target pruning: {}% of Gaussians", params_.optimization.prune_ratio * 100);
-                }
+        torch::Tensor& bg = background_for_step(iter);
 
-                // Log when approaching pruning
-                if (iter == params_.optimization.iterations - 100) {
-                    LOG_INFO("Approaching final pruning in 100 iterations (at iteration {})",
-                             params_.optimization.iterations);
-                }
+        // Rendering with memory tracking and buffer reuse
+        // In train_step, just use the render output directly:
+        RenderOutput r_output;
+        {
+            ScopedMemoryTracker render_tracker(iter, "render", params_.optimization.debug_memory_detailed);
 
-                // Log when pruning will occur
-                if (iter == params_.optimization.iterations - 1) {
-                    LOG_INFO("Final pruning will occur next iteration");
-                }
-            }
-
-            auto adjusted_cam_pos = poseopt_module_->forward(cam->world_view_transform(), torch::tensor({cam->uid()}));
-            auto adjusted_cam = Camera(*cam, adjusted_cam_pos);
-
-            torch::Tensor& bg = background_for_step(iter);
-
-            RenderOutput r_output;
-            // Use the render mode from parameters
             if (!params_.optimization.gut) {
                 r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), bg);
             } else {
-                r_output = rasterize(adjusted_cam, strategy_->get_model(), bg, 1.0f, false, false, render_mode,
-                                     nullptr);
+                r_output = rasterize(adjusted_cam, strategy_->get_model(), bg, 1.0f, false, false, render_mode, nullptr);
             }
+        }
 
-            // Apply bilateral grid if enabled
-            if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
-                r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
+        // After optimizer step, clear everything aggressively:
+        torch::cuda::synchronize();
+        c10::cuda::CUDACachingAllocator::emptyCache();
+
+        // Track render output memory
+        if (params_.optimization.debug_memory && iter % 100 == 0) {
+            MemoryTracker::get().log_tensor_info("rendered_image", r_output.image);
+            if (r_output.depth.defined()) {
+                MemoryTracker::get().log_tensor_info("rendered_depth", r_output.depth);
             }
+        }
 
-            // Compute losses
+        // Apply bilateral grid if enabled
+        if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
+            r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
+        }
+
+        // Loss computation with tracking
+        torch::Tensor total_loss;
+        float loss_value = 0.0f;
+        {
+            ScopedMemoryTracker loss_tracker(iter, "loss_computation", params_.optimization.debug_memory_detailed);
+
+            // Compute photometric loss first
             auto loss_result = compute_photometric_loss(r_output,
                                                         gt_image,
                                                         strategy_->get_model(),
@@ -676,188 +752,279 @@ namespace gs::training {
                 return std::unexpected(loss_result.error());
             }
 
-            torch::Tensor loss = *loss_result;
-            loss.backward();
-            float loss_value = loss.item<float>();
+            total_loss = *loss_result;
 
-            // Scale regularization loss
+            // Add scale regularization
             auto scale_loss_result = compute_scale_reg_loss(strategy_->get_model(), params_.optimization);
             if (!scale_loss_result) {
                 return std::unexpected(scale_loss_result.error());
             }
-            loss = *scale_loss_result;
-            loss.backward();
-            loss_value += loss.item<float>();
+            total_loss = total_loss + *scale_loss_result;
 
-            // Opacity regularization loss
+            // Add opacity regularization
             auto opacity_loss_result = compute_opacity_reg_loss(strategy_->get_model(), params_.optimization);
             if (!opacity_loss_result) {
                 return std::unexpected(opacity_loss_result.error());
             }
-            loss = *opacity_loss_result;
-            loss.backward();
-            loss_value += loss.item<float>();
+            total_loss = total_loss + *opacity_loss_result;
 
-            // Bilateral grid TV loss
+            // Add bilateral grid TV loss
             auto tv_loss_result = compute_bilateral_grid_tv_loss(bilateral_grid_, params_.optimization);
             if (!tv_loss_result) {
                 return std::unexpected(tv_loss_result.error());
             }
-            loss = *tv_loss_result;
-            loss.backward();
-            loss_value += loss.item<float>();
+            total_loss = total_loss + *tv_loss_result;
 
             // Add sparsity loss
             auto sparsity_loss_result = compute_sparsity_loss(iter, strategy_->get_model());
             if (!sparsity_loss_result) {
                 return std::unexpected(sparsity_loss_result.error());
             }
-            loss = *sparsity_loss_result;
-            loss.backward();
-            loss_value += loss.item<float>();
+            total_loss = total_loss + *sparsity_loss_result;
 
-            // Store the loss value immediately
-            current_loss_ = loss_value;
+            // Get the loss value before backward
+            loss_value = total_loss.item<float>();
 
-            // Update progress synchronously if needed
-            if (progress_) {
-                progress_->update(iter, loss_value,
-                                  static_cast<int>(strategy_->get_model().size()),
-                                  strategy_->is_refining(iter));
-            }
+            // Single backward pass on the total loss
+            total_loss.backward();
+        }
 
-            // Emit training progress event (throttled to reduce GUI updates)
-            if (iter % 10 == 0 || iter == 1) {
-                // Only update every 10 iterations
-                events::state::TrainingProgress{
-                    .iteration = iter,
-                    .loss = loss_value,
-                    .num_gaussians = static_cast<int>(strategy_->get_model().size()),
-                    .is_refining = strategy_->is_refining(iter)}
-                    .emit();
-            }
+        // Store the loss value immediately
+        current_loss_ = loss_value;
+
+        // Track memory after backward (gradients are allocated)
+        if (params_.optimization.debug_memory && iter % 100 == 0) {
+            MemoryTracker::get().capture(iter, "post_backward");
+            MemoryTracker::get().check_memory_pressure();
+        }
+
+        // Update progress synchronously if needed
+        if (progress_) {
+            progress_->update(iter, loss_value,
+                              static_cast<int>(strategy_->get_model().size()),
+                              strategy_->is_refining(iter));
+        }
+
+        // Emit training progress event (throttled to reduce GUI updates)
+        if (iter % 10 == 0 || iter == 1) {
+            // Only update every 10 iterations
+            events::state::TrainingProgress{
+                .iteration = iter,
+                .loss = loss_value,
+                .num_gaussians = static_cast<int>(strategy_->get_model().size()),
+                .is_refining = strategy_->is_refining(iter)}
+                .emit();
+        }
+
+        // Optimizer step with tracking
+        {
+            torch::NoGradGuard no_grad;
+            ScopedMemoryTracker optimizer_tracker(iter, "optimizer_step", params_.optimization.debug_memory_detailed);
+
+            DeferredEvents deferred;
             {
-                torch::NoGradGuard no_grad;
+                std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
-                DeferredEvents deferred;
-                {
-                    std::unique_lock<std::shared_mutex> lock(render_mutex_);
+                // Strategy updates (densification can cause big memory changes)
+                if (strategy_->is_refining(iter)) {
+                    if (params_.optimization.debug_memory) {
+                        LOG_DEBUG("[Memory] Densification at iteration {}", iter);
+                        auto before = MemoryTracker::get().capture(iter, "pre_densify");
 
-                    // Execute strategy post-backward and step
-                    // Only call post_backward during base training (not during sparsification)
-                    if (params_.optimization.enable_sparsity) {
-                        int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
-                        if (iter <= base_iterations) {
+                        // Execute strategy post-backward
+                        if (params_.optimization.enable_sparsity) {
+                            int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+                            if (iter <= base_iterations) {
+                                strategy_->post_backward(iter, r_output);
+                            }
+                        } else {
                             strategy_->post_backward(iter, r_output);
                         }
-                        // During sparsification phase, skip post_backward entirely
+
+                        auto after = MemoryTracker::get().capture(iter, "post_densify");
+                        size_t delta = after.cuda_allocated_bytes - before.cuda_allocated_bytes;
+                        LOG_INFO("[Memory] Densification changed allocation by {:.2f}MB",
+                                static_cast<double>(delta) / (1024.0 * 1024.0));
                     } else {
-                        // No sparsity, always call post_backward
-                        strategy_->post_backward(iter, r_output);
-                    }
-
-                    strategy_->step(iter);
-
-                    if (params_.optimization.use_bilateral_grid) {
-                        bilateral_grid_optimizer_->step();
-                        bilateral_grid_optimizer_->zero_grad(true);
-                        bilateral_grid_scheduler_->step();
-                    }
-                    if (params_.optimization.pose_optimization != "none") {
-                        poseopt_optimizer_->step();
-                        poseopt_optimizer_->zero_grad(true);
-                    }
-
-                    // Queue event for emission after lock release
-                    deferred.add(events::state::ModelUpdated{
-                        .iteration = iter,
-                        .num_gaussians = static_cast<size_t>(strategy_->get_model().size())});
-                } // Lock released here
-
-                // Events automatically emitted here when deferred destructs
-
-                // Handle sparsity updates
-                if (auto result = handle_sparsity_update(iter, strategy_->get_model()); !result) {
-                    LOG_ERROR("Sparsity update failed: {}", result.error());
-                }
-
-                // Apply sparsity pruning if needed
-                if (auto result = apply_sparsity_pruning(iter, strategy_->get_model()); !result) {
-                    LOG_ERROR("Sparsity pruning failed: {}", result.error());
-                }
-
-                // Clean evaluation - let the evaluator handle everything
-                if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
-                    evaluator_->print_evaluation_header(iter);
-                    auto metrics = evaluator_->evaluate(iter,
-                                                        strategy_->get_model(),
-                                                        val_dataset_,
-                                                        background_);
-                    LOG_INFO("{}", metrics.to_string());
-                }
-
-                // Save model at specified steps
-                if (!params_.optimization.skip_intermediate_saving) {
-                    for (size_t save_step : params_.optimization.save_steps) {
-                        if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
-                            const bool join_threads = (iter == params_.optimization.save_steps.back());
-                            auto save_path = params_.dataset.output_path;
-                            save_ply(save_path, iter, /*join=*/join_threads);
-                            // Emit checkpoint saved event
-                            events::state::CheckpointSaved{
-                                .iteration = iter,
-                                .path = save_path}
-                                .emit();
-                        }
-                    }
-                }
-
-                if (!params_.dataset.timelapse_images.empty() && iter % params_.dataset.timelapse_every == 0) {
-                    for (const auto& img_name : params_.dataset.timelapse_images) {
-                        auto train_cam = train_dataset_->get_camera_by_filename(img_name);
-                        auto val_cam = val_dataset_ ? val_dataset_->get_camera_by_filename(img_name) : std::nullopt;
-                        if (train_cam.has_value() || val_cam.has_value()) {
-                            Camera* cam_to_use = train_cam.has_value() ? train_cam.value() : val_cam.value();
-
-                            // Image size isn't correct until the image has been loaded once
-                            // If we use the camera before it's loaded, it will render images at the non-scaled size
-                            if (cam_to_use->camera_height() == cam_to_use->image_height() && params_.dataset.resize_factor != 1) {
-                                cam_to_use->load_image_size(params_.dataset.resize_factor);
+                        // Execute strategy post-backward
+                        // Only call post_backward during base training (not during sparsification)
+                        if (params_.optimization.enable_sparsity) {
+                            int base_iterations = params_.optimization.iterations - params_.optimization.sparsify_steps;
+                            if (iter <= base_iterations) {
+                                strategy_->post_backward(iter, r_output);
                             }
-
-                            RenderOutput rendered_timelapse_output = fast_rasterize(
-                                *cam_to_use, strategy_->get_model(), background_);
-
-                            // Get folder name to save in by stripping file extension
-                            std::string folder_name = img_name;
-                            auto last_dot = folder_name.find_last_of('.');
-                            if (last_dot != std::string::npos) {
-                                folder_name = folder_name.substr(0, last_dot);
-                            }
-
-                            auto output_path = params_.dataset.output_path / "timelapse" / folder_name;
-                            std::filesystem::create_directories(output_path);
-
-                            image_io::save_image_async(output_path / std::format("{:06d}.jpg", iter),
-                                                       rendered_timelapse_output.image);
+                            // During sparsification phase, skip post_backward entirely
                         } else {
-                            LOG_WARN("Timelapse image '{}' not found in dataset.", img_name);
+                            // No sparsity, always call post_backward
+                            strategy_->post_backward(iter, r_output);
                         }
+                    }
+
+                    // Always clear cache after densification
+                    torch::cuda::synchronize();
+                    c10::cuda::CUDACachingAllocator::emptyCache();
+                }
+
+                strategy_->step(iter);
+
+                if (params_.optimization.use_bilateral_grid) {
+                    bilateral_grid_optimizer_->step();
+                    bilateral_grid_optimizer_->zero_grad(true);
+                    bilateral_grid_scheduler_->step();
+                }
+                if (params_.optimization.pose_optimization != "none") {
+                    poseopt_optimizer_->step();
+                    poseopt_optimizer_->zero_grad(true);
+                }
+
+                // === MEMORY FIX: Periodic optimizer state compaction ===
+                if (iter % 100 == 0) {
+                    // Compact optimizer state to reduce fragmentation
+                    if (auto* fused_adam = dynamic_cast<FusedAdam*>(strategy_->get_optimizer())) {
+                        fused_adam->compact_state();
+
+                        if (params_.optimization.debug_memory) {
+                            LOG_DEBUG("[Memory] Compacted optimizer state at iteration {}", iter);
+                        }
+                    }
+                }
+
+                // Queue event for emission after lock release
+                deferred.add(events::state::ModelUpdated{
+                    .iteration = iter,
+                    .num_gaussians = static_cast<size_t>(strategy_->get_model().size())});
+            } // Lock released here
+
+            // Events automatically emitted here when deferred destructs
+
+            // Handle sparsity updates
+            if (auto result = handle_sparsity_update(iter, strategy_->get_model()); !result) {
+                LOG_ERROR("Sparsity update failed: {}", result.error());
+            }
+
+            // Apply sparsity pruning if needed
+            if (auto result = apply_sparsity_pruning(iter, strategy_->get_model()); !result) {
+                LOG_ERROR("Sparsity pruning failed: {}", result.error());
+            }
+
+            // === More aggressive memory management ===
+            // Check for memory pressure and clean up proactively
+            {
+                size_t free, total;
+                cudaMemGetInfo(&free, &total);
+                float usage_percent = 100.0f * (1.0f - static_cast<float>(free) / total);
+
+                // Be more aggressive with cache clearing
+                if (usage_percent > 60.0f || iter % 25 == 0) {
+                    torch::cuda::synchronize();
+                    c10::cuda::CUDACachingAllocator::emptyCache();
+
+                    if (params_.optimization.debug_memory && iter % 100 == 0) {
+                        LOG_INFO("[Memory] Cache cleared at {:.1f}% usage", usage_percent);
                     }
                 }
             }
 
-            // Return Continue if we should continue training
-            if (iter < params_.optimization.iterations && !stop_requested_.load() && !stop_token.stop_requested()) {
-                return StepResult::Continue;
-            } else {
-                return StepResult::Stop;
-            }
-        } catch (const std::exception& e) {
-            return std::unexpected(std::format("Training step failed: {}", e.what()));
-        }
-    }
+            // Periodic detailed logging
+            if (params_.optimization.debug_memory && iter % 1000 == 0) {
+                LOG_INFO("[Memory] === Iteration {} Memory Report ===", iter);
+                MemoryTracker::get().log_model_memory(strategy_->get_model());
 
+                // Force cleanup if memory is high
+                size_t free, total;
+                cudaMemGetInfo(&free, &total);
+                if (static_cast<float>(free) / total < 0.1f) {  // Less than 10% free
+                    LOG_WARN("[Memory] Low GPU memory, forcing cache cleanup");
+                    MemoryTracker::get().force_cleanup();
+                }
+            }
+
+            // Clean evaluation - let the evaluator handle everything
+            if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
+                evaluator_->print_evaluation_header(iter);
+                auto metrics = evaluator_->evaluate(iter,
+                                                    strategy_->get_model(),
+                                                    val_dataset_,
+                                                    background_);
+                LOG_INFO("{}", metrics.to_string());
+            }
+
+            // Save model at specified steps
+            if (!params_.optimization.skip_intermediate_saving) {
+                for (size_t save_step : params_.optimization.save_steps) {
+                    if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
+                        const bool join_threads = (iter == params_.optimization.save_steps.back());
+                        auto save_path = params_.dataset.output_path;
+                        save_ply(save_path, iter, /*join=*/join_threads);
+                        // Emit checkpoint saved event
+                        events::state::CheckpointSaved{
+                            .iteration = iter,
+                            .path = save_path}
+                            .emit();
+                    }
+                }
+            }
+
+            if (!params_.dataset.timelapse_images.empty() && iter % params_.dataset.timelapse_every == 0) {
+                for (const auto& img_name : params_.dataset.timelapse_images) {
+                    auto train_cam = train_dataset_->get_camera_by_filename(img_name);
+                    auto val_cam = val_dataset_ ? val_dataset_->get_camera_by_filename(img_name) : std::nullopt;
+                    if (train_cam.has_value() || val_cam.has_value()) {
+                        Camera* cam_to_use = train_cam.has_value() ? train_cam.value() : val_cam.value();
+
+                        // Image size isn't correct until the image has been loaded once
+                        // If we use the camera before it's loaded, it will render images at the non-scaled size
+                        if (cam_to_use->camera_height() == cam_to_use->image_height() && params_.dataset.resize_factor != 1) {
+                            cam_to_use->load_image_size(params_.dataset.resize_factor);
+                        }
+
+                        RenderOutput rendered_timelapse_output = fast_rasterize(
+                            *cam_to_use, strategy_->get_model(), background_);
+
+                        // Get folder name to save in by stripping file extension
+                        std::string folder_name = img_name;
+                        auto last_dot = folder_name.find_last_of('.');
+                        if (last_dot != std::string::npos) {
+                            folder_name = folder_name.substr(0, last_dot);
+                        }
+
+                        auto output_path = params_.dataset.output_path / "timelapse" / folder_name;
+                        std::filesystem::create_directories(output_path);
+
+                        image_io::save_image_async(output_path / std::format("{:06d}.jpg", iter),
+                                                   rendered_timelapse_output.image);
+                    } else {
+                        LOG_WARN("Timelapse image '{}' not found in dataset.", img_name);
+                    }
+                }
+            }
+        }
+
+        // Return Continue if we should continue training
+        if (iter < params_.optimization.iterations && !stop_requested_.load() && !stop_token.stop_requested()) {
+            return StepResult::Continue;
+        } else {
+            return StepResult::Stop;
+        }
+    } catch (const c10::Error& e) {
+        // Catch CUDA OOM specifically
+        if (std::string(e.what()).find("out of memory") != std::string::npos) {
+            LOG_ERROR("[Memory] CUDA OOM at iteration {}", iter);
+            if (params_.optimization.debug_memory) {
+                MemoryTracker::get().capture(iter, "OOM");
+                MemoryTracker::get().log_model_memory(strategy_->get_model());
+            }
+
+            // Try to recover
+            MemoryTracker::get().force_cleanup();
+
+            return std::unexpected(std::format("CUDA OOM at iteration {}: {}", iter, e.what()));
+        }
+        throw;  // Re-throw other errors
+    } catch (const std::exception& e) {
+        return std::unexpected(std::format("Training step failed: {}", e.what()));
+    }
+}
     std::expected<void, std::string> Trainer::train(std::stop_token stop_token) {
         // Check if initialized
         if (!initialized_.load()) {
@@ -965,6 +1132,11 @@ namespace gs::training {
                     static_cast<int>(params_.optimization.iterations),
                     final_path}
                     .emit();
+            }
+
+            // Save memory report at the end
+            if (params_.optimization.debug_memory) {
+                MemoryTracker::get().save_report(params_.dataset.output_path);
             }
 
             if (progress_) {

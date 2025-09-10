@@ -31,6 +31,7 @@ namespace gs::training {
         bool is_refining(int iter) const override;
 
         void step(int iter) override;
+        torch::optim::Optimizer* get_optimizer() override { return _optimizer.get(); }
 
         gs::SplatData& get_model() override { return _splat_data; }
         const gs::SplatData& get_model() const override { return _splat_data; }

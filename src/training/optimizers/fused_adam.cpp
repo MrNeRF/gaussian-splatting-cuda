@@ -5,12 +5,7 @@
 #include "fused_adam.hpp"
 #include "adam_api.h"
 
-// TODO: This is just a gimmick for the bounty. I don't think it should be integrated into the main codebase.
-// TODO: Removing the SH step skipping also means that the custom zero_grad() method is no longer needed.
-// TODO: All skipping conditions assume that iteration count starts at 1 (which is it currently does).
-// Between iteration 1000 and 25000, we can skip every second step for higher degree SH coefficients.
-// This does push the bounty benchmark below 20 minutes, but I don't really like the practical implications.
-// It also causes a *very* small drop in quality metrics and robustness. Thus, I disable it by default.
+// Skip SH steps optimization - disabled by default
 #define SKIP_SH_STEPS false
 
 namespace gs::training {
@@ -25,16 +20,15 @@ namespace gs::training {
         // Get global options
         const auto& global_options = options();
 
-        int i = 0; // HACK: counter to track what Gaussian parameter we are on
+        int i = 0;
         for (auto& group : param_groups()) {
             ++i;
 
-            // For each group, check if it has specific options
+            // Get group-specific options
             double lr = global_options.lr();
             double eps = global_options.eps();
             auto [beta1, beta2] = global_options.betas();
 
-            // If the group has its own options, use those
             if (group.has_options()) {
                 if (auto* group_opts = dynamic_cast<const Options*>(&group.options())) {
                     lr = group_opts->lr();
@@ -48,24 +42,26 @@ namespace gs::training {
                     continue;
                 }
 
-                // Lazy state initialization
+                // Lazy state initialization with better memory management
                 auto state_ptr = state_.find(param.unsafeGetTensorImpl());
                 if (state_ptr == state_.end()) {
                     auto new_state = std::make_unique<AdamParamState>();
                     new_state->step_count = 0;
-                    new_state->exp_avg = torch::zeros_like(param, torch::MemoryFormat::Preserve);
-                    new_state->exp_avg_sq = torch::zeros_like(param, torch::MemoryFormat::Preserve);
+
+                    // Use contiguous memory and same dtype/device as param
+                    new_state->exp_avg = torch::zeros_like(param, param.options())
+                                            .contiguous();
+                    new_state->exp_avg_sq = torch::zeros_like(param, param.options())
+                                               .contiguous();
 
                     state_[param.unsafeGetTensorImpl()] = std::move(new_state);
                     state_ptr = state_.find(param.unsafeGetTensorImpl());
                 }
 
                 auto& state = static_cast<AdamParamState&>(*state_ptr->second);
-
-                // Increment step
                 state.step_count++;
 
-                // Higher degree SH coefficients are not used in the first 1000 iterations so this is a free speed up
+                // Skip higher degree SH coefficients in early iterations
                 if (i == 3 && iteration <= 1000)
                     continue;
 
@@ -78,7 +74,7 @@ namespace gs::training {
                 auto bias_correction1_rcp = 1.0 / (1.0 - std::pow(beta1, state.step_count));
                 auto bias_correction2_sqrt_rcp = 1.0 / std::sqrt(1.0 - std::pow(beta2, state.step_count));
 
-                // Call the fused CUDA kernel from fastgs
+                // Call the fused CUDA kernel - this is already memory efficient
                 fast_gs::optimizer::adam_step_wrapper(
                     param,
                     state.exp_avg,
@@ -94,26 +90,62 @@ namespace gs::training {
         }
     }
 
-    // Based on https://github.com/pytorch/pytorch/blob/ee343ce60ceb449da09d229db25fa9d425d85a4b/torch/csrc/api/src/optim/optimizer.cpp#L122
     void FusedAdam::zero_grad(bool set_to_none, int iteration) {
+        // ALWAYS set gradients to None to free memory immediately
+        // This is crucial for preventing memory fragmentation
+        set_to_none = true;  // Force this to true
+
         if constexpr (SKIP_SH_STEPS) {
-            int i = 0; // HACK: counter to track what Gaussian parameter we are on
+            int i = 0;
             for (auto& group : param_groups()) {
                 ++i;
                 for (auto& p : group.params()) {
-                    // We want to keep accumulating if the optimizer step was skipped
+                    // Skip zeroing if we're accumulating gradients
                     if (i == 3 && (iteration % 2 != 0 && iteration <= 25000))
                         continue;
+
                     if (p.mutable_grad().defined()) {
-                        p.mutable_grad().detach_();
-                        if (set_to_none)
-                            p.mutable_grad().reset();
-                        else
-                            p.mutable_grad().zero_();
+                        // Don't detach, just reset - this frees memory immediately
+                        p.mutable_grad().reset();
                     }
                 }
             }
-        } else
-            Optimizer::zero_grad(set_to_none);
+        } else {
+            // Efficient gradient clearing - always use set_to_none
+            for (auto& group : param_groups()) {
+                for (auto& p : group.params()) {
+                    if (p.mutable_grad().defined()) {
+                        // Reset without detaching - frees memory immediately
+                        p.mutable_grad().reset();
+                    }
+                }
+            }
+        }
+    }
+
+    void FusedAdam::compact_state() {
+        // Compact optimizer state to reduce memory fragmentation
+        for (auto& [key, state_ptr] : state_) {
+            if (auto* adam_state = dynamic_cast<AdamParamState*>(state_ptr.get())) {
+                // Make states contiguous if they're not
+                if (!adam_state->exp_avg.is_contiguous()) {
+                    adam_state->exp_avg = adam_state->exp_avg.contiguous();
+                }
+                if (!adam_state->exp_avg_sq.is_contiguous()) {
+                    adam_state->exp_avg_sq = adam_state->exp_avg_sq.contiguous();
+                }
+
+                // Optional: Reallocate to exact size if there's been resizing
+                // This can help with fragmentation after densification
+                if (adam_state->exp_avg.defined()) {
+                    auto temp = adam_state->exp_avg.clone();
+                    adam_state->exp_avg = temp;
+                }
+                if (adam_state->exp_avg_sq.defined()) {
+                    auto temp = adam_state->exp_avg_sq.clone();
+                    adam_state->exp_avg_sq = temp;
+                }
+            }
+        }
     }
 } // namespace gs::training

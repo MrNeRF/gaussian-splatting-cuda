@@ -1,11 +1,12 @@
 /* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
- *
+*
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #pragma once
 
 #include "core/parameters.hpp"
 #include "core/splat_data.hpp"
+#include <torch/torch.h>
 
 namespace gs::training {
     struct RenderOutput;
@@ -29,5 +30,8 @@ namespace gs::training {
 
         // Remove Gaussians based on mask
         virtual void remove_gaussians(const torch::Tensor& mask) = 0;
+
+        // Get the optimizer for memory management
+        virtual torch::optim::Optimizer* get_optimizer() = 0;
     };
 } // namespace gs::training
