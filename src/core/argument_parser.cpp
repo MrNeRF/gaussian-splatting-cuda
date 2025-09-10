@@ -125,6 +125,10 @@ namespace {
             ::args::Flag rc(parser, "rc", "Workaround for reality captures - doesn't properly convert COLMAP camera model", {"rc"});
             ::args::Flag save_sog(parser, "sog", "Save in SOG format alongside PLY", {"sog"});
 
+            // Memory debugging flags
+            ::args::Flag debug_memory(parser, "debug_memory", "Enable memory tracking and debugging", {"debug-memory"});
+            ::args::Flag debug_memory_detailed(parser, "debug_memory_detailed", "Enable detailed memory tracking (verbose)", {"debug-memory-detailed"});
+
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
                                                             "resize resolution by this factor. Options: auto, 1, 2, 4, 8 (default: auto)",
                                                             {'r', "resize_factor"},
@@ -308,7 +312,9 @@ namespace {
                                         random_flag = bool(random),
                                         gut_flag = bool(gut),
                                         save_sog_flag = bool(save_sog),
-                                        enable_sparsity_flag = bool(enable_sparsity)]() {
+                                        enable_sparsity_flag = bool(enable_sparsity),
+                                        debug_memory_flag = bool(debug_memory),
+                                        debug_memory_detailed_flag = bool(debug_memory_detailed)]() {
                 auto& opt = params.optimization;
                 auto& ds = params.dataset;
 
@@ -361,6 +367,13 @@ namespace {
                 setFlag(gut_flag, opt.gut);
                 setFlag(save_sog_flag, opt.save_sog);
                 setFlag(enable_sparsity_flag, opt.enable_sparsity);
+                setFlag(debug_memory_flag, opt.debug_memory);
+                setFlag(debug_memory_detailed_flag, opt.debug_memory_detailed);
+
+                // If detailed is set, also enable basic memory debugging
+                if (opt.debug_memory_detailed) {
+                    opt.debug_memory = true;
+                }
             };
 
             return std::make_tuple(ParseResult::Success, apply_cmd_overrides);

@@ -154,7 +154,9 @@ namespace gs {
                     {"prune_ratio", defaults.prune_ratio, "Final pruning ratio for sparsity"},
                     {"init_extent", defaults.init_extent, "Extent of random initialization"},
                     {"save_sog", defaults.save_sog, "Save in SOG format alongside PLY"},
-                    {"sog_iterations", defaults.sog_iterations, "K-means iterations for SOG compression"}};
+                    {"sog_iterations", defaults.sog_iterations, "K-means iterations for SOG compression"},
+                    {"debug_memory", defaults.debug_memory, "Enable memory tracking"},
+                    {"debug_memory_detailed", defaults.debug_memory_detailed, "Enable detailed memory tracking"}};
 
                 // Check all expected parameters
                 for (const auto& param : expected_params) {
@@ -310,6 +312,8 @@ namespace gs {
             opt_json["sparsify_steps"] = sparsify_steps;
             opt_json["init_rho"] = init_rho;
             opt_json["prune_ratio"] = prune_ratio;
+            opt_json["debug_memory"] = debug_memory;
+            opt_json["debug_memory_detailed"] = debug_memory_detailed;
 
             return opt_json;
         }
@@ -344,7 +348,7 @@ namespace gs {
                 params.init_scaling = json["init_scaling"];
             }
             if (json.contains("num_workers")) {
-                params.num_workers = json["num_workers_cap"];
+                params.num_workers = json["num_workers"];
             }
             if (json.contains("max_cap")) {
                 params.max_cap = json["max_cap"];
@@ -480,6 +484,12 @@ namespace gs {
             }
             if (json.contains("prune_ratio")) {
                 params.prune_ratio = json["prune_ratio"];
+            }
+            if (json.contains("debug_memory")) {
+                params.debug_memory = json["debug_memory"];
+            }
+            if (json.contains("debug_memory_detailed")) {
+                params.debug_memory_detailed = json["debug_memory_detailed"];
             }
 
             return params;

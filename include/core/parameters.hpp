@@ -83,6 +83,10 @@ namespace gs {
             float init_rho = 0.0005f;
             float prune_ratio = 0.6f;
 
+            // Memory debugging parameters
+            bool debug_memory = false;          // Enable memory tracking
+            bool debug_memory_detailed = false; // Enable detailed memory tracking
+
             nlohmann::json to_json() const;
             static OptimizationParameters from_json(const nlohmann::json& j);
         };
