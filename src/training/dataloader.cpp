@@ -135,6 +135,11 @@ namespace gs::training {
                                           .to(torch::kFloat32)
                                           .div_(255.0f)
                                           .contiguous(); // Ensure contiguous memory layout
+            torch::Tensor gpu_mask;
+            if (!camera->mask_path().empty()) {
+                gpu_mask = camera->load_and_get_attention_weights(resize_factor);
+            }
+
 
             // Synchronize this stream to ensure transfer is complete
             stream.synchronize();
@@ -143,7 +148,7 @@ namespace gs::training {
             free_image(data);
 
             // Create the example with the GPU tensor
-            CameraWithImage example{camera, std::move(gpu_image)};
+            CameraWithImage example{camera, std::move(gpu_image), std::move(gpu_mask)};
 
             // Add to ready queue
             {

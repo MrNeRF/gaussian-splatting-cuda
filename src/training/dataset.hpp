@@ -61,7 +61,7 @@ namespace gs::training {
 
             torch::Tensor image = cam->load_and_get_image(_datasetConfig.resize_factor);
             torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resize_factor);
-            return {{cam.get(), std::move(image), std::move(attention_weights)}};
+            return {cam.get(), std::move(image), std::move(attention_weights)};
         }
 
         size_t size() const { return _indices.size(); }

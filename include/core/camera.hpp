@@ -82,6 +82,7 @@ namespace gs {
         gsplat::CameraModelType camera_model_type() const noexcept { return _camera_model_type; }
         const std::string& image_name() const noexcept { return _image_name; }
         const std::filesystem::path& image_path() const noexcept { return _image_path; }
+        const std::filesystem::path& mask_path() const noexcept { return _mask_path; }
         int uid() const noexcept { return _uid; }
 
         float FoVx() const noexcept { return _FoVx; }

@@ -172,7 +172,7 @@ namespace gs::training {
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
         // Prune gaussians using masks
-        void prune_after_training(float threshold);
+        void prune_after_training(float center_keep_threshold, int min_visibility_count);
         
         void save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads = true);
 
