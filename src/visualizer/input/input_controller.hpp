@@ -132,7 +132,7 @@ namespace gs::visualizer {
         // Key states (only what we actually need)
         bool key_r_pressed_ = false;
         bool key_ctrl_pressed_ = false;
-        bool keys_wasd_[4] = {false, false, false, false}; // W,A,S,D
+        bool keys_wasd_[6] = {false, false, false, false, false, false}; // W,A,S,D,Q,E
 
         // Special modes
         bool point_cloud_mode_ = false;
