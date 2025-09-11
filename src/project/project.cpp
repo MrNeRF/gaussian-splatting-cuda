@@ -445,7 +445,7 @@ namespace gs::management {
         std::filesystem::path lockFile = getProjectOutputFolder() / Project::PROJECT_LOCK_FILE;
 
         if (!std::filesystem::exists(lockFile)) {
-            LOG_WARN("warining - calling unlock on unlocked project. lock file dont exists {}", lockFile.string());
+            LOG_WARN("warning - calling unlock on unlocked project. lock file doesn't exist {}", lockFile.string());
             return true; //??
         }
         if (!std::filesystem::remove(lockFile)) {
@@ -612,7 +612,7 @@ namespace gs::management {
 
                 if (folder_name.rfind(Project::PROJECT_DIR_PREFIX, 0) == 0) { // starts with prefix
                     if (std::filesystem::exists(entry.path() / ".lock")) {
-                        LOG_DEBUG("folder: {} exists, but it locked", entry.path().string());
+                        LOG_DEBUG("folder: {} exists, but it is locked", entry.path().string());
                         continue;
                     }
                     std::error_code ec;
