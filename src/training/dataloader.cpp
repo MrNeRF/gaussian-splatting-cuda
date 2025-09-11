@@ -19,8 +19,7 @@ namespace gs::training {
         std::shared_ptr<CameraDataset> dataset,
         int num_workers)
         : dataset_(dataset),
-          num_workers_(num_workers),
-          max_queue_size_(num_workers * QUEUE_BUFFER_FACTOR) {
+          num_workers_(num_workers) {
 
         // Get the actual dataset size (respects train/val split)
         size_t dataset_size = dataset_->size();
@@ -30,12 +29,15 @@ namespace gs::training {
         std::iota(indices_.begin(), indices_.end(), 0);
         std::shuffle(indices_.begin(), indices_.end(), rng_);
 
-        LOG_INFO("Initializing efficient dataloader with {} workers", num_workers);
-        LOG_INFO("Dataset size: {} images", dataset_size);
-        LOG_INFO("Max queue size: {} ({}x buffer factor per worker)",
-                 max_queue_size_, QUEUE_BUFFER_FACTOR);
+        // Pre-allocate GPU buffers - this is THE key optimization
+        // We allocate num_workers * 2 buffers for double buffering
+        const size_t buffer_count = num_workers * 2;
+        buffer_pool_.reserve(buffer_count);
 
-        // Estimate memory usage from first image (for logging purposes only)
+        LOG_INFO("Pre-allocating {} GPU buffers for efficient dataloader", buffer_count);
+        LOG_INFO("Dataset size: {} images", dataset_size);
+
+        // Estimate size from first image
         if (dataset_size > 0) {
             // Get first camera through the dataset to respect the split
             auto first_example = dataset_->get(0);
@@ -48,11 +50,23 @@ namespace gs::training {
                 h /= resize;
             }
 
-            // Estimate memory usage for queue
-            size_t per_image_bytes = w * h * c * sizeof(float);
-            size_t total_queue_memory = max_queue_size_ * per_image_bytes;
-            LOG_INFO("Estimated max queue memory usage: {:.2f} MB",
-                     total_queue_memory / (1024.0 * 1024.0));
+            // Pre-allocate GPU tensors
+            for (size_t i = 0; i < buffer_count; ++i) {
+                auto slot = std::make_unique<BufferSlot>();
+                // Allocate GPU memory once
+                slot->gpu_buffer = torch::empty(
+                    {c, h, w}, // CHW format
+                    torch::TensorOptions()
+                        .dtype(torch::kFloat32)
+                        .device(torch::kCUDA));
+                slot->last_width = w;
+                slot->last_height = h;
+                buffer_pool_.push_back(std::move(slot));
+            }
+
+            size_t total_vram = buffer_count * w * h * c * sizeof(float);
+            LOG_INFO("Total VRAM pre-allocated for dataloader: {:.2f} MB",
+                     total_vram / (1024.0 * 1024.0));
         }
 
         // Start worker threads
@@ -77,6 +91,27 @@ namespace gs::training {
         LOG_DEBUG("Stopped all dataloader worker threads");
     }
 
+    EfficientDataLoader::BufferSlot* EfficientDataLoader::acquire_buffer() {
+        // Find an unused buffer
+        while (!should_stop_) {
+            for (auto& slot : buffer_pool_) {
+                bool expected = false;
+                if (slot->in_use.compare_exchange_strong(expected, true)) {
+                    return slot.get();
+                }
+            }
+            // If no buffer available, wait a bit
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+        return nullptr;
+    }
+
+    void EfficientDataLoader::release_buffer(BufferSlot* buffer) {
+        if (buffer) {
+            buffer->in_use = false;
+        }
+    }
+
     void EfficientDataLoader::worker_thread(int worker_id) {
         const int resize_factor = dataset_->get_resize_factor();
 
@@ -88,7 +123,7 @@ namespace gs::training {
             {
                 std::unique_lock<std::mutex> lock(queue_mutex_);
                 space_cv_.wait(lock, [this] {
-                    return ready_queue_.size() < max_queue_size_ || should_stop_;
+                    return ready_queue_.size() < static_cast<size_t>(num_workers_ * 2) || should_stop_;
                 });
 
                 if (should_stop_)
@@ -112,15 +147,34 @@ namespace gs::training {
             auto dataset_example = dataset_->get(dataset_idx);
             Camera* camera = dataset_example.camera;
 
+            // Acquire a buffer slot
+            BufferSlot* slot = acquire_buffer();
+            if (!slot)
+                continue;
+
             // Load image data using image_io's standard function
             auto [data, w, h, c] = load_image(camera->image_path(), resize_factor);
 
             // Update camera dimensions
             camera->update_image_dimensions(w, h);
 
+            // Check if buffer needs resize
+            if (slot->last_width != w || slot->last_height != h) {
+                LOG_DEBUG("Resizing buffer from {}x{} to {}x{}",
+                          slot->last_width, slot->last_height, w, h);
+                slot->gpu_buffer = torch::empty(
+                    {c, h, w},
+                    torch::TensorOptions()
+                        .dtype(torch::kFloat32)
+                        .device(torch::kCUDA));
+                slot->last_width = w;
+                slot->last_height = h;
+            }
+
             // Use stream for this worker
             c10::cuda::CUDAStreamGuard guard(stream);
 
+            // Transfer to GPU with minimal allocations
             // Create pinned tensor WITHOUT copying - just wrapping the existing data
             auto pinned = torch::from_blob(
                 data,
@@ -129,21 +183,26 @@ namespace gs::training {
                     .dtype(torch::kUInt8)
                     .pinned_memory(true));
 
-            // Allocate fresh GPU tensor for each image
-            torch::Tensor gpu_image = pinned.to(torch::kCUDA, /*non_blocking=*/true)
-                                          .permute({2, 0, 1}) // HWC -> CHW
-                                          .to(torch::kFloat32)
-                                          .div_(255.0f)
-                                          .contiguous(); // Ensure contiguous memory layout
+            // Direct conversion and copy into pre-allocated buffer
+            // This is the KEY - we reuse slot->gpu_buffer!
+            slot->gpu_buffer.copy_(
+                pinned.to(torch::kCUDA, /*non_blocking=*/true)
+                    .permute({2, 0, 1}) // HWC -> CHW
+                    .to(torch::kFloat32)
+                    .div_(255.0f),
+                /*non_blocking=*/true);
 
-            // Synchronize this stream to ensure transfer is complete
+            // Synchronize this stream
             stream.synchronize();
 
             // Free CPU memory using image_io's function
             free_image(data);
 
-            // Create the example with the GPU tensor
-            CameraWithImage example{camera, std::move(gpu_image)};
+            // Create the example - clone() here is cheap as it just increments ref count
+            CameraWithImage example{camera, slot->gpu_buffer.clone()};
+
+            // Release buffer back to pool
+            release_buffer(slot);
 
             // Add to ready queue
             {
