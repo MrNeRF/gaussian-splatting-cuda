@@ -8,8 +8,6 @@
 #include "components/sparsity_optimizer.hpp"
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
-#include "dataloader.hpp"
-
 #include "kernels/fused_ssim.cuh"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
@@ -486,15 +484,15 @@ namespace gs::training {
                     base_dataset_->get_cameras(), params.dataset, CameraDataset::Split::VAL);
 
                 LOG_INFO("Created train/val split: {} train, {} val images",
-                         train_dataset_->size(),
-                         val_dataset_->size());
+                         train_dataset_->size().value(),
+                         val_dataset_->size().value());
             } else {
                 // Use all images for training
                 train_dataset_ = base_dataset_;
                 val_dataset_ = nullptr;
 
                 LOG_INFO("Using all {} images for training (no evaluation)",
-                         train_dataset_->size());
+                         train_dataset_->size().value());
             }
 
             // chage resize factor (change may comes from gui)
@@ -505,7 +503,7 @@ namespace gs::training {
                 val_dataset_->set_resize_factor(params.dataset.resize_factor);
             }
 
-            train_dataset_size_ = train_dataset_->size();
+            train_dataset_size_ = train_dataset_->size().value();
 
             m_cam_id_to_cam.clear();
             // Setup camera cache
@@ -1127,7 +1125,7 @@ namespace gs::training {
             }
 
             // Use infinite dataloader to avoid epoch restarts
-            auto train_dataloader = create_efficient_infinite_dataloader(train_dataset_, num_workers);
+            auto train_dataloader = create_infinite_dataloader_from_dataset(train_dataset_, num_workers);
             auto loader = train_dataloader->begin();
 
             LOG_DEBUG("Starting training iterations");
@@ -1142,9 +1140,10 @@ namespace gs::training {
                     callback_stream_.synchronize();
                 }
 
-                auto sample = *loader;
-                Camera* cam = sample.camera;
-                torch::Tensor gt_image = std::move(sample.image); // Already on CUDA!
+                auto& batch = *loader;
+                auto camera_with_image = batch[0].data;
+                Camera* cam = camera_with_image.camera;
+                torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA, /*non_blocking=*/true);
 
 
                 std::expected<Trainer::StepResult, std::string> step_result;

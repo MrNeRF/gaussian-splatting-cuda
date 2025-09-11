@@ -306,7 +306,7 @@ namespace gs {
                                              .size();
 
             LOG_INFO("Dataset loaded successfully - {} images, {} initial gaussians",
-                     setup_result->dataset->size(), num_gaussians);
+                     setup_result->dataset->size().value(), num_gaussians);
 
             events::state::SceneLoaded{
                 .scene = nullptr,
@@ -319,7 +319,7 @@ namespace gs {
                 .path = path,
                 .success = true,
                 .error = std::nullopt,
-                .num_images = setup_result->dataset->size(),
+                .num_images = setup_result->dataset->size().value(),
                 .num_points = num_gaussians}
                 .emit();
 

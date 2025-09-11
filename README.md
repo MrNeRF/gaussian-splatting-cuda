@@ -70,7 +70,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
 cmake --build build -- -j$(nproc)
 
 # Train on sample data
-./build/gaussian_splatting_cuda -d data/garden -o output/garden --eval
+./build/LichtFeld-Studio -d data/garden -o output/garden --eval
 ```
 
 ## Installation
@@ -247,12 +247,12 @@ unzip tandt_db.zip -d data/
 
 Basic training:
 ```bash
-./build/gaussian_splatting_cuda -d data/garden -o output/garden
+./build/LichtFeld-Studio -d data/garden -o output/garden
 ```
 
 Training with evaluation and visualization:
 ```bash
-./build/gaussian_splatting_cuda \
+./build/LichtFeld-Studio \
     -d data/garden \
     -o output/garden \
     --eval \
@@ -263,7 +263,7 @@ Training with evaluation and visualization:
 
 MCMC strategy with limited Gaussians:
 ```bash
-./build/gaussian_splatting_cuda \
+./build/LichtFeld-Studio \
     -d data/garden \
     -o output/garden \
     --strategy mcmc \
@@ -345,7 +345,7 @@ This implementation builds upon:
   author    = {LichtFeld Studio},
   title     = {A high-performance C++ and CUDA implementation of 3D Gaussian Splatting},
   year      = {2025},
-  url       = {https://github.com/MrNeRF/gaussian-splatting-cuda}
+  url       = {https://github.com/MrNeRF/LichtFeld-Studio}
 }
 ```
 

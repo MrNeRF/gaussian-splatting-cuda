@@ -71,10 +71,6 @@ namespace gs {
         int image_width() const noexcept { return _image_width; }
         int camera_height() const noexcept { return _camera_height; }
         int camera_width() const noexcept { return _camera_width; }
-        void update_image_dimensions(int width, int height) {
-            _image_width = width;
-            _image_height = height;
-        }
         float focal_x() const noexcept { return _focal_x; }
         float focal_y() const noexcept { return _focal_y; }
         torch::Tensor radial_distortion() const noexcept { return _radial_distortion; }
@@ -122,7 +118,6 @@ namespace gs {
         // CUDA stream for async operations
         at::cuda::CUDAStream _stream = at::cuda::getStreamFromPool(false);
     };
-
     inline float focal2fov(float focal, int pixels) {
         return 2.0f * std::atan(pixels / (2.0f * focal));
     }

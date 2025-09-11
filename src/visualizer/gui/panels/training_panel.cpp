@@ -6,9 +6,63 @@
 #include "core/events.hpp"
 #include "gui/ui_widgets.hpp"
 #include "visualizer_impl.hpp"
+
+#include <chrono>
+#include <deque>
 #include <imgui.h>
 
 namespace gs::gui::panels {
+
+    // Iteration rate tracking
+    struct IterationRateTracker {
+        struct Sample {
+            int iteration;
+            std::chrono::steady_clock::time_point timestamp;
+        };
+
+        std::deque<Sample> samples;
+        float window_seconds = 5.0f; // Configurable averaging window
+
+        void addSample(int iteration) {
+            auto now = std::chrono::steady_clock::now();
+            samples.push_back({iteration, now});
+
+            // Remove old samples outside the window
+            while (!samples.empty()) {
+                auto age = std::chrono::duration_cast<std::chrono::milliseconds>(now - samples.front().timestamp).count() / 1000.0f;
+                if (age <= window_seconds) {
+                    break;
+                }
+                samples.pop_front();
+            }
+        }
+
+        float getIterationsPerSecond() const {
+            if (samples.size() < 2) {
+                return 0.0f;
+            }
+
+            const auto& oldest = samples.front();
+            const auto& newest = samples.back();
+
+            int iter_diff = newest.iteration - oldest.iteration;
+            auto time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(newest.timestamp - oldest.timestamp).count() / 1000.0f;
+
+            if (time_diff <= 0.0f) {
+                return 0.0f;
+            }
+
+            return iter_diff / time_diff;
+        }
+
+        void clear() {
+            samples.clear();
+        }
+
+        void setWindowSeconds(float seconds) {
+            window_seconds = seconds;
+        }
+    };
 
     void SaveProjectButton(const UIContext& ctx, TrainingPanelState& state) {
         // Add Save Project button
@@ -718,8 +772,17 @@ namespace gs::gui::panels {
         case TrainerManager::State::Error: state_str = "Error"; break;
         }
 
+        // Static tracker instance
+        static IterationRateTracker g_iter_rate_tracker;
+
         ImGui::Text("Status: %s", state_str);
-        ImGui::Text("Iteration: %d", current_iteration);
+        // Update iteration rate tracker
+        g_iter_rate_tracker.addSample(current_iteration);
+        // Get iteration rate
+        float iters_per_sec = g_iter_rate_tracker.getIterationsPerSecond();
+        // Display iteration with rate
+        ImGui::Text("Iteration: %d (%.1f iters/sec)", current_iteration, iters_per_sec);
+
         ImGui::Text("Loss: %.6f", current_loss);
 
         // Render save project file browser
