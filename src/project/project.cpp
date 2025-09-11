@@ -445,7 +445,7 @@ namespace gs::management {
         std::filesystem::path lockFile = getProjectOutputFolder() / Project::PROJECT_LOCK_FILE;
 
         if (!std::filesystem::exists(lockFile)) {
-            LOG_WARN("warining - calling unlock on unlocked project. lock file dont exists {}", lockFile.string());
+            LOG_WARN("warning - calling unlock on unlocked project. lock file doesn't exist {}", lockFile.string());
             return true; //??
         }
         if (!std::filesystem::remove(lockFile)) {
