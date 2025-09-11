@@ -612,7 +612,7 @@ namespace gs::management {
 
                 if (folder_name.rfind(Project::PROJECT_DIR_PREFIX, 0) == 0) { // starts with prefix
                     if (std::filesystem::exists(entry.path() / ".lock")) {
-                        LOG_DEBUG("folder: {} exists, but it locked", entry.path().string());
+                        LOG_DEBUG("folder: {} exists, but it is locked", entry.path().string());
                         continue;
                     }
                     std::error_code ec;
