@@ -31,7 +31,6 @@ namespace {
     }
 
     // Downscale (resample) to (nw, nh). Returns newly malloc’ed RGB buffer.
-    // Downscale (resample) to (nw, nh). Returns newly malloc’ed RGB buffer.
     static inline unsigned char* downscale_resample_direct(const unsigned char* src_rgb,
                                                            int w, int h, int nw, int nh,
                                                            int nthreads /* 0=auto, 1=single */) {
@@ -212,8 +211,7 @@ void save_image(const std::filesystem::path& path, torch::Tensor image) {
     if (channels < 1 || channels > 4)
         throw std::runtime_error("save_image: channels must be in [1..4]");
 
-    std::cout << "Saving image: " << path
-              << " shape: [" << height << ", " << width << ", " << channels << "]\n";
+    LOG_INFO("Saving image: {} shape: [{}, {}, {}]", path.string(), height, width, channels);
 
     auto img_uint8 = (image.clamp(0, 1) * 255.0f).to(torch::kUInt8).contiguous();
 
@@ -296,7 +294,7 @@ namespace image_io {
     BatchImageSaver::BatchImageSaver(size_t num_workers)
         : num_workers_(std::min(num_workers, std::min(size_t(8), size_t(std::thread::hardware_concurrency())))) {
 
-        std::cout << "[BatchImageSaver] Starting with " << num_workers_ << " worker threads" << std::endl;
+        LOG_INFO("[BatchImageSaver] Starting with {} worker threads", num_workers_);
         for (size_t i = 0; i < num_workers_; ++i) {
             workers_.emplace_back(&BatchImageSaver::worker_thread, this);
         }
@@ -310,7 +308,7 @@ namespace image_io {
             if (stop_)
                 return;
             stop_ = true;
-            std::cout << "[BatchImageSaver] Shutting down..." << std::endl;
+            LOG_INFO("[BatchImageSaver] Shutting down...");
         }
         cv_.notify_all();
 
@@ -322,10 +320,7 @@ namespace image_io {
             process_task(task_queue_.front());
             task_queue_.pop();
         }
-        std::cout << "[BatchImageSaver] Shutdown complete" << std::endl;
-
-        // Optional: OIIO global shutdown to silence thread-pool warnings on some platforms.
-        // OIIO::shutdown();
+        LOG_INFO("[BatchImageSaver] Shutdown complete");
     }
 
     void BatchImageSaver::queue_save(const std::filesystem::path& path, torch::Tensor image) {
@@ -418,7 +413,7 @@ namespace image_io {
                 save_image(t.path, t.image);
             }
         } catch (const std::exception& e) {
-            std::cerr << "[BatchImageSaver] Error saving " << t.path << ": " << e.what() << std::endl;
+            LOG_ERROR("[BatchImageSaver] Error saving {}: {}", t.path.string(), e.what());
         }
     }
 
