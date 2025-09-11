@@ -32,7 +32,6 @@ do
         -o $RESULT_DIR/$SCENE/ \
         --images images_${DATA_FACTOR} \
         --iter 30000 \
-        --num-workers 8 \
         --headless \
 	--strategy default
 

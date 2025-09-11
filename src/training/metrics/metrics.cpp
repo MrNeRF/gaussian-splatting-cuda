@@ -5,7 +5,6 @@
 #include "metrics.hpp"
 #include "core/image_io.hpp"
 #include "core/splat_data.hpp"
-#include "dataloader.hpp"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
 #include <chrono>
@@ -383,6 +382,10 @@ namespace gs::training {
         return colormap;
     }
 
+    auto MetricsEvaluator::make_dataloader(std::shared_ptr<CameraDataset> dataset, const int workers) const {
+        return create_dataloader_from_dataset(dataset, workers);
+    }
+
     EvalMetrics MetricsEvaluator::evaluate(const int iteration,
                                            const SplatData& splatData,
                                            std::shared_ptr<CameraDataset> val_dataset,
@@ -395,8 +398,7 @@ namespace gs::training {
         result.num_gaussians = static_cast<int>(splatData.size());
         result.iteration = iteration;
 
-        // Use our simple evaluation dataloader
-        const auto val_dataloader = create_eval_dataloader(val_dataset);
+        const auto val_dataloader = make_dataloader(val_dataset);
 
         std::vector<float> psnr_values, ssim_values, lpips_values;
         const auto start_time = std::chrono::steady_clock::now();
@@ -415,20 +417,13 @@ namespace gs::training {
             std::filesystem::create_directories(depth_dir);
         }
 
-        const size_t val_dataset_size = val_dataset->size();
+        int image_idx = 0;
+        const size_t val_dataset_size = val_dataset->size().value();
 
-        // Clean iteration through evaluation dataset
-        for (auto example : *val_dataloader) {
-            Camera* cam = example.camera;
-            torch::Tensor gt_image = std::move(example.image).to(torch::kCUDA);
-
-            // Get the actual image name without extension for saving
-            std::string image_base_name = cam->image_name();
-            // Remove extension if present
-            size_t last_dot = image_base_name.find_last_of('.');
-            if (last_dot != std::string::npos) {
-                image_base_name = image_base_name.substr(0, last_dot);
-            }
+        for (auto& batch : *val_dataloader) {
+            auto camera_with_image = batch[0].data;
+            Camera* cam = camera_with_image.camera; // rasterize needs non-const Camera&
+            torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA);
 
             // TODO: const_cast is certainly not the correct solution here!
             auto& splatData_mutable = const_cast<SplatData&>(splatData);
@@ -454,11 +449,11 @@ namespace gs::training {
                 ssim_values.push_back(ssim);
                 lpips_values.push_back(lpips);
 
-                // Save side-by-side RGB images asynchronously with actual image name
+                // Save side-by-side RGB images asynchronously
                 if (_params.optimization.enable_save_eval_images) {
                     const std::vector<torch::Tensor> rgb_images = {gt_image.squeeze(0), r_output.image.squeeze(0)};
                     image_io::save_images_async(
-                        eval_dir / (image_base_name + ".png"),
+                        eval_dir / (std::to_string(image_idx) + ".png"),
                         rgb_images,
                         true, // horizontal
                         4);   // separator width
@@ -482,7 +477,7 @@ namespace gs::training {
                     if (has_rgb()) {
                         const std::vector<torch::Tensor> rgb_depth_images = {r_output.image.squeeze(0), depth_colormap};
                         image_io::save_images_async(
-                            depth_dir / (image_base_name + "_rgb_depth.png"),
+                            depth_dir / (std::to_string(image_idx) + "_rgb_depth.png"),
                             rgb_depth_images,
                             true, // horizontal
                             4);   // separator width
@@ -490,14 +485,16 @@ namespace gs::training {
                         // Save depth alone if no RGB
                         const auto depth_gray_rgb = depth_normalized.unsqueeze(0).repeat({3, 1, 1});
                         image_io::save_image_async(
-                            depth_dir / (image_base_name + "_gray.png"),
+                            depth_dir / (std::to_string(image_idx) + "_gray.png"),
                             depth_gray_rgb);
                         image_io::save_image_async(
-                            depth_dir / (image_base_name + "_color.png"),
+                            depth_dir / (std::to_string(image_idx) + "_color.png"),
                             depth_colormap);
                     }
                 }
             }
+
+            image_idx++;
         }
 
         // Wait for all images to be saved before computing final timing
@@ -528,7 +525,7 @@ namespace gs::training {
         _reporter->add_metrics(result);
 
         if (_params.optimization.enable_save_eval_images) {
-            std::cout << "Saved " << val_dataset_size << " evaluation images to: " << eval_dir << std::endl;
+            std::cout << "Saved " << image_idx << " evaluation images to: " << eval_dir << std::endl;
             if (has_depth()) {
                 std::cout << "Saved depth maps to: " << depth_dir << std::endl;
             }
@@ -536,5 +533,4 @@ namespace gs::training {
 
         return result;
     }
-
 } // namespace gs::training
