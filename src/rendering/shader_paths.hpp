@@ -34,8 +34,15 @@ namespace gs::rendering {
         LOG_TRACE("Shader '{}' not found in source directory: {}", shader_name, source_path.string());
 #endif
 
-        // Last resort - try relative to current file
+        // Try relative to current file
         std::filesystem::path fallback_path = std::filesystem::path(__FILE__).parent_path() / "resources" / "shaders" / shader_name;
+        if (std::filesystem::exists(fallback_path)) {
+            LOG_DEBUG("Found shader '{}' in fallback path: {}", shader_name, fallback_path.string());
+            return fallback_path;
+        }
+                
+        // Last resort - try relative to the executable
+        fallback_path = std::filesystem::current_path() / "resources" / "shaders" / shader_name;
         if (std::filesystem::exists(fallback_path)) {
             LOG_DEBUG("Found shader '{}' in fallback path: {}", shader_name, fallback_path.string());
             return fallback_path;

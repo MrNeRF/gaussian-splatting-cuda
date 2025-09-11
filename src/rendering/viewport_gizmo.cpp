@@ -46,6 +46,13 @@ namespace gs::rendering {
         // Load font from our assets
         std::string font_path = std::string(PROJECT_ROOT_PATH) +
                                 "/src/rendering/resources/assets/JetBrainsMono-Regular.ttf";
+
+        if (!std::filesystem::exists(font_path)) {
+            font_path = (std::filesystem::current_path() /
+                         "/resources/assets/JetBrainsMono-Regular.ttf")
+                            .string();
+        }
+
         if (auto result = text_renderer_->LoadFont(font_path, 48); !result) {
             LOG_WARN("ViewportGizmo: Failed to load font: {}", result.error());
             text_renderer_.reset();
