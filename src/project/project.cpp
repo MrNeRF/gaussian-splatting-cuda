@@ -660,12 +660,15 @@ namespace gs::management {
             LOG_ERROR("Project temoprary directory exists. This should not happen {}", temp_path.string());
         } else {
             try {
-                bool success = fs::create_directories(temp_path);
-                if (!success) {
-                    LOG_ERROR("failed to create temporary directory {}", temp_path.string());
-                    return nullptr;
+                // if data path is empty, project should not create directory yet
+                if (!data.data_path.empty()) {
+                    bool success = fs::create_directories(temp_path);
+                    if (!success) {
+                        LOG_ERROR("failed to create temporary directory {}", temp_path.string());
+                        return nullptr;
+                    }
+                    LOG_INFO("Project created temoprary directory successfuly: {}", temp_path.string());
                 }
-                LOG_INFO("Project created temoprary directory successfuly: {}", temp_path.string());
 
             } catch (const fs::filesystem_error& e) {
                 LOG_ERROR("failed to create temporary directory {}. reason: {}", temp_path.string(), e.what());
@@ -673,6 +676,11 @@ namespace gs::management {
             }
         }
         data_with_temp_output.output_path = temp_path;
+
+        if (data.data_path.empty()) {
+            udpdate_file_on_change = false; // if data path is empty, project should not create directory yet
+        }
+
         auto project = CreateNewProject(data_with_temp_output, opt, project_name, udpdate_file_on_change);
 
         if (project) {
