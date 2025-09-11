@@ -22,7 +22,7 @@ namespace {
 
     const std::set<std::string> VALID_RENDER_MODES = {"RGB", "D", "ED", "RGB_D", "RGB_ED"};
     const std::set<std::string> VALID_POSE_OPTS = {"none", "direct", "mlp"};
-    const std::set<std::string> VALID_STRATEGIES = {"mcmc", "default"};
+    const std::set<std::string> VALID_STRATEGIES = {"mcmc", "default", "combined"};
 
     void scale_steps_vector(std::vector<size_t>& steps, size_t scaler) {
         std::set<size_t> unique_steps(steps.begin(), steps.end());

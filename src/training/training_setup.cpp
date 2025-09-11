@@ -8,6 +8,7 @@
 #include "loader/loader.hpp"
 #include "strategies/default_strategy.hpp"
 #include "strategies/mcmc.hpp"
+#include "strategies/combined.hpp"
 #include <format>
 
 namespace gs::training {
@@ -105,6 +106,9 @@ namespace gs::training {
                 if (params.optimization.strategy == "mcmc") {
                     strategy = std::make_unique<MCMC>(std::move(*splat_result));
                     LOG_DEBUG("Created MCMC strategy");
+                } else if (params.optimization.strategy == "combined") {
+                    strategy = std::make_unique<CombinedStrategy>(std::move(*splat_result));
+                    LOG_DEBUG("Created Combined strategy");
                 } else {
                     strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
                     LOG_DEBUG("Created default strategy");

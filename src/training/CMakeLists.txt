@@ -18,6 +18,7 @@ set(TRAINING_HOST_SOURCES
         strategies/strategy_utils.cpp
         strategies/default_strategy.cpp
         strategies/mcmc.cpp
+        strategies/combined.cpp
 
         # Optimizers
         optimizers/scheduler.cpp

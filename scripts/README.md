@@ -29,6 +29,7 @@ The following commands should be run from the root directory of this project.
     ./scripts/benchmark_mipnerf360_adc.sh
     ./scripts/timing_mipnerf360_mcmc.sh
     ./scripts/timing_mipnerf360_adc.sh
+    ./scripts/benchmark_mipnerf360_combined.sh
     ```
 
     ```ps

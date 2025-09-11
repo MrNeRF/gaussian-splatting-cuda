@@ -373,7 +373,7 @@ namespace gs {
 
             if (json.contains("strategy")) {
                 std::string strategy = json["strategy"];
-                if (strategy == "mcmc" || strategy == "default") {
+                if (strategy == "mcmc" || strategy == "default" || strategy == "combined") {
                     params.strategy = strategy;
                 } else {
                     std::println(stderr, "Warning: Invalid optimization strategy '{}' in JSON. Using default 'default'", strategy);
