@@ -441,6 +441,23 @@ namespace gs::management {
         return true;
     }
 
+    bool Project::unlockProject() {
+        std::filesystem::path lockFile = getProjectOutputFolder() / Project::PROJECT_LOCK_FILE;
+
+        if (!std::filesystem::exists(lockFile)) {
+            LOG_WARN("warining - calling unlock on unlocked project. lock file dont exists {}", lockFile.string());
+            return true; //??
+        }
+        if (!std::filesystem::remove(lockFile)) {
+            LOG_ERROR("failed to remove Lock file: {}", lockFile.string());
+            return false;
+        }
+
+        LOG_DEBUG("Lock file deleted: {}", lockFile.string());
+
+        return true;
+    }
+
     bool Project::portProjectToDir(const std::filesystem::path& dst_dir) {
 
         namespace fs = std::filesystem;
