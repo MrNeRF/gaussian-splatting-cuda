@@ -53,6 +53,9 @@ namespace gs {
     int run_gui_app(std::unique_ptr<param::TrainingParameters> params) {
         LOG_INFO("Starting viewer mode...");
 
+        LOG_DEBUG("removing temporary projects");
+        gs::management::RemoveTempUnlockedProjects();
+
         // Create visualizer with options
         auto viewer = visualizer::Visualizer::create({.title = "LichtFeld Studio",
                                                       .width = 1280,

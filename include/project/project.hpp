@@ -111,6 +111,8 @@ namespace gs::management {
         static const Version CURRENT_VERSION;
         static const std::string FILE_HEADER;
         static const std::string EXTENSION;
+        static const std::string PROJECT_DIR_PREFIX;
+        static const std::string PROJECT_LOCK_FILE;
 
         explicit Project(bool update_file_on_change = false);
         explicit Project(const ProjectData& initialData, bool update_file_on_change = false);
@@ -157,6 +159,8 @@ namespace gs::management {
 
         [[nodiscard]] bool getIsTempProject() const { return is_temp_project_; }
         void setIsTempProject(bool is_temp) { is_temp_project_ = is_temp; }
+        bool lockProject();
+        bool unlockProject();
 
     private:
         std::filesystem::path output_file_name_;
@@ -164,7 +168,9 @@ namespace gs::management {
         mutable std::mutex io_mutex_;
         bool is_temp_project_ = false;
     };
-
+    // go over all lfs folders in temp directory and remove unlocked ones
+    // preferably this should be called at the app startup
+    bool RemoveTempUnlockedProjects();
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data, const param::OptimizationParameters& opt,
                                               const std::string& project_name = "LichtFeldStudioProject", bool update_file_on_change = true);
 

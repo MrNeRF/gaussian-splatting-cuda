@@ -16,7 +16,9 @@ namespace gs::management {
     // Static member definitions
     const Version Project::CURRENT_VERSION(0, 0, 1);
     const std::string Project::FILE_HEADER = "LichtFeldStudio Project File";
-    const std::string Project::EXTENSION = ".ls"; // LichtFeldStudio file
+    const std::string Project::EXTENSION = ".ls";                // LichtFeldStudio file
+    const std::string Project::PROJECT_DIR_PREFIX = "lfs_proj_"; // LichtFeldStudio file
+    const std::string Project::PROJECT_LOCK_FILE = ".lock";
 
     // Version implementation
     Version::Version(const std::string& versionStr) {
@@ -423,6 +425,39 @@ namespace gs::management {
                !project_data_.data_set_info.data_type.empty();
     }
 
+    bool Project::lockProject() {
+        std::filesystem::path lockFile = getProjectOutputFolder() / Project::PROJECT_LOCK_FILE;
+
+        // Create empty file (truncate if exists)
+        std::ofstream(lockFile).close();
+
+        if (!std::filesystem::exists(lockFile)) {
+            LOG_ERROR("failed to generate Lock file: {}", lockFile.string());
+            return false;
+        }
+
+        LOG_DEBUG("Lock file created: {}", lockFile.string());
+
+        return true;
+    }
+
+    bool Project::unlockProject() {
+        std::filesystem::path lockFile = getProjectOutputFolder() / Project::PROJECT_LOCK_FILE;
+
+        if (!std::filesystem::exists(lockFile)) {
+            LOG_WARN("warning - calling unlock on unlocked project. lock file doesn't exist {}", lockFile.string());
+            return true; //??
+        }
+        if (!std::filesystem::remove(lockFile)) {
+            LOG_ERROR("failed to remove Lock file: {}", lockFile.string());
+            return false;
+        }
+
+        LOG_DEBUG("Lock file deleted: {}", lockFile.string());
+
+        return true;
+    }
+
     bool Project::portProjectToDir(const std::filesystem::path& dst_dir) {
 
         namespace fs = std::filesystem;
@@ -463,6 +498,14 @@ namespace gs::management {
             } catch (const fs::filesystem_error& e) {
                 LOG_ERROR("PortProjectToDir: failed to copy ply {} -> {}. reason: {}",
                           ply.ply_path.string(), (dst_dir / ply.ply_path.filename()).string(), e.what());
+                return false;
+            }
+        }
+
+        fs::path lock_file = src_project_dir / Project::PROJECT_LOCK_FILE;
+        if (std::filesystem::exists(lock_file)) {
+            if (!fs::remove(lock_file)) {
+                LOG_ERROR("failed to remove lock file from temporary dir {}", lock_file.string());
                 return false;
             }
         }
@@ -550,6 +593,59 @@ namespace gs::management {
             fs::remove_all(entry);
         }
     }
+    static std::filesystem::path GetLichtFeldBaseTemporaryFolder() {
+        return std::filesystem::temp_directory_path() / "LichtFeldStudio";
+    }
+
+    bool RemoveTempUnlockedProjects() {
+
+        const std::filesystem::path& base_folder = GetLichtFeldBaseTemporaryFolder();
+
+        if (!std::filesystem::exists(base_folder) || !std::filesystem::is_directory(base_folder)) {
+            LOG_ERROR("Invalid base folder: {}", base_folder.string());
+            return false;
+        }
+
+        for (const auto& entry : std::filesystem::directory_iterator(base_folder)) {
+            if (entry.is_directory()) {
+                auto folder_name = entry.path().filename().string();
+
+                if (folder_name.rfind(Project::PROJECT_DIR_PREFIX, 0) == 0) { // starts with prefix
+                    if (std::filesystem::exists(entry.path() / ".lock")) {
+                        LOG_DEBUG("folder: {} exists, but it is locked", entry.path().string());
+                        continue;
+                    }
+                    std::error_code ec;
+                    std::filesystem::remove_all(entry.path(), ec);
+                    if (ec) {
+                        LOG_ERROR("Failed to remove {}:{}", entry.path().string(), ec.message());
+                        return false;
+                    }
+                    LOG_DEBUG("Removed folder: {}", entry.path().string());
+                }
+            }
+        }
+
+        return true;
+    }
+
+    static std::string generateShortHash() {
+        // Current time in nanoseconds
+        auto now = std::chrono::high_resolution_clock::now();
+        auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+
+        // Hash the timestamp
+        std::hash<long long> hasher;
+        size_t hashValue = hasher(ns);
+
+        // Convert to hex string
+        std::stringstream ss;
+        ss << std::hex << hashValue;
+        std::string hashStr = ss.str();
+
+        // Return only first 5 characters (or shorter if hash < 5 chars)
+        return hashStr.substr(0, 5);
+    }
 
     std::shared_ptr<Project> CreateTempNewProject(const gs::param::DatasetConfig& data,
                                                   const param::OptimizationParameters& opt,
@@ -557,18 +653,22 @@ namespace gs::management {
         namespace fs = std::filesystem;
         gs::param::DatasetConfig data_with_temp_output = data;
 
-        auto temp_path = fs::temp_directory_path() / "LichtFeldStudio";
+        std::string unique_id = generateShortHash();
+        auto temp_path = GetLichtFeldBaseTemporaryFolder() / (Project::PROJECT_DIR_PREFIX + "_" + unique_id);
+
         if (fs::exists(temp_path)) {
-            clear_directory(temp_path);
-            LOG_INFO("Project temoprary directory exists removing its contenet {}", temp_path.string());
+            LOG_ERROR("Project temoprary directory exists. This should not happen {}", temp_path.string());
         } else {
             try {
-                bool success = fs::create_directories(temp_path);
-                if (!success) {
-                    LOG_ERROR("failed to create temporary directory {}", temp_path.string());
-                    return nullptr;
+                // if data path is empty, project should not create directory yet
+                if (!data.data_path.empty()) {
+                    bool success = fs::create_directories(temp_path);
+                    if (!success) {
+                        LOG_ERROR("failed to create temporary directory {}", temp_path.string());
+                        return nullptr;
+                    }
+                    LOG_INFO("Project created temoprary directory successfuly: {}", temp_path.string());
                 }
-                LOG_INFO("Project created temoprary directory successfuly: {}", temp_path.string());
 
             } catch (const fs::filesystem_error& e) {
                 LOG_ERROR("failed to create temporary directory {}. reason: {}", temp_path.string(), e.what());
@@ -576,10 +676,19 @@ namespace gs::management {
             }
         }
         data_with_temp_output.output_path = temp_path;
+
+        if (data.data_path.empty()) {
+            udpdate_file_on_change = false; // if data path is empty, project should not create directory yet
+        }
+
         auto project = CreateNewProject(data_with_temp_output, opt, project_name, udpdate_file_on_change);
 
         if (project) {
             project->setIsTempProject(true);
+        }
+
+        if (!data.data_path.empty()) {
+            project->lockProject();
         }
 
         return project;
