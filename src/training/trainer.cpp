@@ -1147,10 +1147,10 @@ namespace gs::training {
 
 
                 std::expected<Trainer::StepResult, std::string> step_result;
-                if (!params_.optimization.use_attention_mask || !sample.attentionMask.defined()) {
+                if (!params_.optimization.use_attention_mask || !camera_with_image.attentionMask.defined()) {
                     step_result = train_step(iter, cam, gt_image, torch::Tensor(), render_mode, false, stop_token);
                 } else {
-                    torch::Tensor attention_image = std::move(sample.attentionMask);
+                    torch::Tensor attention_image = std::move(camera_with_image.attentionMask).to(torch::kCUDA, /*non_blocking=*/true);
                     bool out_of_mask_penalty = true;
                     step_result = train_step(iter, cam, gt_image, attention_image, render_mode, out_of_mask_penalty, stop_token);
                 }
@@ -1273,9 +1273,11 @@ namespace gs::training {
             std::cout << "[Prune center] Empty dataset.\n";
             return;
         }
+
+        
         const int workers = std::max(1, params_.optimization.num_workers);
-        auto loader = create_efficient_infinite_dataloader(train_dataset_, workers);
-        auto it = loader->begin();
+        auto train_dataloader = create_infinite_dataloader_from_dataset(train_dataset_, workers);
+        auto loader = train_dataloader->begin();
 
         // 3) Projection constants
         const float eps2d = 0.3f;
@@ -1287,13 +1289,14 @@ namespace gs::training {
         int idx_img = 1;
         size_t skipped_missing = 0, skipped_shape = 0, skipped_size = 0, skipped_proj = 0;
 
-        for (size_t i = 0; i < dataset_size; ++i, ++it) {
+        
+        for (size_t i = 0; i < dataset_size; ++i, ++loader) {
             std::printf("\r[Prune Center] image %d/%zu", idx_img++, dataset_size);
             std::fflush(stdout);
-
-            const auto sample = *it; // CameraDataset::Sample {camera, image, attentionMask}
-            Camera* cam = sample.camera;
-            auto mask_f = sample.attentionMask;
+            auto& batch = *loader;
+            const auto camera_with_image = batch[0].data; // {camera, image, attentionMask}
+            Camera* cam = camera_with_image.camera;
+            auto mask_f = camera_with_image.attentionMask;
 
             if (!cam) {
                 std::cout << "\n[Prune center] Warning: null camera; skipping view.\n";
@@ -1385,7 +1388,7 @@ namespace gs::training {
                 continue;
             auto vidx = visible.nonzero().squeeze(-1); // [M], CUDA
 
-            // 2D centers → CPU ints in [0..W-1],[0..H-1]
+            // 2D centers -> CPU ints in [0..W-1],[0..H-1]
             auto xy_cuda = means2d.index({vidx}); // [M,2], CUDA
             auto xy = xy_cuda.detach().to(torch::kCPU);
             auto x = torch::round(xy.select(1, 0)).to(torch::kLong).clamp(0, W - 1);
