@@ -104,7 +104,7 @@ namespace gs::visualizer {
         main_loop_->setUpdateCallback([this]() { update(); });
         main_loop_->setRenderCallback([this]() { render(); });
         main_loop_->setShutdownCallback([this]() { shutdown(); });
-        main_loop_->setShouldCloseCallback([this]() { return window_manager_->shouldClose(); });
+        main_loop_->setShouldCloseCallback([this]() { return allowclose(); });
 
         // Set up GUI connections
         gui_manager_->setScriptExecutor([this](const std::string& cmd) {
@@ -352,6 +352,21 @@ namespace gs::visualizer {
         window_manager_->swapBuffers();
         window_manager_->pollEvents();
     }
+
+    
+    bool VisualizerImpl::allowclose() {
+        if (window_manager_->shouldClose() && ! gui_manager_->force_exit_) {
+            if (project_) {
+                if (project_->getIsTempProject()) {
+                    gui_manager_->showWindow("dialog_box", true);
+                    window_manager_->cancelClose();
+                }
+            }
+        }
+
+        return window_manager_->shouldClose();
+    }
+    
 
     void VisualizerImpl::shutdown() {
         // Shutdown tools

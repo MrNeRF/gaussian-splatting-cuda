@@ -113,6 +113,7 @@ namespace gs::visualizer {
         void update();
         void render();
         void shutdown();
+        bool allowclose();
 
         // Event system
         void setupEventHandlers();

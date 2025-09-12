@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include "windows/dialogbox.hpp"
 
 namespace gs {
     namespace visualizer {
@@ -21,6 +22,7 @@ namespace gs {
         class ScriptingConsole;
         class FileBrowser;
         class ScenePanel;
+        class DialogBox;
 
         class GuiManager {
         public:
@@ -46,6 +48,7 @@ namespace gs {
             // Missing methods that visualizer_impl expects
             void setScriptExecutor(std::function<std::string(const std::string&)> executor);
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
+            void handleDialogCallback(std::function<void(bool)> callback);
             void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
 
             // Viewport region access
@@ -54,6 +57,8 @@ namespace gs {
             bool isMouseInViewport() const;
             bool isViewportFocused() const;
             bool isPositionInViewport(double x, double y) const;
+
+            bool force_exit_ = false;
 
         private:
             void setupEventHandlers();
@@ -67,6 +72,7 @@ namespace gs {
             // Owned components
             std::unique_ptr<ScriptingConsole> console_;
             std::unique_ptr<FileBrowser> file_browser_;
+            std::unique_ptr<SaveProjectDialogBox> dialog_box_;
             std::unique_ptr<ScenePanel> scene_panel_;
 
             // UI state only
@@ -89,6 +95,8 @@ namespace gs {
             // Method declarations
             void renderSpeedOverlay();
             void showSpeedOverlay(float current_speed, float max_speed);
+
+            
         };
     } // namespace gui
 } // namespace gs

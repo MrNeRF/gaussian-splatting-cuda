@@ -22,7 +22,12 @@ namespace gs::visualizer {
         // Continue running while:
         // - Either we don't have a should_close callback (run forever)
         // - OR we have one and it returns false (not time to close)
-        while (!should_close_callback_ || !should_close_callback_()) {
+        while (true) {
+            if (!should_close_callback_ || should_close_callback_()) {
+                LOG_DEBUG("Should close callback requested exit");
+                break;
+            }
+                
             if (update_callback_) {
                 update_callback_();
             }

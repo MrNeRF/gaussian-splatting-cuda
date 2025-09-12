@@ -29,6 +29,7 @@ add_library(gs_visualizer STATIC
         gui/windows/scripting_console.cpp
         gui/windows/file_browser.cpp
         gui/windows/camera_controls.cpp
+        gui/windows/dialogbox.cpp
         gui/windows/image_preview.cpp
         gui/windows/save_project_browser.cpp
 

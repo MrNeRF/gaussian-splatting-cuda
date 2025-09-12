@@ -61,6 +61,11 @@ namespace gs::gui::panels {
             (*ctx.window_states)["camera_controls"] = true;
         }
 
+        if (ImGui::Button("save as", ImVec2(-1, 0))) {
+            (*ctx.window_states)["dialog_box"] = true;
+        }
+
+
         ImGui::Separator();
         ImGui::Text("Windows");
         ImGui::Checkbox("Scripting Console", &(*ctx.window_states)["console"]);

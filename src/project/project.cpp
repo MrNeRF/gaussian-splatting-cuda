@@ -684,10 +684,11 @@ namespace gs::management {
         auto project = CreateNewProject(data_with_temp_output, opt, project_name, udpdate_file_on_change);
 
         if (project) {
-            project->setIsTempProject(true);
+            // project->setIsTempProject(true);
         }
 
         if (!data.data_path.empty()) {
+            project->setIsTempProject(true);
             project->lockProject();
         }
 
