@@ -147,12 +147,9 @@ class Viewport {
 
     private:
         void applyRotationAroundCenter(float yaw, float pitch) {
-            // Use world Y-axis for yaw rotation to maintain height
-            // and camera's local right axis for pitch
-            glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
 
-            // Yaw rotation around world Y-axis
-            glm::mat3 Ry = glm::mat3(glm::rotate(glm::mat4(1.0f), yaw, worldUp));
+            // Yaw rotation around local up axis
+            glm::mat3 Ry = glm::mat3(glm::rotate(glm::mat4(1.0f), yaw, R[1]));
 
             // Pitch rotation around camera's local right axis
             glm::mat3 Rp = glm::mat3(glm::rotate(glm::mat4(1.0f), pitch, R[0]));
