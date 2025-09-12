@@ -50,6 +50,7 @@ namespace gs {
             EVENT(ShowWindow, std::string window_name; bool show;);
             EVENT(ExecuteConsole, std::string command;);
             EVENT(GoToCamView, int cam_id;);
+            EVENT(ToggleEnableCamera, int cam_id;);
             EVENT(AddPLY, std::filesystem::path path; std::string name;);
             EVENT(RemovePLY, std::string name;);
             EVENT(SetPLYVisibility, std::string name; bool visible;);
