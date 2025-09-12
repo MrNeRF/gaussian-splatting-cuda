@@ -27,9 +27,9 @@ add_library(gs_visualizer STATIC
         gui/panels/tools_panel.cpp
         gui/panels/world_transform_panel.cpp
         gui/windows/scripting_console.cpp
-        gui/windows/project_changed_dialog_box.cpp
+        gui/windows/file_browser.cpp
         gui/windows/camera_controls.cpp
-        gui/windows/dialogbox.cpp
+        gui/windows/project_changed_dialog_box.cpp
         gui/windows/image_preview.cpp
         gui/windows/save_project_browser.cpp
 
