@@ -344,7 +344,7 @@ namespace gs {
                 params.init_scaling = json["init_scaling"];
             }
             if (json.contains("num_workers")) {
-                params.num_workers = json["num_workers_cap"];
+                params.num_workers = json["num_workers"];
             }
             if (json.contains("max_cap")) {
                 params.max_cap = json["max_cap"];
