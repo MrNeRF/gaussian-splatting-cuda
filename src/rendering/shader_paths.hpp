@@ -40,7 +40,7 @@ namespace gs::rendering {
             LOG_DEBUG("Found shader '{}' in fallback path: {}", shader_name, fallback_path.string());
             return fallback_path;
         }
-                
+
         // Last resort - try relative to the executable
         fallback_path = std::filesystem::current_path() / "resources" / "shaders" / shader_name;
         if (std::filesystem::exists(fallback_path)) {
