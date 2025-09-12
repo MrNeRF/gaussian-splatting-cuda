@@ -14,7 +14,7 @@ namespace gs::gui {
     public:
         SaveProjectBrowser();
 
-        void render(bool* p_open);
+        bool render(bool* p_open);
         void setCurrentPath(const std::filesystem::path& path);
 
     private:

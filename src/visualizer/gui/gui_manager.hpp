@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include "windows/dialogbox.hpp"
+#include "gui/windows/save_project_browser.hpp"
 
 namespace gs {
     namespace visualizer {
@@ -96,7 +97,7 @@ namespace gs {
             void renderSpeedOverlay();
             void showSpeedOverlay(float current_speed, float max_speed);
 
-            
+            std::unique_ptr<SaveProjectBrowser> save_project_browser_;
         };
     } // namespace gui
 } // namespace gs

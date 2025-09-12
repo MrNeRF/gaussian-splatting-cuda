@@ -15,7 +15,6 @@
 #include "gui/windows/scripting_console.hpp"
 #include "internal/resource_paths.hpp"
 #include "visualizer_impl.hpp"
-#include "gui/windows/save_project_browser.hpp"
 
 #include <GLFW/glfw3.h>
 #include <chrono>
@@ -25,7 +24,6 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
 
-
 namespace gs::gui {
 
     GuiManager::GuiManager(visualizer::VisualizerImpl* viewer)
@@ -34,8 +32,9 @@ namespace gs::gui {
         // Create components
         console_ = std::make_unique<ScriptingConsole>();
         file_browser_ = std::make_unique<FileBrowser>();
-        dialog_box_ =  std::make_unique<SaveProjectDialogBox>();
+        dialog_box_ = std::make_unique<SaveProjectDialogBox>();
         scene_panel_ = std::make_unique<ScenePanel>(viewer->trainer_manager_);
+        save_project_browser_ = std::make_unique<SaveProjectBrowser>();
 
         // Initialize window states
         window_states_["console"] = false;
@@ -43,6 +42,7 @@ namespace gs::gui {
         window_states_["camera_controls"] = false;
         window_states_["scene_panel"] = true;
         window_states_["dialog_box"] = false;
+        window_states_["save_project_browser_before_exit"] = false;
 
         // Initialize speed overlay state
         speed_overlay_visible_ = false;
@@ -95,20 +95,16 @@ namespace gs::gui {
             window_states_["file_browser"] = false;
         });
 
-
         handleDialogCallback([this](bool save) {
             if (save) {
-                /* need to show the save dialog box*/
-                // auto& panel_state = TrainingPanelState::getInstance();
-                // panel_state.show_save_browser = true;
+                window_states_["save_project_browser_before_exit"] = true;
             } else {
                 force_exit_ = true;
                 glfwSetWindowShouldClose(viewer_->getWindow(), true);
+                LOG_INFO("Existing LichtFeldStudio gracefully without saving");
             }
             window_states_["dialog_box"] = false;
         });
-
-        
 
         scene_panel_->setOnDatasetLoad([this](const std::filesystem::path& path) {
             if (path.empty()) {
@@ -255,8 +251,18 @@ namespace gs::gui {
         if (window_states_["camera_controls"]) {
             gui::windows::DrawCameraControls(&window_states_["camera_controls"]);
         }
+
         if (window_states_["dialog_box"]) {
             dialog_box_->render(&window_states_["dialog_box"]);
+        }
+
+        if (window_states_["save_project_browser_before_exit"]) {
+            bool was_project_saved = save_project_browser_->render(&window_states_["save_project_browser_before_exit"]);
+            if (was_project_saved) {
+                force_exit_ = true;
+                glfwSetWindowShouldClose(viewer_->getWindow(), true);
+                LOG_INFO("Existing LichtFeldStudio gracefully after project save");
+            }
         }
 
         // Render speed overlay if visible
@@ -671,6 +677,5 @@ namespace gs::gui {
             dialog_box_->setOnDialogClose(callback);
         }
     }
-
 
 } // namespace gs::gui
