@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <wtypes.h>
+#include <GLFW/glfw3.h>
 #include "core/events.hpp"
 #include "gui/ui_context.hpp"
 #include "gui/windows/save_project_browser.hpp"
@@ -51,6 +53,8 @@ namespace gs {
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
             void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
             void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
+
+            bool HICONToGLFWImage(HICON* hIcon, GLFWimage* outImage);
 
             // Viewport region access
             ImVec2 getViewportPos() const;

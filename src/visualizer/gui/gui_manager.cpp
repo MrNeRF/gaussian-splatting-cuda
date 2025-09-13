@@ -24,6 +24,7 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
 
+
 namespace gs::gui {
 
     GuiManager::GuiManager(visualizer::VisualizerImpl* viewer)
@@ -71,6 +72,18 @@ namespace gs::gui {
         // Platform/Renderer initialization
         ImGui_ImplGlfw_InitForOpenGL(viewer_->getWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 430");
+
+        // load icon from application resources
+        // on linux, maybe this does not work, then we could load the icon from a resource file (simular to font loading) - to be confirmed
+        // HICON hIcon = = (HICON)LoadImage(NULL, "../../icon.ico", IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADFROMFILE);
+        HICON hIcon = (HICON)LoadImage(GetModuleHandle(NULL), "IDI_ICON1", IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);        
+        
+        // set icon as application icon for the window
+        GLFWimage iconImage;
+        if (HICONToGLFWImage(&hIcon, &iconImage)) {
+            glfwSetWindowIcon(viewer_->getWindow(), 1, &iconImage);
+            delete[] iconImage.pixels;
+        }
 
         // Load fonts - use the resource path helper
         try {
@@ -677,5 +690,66 @@ namespace gs::gui {
             project_changed_dialog_box_->setOnDialogClose(callback);
         }
     }
+
+    bool GuiManager::HICONToGLFWImage(HICON* hIcon, GLFWimage* outImage) {
+        if (!hIcon || !outImage) {
+            return false;
+        }
+
+        // Get icon information
+        ICONINFO iconInfo;
+        if (!GetIconInfo(*hIcon, &iconInfo)) {
+            return false;
+        }
+
+        // Get bitmap information
+        BITMAP bmp;
+        if (!GetObject(iconInfo.hbmColor, sizeof(BITMAP), &bmp)) {
+            DeleteObject(iconInfo.hbmColor);
+            DeleteObject(iconInfo.hbmMask);
+            return false;
+        }
+
+        // Create DC and select bitmap
+        HDC hdc = CreateCompatibleDC(NULL);
+        HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdc, iconInfo.hbmColor);
+
+        // Allocate memory for pixel data
+        int width = bmp.bmWidth;
+        int height = bmp.bmHeight;
+        unsigned char* pixels = new unsigned char[width * height * 4];
+
+        // Setup bitmap info
+        BITMAPINFO bmi = {0};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = width;
+        bmi.bmiHeader.biHeight = -height; // Negative height for top-down
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        // Get pixel data
+        if (!GetDIBits(hdc, iconInfo.hbmColor, 0, height, pixels, &bmi, DIB_RGB_COLORS)) {
+            delete[] pixels;
+            SelectObject(hdc, hOldBitmap);
+            DeleteDC(hdc);
+            DeleteObject(iconInfo.hbmColor);
+            DeleteObject(iconInfo.hbmMask);
+            return false;
+        }
+
+        // Set GLFWimage properties
+        outImage->width = width;
+        outImage->height = height;
+        outImage->pixels = pixels;
+
+        // Cleanup GDI objects
+        SelectObject(hdc, hOldBitmap);
+        DeleteDC(hdc);
+        DeleteObject(iconInfo.hbmColor);
+        DeleteObject(iconInfo.hbmMask);
+
+    return true;
+}
 
 } // namespace gs::gui
