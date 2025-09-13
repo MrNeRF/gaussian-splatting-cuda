@@ -31,6 +31,7 @@ namespace gs {
         void swapBuffers();
         void pollEvents();
         bool shouldClose() const;
+        void cancelClose();
         void setVSync(bool enabled);
         [[nodiscard]] bool getVSync() const { return vsync_enabled_; }
         void requestRedraw();

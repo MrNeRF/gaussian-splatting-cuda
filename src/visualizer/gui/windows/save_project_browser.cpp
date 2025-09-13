@@ -15,7 +15,8 @@ namespace gs::gui {
         project_dir_name_ = "";
     }
 
-    void SaveProjectBrowser::render(bool* p_open) {
+    // returns true if project was saved
+    bool SaveProjectBrowser::render(bool* p_open) {
         ImGui::SetNextWindowSize(ImVec2(650, 400), ImGuiCond_FirstUseEver);
 
         // Add NoDocking flag and make it modal
@@ -24,10 +25,12 @@ namespace gs::gui {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.17f, 0.98f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
 
+        bool was_project_saved = false;
+
         if (!ImGui::Begin("Save Project", p_open, window_flags)) {
             ImGui::End();
             ImGui::PopStyleColor(2);
-            return;
+            return was_project_saved;
         }
 
         if (ImGui::BeginMenuBar()) {
@@ -162,6 +165,7 @@ namespace gs::gui {
             events::cmd::SaveProject{project_dir}.emit();
             // Call the callback if set
             *p_open = false;
+            was_project_saved = true;
         }
         ImGui::PopStyleColor(2);
 
@@ -178,6 +182,8 @@ namespace gs::gui {
 
         ImGui::End();
         ImGui::PopStyleColor(2);
+
+        return was_project_saved;
     }
 
     void SaveProjectBrowser::setCurrentPath(const std::filesystem::path& path) {
