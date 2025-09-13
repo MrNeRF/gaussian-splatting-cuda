@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "gui/windows/project_changed_dialog_box.hpp"
-#include <imgui.h>
 #include "gui/ui_widgets.hpp"
 #include <core/logger.hpp>
+#include <imgui.h>
 
 namespace gs::gui {
 
@@ -54,7 +54,6 @@ namespace gs::gui {
             }
 
             ImGui::Text("");
-
         }
         ImGui::End();
         ImGui::PopStyleColor(4);

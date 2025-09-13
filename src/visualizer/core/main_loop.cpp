@@ -27,7 +27,7 @@ namespace gs::visualizer {
                 LOG_DEBUG("Should close callback requested exit");
                 break;
             }
-                
+
             if (update_callback_) {
                 update_callback_();
             }

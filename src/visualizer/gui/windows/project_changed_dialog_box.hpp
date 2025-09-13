@@ -22,5 +22,3 @@ namespace gs::gui {
     };
 
 } // namespace gs::gui
-
-

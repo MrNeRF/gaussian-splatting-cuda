@@ -6,13 +6,13 @@
 
 #include "core/events.hpp"
 #include "gui/ui_context.hpp"
+#include "gui/windows/save_project_browser.hpp"
+#include "windows/project_changed_dialog_box.hpp"
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include "windows/project_changed_dialog_box.hpp"
-#include "gui/windows/save_project_browser.hpp"
 
 namespace gs {
     namespace visualizer {
@@ -60,7 +60,6 @@ namespace gs {
             bool isPositionInViewport(double x, double y) const;
 
             bool isForceExit() const { return force_exit_; }
-            
 
         private:
             void setupEventHandlers();

@@ -353,7 +353,6 @@ namespace gs::visualizer {
         window_manager_->pollEvents();
     }
 
-    
     bool VisualizerImpl::allowclose() {
         // If we are trying to close and the project is temporary, show dialog
         if (window_manager_->shouldClose() && !gui_manager_->isForceExit()) {
@@ -375,7 +374,6 @@ namespace gs::visualizer {
 
         return window_manager_->shouldClose();
     }
-    
 
     void VisualizerImpl::shutdown() {
         // Shutdown tools
