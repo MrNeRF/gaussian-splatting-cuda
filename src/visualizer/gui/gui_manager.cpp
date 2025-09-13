@@ -4,6 +4,7 @@
 
 #include "gui/gui_manager.hpp"
 #include "core/logger.hpp"
+#include "core/image_io.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
 #include "gui/panels/tools_panel.hpp"
@@ -73,19 +74,25 @@ namespace gs::gui {
         ImGui_ImplGlfw_InitForOpenGL(viewer_->getWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 430");
 
-#ifdef _WIN32
-        // load icon from application resources
-        // on linux, maybe this does not work, then we could load the icon from a resource file (simular to font loading) - to be confirmed
-        // HICON hIcon = = (HICON)LoadImage(NULL, "../../icon.ico", IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADFROMFILE);
-        HICON hIcon = (HICON)LoadImage(GetModuleHandle(NULL), "IDI_ICON1", IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);        
-        
-        // set icon as application icon for the window
-        GLFWimage iconImage;
-        if (HICONToGLFWImage(&hIcon, &iconImage)) {
-            glfwSetWindowIcon(viewer_->getWindow(), 1, &iconImage);
-            delete[] iconImage.pixels;
+        // Set application icon - use the resource path helper
+        try {
+            auto icon_path = gs::visualizer::getAssetPath("lichtfeld-icon.png");
+            auto result = load_image_with_alpha(icon_path);
+            unsigned char* data;
+            int width, height, channels = 0;
+
+            data = std::get<0>(result);
+            width = std::get<1>(result);
+            height = std::get<2>(result);
+            channels = std::get<3>(result);
+
+            GLFWimage image{width, height, data};
+            glfwSetWindowIcon(viewer_->getWindow(), 1, &image);
+            free_image(data);
+        } catch (const std::exception& e) {            
+            LOG_WARN("Could not load application icon: {}", e.what());
         }
-#endif
+
         // Load fonts - use the resource path helper
         try {
             auto font_path = gs::visualizer::getAssetPath("JetBrainsMono-Regular.ttf");
