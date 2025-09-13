@@ -1,7 +1,10 @@
+/* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later */
+
 #include "gui/windows/project_changed_dialog_box.hpp"
 #include <imgui.h>
 #include "gui/ui_widgets.hpp"
-#include "visualizer/visualizer_impl.hpp" // <-- Add this include
 #include <core/logger.hpp>
 
 namespace gs::gui {

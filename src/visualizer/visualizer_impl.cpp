@@ -356,7 +356,7 @@ namespace gs::visualizer {
     
     bool VisualizerImpl::allowclose() {
         // If we are trying to close and the project is temporary, show dialog
-        if (window_manager_->shouldClose() && ! gui_manager_->isForceExit()) {
+        if (window_manager_->shouldClose() && !gui_manager_->isForceExit()) {
             if (project_) {
                 if (project_->getIsTempProject()) {
                     gui_manager_->showWindow("project_changed_dialog_box", true);

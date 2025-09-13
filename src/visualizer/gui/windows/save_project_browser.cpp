@@ -165,7 +165,7 @@ namespace gs::gui {
             events::cmd::SaveProject{project_dir}.emit();
             // Call the callback if set
             *p_open = false;
-            was_project_saved=true;
+            was_project_saved = true;
         }
         ImGui::PopStyleColor(2);
 
