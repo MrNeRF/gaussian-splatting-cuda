@@ -73,6 +73,7 @@ namespace gs::gui {
         ImGui_ImplGlfw_InitForOpenGL(viewer_->getWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 430");
 
+#ifdef _WIN32
         // load icon from application resources
         // on linux, maybe this does not work, then we could load the icon from a resource file (simular to font loading) - to be confirmed
         // HICON hIcon = = (HICON)LoadImage(NULL, "../../icon.ico", IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADFROMFILE);
@@ -84,7 +85,7 @@ namespace gs::gui {
             glfwSetWindowIcon(viewer_->getWindow(), 1, &iconImage);
             delete[] iconImage.pixels;
         }
-
+#endif
         // Load fonts - use the resource path helper
         try {
             auto font_path = gs::visualizer::getAssetPath("JetBrainsMono-Regular.ttf");
@@ -691,6 +692,8 @@ namespace gs::gui {
         }
     }
 
+#ifdef _WIN32
+    // support function to convert HICON to GLFWimage
     bool GuiManager::HICONToGLFWImage(HICON* hIcon, GLFWimage* outImage) {
         if (!hIcon || !outImage) {
             return false;
@@ -749,7 +752,8 @@ namespace gs::gui {
         DeleteObject(iconInfo.hbmColor);
         DeleteObject(iconInfo.hbmMask);
 
-    return true;
-}
+        return true;
+    }
+#endif
 
 } // namespace gs::gui

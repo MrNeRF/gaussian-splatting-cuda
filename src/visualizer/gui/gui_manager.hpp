@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <wtypes.h>
 #include <GLFW/glfw3.h>
 #include "core/events.hpp"
 #include "gui/ui_context.hpp"
@@ -15,6 +14,11 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+
+
+#ifdef _WIN32
+#include <wtypes.h>
+#endif
 
 namespace gs {
     namespace visualizer {
@@ -54,8 +58,9 @@ namespace gs {
             void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
             void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
 
+#ifdef _WIN32
             bool HICONToGLFWImage(HICON* hIcon, GLFWimage* outImage);
-
+#endif
             // Viewport region access
             ImVec2 getViewportPos() const;
             ImVec2 getViewportSize() const;
