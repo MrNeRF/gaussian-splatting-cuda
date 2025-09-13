@@ -10,6 +10,8 @@
 #include "visualizer_impl.hpp"
 #include <algorithm>
 #include <imgui.h>
+#include <windows.h> // For Windows-specific console handling
+#include "core/logger.hpp"
 
 namespace gs::gui::panels {
 
@@ -53,6 +55,34 @@ namespace gs::gui::panels {
     }
 
     void DrawWindowControls(const UIContext& ctx) {
+
+        if (ImGui::Button("Show system Console", ImVec2(-1, 0))) {
+            HWND hwnd = GetConsoleWindow();
+            Sleep(1);
+            HWND owner = GetWindow(hwnd, GW_OWNER);
+            DWORD dwProcessId;
+
+            if (owner == NULL) {
+                ShowWindow(hwnd, SW_SHOW); // Windows 10
+            } else {
+                ShowWindow(owner, SW_SHOW); // Windows 11
+            }
+        }
+
+        if (ImGui::Button("Hide system Console", ImVec2(-1, 0))) {
+            HWND hwnd = GetConsoleWindow();
+            Sleep(1);
+            HWND owner = GetWindow(hwnd, GW_OWNER);
+            DWORD dwProcessId;
+
+            if (owner == NULL) {
+                ShowWindow(hwnd, SW_HIDE); // Windows 10
+            } else {
+                ShowWindow(owner, SW_HIDE); // Windows 11
+            }
+        }
+
+
         if (ImGui::Button("Open Scripting Console", ImVec2(-1, 0))) {
             (*ctx.window_states)["console"] = true;
         }
