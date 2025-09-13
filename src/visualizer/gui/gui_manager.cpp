@@ -4,6 +4,7 @@
 
 #include "gui/gui_manager.hpp"
 #include "core/logger.hpp"
+#include "core/image_io.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
 #include "gui/panels/tools_panel.hpp"
@@ -23,6 +24,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
+
 
 namespace gs::gui {
 
@@ -71,6 +73,25 @@ namespace gs::gui {
         // Platform/Renderer initialization
         ImGui_ImplGlfw_InitForOpenGL(viewer_->getWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 430");
+
+        // Set application icon - use the resource path helper
+        try {
+            auto icon_path = gs::visualizer::getAssetPath("lichtfeld-icon.png");
+            auto result = load_image_with_alpha(icon_path);
+            unsigned char* data;
+            int width, height, channels = 0;
+
+            data = std::get<0>(result);
+            width = std::get<1>(result);
+            height = std::get<2>(result);
+            channels = std::get<3>(result);
+
+            GLFWimage image{width, height, data};
+            glfwSetWindowIcon(viewer_->getWindow(), 1, &image);
+            free_image(data);
+        } catch (const std::exception& e) {            
+            LOG_WARN("Could not load application icon: {}", e.what());
+        }
 
         // Load fonts - use the resource path helper
         try {
@@ -677,5 +698,4 @@ namespace gs::gui {
             project_changed_dialog_box_->setOnDialogClose(callback);
         }
     }
-
 } // namespace gs::gui

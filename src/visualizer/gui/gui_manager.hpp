@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <GLFW/glfw3.h>
 #include "core/events.hpp"
 #include "gui/ui_context.hpp"
 #include "gui/windows/save_project_browser.hpp"
@@ -51,7 +52,7 @@ namespace gs {
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
             void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
             void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
-
+			
             // Viewport region access
             ImVec2 getViewportPos() const;
             ImVec2 getViewportSize() const;
