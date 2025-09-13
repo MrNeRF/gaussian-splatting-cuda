@@ -15,11 +15,6 @@
 #include <string>
 #include <unordered_map>
 
-
-#ifdef _WIN32
-#include <wtypes.h>
-#endif
-
 namespace gs {
     namespace visualizer {
         class VisualizerImpl;
@@ -57,10 +52,7 @@ namespace gs {
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
             void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
             void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
-
-#ifdef _WIN32
-            bool HICONToGLFWImage(HICON* hIcon, GLFWimage* outImage);
-#endif
+			
             // Viewport region access
             ImVec2 getViewportPos() const;
             ImVec2 getViewportSize() const;
