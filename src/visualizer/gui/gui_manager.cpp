@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "gui/gui_manager.hpp"
-#include "core/logger.hpp"
 #include "core/image_io.hpp"
+#include "core/logger.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
 #include "gui/panels/tools_panel.hpp"
@@ -24,7 +24,6 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
-
 
 namespace gs::gui {
 
@@ -89,7 +88,7 @@ namespace gs::gui {
             GLFWimage image{width, height, data};
             glfwSetWindowIcon(viewer_->getWindow(), 1, &image);
             free_image(data);
-        } catch (const std::exception& e) {            
+        } catch (const std::exception& e) {
             LOG_WARN("Could not load application icon: {}", e.what());
         }
 

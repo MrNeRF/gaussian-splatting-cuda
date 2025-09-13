@@ -87,7 +87,7 @@ load_image_with_alpha(std::filesystem::path p) {
         return std::make_tuple(data, W, H, C);
     };
 
-    // Fast path: read 4 channels directly 
+    // Fast path: read 4 channels directly
     if (file_c == 4) {
         // allocate and read directly into final RGB buffer
         auto* out = static_cast<unsigned char*>(std::malloc((size_t)w * h * 4));
