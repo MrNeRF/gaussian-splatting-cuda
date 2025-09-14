@@ -197,12 +197,38 @@ namespace gs::gui::panels {
                 }
 
                 ImGui::EndTable();
+
+                // Reality Capture checkbox
+                bool rc_enabled = opt_params.rc;
+                if (!can_edit) {
+                    ImGui::BeginDisabled();
+                }
+                if (ImGui::Checkbox("Import from Reality Capture", &rc_enabled)) {
+                    opt_params.rc = rc_enabled;
+                    opt_params_changed = true;
+                }
+                if (!can_edit) {
+                    ImGui::EndDisabled();
+                }
             }
             ImGui::TreePop();
         }
 
         // Optimization Parameters
         if (ImGui::TreeNode("Optimization")) {
+            // Enabled GUI checkbox
+            if (!can_edit) {
+                ImGui::BeginDisabled();
+            }
+            bool gut_enabled = opt_params.gut;
+            if (ImGui::Checkbox("GUT", &gut_enabled)) {
+                opt_params.gut = gut_enabled;
+                opt_params_changed = true;
+            }
+            if (!can_edit) {
+                ImGui::EndDisabled();
+            }
+
             if (ImGui::BeginTable("OptimizationTable", 2, ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
@@ -717,6 +743,14 @@ namespace gs::gui::panels {
                 if (!error_msg.empty()) {
                     ImGui::TextWrapped("%s", error_msg.c_str());
                 }
+                // Reset button
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.7f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.6f, 0.8f, 1.0f));
+                if (ImGui::Button("Reset Training", ImVec2(-1, 0))) {
+                    trainer_manager->resetTraining();
+                }
+                ImGui::PopStyleColor(2);
+
             }
             break;
 
