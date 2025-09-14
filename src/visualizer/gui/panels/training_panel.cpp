@@ -197,7 +197,6 @@ namespace gs::gui::panels {
                 }
 
                 ImGui::EndTable();
-
             }
             ImGui::TreePop();
         }
