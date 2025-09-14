@@ -122,7 +122,6 @@ namespace {
             ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
             ::args::Flag gut(parser, "gut", "Enable GUT mode", {"gut"});
             ::args::Flag enable_sparsity(parser, "enable_sparsity", "Enable sparsity optimization", {"enable-sparsity"});
-            ::args::Flag rc(parser, "rc", "Workaround for reality captures - doesn't properly convert COLMAP camera model", {"rc"});
             ::args::Flag save_sog(parser, "sog", "Save in SOG format alongside PLY", {"sog"});
 
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
