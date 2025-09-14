@@ -707,7 +707,12 @@ namespace gs::loader {
                 out[i]._center_x = out[i]._params[1].item<float>();
                 out[i]._center_y = out[i]._params[2].item<float>();
                 float k1 = out[i]._params[3].item<float>();
-                out[i]._radial_distortion = torch::tensor({k1}, torch::kFloat32);
+                // k1 should be zero for COLMAP's SIMPLE_RADIAL to match a pinhole model
+                if (k1 != 0.0f) {
+                    LOG_WARN("Camera {} uses SIMPLE_RADIAL model with non-zero k1 distortion ({})",
+                             out[i]._camera_ID, k1);
+                    out[i]._radial_distortion = torch::tensor({k1}, torch::kFloat32);
+                }
                 out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
                 break;
             }

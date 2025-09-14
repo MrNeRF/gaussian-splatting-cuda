@@ -198,18 +198,6 @@ namespace gs::gui::panels {
 
                 ImGui::EndTable();
 
-                // Reality Capture checkbox
-                bool rc_enabled = opt_params.rc;
-                if (!can_edit) {
-                    ImGui::BeginDisabled();
-                }
-                if (ImGui::Checkbox("Import from Reality Capture", &rc_enabled)) {
-                    opt_params.rc = rc_enabled;
-                    opt_params_changed = true;
-                }
-                if (!can_edit) {
-                    ImGui::EndDisabled();
-                }
             }
             ImGui::TreePop();
         }
