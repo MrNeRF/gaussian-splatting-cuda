@@ -1,7 +1,6 @@
-# LichtFeld Studio
+<div align="center"><img src="src/visualizer/gui/assets/logo/lichtfeld-logo-white.svg" alt="LichtFeld Studio" height="60"></div>
 
 <div align="center">
-
 **A high-performance C++ and CUDA implementation of 3D Gaussian Splatting**
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?logo=discord&logoColor=white)](https://discord.gg/TbxJST2BbC)
@@ -20,6 +19,22 @@
 [**Community**](#community--support)
 
 </div>
+
+---
+
+## Support LichtFeld Studio Development
+
+LichtFeld Studio is a free, open-source implementation of 3D Gaussian Splatting that pushes the boundaries of real-time rendering performance.
+
+**Why Your Support Matters**:
+This project requires significant time and resources to develop and maintain. 
+
+Unlike commercial alternatives that can cost thousands in licensing fees, LichtFeld Studio remains completely free and open. Your contribution helps ensure it stays that way while continuing to evolve with the latest research.
+
+Whether you're using it for research, production, or learning, your support enables us to dedicate more time to making LichtFeld Studio faster, more powerful, and accessible to everyone in the 3D graphics community.
+
+[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/MrNeRF)
+[![Support on Donorbox](https://img.shields.io/badge/Donate-Donorbox-27A9E1?style=for-the-badge)](https://donorbox.org/lichtfeld-studio)
 
 ---
 

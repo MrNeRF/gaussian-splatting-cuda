@@ -1,0 +1,2 @@
+Please treat the black on white SVG-file as base-file. All other files are copies of it only with the required edit.
+The logo font is "Outfit" from google fonts: https://fonts.google.com/specimen/Outfit
