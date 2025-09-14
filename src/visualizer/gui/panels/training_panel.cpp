@@ -216,7 +216,6 @@ namespace gs::gui::panels {
 
         // Optimization Parameters
         if (ImGui::TreeNode("Optimization")) {
-
             // Enabled GUI checkbox
             if (!can_edit) {
                 ImGui::BeginDisabled();
@@ -231,7 +230,6 @@ namespace gs::gui::panels {
             }
 
             if (ImGui::BeginTable("OptimizationTable", 2, ImGuiTableFlags_SizingStretchProp)) {
-
                 ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
