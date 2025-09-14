@@ -60,14 +60,15 @@ Join our growing community for discussions, support, and updates:
 - **[Awesome 3D Gaussian Splatting](https://mrnerf.github.io/awesome-3D-gaussian-splatting/)** - Comprehensive paper list
 - **[@janusch_patas](https://twitter.com/janusch_patas)** - Follow for the latest updates
 
-## Active Bounty
+## Active Bounties
 
-### Second Bounty: Better 3DGS Initialization and Training without Densification
-**$2,600 + $500 Bonus Challenge**
+### Fourth Bounty: Automatic Per-Scene Hyperparameter Optimization
+**💰 $2,430** | [Issue #443](https://github.com/MrNeRF/LichtFeld-Studio/issues/443)  
+**📅 Deadline:** October 12, 2025 at 11:59 PM PST
 
-Details: [Issue #284](https://github.com/MrNeRF/LichtFeld-Studio/issues/284)
-
-Previous winner: [Florian Hahlbohm](https://github.com/MrNeRF/LichtFeld-Studio/pull/245) (2.4x rasterizer speedup)
+### Third Bounty: Follow-up to Bounty #002
+**💰 $500** | [Issue #421](https://github.com/MrNeRF/LichtFeld-Studio/issues/421)  
+**📅 Deadline:** None (open-ended)
 
 ## Quick Start
 
