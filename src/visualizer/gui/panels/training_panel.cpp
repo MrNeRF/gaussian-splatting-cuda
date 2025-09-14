@@ -750,7 +750,6 @@ namespace gs::gui::panels {
                     trainer_manager->resetTraining();
                 }
                 ImGui::PopStyleColor(2);
-
             }
             break;
 
