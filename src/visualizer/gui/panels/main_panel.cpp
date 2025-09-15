@@ -72,7 +72,7 @@ namespace gs::gui::panels {
                     ShowWindow(owner, SW_SHOW); // Windows 11
                 }
                 ctx.window_states->at("system_console") = true;
-            } 
+            }
         } else {
             if (ImGui::Button("Hide system Console", ImVec2(-1, 0))) {
                 HWND hwnd = GetConsoleWindow();
@@ -88,7 +88,6 @@ namespace gs::gui::panels {
             }
         }
 #endif // Win32
-
 
         ImGui::Text("Windows");
         ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);

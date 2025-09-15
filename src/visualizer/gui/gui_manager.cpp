@@ -615,7 +615,6 @@ namespace gs::gui {
         ui::SpeedChanged::when([this](const auto& e) {
             showSpeedOverlay(e.current_speed, e.max_speed);
         });
-
     }
 
     void GuiManager::applyDefaultStyle() {

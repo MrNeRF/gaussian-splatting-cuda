@@ -9,7 +9,7 @@
 #include "tools/translation_gizmo_tool.hpp"
 #include <stdexcept>
 #ifdef WIN32
-#include <windows.h>    
+#include <windows.h>
 #endif
 
 namespace gs::visualizer {
