@@ -10,6 +10,9 @@
 #include "visualizer_impl.hpp"
 #include <algorithm>
 #include <imgui.h>
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 namespace gs::gui::panels {
 
@@ -62,7 +65,6 @@ namespace gs::gui::panels {
                 HWND hwnd = GetConsoleWindow();
                 Sleep(1);
                 HWND owner = GetWindow(hwnd, GW_OWNER);
-                DWORD dwProcessId;
 
                 if (owner == NULL) {
                     ShowWindow(hwnd, SW_SHOW); // Windows 10
@@ -76,7 +78,6 @@ namespace gs::gui::panels {
                 HWND hwnd = GetConsoleWindow();
                 Sleep(1);
                 HWND owner = GetWindow(hwnd, GW_OWNER);
-                DWORD dwProcessId;
 
                 if (owner == NULL) {
                     ShowWindow(hwnd, SW_HIDE); // Windows 10

@@ -9,6 +9,9 @@
 #include "scene/scene_manager.hpp"
 #include "tools/translation_gizmo_tool.hpp"
 #include <stdexcept>
+#ifdef WIN32
+#include <windows.h>    
+#endif
 
 namespace gs::visualizer {
 
