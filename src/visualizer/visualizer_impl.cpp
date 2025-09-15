@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "visualizer_impl.hpp"
-#include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
 #include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
@@ -44,9 +43,6 @@ namespace gs::visualizer {
         initial_settings.antialiasing = options.antialiasing;
         initial_settings.gut = options.gut;
         rendering_manager_->updateSettings(initial_settings);
-
-        // Create command processor
-        command_processor_ = std::make_unique<CommandProcessor>(scene_manager_.get());
 
         // Create data loading service
         data_loader_ = std::make_unique<DataLoadingService>(scene_manager_.get());
@@ -109,11 +105,6 @@ namespace gs::visualizer {
         main_loop_->setShutdownCallback([this]() { shutdown(); });
         main_loop_->setShouldCloseCallback([this]() { return allowclose(); });
 
-        // Set up GUI connections
-        gui_manager_->setScriptExecutor([this](const std::string& cmd) {
-            return command_processor_->processCommand(cmd);
-        });
-
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
         });
@@ -175,15 +166,6 @@ namespace gs::visualizer {
             }
             if (rendering_manager_) {
                 rendering_manager_->markDirty();
-            }
-        });
-
-        // Evaluation completed
-        state::EvaluationCompleted::when([this](const auto& event) {
-            if (gui_manager_) {
-                gui_manager_->addConsoleLog(
-                    "Evaluation completed - PSNR: %.2f, SSIM: %.3f, LPIPS: %.3f",
-                    event.psnr, event.ssim, event.lpips);
             }
         });
 
@@ -593,10 +575,6 @@ namespace gs::visualizer {
             }
         } catch (const std::exception& e) {
             LOG_ERROR("Error handling LoadProject command: {}", e.what());
-
-            if (gui_manager_) {
-                gui_manager_->addConsoleLog("ERROR: Failed to load project: %s", e.what());
-            }
 
             // Re-throw to let higher level handle it
             throw;

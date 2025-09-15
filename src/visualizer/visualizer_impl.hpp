@@ -24,7 +24,6 @@
 struct GLFWwindow;
 
 namespace gs {
-    class CommandProcessor;
     class SceneManager;
 } // namespace gs
 
@@ -135,7 +134,6 @@ namespace gs::visualizer {
         std::unique_ptr<InputController> input_controller_;
         std::unique_ptr<RenderingManager> rendering_manager_;
         std::unique_ptr<SceneManager> scene_manager_;
-        std::unique_ptr<CommandProcessor> command_processor_;
         std::unique_ptr<DataLoadingService> data_loader_;
         std::unique_ptr<MainLoop> main_loop_;
 
