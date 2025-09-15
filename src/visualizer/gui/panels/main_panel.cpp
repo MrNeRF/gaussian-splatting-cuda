@@ -10,7 +10,9 @@
 #include "visualizer_impl.hpp"
 #include <algorithm>
 #include <imgui.h>
+#ifdef WIN32
 #include <windows.h> // For Windows-specific console handling
+#endif
 #include "core/logger.hpp"
 
 namespace gs::gui::panels {
@@ -56,45 +58,46 @@ namespace gs::gui::panels {
 
     void DrawWindowControls(const UIContext& ctx) {
 
-        if (ImGui::Button("Show system Console", ImVec2(-1, 0))) {
-            HWND hwnd = GetConsoleWindow();
-            Sleep(1);
-            HWND owner = GetWindow(hwnd, GW_OWNER);
-            DWORD dwProcessId;
+#ifndef WIN32
+        // On non-Windows platforms, disable the console toggle button
+        ImGui::BeginDisabled();
+#endif // !Win32
 
-            if (owner == NULL) {
-                ShowWindow(hwnd, SW_SHOW); // Windows 10
-            } else {
-                ShowWindow(owner, SW_SHOW); // Windows 11
+        if (!ctx.window_states->at("system_console")) {
+            if (ImGui::Button("Show system Console", ImVec2(-1, 0))) {
+                HWND hwnd = GetConsoleWindow();
+                Sleep(1);
+                HWND owner = GetWindow(hwnd, GW_OWNER);
+                DWORD dwProcessId;
+
+                if (owner == NULL) {
+                    ShowWindow(hwnd, SW_SHOW); // Windows 10
+                } else {
+                    ShowWindow(owner, SW_SHOW); // Windows 11
+                }
+                ctx.window_states->at("system_console") = true;
+            } 
+        } else {
+            if (ImGui::Button("Hide system Console", ImVec2(-1, 0))) {
+                HWND hwnd = GetConsoleWindow();
+                Sleep(1);
+                HWND owner = GetWindow(hwnd, GW_OWNER);
+                DWORD dwProcessId;
+
+                if (owner == NULL) {
+                    ShowWindow(hwnd, SW_HIDE); // Windows 10
+                } else {
+                    ShowWindow(owner, SW_HIDE); // Windows 11
+                }
+                ctx.window_states->at("system_console") = false;
             }
         }
-
-        if (ImGui::Button("Hide system Console", ImVec2(-1, 0))) {
-            HWND hwnd = GetConsoleWindow();
-            Sleep(1);
-            HWND owner = GetWindow(hwnd, GW_OWNER);
-            DWORD dwProcessId;
-
-            if (owner == NULL) {
-                ShowWindow(hwnd, SW_HIDE); // Windows 10
-            } else {
-                ShowWindow(owner, SW_HIDE); // Windows 11
-            }
-        }
+#ifndef WIN32
+        ImGui::EndDisabled();
+#endif // !Win32
 
 
-        if (ImGui::Button("Open Scripting Console", ImVec2(-1, 0))) {
-            (*ctx.window_states)["console"] = true;
-        }
-
-        if (ImGui::Button("Open Camera Controls", ImVec2(-1, 0))) {
-            (*ctx.window_states)["camera_controls"] = true;
-        }
-
-        ImGui::Separator();
         ImGui::Text("Windows");
-        ImGui::Checkbox("Scripting Console", &(*ctx.window_states)["console"]);
-        ImGui::Checkbox("Camera Controls", &(*ctx.window_states)["camera_controls"]);
         ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
     }
 

@@ -44,6 +44,7 @@ namespace gs::gui {
         window_states_["scene_panel"] = true;
         window_states_["project_changed_dialog_box"] = false;
         window_states_["save_project_browser_before_exit"] = false;
+        window_states_["system_console"] = false;
 
         // Initialize speed overlay state
         speed_overlay_visible_ = false;

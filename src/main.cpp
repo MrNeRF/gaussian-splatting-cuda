@@ -9,8 +9,6 @@
 #include <c10/cuda/CUDAAllocatorConfig.h>
 #include <iostream>
 #include <print>
-#include < windows.h>
-
 
 int main(int argc, char* argv[]) {
 //----------------------------------------------------------------------
@@ -46,20 +44,7 @@ int main(int argc, char* argv[]) {
 
     auto params = std::move(*params_result);
 
-    HWND hwnd = GetConsoleWindow();
-    Sleep(1); 
-    HWND owner = GetWindow(hwnd, GW_OWNER);
-    DWORD dwProcessId;
-    GetWindowThreadProcessId(hwnd, &dwProcessId);
-    if (GetCurrentProcessId() == dwProcessId) {
-        if (owner == NULL) {
-             ShowWindow(hwnd, SW_HIDE); // Windows 10
-        } else {
-             ShowWindow(owner, SW_HIDE); // Windows 11
-        }
-    } else {
 
-    }
 
     gs::Application app;
     return app.run(std::move(params));
