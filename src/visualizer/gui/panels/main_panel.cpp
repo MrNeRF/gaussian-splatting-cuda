@@ -54,10 +54,8 @@ namespace gs::gui::panels {
 
     void DrawWindowControls(const UIContext& ctx) {
 
-#ifndef WIN32
-        // On non-Windows platforms, disable the console toggle button
-        ImGui::BeginDisabled();
-#endif // !Win32
+#ifdef WIN32
+        // On non-Windows platforms, dont show the console toggle button
 
         if (!ctx.window_states->at("system_console")) {
             if (ImGui::Button("Show system Console", ImVec2(-1, 0))) {
@@ -88,9 +86,7 @@ namespace gs::gui::panels {
                 ctx.window_states->at("system_console") = false;
             }
         }
-#ifndef WIN32
-        ImGui::EndDisabled();
-#endif // !Win32
+#endif // Win32
 
 
         ImGui::Text("Windows");
