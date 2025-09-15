@@ -112,6 +112,10 @@ namespace gs {
         return glfwWindowShouldClose(window_);
     }
 
+    void WindowManager::cancelClose() {
+        glfwSetWindowShouldClose(window_, false);
+    }
+
     void WindowManager::setVSync(bool enabled) {
         glfwSwapInterval(enabled ? 1 : 0);
         vsync_enabled_ = enabled;

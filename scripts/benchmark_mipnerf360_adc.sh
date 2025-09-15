@@ -40,7 +40,6 @@ do
         --eval \
         --headless \
         --save-eval-images \
-        --num-workers 8 \
         --strategy default
 
     echo "Completed $SCENE"

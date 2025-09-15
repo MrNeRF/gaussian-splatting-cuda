@@ -259,6 +259,7 @@ find_package(spdlog REQUIRED)
 find_package(Freetype REQUIRED)
 find_package(WebP REQUIRED)
 find_package(LibArchive REQUIRED)
+find_package(OpenImageIO REQUIRED)
 
 # TORCH_CUDA_ARCH_LIST is already defined by Torch
 # use it here as the global default CUDA architecture list too
@@ -393,7 +394,7 @@ add_subdirectory(src/visualizer)  # GUI and visualization
 # =============================================================================
 # MAIN EXECUTABLE
 # =============================================================================
-add_executable(${PROJECT_NAME} src/main.cpp)
+add_executable(${PROJECT_NAME} src/main.cpp resources/lichtfeld-studio.rc)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
         CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}"
@@ -427,6 +428,7 @@ target_link_libraries(${PROJECT_NAME}
         CUDA::cudart
         spdlog::spdlog
         taywee::args
+        OpenImageIO::OpenImageIO
 )
 
 # Platform-specific settings
@@ -593,6 +595,7 @@ message(STATUS "  CUDA-GL Interop Available: ${CUDA_GL_INTEROP_FOUND}")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "  CUDA Standard: ${CMAKE_CUDA_STANDARD}")
+message(STATUS "  OpenImageIO Found: ${OpenImageIO_FOUND}")
 message(STATUS "  Tests: ${BUILD_TESTS}")
 message(STATUS "===========================================")
 

@@ -6,6 +6,9 @@
 
 #include "core/events.hpp"
 #include "gui/ui_context.hpp"
+#include "gui/windows/save_project_browser.hpp"
+#include "windows/project_changed_dialog_box.hpp"
+#include <GLFW/glfw3.h>
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
@@ -21,6 +24,7 @@ namespace gs {
         class ScriptingConsole;
         class FileBrowser;
         class ScenePanel;
+        class ProjectChangedDialogBox;
 
         class GuiManager {
         public:
@@ -46,6 +50,7 @@ namespace gs {
             // Missing methods that visualizer_impl expects
             void setScriptExecutor(std::function<std::string(const std::string&)> executor);
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
+            void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
             void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
 
             // Viewport region access
@@ -54,6 +59,8 @@ namespace gs {
             bool isMouseInViewport() const;
             bool isViewportFocused() const;
             bool isPositionInViewport(double x, double y) const;
+
+            bool isForceExit() const { return force_exit_; }
 
         private:
             void setupEventHandlers();
@@ -67,6 +74,7 @@ namespace gs {
             // Owned components
             std::unique_ptr<ScriptingConsole> console_;
             std::unique_ptr<FileBrowser> file_browser_;
+            std::unique_ptr<ProjectChangedDialogBox> project_changed_dialog_box_;
             std::unique_ptr<ScenePanel> scene_panel_;
 
             // UI state only
@@ -89,6 +97,10 @@ namespace gs {
             // Method declarations
             void renderSpeedOverlay();
             void showSpeedOverlay(float current_speed, float max_speed);
+
+            std::unique_ptr<SaveProjectBrowser> save_project_browser_;
+
+            bool force_exit_ = false;
         };
     } // namespace gui
 } // namespace gs

@@ -105,6 +105,14 @@ class Viewport {
             t += R * glm::vec3(1, 0, 0) * deltaTime * wasdSpeed;
         }
 
+        void advance_up(float deltaTime) {
+            t += R * glm::vec3(0, -1, 0) * deltaTime * wasdSpeed;
+        }
+
+        void advance_down(float deltaTime) {
+            t += R * glm::vec3(0, 1, 0) * deltaTime * wasdSpeed;
+        }
+
         void initScreenPos(const glm::vec2& pos) {
             prePos = pos;
         }

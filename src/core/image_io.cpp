@@ -1,234 +1,365 @@
 /* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
- *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_RESIZE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-
 #include "core/image_io.hpp"
-#include "external/stb_image.h"
-#include "external/stb_image_resize.h"
-#include "external/stb_image_write.h"
+
+#include <OpenImageIO/imagebuf.h>
+#include <OpenImageIO/imagebufalgo.h>
+#include <OpenImageIO/imageio.h>
 
 #include <algorithm>
+#include <condition_variable>
 #include <core/logger.hpp>
 #include <filesystem>
 #include <iostream>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <stdexcept>
+#include <thread>
 #include <vector>
 
-unsigned char* strip_image_alpha(unsigned char* img, int width, int height) {
-    unsigned char* new_img = (unsigned char*)malloc(width * height * 3);
-    if (!new_img) {
-        stbi_image_free(img);
-        throw std::runtime_error("failed allocating img in strip_image_alpha");
+namespace {
+
+    // Run once: set global OIIO attributes (threading, etc.)
+    std::once_flag g_oiio_once;
+    inline void init_oiio() {
+        std::call_once(g_oiio_once, [] {
+            int n = (int)std::max(1u, std::thread::hardware_concurrency());
+            OIIO::attribute("threads", n);
+        });
     }
 
-    for (int i = 0; i < width * height; ++i) {
-        new_img[i * 3 + 0] = img[i * 4 + 0]; // R
-        new_img[i * 3 + 1] = img[i * 4 + 1]; // G
-        new_img[i * 3 + 2] = img[i * 4 + 2]; // B
+    // Downscale (resample) to (nw, nh). Returns newly malloc’ed RGB buffer.
+    static inline unsigned char* downscale_resample_direct(const unsigned char* src_rgb,
+                                                           int w, int h, int nw, int nh,
+                                                           int nthreads /* 0=auto, 1=single */) {
+        // Allocate destination first
+        size_t outbytes = (size_t)nw * nh * 3;
+        auto* out = static_cast<unsigned char*>(std::malloc(outbytes));
+        if (!out)
+            throw std::bad_alloc();
+
+        // Wrap src & dst without extra allocations/copies
+        OIIO::ImageBuf srcbuf(OIIO::ImageSpec(w, h, 3, OIIO::TypeDesc::UINT8),
+                              const_cast<unsigned char*>(src_rgb));
+        OIIO::ImageBuf dstbuf(OIIO::ImageSpec(nw, nh, 3, OIIO::TypeDesc::UINT8), out);
+
+        OIIO::ROI roi(0, nw, 0, nh, 0, 1, 0, 3);
+        if (!OIIO::ImageBufAlgo::resample(dstbuf, srcbuf, /*interpolate=*/true, roi, nthreads)) {
+            std::string err = dstbuf.geterror();
+            std::free(out);
+            throw std::runtime_error(std::string("Resample failed: ") + (err.empty() ? "unknown" : err));
+        }
+        return out; // already filled
     }
 
-    stbi_image_free(img);
-    return new_img;
-}
+} // namespace
 
-std::tuple<int, int, int>
-get_image_info(std::filesystem::path p) {
-    int w, h, c;
-    int result = stbi_info(p.string().c_str(), &w, &h, &c);
-    if (!result)
-        throw std::runtime_error("stbi_info failed: " + p.string() + " : " + stbi_failure_reason());
+std::tuple<int, int, int> get_image_info(std::filesystem::path p) {
+    init_oiio();
+
+    auto in = OIIO::ImageInput::open(p.string());
+    if (!in) {
+        throw std::runtime_error("OIIO open failed: " + p.string() + " : " + OIIO::geterror());
+    }
+    const OIIO::ImageSpec& spec = in->spec();
+    const int w = spec.width;
+    const int h = spec.height;
+    const int c = spec.nchannels;
+    in->close();
     return {w, h, c};
 }
 
-// Existing implementations...
-std::tuple<unsigned char*, int, int, int> load_image(std::filesystem::path p, int res_div) {
-    int w, h, c;
-    unsigned char* img = stbi_load(p.string().c_str(), &w, &h, &c, 0);
-    if (!img)
-        throw std::runtime_error("Load failed: " + p.string() + " : " + stbi_failure_reason());
+std::tuple<unsigned char*, int, int, int>
+load_image_with_alpha(std::filesystem::path p) {
+    init_oiio();
 
-    if (c == 4) {
-        img = strip_image_alpha(img, w, h);
-        c = 3;
+    std::unique_ptr<OIIO::ImageInput> in(OIIO::ImageInput::open(p.string()));
+    if (!in)
+        throw std::runtime_error("Load failed: " + p.string() + " : " + OIIO::geterror());
+
+    const OIIO::ImageSpec& spec = in->spec();
+    int w = spec.width, h = spec.height, file_c = spec.nchannels;
+
+    auto finish = [&](unsigned char* data, int W, int H, int C) {
+        in->close();
+        return std::make_tuple(data, W, H, C);
+    };
+
+    // Fast path: read 4 channels directly
+    if (file_c == 4) {
+        // allocate and read directly into final RGB buffer
+        auto* out = static_cast<unsigned char*>(std::malloc((size_t)w * h * 4));
+        if (!out) {
+            in->close();
+            throw std::bad_alloc();
+        }
+
+        if (!in->read_image(/*subimage*/ 0, /*miplevel*/ 0,
+                            /*chbegin*/ 0, /*chend*/ 4,
+                            OIIO::TypeDesc::UINT8, out)) {
+            std::string e = in->geterror();
+            std::free(out);
+            in->close();
+            throw std::runtime_error("Read failed: " + p.string() + (e.empty() ? "" : (" : " + e)));
+        }
+        return finish(out, w, h, 4);
+    } else {
+        LOG_ERROR("load_image_with_alpha: image does not contain alpha channel -  alpha channels found: {}", file_c);
+    }
+}
+
+std::tuple<unsigned char*, int, int, int>
+load_image(std::filesystem::path p, int res_div) {
+    init_oiio();
+
+    std::unique_ptr<OIIO::ImageInput> in(OIIO::ImageInput::open(p.string()));
+    if (!in)
+        throw std::runtime_error("Load failed: " + p.string() + " : " + OIIO::geterror());
+
+    const OIIO::ImageSpec& spec = in->spec();
+    int w = spec.width, h = spec.height, file_c = spec.nchannels;
+
+    auto finish = [&](unsigned char* data, int W, int H, int C) {
+        in->close();
+        return std::make_tuple(data, W, H, C);
+    };
+
+    // Decide threading for the resample (see notes below)
+    const int nthreads = 0; // set to 1 if you call this from multiple worker threads
+
+    // Fast path: read 3 channels directly (drop alpha if present)
+    if (file_c >= 3) {
+        if (res_div <= 1) {
+            // allocate and read directly into final RGB buffer
+            auto* out = static_cast<unsigned char*>(std::malloc((size_t)w * h * 3));
+            if (!out) {
+                in->close();
+                throw std::bad_alloc();
+            }
+
+            if (!in->read_image(/*subimage*/ 0, /*miplevel*/ 0,
+                                /*chbegin*/ 0, /*chend*/ 3,
+                                OIIO::TypeDesc::UINT8, out)) {
+                std::string e = in->geterror();
+                std::free(out);
+                in->close();
+                throw std::runtime_error("Read failed: " + p.string() + (e.empty() ? "" : (" : " + e)));
+            }
+            return finish(out, w, h, 3);
+        } else if (res_div == 2 || res_div == 4 || res_div == 8) {
+            // read full, then downscale in-place into a new buffer without extra copy
+            auto* full = static_cast<unsigned char*>(std::malloc((size_t)w * h * 3));
+            if (!full) {
+                in->close();
+                throw std::bad_alloc();
+            }
+
+            if (!in->read_image(0, 0, 0, 3, OIIO::TypeDesc::UINT8, full)) {
+                std::string e = in->geterror();
+                std::free(full);
+                in->close();
+                throw std::runtime_error("Read failed: " + p.string() + (e.empty() ? "" : (" : " + e)));
+            }
+            in->close();
+
+            const int nw = std::max(1, w / res_div);
+            const int nh = std::max(1, h / res_div);
+            unsigned char* out = nullptr;
+            try {
+                out = downscale_resample_direct(full, w, h, nw, nh, nthreads);
+            } catch (...) {
+                std::free(full);
+                throw;
+            }
+            std::free(full);
+            return {out, nw, nh, 3};
+        } else {
+            LOG_ERROR("load_image: unsupported resize factor {}", res_div);
+            // fall through
+        }
     }
 
-    if (res_div == 2 || res_div == 4 || res_div == 8) {
-        int nw = w / res_div, nh = h / res_div;
-        auto* out = static_cast<unsigned char*>(malloc(nw * nh * c));
-        if (!stbir_resize_uint8(img, w, h, 0, out, nw, nh, 0, c))
-            throw std::runtime_error("Resize failed: " + p.string() + " : " + stbi_failure_reason());
-        stbi_image_free(img);
-        img = out;
-        w = nw;
-        h = nh;
-    } else if (res_div > 1) {
-        LOG_ERROR("load_image: unimplement resize factor {}", res_div);
-    }
+    // 1–2 channel inputs -> read native, then expand to RGB
+    {
+        const int in_c = std::min(2, std::max(1, file_c));
+        std::vector<unsigned char> tmp((size_t)w * h * in_c);
+        if (!in->read_image(0, 0, 0, in_c, OIIO::TypeDesc::UINT8, tmp.data())) {
+            auto e = in->geterror();
+            in->close();
+            throw std::runtime_error("Read failed: " + p.string() + (e.empty() ? "" : (" : " + e)));
+        }
+        in->close();
 
-    return {img, w, h, c};
+        auto* base = static_cast<unsigned char*>(std::malloc((size_t)w * h * 3));
+        if (!base)
+            throw std::bad_alloc();
+
+        if (in_c == 1) {
+            const unsigned char* g = tmp.data();
+            for (size_t i = 0, N = (size_t)w * h; i < N; ++i) {
+                unsigned char v = g[i];
+                base[3 * i + 0] = v;
+                base[3 * i + 1] = v;
+                base[3 * i + 2] = v;
+            }
+        } else { // 2 channels -> (R,G,avg)
+            const unsigned char* src = tmp.data();
+            for (size_t i = 0, N = (size_t)w * h; i < N; ++i) {
+                unsigned char r = src[2 * i + 0];
+                unsigned char g = src[2 * i + 1];
+                base[3 * i + 0] = r;
+                base[3 * i + 1] = g;
+                base[3 * i + 2] = (unsigned char)(((int)r + (int)g) / 2);
+            }
+        }
+
+        if (res_div == 2 || res_div == 4 || res_div == 8) {
+            const int nw = std::max(1, w / res_div);
+            const int nh = std::max(1, h / res_div);
+            unsigned char* out = nullptr;
+            try {
+                out = downscale_resample_direct(base, w, h, nw, nh, nthreads);
+            } catch (...) {
+                std::free(base);
+                throw;
+            }
+            std::free(base);
+            return {out, nw, nh, 3};
+        }
+
+        return {base, w, h, 3};
+    }
 }
 
 void save_image(const std::filesystem::path& path, torch::Tensor image) {
-    // Clone to avoid modifying original
-    image = image.clone();
+    init_oiio();
 
-    // Ensure CPU and float
-    image = image.to(torch::kCPU).to(torch::kFloat32);
-
-    // Handle different input formats
-    if (image.dim() == 4) { // [B, C, H, W] or [B, H, W, C]
-        image = image.squeeze(0);
-    }
-
-    // Convert [C, H, W] to [H, W, C]
-    if (image.dim() == 3 && image.size(0) <= 4) {
-        image = image.permute({1, 2, 0});
-    }
-
-    // Make contiguous after permute
+    // Normalize to HxWxC, uint8 on CPU
+    image = image.clone().to(torch::kCPU).to(torch::kFloat32);
+    if (image.dim() == 4)
+        image = image.squeeze(0); // [B,C,H,W] -> [C,H,W]
+    if (image.dim() == 3 && image.size(0) <= 4)
+        image = image.permute({1, 2, 0}); // [C,H,W]->[H,W,C]
     image = image.contiguous();
 
-    int height = image.size(0);
-    int width = image.size(1);
-    int channels = image.size(2);
+    const int height = (int)image.size(0);
+    const int width = (int)image.size(1);
+    int channels = (int)image.size(2);
+    if (channels < 1 || channels > 4)
+        throw std::runtime_error("save_image: channels must be in [1..4]");
 
-    // Debug print
-    std::cout << "Saving image: " << path << " shape: [" << height << ", " << width << ", " << channels << "]\n";
+    LOG_INFO("Saving image: {} shape: [{}, {}, {}]", path.string(), height, width, channels);
 
-    // Convert to uint8
-    auto img_uint8 = (image.clamp(0, 1) * 255).to(torch::kUInt8).contiguous();
+    auto img_uint8 = (image.clamp(0, 1) * 255.0f).to(torch::kUInt8).contiguous();
 
+    // Prepare OIIO output
+    const std::string fname = path.string();
+    auto out = OIIO::ImageOutput::create(fname);
+    if (!out) {
+        throw std::runtime_error("ImageOutput::create failed for " + fname + " : " + OIIO::geterror());
+    }
+
+    OIIO::ImageSpec spec(width, height, channels, OIIO::TypeDesc::UINT8);
+
+    // Set JPEG quality if needed
     auto ext = path.extension().string();
-    bool success = false;
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+    if (ext == ".jpg" || ext == ".jpeg")
+        spec.attribute("CompressionQuality", 95);
 
-    if (ext == ".png") {
-        success = stbi_write_png(path.string().c_str(), width, height, channels,
-                                 img_uint8.data_ptr<uint8_t>(), width * channels);
-    } else if (ext == ".jpg" || ext == ".jpeg") {
-        success = stbi_write_jpg(path.string().c_str(), width, height, channels,
-                                 img_uint8.data_ptr<uint8_t>(), 95);
+    if (!out->open(fname, spec)) {
+        auto e = out->geterror();
+        throw std::runtime_error("open('" + fname + "') failed: " + (e.empty() ? OIIO::geterror() : e));
     }
 
-    if (!success) {
-        throw std::runtime_error("Failed to save image: " + path.string());
+    if (!out->write_image(OIIO::TypeDesc::UINT8, img_uint8.data_ptr<uint8_t>())) {
+        auto e = out->geterror();
+        out->close();
+        throw std::runtime_error("write_image failed: " + (e.empty() ? OIIO::geterror() : e));
     }
+    out->close();
 }
 
 void save_image(const std::filesystem::path& path,
                 const std::vector<torch::Tensor>& images,
                 bool horizontal,
                 int separator_width) {
-    if (images.empty()) {
+    if (images.empty())
         throw std::runtime_error("No images provided");
-    }
-
     if (images.size() == 1) {
         save_image(path, images[0]);
         return;
     }
 
-    // Prepare all images to same format
-    std::vector<torch::Tensor> processed_images;
+    // Prepare all to HWC float on CPU
+    std::vector<torch::Tensor> xs;
+    xs.reserve(images.size());
     for (auto img : images) {
-        // Clone to avoid modifying original
         img = img.clone().to(torch::kCPU).to(torch::kFloat32);
-
-        // Handle different input formats
-        if (img.dim() == 4) {
+        if (img.dim() == 4)
             img = img.squeeze(0);
-        }
-
-        // Convert [C, H, W] to [H, W, C]
-        if (img.dim() == 3 && img.size(0) <= 4) {
+        if (img.dim() == 3 && img.size(0) <= 4)
             img = img.permute({1, 2, 0});
-        }
-
-        processed_images.push_back(img.contiguous());
+        xs.push_back(img.contiguous());
     }
 
-    // Create separator (white by default)
-    torch::Tensor separator;
+    // Separator (white)
+    torch::Tensor sep;
     if (separator_width > 0) {
-        auto first_img = processed_images[0];
-        if (horizontal) {
-            separator = torch::ones({first_img.size(0), separator_width, first_img.size(2)},
-                                    first_img.options());
-        } else {
-            separator = torch::ones({separator_width, first_img.size(1), first_img.size(2)},
-                                    first_img.options());
-        }
+        const auto ref = xs[0];
+        sep = horizontal
+                  ? torch::ones({ref.size(0), separator_width, ref.size(2)}, ref.options())
+                  : torch::ones({separator_width, ref.size(1), ref.size(2)}, ref.options());
     }
 
-    // Concatenate images with separators
-    torch::Tensor combined;
-    for (size_t i = 0; i < processed_images.size(); ++i) {
-        if (i == 0) {
-            combined = processed_images[i];
-        } else {
-            if (separator_width > 0) {
-                combined = torch::cat({combined, separator, processed_images[i]},
-                                      horizontal ? 1 : 0);
-            } else {
-                combined = torch::cat({combined, processed_images[i]},
-                                      horizontal ? 1 : 0);
-            }
-        }
+    // Concatenate
+    torch::Tensor combo = xs[0];
+    for (size_t i = 1; i < xs.size(); ++i) {
+        combo = (separator_width > 0)
+                    ? torch::cat({combo, sep, xs[i]}, horizontal ? 1 : 0)
+                    : torch::cat({combo, xs[i]}, horizontal ? 1 : 0);
     }
 
-    // Save the combined image
-    save_image(path, combined);
+    // Save
+    save_image(path, combo);
 }
 
-void free_image(unsigned char* img) {
-    stbi_image_free(img);
-}
+void free_image(unsigned char* img) { std::free(img); }
 
-// Batch image saver implementation
 namespace image_io {
 
     BatchImageSaver::BatchImageSaver(size_t num_workers)
         : num_workers_(std::min(num_workers, std::min(size_t(8), size_t(std::thread::hardware_concurrency())))) {
 
-        std::cout << "[BatchImageSaver] Starting with " << num_workers_ << " worker threads" << std::endl;
-
+        LOG_INFO("[BatchImageSaver] Starting with {} worker threads", num_workers_);
         for (size_t i = 0; i < num_workers_; ++i) {
             workers_.emplace_back(&BatchImageSaver::worker_thread, this);
         }
     }
 
-    BatchImageSaver::~BatchImageSaver() {
-        shutdown();
-    }
+    BatchImageSaver::~BatchImageSaver() { shutdown(); }
 
     void BatchImageSaver::shutdown() {
-        // Signal stop
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
             if (stop_)
-                return; // Already stopped
-
+                return;
             stop_ = true;
-            std::cout << "[BatchImageSaver] Shutting down..." << std::endl;
+            LOG_INFO("[BatchImageSaver] Shutting down...");
         }
         cv_.notify_all();
 
-        // Wait for all workers to finish
-        for (auto& worker : workers_) {
-            if (worker.joinable()) {
-                worker.join();
-            }
-        }
+        for (auto& w : workers_)
+            if (w.joinable())
+                w.join();
 
-        // Process any remaining tasks synchronously
         while (!task_queue_.empty()) {
             process_task(task_queue_.front());
             task_queue_.pop();
         }
-
-        std::cout << "[BatchImageSaver] Shutdown complete" << std::endl;
+        LOG_INFO("[BatchImageSaver] Shutdown complete");
     }
 
     void BatchImageSaver::queue_save(const std::filesystem::path& path, torch::Tensor image) {
@@ -236,20 +367,17 @@ namespace image_io {
             save_image(path, image);
             return;
         }
-
-        SaveTask task;
-        task.path = path;
-        task.image = image.clone(); // Clone to avoid data races
-        task.is_multi = false;
-
+        SaveTask t;
+        t.path = path;
+        t.image = image.clone();
+        t.is_multi = false;
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
             if (stop_) {
-                // If stopped, save synchronously
                 save_image(path, image);
                 return;
             }
-            task_queue_.push(std::move(task));
+            task_queue_.push(std::move(t));
             active_tasks_++;
         }
         cv_.notify_one();
@@ -263,25 +391,22 @@ namespace image_io {
             save_image(path, images, horizontal, separator_width);
             return;
         }
-
-        SaveTask task;
-        task.path = path;
-        task.images.reserve(images.size());
-        for (const auto& img : images) {
-            task.images.push_back(img.clone());
-        }
-        task.is_multi = true;
-        task.horizontal = horizontal;
-        task.separator_width = separator_width;
+        SaveTask t;
+        t.path = path;
+        t.images.reserve(images.size());
+        for (const auto& img : images)
+            t.images.push_back(img.clone());
+        t.is_multi = true;
+        t.horizontal = horizontal;
+        t.separator_width = separator_width;
 
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
             if (stop_) {
-                // If stopped, save synchronously
                 save_image(path, images, horizontal, separator_width);
                 return;
             }
-            task_queue_.push(std::move(task));
+            task_queue_.push(std::move(t));
             active_tasks_++;
         }
         cv_.notify_one();
@@ -289,9 +414,7 @@ namespace image_io {
 
     void BatchImageSaver::wait_all() {
         std::unique_lock<std::mutex> lock(queue_mutex_);
-        cv_finished_.wait(lock, [this] {
-            return task_queue_.empty() && active_tasks_ == 0;
-        });
+        cv_finished_.wait(lock, [this] { return task_queue_.empty() && active_tasks_ == 0; });
     }
 
     size_t BatchImageSaver::pending_count() const {
@@ -301,25 +424,18 @@ namespace image_io {
 
     void BatchImageSaver::worker_thread() {
         while (true) {
-            SaveTask task;
+            SaveTask t;
             {
                 std::unique_lock<std::mutex> lock(queue_mutex_);
                 cv_.wait(lock, [this] { return stop_ || !task_queue_.empty(); });
-
-                if (stop_ && task_queue_.empty()) {
+                if (stop_ && task_queue_.empty())
                     break;
-                }
-
-                if (!task_queue_.empty()) {
-                    task = std::move(task_queue_.front());
-                    task_queue_.pop();
-                } else {
+                if (task_queue_.empty())
                     continue;
-                }
+                t = std::move(task_queue_.front());
+                task_queue_.pop();
             }
-
-            process_task(task);
-
+            process_task(t);
             {
                 std::unique_lock<std::mutex> lock(queue_mutex_);
                 active_tasks_--;
@@ -328,15 +444,15 @@ namespace image_io {
         }
     }
 
-    void BatchImageSaver::process_task(const SaveTask& task) {
+    void BatchImageSaver::process_task(const SaveTask& t) {
         try {
-            if (task.is_multi) {
-                save_image(task.path, task.images, task.horizontal, task.separator_width);
+            if (t.is_multi) {
+                save_image(t.path, t.images, t.horizontal, t.separator_width);
             } else {
-                save_image(task.path, task.image);
+                save_image(t.path, t.image);
             }
         } catch (const std::exception& e) {
-            std::cerr << "[BatchImageSaver] Error saving " << task.path << ": " << e.what() << std::endl;
+            LOG_ERROR("[BatchImageSaver] Error saving {}: {}", t.path.string(), e.what());
         }
     }
 

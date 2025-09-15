@@ -104,7 +104,7 @@ namespace gs::visualizer {
         main_loop_->setUpdateCallback([this]() { update(); });
         main_loop_->setRenderCallback([this]() { render(); });
         main_loop_->setShutdownCallback([this]() { shutdown(); });
-        main_loop_->setShouldCloseCallback([this]() { return window_manager_->shouldClose(); });
+        main_loop_->setShouldCloseCallback([this]() { return allowclose(); });
 
         // Set up GUI connections
         gui_manager_->setScriptExecutor([this](const std::string& cmd) {
@@ -351,6 +351,28 @@ namespace gs::visualizer {
 
         window_manager_->swapBuffers();
         window_manager_->pollEvents();
+    }
+
+    bool VisualizerImpl::allowclose() {
+        // If we are trying to close and the project is temporary, show dialog
+        if (window_manager_->shouldClose() && !gui_manager_->isForceExit()) {
+            if (project_) {
+                if (project_->getIsTempProject()) {
+                    gui_manager_->showWindow("project_changed_dialog_box", true);
+                    window_manager_->cancelClose();
+                }
+            }
+        }
+        // If we are trying to close and the project is temporary and we are forcing exit, unlock project
+        if (window_manager_->shouldClose() && gui_manager_->isForceExit()) {
+            if (project_) {
+                if (project_->getIsTempProject()) {
+                    project_->unlockProject();
+                }
+            }
+        }
+
+        return window_manager_->shouldClose();
     }
 
     void VisualizerImpl::shutdown() {
