@@ -394,7 +394,7 @@ add_subdirectory(src/visualizer)  # GUI and visualization
 # =============================================================================
 # MAIN EXECUTABLE
 # =============================================================================
-add_executable(${PROJECT_NAME} WIN32 src/main.cpp resources/lichtfeld-studio.rc)
+add_executable(${PROJECT_NAME} src/main.cpp resources/lichtfeld-studio.rc)
 
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
