@@ -26,8 +26,7 @@ int main(int argc, char* argv[]) {
     // Windows doesn't support CUDACachingAllocator expandable_segments
     c10::cuda::CUDACachingAllocator::setAllocatorSettings("expandable_segments:True");
 #endif
-   
-    
+
     // Parse arguments (this automatically initializes the logger based on --log-level flag)
     auto params_result = gs::args::parse_args_and_params(argc, argv);
     if (!params_result) {
@@ -43,8 +42,6 @@ int main(int argc, char* argv[]) {
     LOG_INFO("========================================");
 
     auto params = std::move(*params_result);
-
-
 
     gs::Application app;
     return app.run(std::move(params));

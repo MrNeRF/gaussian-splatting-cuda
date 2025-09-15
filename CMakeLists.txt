@@ -396,7 +396,6 @@ add_subdirectory(src/visualizer)  # GUI and visualization
 # =============================================================================
 add_executable(${PROJECT_NAME} src/main.cpp resources/lichtfeld-studio.rc)
 
-
 set_target_properties(${PROJECT_NAME} PROPERTIES
         CUDA_ARCHITECTURES "${LichtFeld-Studio_CUDA_ARCH}"
         CUDA_SEPARABLE_COMPILATION ON
