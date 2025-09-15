@@ -372,6 +372,26 @@ namespace gs::visualizer {
             }
         }
 
+#ifdef WIN32
+        // show console in case it was hidden to prevent cmd window to stay hidden/in memory after closing the application
+        if (window_manager_->shouldClose()) {
+            HWND hwnd = GetConsoleWindow();
+            Sleep(1);
+            HWND owner = GetWindow(hwnd, GW_OWNER);
+            DWORD dwProcessId;
+            GetWindowThreadProcessId(hwnd, &dwProcessId);
+
+            // show console if we started from console
+            if (GetCurrentProcessId() != dwProcessId) {
+                if (owner == NULL) {
+                    ShowWindow(hwnd, SW_SHOW); // Windows 10
+                } else {
+                    ShowWindow(owner, SW_SHOW); // Windows 11
+                }
+            }
+        }
+#endif
+
         return window_manager_->shouldClose();
     }
 

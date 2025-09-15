@@ -151,7 +151,7 @@ namespace gs {
         DWORD dwProcessId;
         GetWindowThreadProcessId(hwnd, &dwProcessId);
 
-        // Only hide if we own the console window
+        // Only hide if did not start from console
         if (GetCurrentProcessId() == dwProcessId) {
             if (owner == NULL) {
                 ShowWindow(hwnd, SW_HIDE); // Windows 10
