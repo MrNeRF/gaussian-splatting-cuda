@@ -8,9 +8,6 @@
 #include "project/project.hpp"
 #include "training/training_setup.hpp"
 #include "visualizer/visualizer.hpp"
-#ifdef WIN32
-#include < windows.h>
-#endif
 
 namespace gs {
 

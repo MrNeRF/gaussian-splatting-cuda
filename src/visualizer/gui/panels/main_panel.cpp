@@ -10,9 +10,6 @@
 #include "visualizer_impl.hpp"
 #include <algorithm>
 #include <imgui.h>
-#ifdef WIN32
-#include <windows.h> // For Windows-specific console handling
-#endif
 
 namespace gs::gui::panels {
 
