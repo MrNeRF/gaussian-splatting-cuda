@@ -12,8 +12,8 @@
 #include "gui/ui_widgets.hpp"
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/project_changed_dialog_box.hpp"
+#include "internal/resource_paths.hpp"
 #include "visualizer_impl.hpp"
-#include "visualizer/internal/resource_paths.hpp"
 
 #include <GLFW/glfw3.h>
 #include <chrono>
