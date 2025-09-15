@@ -10,6 +10,9 @@
 #include "visualizer_impl.hpp"
 #include <algorithm>
 #include <imgui.h>
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 namespace gs::gui::panels {
 
@@ -53,18 +56,41 @@ namespace gs::gui::panels {
     }
 
     void DrawWindowControls(const UIContext& ctx) {
-        if (ImGui::Button("Open Scripting Console", ImVec2(-1, 0))) {
-            (*ctx.window_states)["console"] = true;
-        }
 
-        if (ImGui::Button("Open Camera Controls", ImVec2(-1, 0))) {
-            (*ctx.window_states)["camera_controls"] = true;
-        }
+#ifdef WIN32
+        // On non-Windows platforms, dont show the console toggle button
 
-        ImGui::Separator();
+        if (!ctx.window_states->at("system_console")) {
+            if (ImGui::Button("Show system Console", ImVec2(-1, 0))) {
+                HWND hwnd = GetConsoleWindow();
+                Sleep(1);
+                HWND owner = GetWindow(hwnd, GW_OWNER);
+
+                if (owner == NULL) {
+                    ShowWindow(hwnd, SW_SHOW); // Windows 10
+                } else {
+                    ShowWindow(owner, SW_SHOW); // Windows 11
+                }
+                ctx.window_states->at("system_console") = true;
+            } 
+        } else {
+            if (ImGui::Button("Hide system Console", ImVec2(-1, 0))) {
+                HWND hwnd = GetConsoleWindow();
+                Sleep(1);
+                HWND owner = GetWindow(hwnd, GW_OWNER);
+
+                if (owner == NULL) {
+                    ShowWindow(hwnd, SW_HIDE); // Windows 10
+                } else {
+                    ShowWindow(owner, SW_HIDE); // Windows 11
+                }
+                ctx.window_states->at("system_console") = false;
+            }
+        }
+#endif // Win32
+
+
         ImGui::Text("Windows");
-        ImGui::Checkbox("Scripting Console", &(*ctx.window_states)["console"]);
-        ImGui::Checkbox("Camera Controls", &(*ctx.window_states)["camera_controls"]);
         ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
     }
 

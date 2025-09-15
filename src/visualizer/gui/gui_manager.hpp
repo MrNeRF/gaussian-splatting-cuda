@@ -44,11 +44,7 @@ namespace gs {
             void showWindow(const std::string& name, bool show = true);
             void toggleWindow(const std::string& name);
 
-            // Console access for logging
-            void addConsoleLog(const char* fmt, ...);
-
             // Missing methods that visualizer_impl expects
-            void setScriptExecutor(std::function<std::string(const std::string&)> executor);
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
             void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
             void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
@@ -72,7 +68,6 @@ namespace gs {
             visualizer::VisualizerImpl* viewer_;
 
             // Owned components
-            std::unique_ptr<ScriptingConsole> console_;
             std::unique_ptr<FileBrowser> file_browser_;
             std::unique_ptr<ProjectChangedDialogBox> project_changed_dialog_box_;
             std::unique_ptr<ScenePanel> scene_panel_;

@@ -10,10 +10,8 @@
 #include "gui/panels/tools_panel.hpp"
 #include "gui/panels/training_panel.hpp"
 #include "gui/ui_widgets.hpp"
-#include "gui/windows/camera_controls.hpp"
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/project_changed_dialog_box.hpp"
-#include "gui/windows/scripting_console.hpp"
 #include "internal/resource_paths.hpp"
 #include "visualizer_impl.hpp"
 
@@ -31,19 +29,17 @@ namespace gs::gui {
         : viewer_(viewer) {
 
         // Create components
-        console_ = std::make_unique<ScriptingConsole>();
         file_browser_ = std::make_unique<FileBrowser>();
         project_changed_dialog_box_ = std::make_unique<ProjectChangedDialogBox>();
         scene_panel_ = std::make_unique<ScenePanel>(viewer->trainer_manager_);
         save_project_browser_ = std::make_unique<SaveProjectBrowser>();
 
         // Initialize window states
-        window_states_["console"] = false;
         window_states_["file_browser"] = false;
-        window_states_["camera_controls"] = false;
         window_states_["scene_panel"] = true;
         window_states_["project_changed_dialog_box"] = false;
         window_states_["save_project_browser_before_exit"] = false;
+        window_states_["system_console"] = false;
 
         // Initialize speed overlay state
         speed_overlay_visible_ = false;
@@ -227,7 +223,6 @@ namespace gs::gui {
         // Create context for this frame
         UIContext ctx{
             .viewer = viewer_,
-            .console = console_.get(),
             .file_browser = file_browser_.get(),
             .window_states = &window_states_};
 
@@ -260,16 +255,8 @@ namespace gs::gui {
         }
 
         // Render floating windows (these remain movable)
-        if (window_states_["console"]) {
-            console_->render(&window_states_["console"]);
-        }
-
         if (window_states_["file_browser"]) {
             file_browser_->render(&window_states_["file_browser"]);
-        }
-
-        if (window_states_["camera_controls"]) {
-            gui::windows::DrawCameraControls(&window_states_["camera_controls"]);
         }
 
         if (window_states_["project_changed_dialog_box"]) {
@@ -629,13 +616,6 @@ namespace gs::gui {
             showSpeedOverlay(e.current_speed, e.max_speed);
         });
 
-        // Handle console results
-        ui::ConsoleResult::when([this](const auto& e) {
-            console_->addLog("> %s", e.command.c_str());
-            if (!e.result.empty()) {
-                console_->addLog("%s", e.result.c_str());
-            }
-        });
     }
 
     void GuiManager::applyDefaultStyle() {
@@ -657,17 +637,6 @@ namespace gs::gui {
         window_states_[name] = !window_states_[name];
     }
 
-    void GuiManager::addConsoleLog(const char* fmt, ...) {
-        if (console_) {
-            va_list args;
-            va_start(args, fmt);
-            char buf[1024];
-            vsnprintf(buf, sizeof(buf), fmt, args);
-            va_end(args);
-            console_->addLog("%s", buf);
-        }
-    }
-
     bool GuiManager::wantsInput() const {
         ImGuiIO& io = ImGui::GetIO();
         return io.WantCaptureMouse || io.WantCaptureKeyboard;
@@ -678,12 +647,6 @@ namespace gs::gui {
                ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) ||
                ImGui::GetIO().WantCaptureMouse ||
                ImGui::GetIO().WantCaptureKeyboard;
-    }
-
-    void GuiManager::setScriptExecutor(std::function<std::string(const std::string&)> executor) {
-        if (console_) {
-            console_->setExecutor(executor);
-        }
     }
 
     void GuiManager::setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback) {

@@ -8,7 +8,6 @@ add_library(gs_visualizer STATIC
         visualizer_impl.cpp
         core/main_loop.cpp
         core/data_loading_service.cpp
-        core/command_processor.cpp
 
         # Window management
         window/window_manager.cpp
@@ -26,9 +25,7 @@ add_library(gs_visualizer STATIC
         gui/panels/scene_panel.cpp
         gui/panels/tools_panel.cpp
         gui/panels/world_transform_panel.cpp
-        gui/windows/scripting_console.cpp
         gui/windows/file_browser.cpp
-        gui/windows/camera_controls.cpp
         gui/windows/project_changed_dialog_box.cpp
         gui/windows/image_preview.cpp
         gui/windows/save_project_browser.cpp
