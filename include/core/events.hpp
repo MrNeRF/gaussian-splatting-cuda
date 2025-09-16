@@ -56,6 +56,7 @@ namespace gs {
             EVENT(CyclePLY, );
             EVENT(ToggleSplitView, );
             EVENT(ToggleGTComparison, );
+            EVENT(ToggleGimbalLock, bool locked;);
         } // namespace cmd
 
         // ============================================================================

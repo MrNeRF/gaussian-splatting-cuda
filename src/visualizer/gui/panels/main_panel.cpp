@@ -173,6 +173,9 @@ namespace gs::gui::panels {
         // Camera Rotation
         if (ImGui::Checkbox("Lock Gimbal", &settings.lock_gimbal)) {
             settings_changed = true;
+            events::cmd::ToggleGimbalLock{
+                .locked = settings.lock_gimbal}
+            .emit();
         }
 
         // Camera Frustums

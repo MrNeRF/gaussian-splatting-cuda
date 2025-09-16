@@ -128,6 +128,7 @@ namespace gs::visualizer {
         glm::dvec2 last_mouse_pos_{0, 0};
         float splitter_start_pos_ = 0.5f;
         double splitter_start_x_ = 0.0;
+        bool gimbal_locked = false;
 
         // Key states (only what we actually need)
         bool key_r_pressed_ = false;

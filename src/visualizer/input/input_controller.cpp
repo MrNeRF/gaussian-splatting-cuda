@@ -28,6 +28,10 @@ namespace gs::visualizer {
             std::fill(std::begin(keys_wasd_), std::end(keys_wasd_), false);
             hovered_camera_id_ = -1;
         });
+        // Subscribe to GimbalLock events
+        events::cmd::ToggleGimbalLock::when([this](const events::cmd::ToggleGimbalLock &e) {
+            gimbal_locked = e.locked;
+        });
 
         LOG_DEBUG("InputController created");
     }
@@ -432,7 +436,7 @@ namespace gs::visualizer {
                 viewport_.camera.translate(pos);
                 break;
             case DragMode::Rotate:
-                viewport_.camera.rotate(pos, rendering_manager_->getSettings().lock_gimbal);
+                viewport_.camera.rotate(pos, gimbal_locked);
                 break;
             case DragMode::Orbit: {
                 float current_time = static_cast<float>(glfwGetTime());
