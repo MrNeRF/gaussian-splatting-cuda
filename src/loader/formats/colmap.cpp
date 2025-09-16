@@ -853,7 +853,7 @@ namespace gs::loader {
             LOG_DEBUG("Verifying actual image dimensions against COLMAP database");
 
             // Load first image to check actual dimensions
-            auto [img_data, actual_w, actual_h, channels] = load_image(out[0]._image_path);
+            auto [actual_w, actual_h, channels] = get_image_info(out[0]._image_path);
 
             int expected_w = out[0]._width;
             int expected_h = out[0]._height;
@@ -874,8 +874,6 @@ namespace gs::loader {
             } else {
                 LOG_DEBUG("Image dimensions match COLMAP database ({}x{})", actual_w, actual_h);
             }
-
-            free_image(img_data);
         }
 
         LOG_INFO("Training with {} images", out.size());
