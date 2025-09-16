@@ -170,6 +170,14 @@ namespace gs::gui::panels {
             ImGui::Unindent();
         }
 
+        // Camera Rotation
+        if (ImGui::Checkbox("Lock Gimbal", &settings.lock_gimbal)) {
+            settings_changed = true;
+            events::cmd::ToggleGimbalLock{
+                .locked = settings.lock_gimbal}
+            .emit();
+        }
+
         // Camera Frustums
         ImGui::Separator();
         if (ImGui::Checkbox("Show Camera Frustums", &settings.show_camera_frustums)) {
