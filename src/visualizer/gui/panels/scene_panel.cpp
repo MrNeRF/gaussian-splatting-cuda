@@ -215,10 +215,12 @@ namespace gs::gui {
 
             if (SUCCEEDED(hr)) {
                 DWORD dwOptions;
+                
                 if (SUCCEEDED(pFileOpen->GetOptions(&dwOptions))) {
                     if (blnDirectory) {
                         pFileOpen->SetOptions(dwOptions | FOS_PICKFOLDERS);
                     } else {
+                        // pFileOpen->SetOptions(dwOptions || FOS_ALLOWMULTISELECT);  // for future reference/use
                         hr = pFileOpen->SetFileTypes(
                             cFileTypes,
                             rgSpec);                    
@@ -261,9 +263,10 @@ namespace gs::gui {
     void OpenProjectFileDialog() {
         // show native windows file dialog for project file selection
         PWSTR filePath = nullptr;
+         
         COMDLG_FILTERSPEC rgSpec[] =
             {
-                {L"LichtFelt Studio", L"*.lfs;*.ls"},
+                {L"LichtFeldStudio Project File", L"*.lfs;*.ls"},
             };
         if (SUCCEEDED(selectFileNative(filePath, rgSpec, 1, false))) {
             std::filesystem::path project_path(filePath);
@@ -457,7 +460,13 @@ namespace gs::gui {
             // Open file browser for adding PLY
             events::cmd::ShowWindow{.window_name = "file_browser", .show = true}.emit();
             LOG_DEBUG("Opening file browser to add PLY");
+#ifdef WIN32
+            // show native windows file dialog for folder selection
+            OpenPlyFileDialog();
 
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
 
         }
 
