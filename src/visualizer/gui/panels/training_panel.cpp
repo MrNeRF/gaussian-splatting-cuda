@@ -12,7 +12,6 @@
 #include <deque>
 #include <imgui.h>
 
-
 namespace gs::gui::panels {
 
     // Iteration rate tracking

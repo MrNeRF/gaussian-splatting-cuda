@@ -12,7 +12,6 @@
 #include <ranges>
 #include <stdexcept>
 
-
 namespace gs::gui {
 
     // ScenePanel Implementation
