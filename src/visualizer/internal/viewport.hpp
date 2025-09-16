@@ -60,12 +60,11 @@ class Viewport {
 
         CameraMotion() = default;
 
-        void rotate(const glm::vec2& pos, bool enforceUpright = true, bool invertAxis = true) {
+        void rotate(const glm::vec2& pos, bool enforceUpright = false) {
             glm::vec2 delta = pos - prePos;
 
-            float axisInversion = invertAxis ? -1.0f : 1.0f;
-            float y = -delta.x * rotateSpeed * axisInversion;
-            float p = +delta.y * rotateSpeed * axisInversion;
+            float y = +delta.x * rotateSpeed ;
+            float p = -delta.y * rotateSpeed;
             glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
 
             glm::mat3 Ry = glm::mat3(glm::rotate(glm::mat4(1.0f), y, glm::vec3(0.0f, 1.0f, 0.0f)));

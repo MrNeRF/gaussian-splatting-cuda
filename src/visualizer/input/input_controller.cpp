@@ -432,7 +432,7 @@ namespace gs::visualizer {
                 viewport_.camera.translate(pos);
                 break;
             case DragMode::Rotate:
-                viewport_.camera.rotate(pos);
+                viewport_.camera.rotate(pos, rendering_manager_->getSettings().lock_gimbal);
                 break;
             case DragMode::Orbit: {
                 float current_time = static_cast<float>(glfwGetTime());
