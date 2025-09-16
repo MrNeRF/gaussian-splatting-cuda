@@ -29,7 +29,7 @@ namespace gs::visualizer {
             hovered_camera_id_ = -1;
         });
         // Subscribe to GimbalLock events
-        events::cmd::ToggleGimbalLock::when([this](const events::cmd::ToggleGimbalLock &e) {
+        events::cmd::ToggleGimbalLock::when([this](const events::cmd::ToggleGimbalLock& e) {
             gimbal_locked = e.locked;
         });
 

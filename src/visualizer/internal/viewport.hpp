@@ -24,7 +24,6 @@ class Viewport {
         float maxWasdSpeed = 1000.0f;
         float wasdSpeedChangePercentage = 10.0f;
 
-
         // REMOVED: Orbit velocity and inertia - we don't want spinning to continue
         // glm::vec2 orbitVelocity = glm::vec2(0.0f);
         // float preTime = 0.0f;

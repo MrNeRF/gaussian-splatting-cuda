@@ -175,7 +175,7 @@ namespace gs::gui::panels {
             settings_changed = true;
             events::cmd::ToggleGimbalLock{
                 .locked = settings.lock_gimbal}
-            .emit();
+                .emit();
         }
 
         // Camera Frustums
