@@ -427,9 +427,6 @@ namespace gs::gui {
         } else {
             // No data loaded - show empty state
             ImGui::Text("No data loaded.");
-            ImGui::Text("Use 'Open File Browser' to load:");
-            ImGui::BulletText("PLY file(s) for viewing");
-            ImGui::BulletText("Dataset for training");
         }
 
         ImGui::End();
