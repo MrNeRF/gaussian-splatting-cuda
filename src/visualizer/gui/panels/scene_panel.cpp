@@ -11,10 +11,7 @@
 #include <imgui.h>
 #include <ranges>
 #include <stdexcept>
-#ifdef WIN32
-#include <shobjidl.h>
-#include <windows.h>
-#endif
+
 
 namespace gs::gui {
 
@@ -379,7 +376,6 @@ namespace gs::gui {
                 LOG_DEBUG("Refreshing PLY nodes");
                 updatePLYNodes();
             }
-
         }
 
         ImGui::SameLine();

@@ -11,10 +11,7 @@
 #include <chrono>
 #include <deque>
 #include <imgui.h>
-#ifdef WIN32
-#include <shobjidl.h>
-#include <windows.h>
-#endif
+
 
 namespace gs::gui::panels {
 
