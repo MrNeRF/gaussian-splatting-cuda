@@ -10,6 +10,7 @@
 #include <iostream>
 #include <print>
 
+
 int main(int argc, char* argv[]) {
 //----------------------------------------------------------------------
 // 0. Set CUDA caching allocator settings to avoid fragmentation issues
@@ -42,6 +43,8 @@ int main(int argc, char* argv[]) {
     LOG_INFO("========================================");
 
     auto params = std::move(*params_result);
+
+    
 
     gs::Application app;
     return app.run(std::move(params));

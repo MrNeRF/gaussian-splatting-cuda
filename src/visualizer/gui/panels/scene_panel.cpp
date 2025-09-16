@@ -11,6 +11,10 @@
 #include <imgui.h>
 #include <ranges>
 #include <stdexcept>
+#ifdef WIN32
+#include <shobjidl.h>
+#include <windows.h>
+#endif
 
 namespace gs::gui {
 
@@ -197,6 +201,107 @@ namespace gs::gui {
         return !m_plyNodes.empty();
     }
 
+#ifdef WIN32
+    HRESULT selectFileNative(PWSTR& strDirectory, COMDLG_FILTERSPEC rgSpec[] = {}, UINT cFileTypes = 0, bool blnDirectory = false) {
+
+        HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to initialize COM: {:#x}", static_cast<unsigned int>(hr));
+        } else {
+            // Create the FileOpenDialog instance
+            IFileOpenDialog* pFileOpen = nullptr;
+            hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
+                                  IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
+
+            if (SUCCEEDED(hr)) {
+                DWORD dwOptions;
+                if (SUCCEEDED(pFileOpen->GetOptions(&dwOptions))) {
+                    if (blnDirectory) {
+                        pFileOpen->SetOptions(dwOptions | FOS_PICKFOLDERS);
+                    } else {
+                        hr = pFileOpen->SetFileTypes(
+                            cFileTypes,
+                            rgSpec);                    
+                        if (SUCCEEDED(hr)) {
+                            pFileOpen->SetOptions(dwOptions | FOS_NOCHANGEDIR | FOS_FILEMUSTEXIST);
+                            pFileOpen->SetFileTypeIndex(1);
+                        } else {
+                            LOG_ERROR("Failed to set file types: {:#x}", static_cast<unsigned int>(hr));
+                        }
+                    }
+                }
+
+                // Show the Open File dialog
+                hr = pFileOpen->Show(NULL);
+
+                if (SUCCEEDED(hr)) {
+                    IShellItem* pItem;
+                    hr = pFileOpen->GetResult(&pItem);
+                    if (SUCCEEDED(hr)) {
+                        PWSTR filePath = nullptr;
+                        hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &filePath);
+
+                        if (SUCCEEDED(hr)) {
+                            strDirectory = filePath;    
+                            CoTaskMemFree(filePath);
+                        }
+                        pItem->Release();
+                    }
+                }
+                pFileOpen->Release();
+            } else {
+                LOG_ERROR("Failed to create FileOpenDialog: {:#x}", static_cast<unsigned int>(hr));
+                CoUninitialize();
+            }
+            CoUninitialize();
+        }
+        return hr;
+    }
+
+    void OpenProjectFileDialog() {
+        // show native windows file dialog for project file selection
+        PWSTR filePath = nullptr;
+        COMDLG_FILTERSPEC rgSpec[] =
+            {
+                {L"LichtFelt Studio", L"*.lfs;*.ls"},
+            };
+        if (SUCCEEDED(selectFileNative(filePath, rgSpec, 1, false))) {
+            std::filesystem::path project_path(filePath);
+            events::cmd::LoadProject{.path = project_path}.emit();
+            LOG_INFO("Loading project file : {}", std::filesystem::path(project_path).string());
+        }
+    }
+
+    void OpenPlyFileDialog() {
+        // show native windows file dialog for project file selection
+        PWSTR filePath = nullptr;
+        COMDLG_FILTERSPEC rgSpec[] =
+            {
+                {L"Point Cloud", L"*.ply;"},
+            };
+        if (SUCCEEDED(selectFileNative(filePath, rgSpec, 1, false))) {
+            std::filesystem::path ply_path(filePath);
+            events::cmd::LoadFile{.path = ply_path}.emit();
+            LOG_INFO("Loading project file : {}", std::filesystem::path(ply_path).string());
+        }
+    }
+
+    void OpenDatasetFolderDialog() {
+        // show native windows file dialog for folder selection
+        PWSTR filePath = nullptr;
+        if (SUCCEEDED(selectFileNative(filePath, NULL, 0, true))) {
+            std::filesystem::path dataset_path(filePath);
+            if (std::filesystem::is_directory(filePath)) {
+                events::cmd::LoadFile{.path = dataset_path, .is_dataset = true}.emit();
+                // std::string selected_path = filePath;
+                LOG_INFO("Loading dataset via drag-and-drop: {}", std::filesystem::path(dataset_path).string());
+            }        
+         }
+    }
+
+    
+#endif // WIN32
+
     void ScenePanel::render(bool* p_open) {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
 
@@ -210,7 +315,23 @@ namespace gs::gui {
         float button_width = ImGui::GetContentRegionAvail().x;
 
         // Common controls
-        if (ImGui::Button("Open File Browser", ImVec2(button_width, 0))) {
+        if (ImGui::Button("Open Project", ImVec2(button_width, 0))) {
+            // Fire the callback to open file browser with empty path
+            if (m_onDatasetLoad) {
+                m_onDatasetLoad(std::filesystem::path("")); // Empty path signals to open browser
+            }
+
+#ifdef WIN32
+            // show native windows file dialog for project file selection
+            OpenProjectFileDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+
+#endif // WIN32
+        }
+
+        if (ImGui::Button("Import dataset", ImVec2(button_width, 0))) {
             // Request to show file browser
             LOG_DEBUG("Opening file browser from scene panel");
 
@@ -218,7 +339,34 @@ namespace gs::gui {
             if (m_onDatasetLoad) {
                 m_onDatasetLoad(std::filesystem::path("")); // Empty path signals to open browser
             }
+#ifdef WIN32
+            // show native windows file dialog for folder selection
+            OpenDatasetFolderDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+
         }
+
+        if (ImGui::Button("Open .ply", ImVec2(button_width, 0))) {
+            // Request to show file browser
+            LOG_DEBUG("Opening file browser from scene panel");
+
+            // Fire the callback to open file browser with empty path
+            if (m_onDatasetLoad) {
+                m_onDatasetLoad(std::filesystem::path("")); // Empty path signals to open browser
+            }
+
+#ifdef WIN32
+            // show native windows file dialog for folder selection
+            OpenPlyFileDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+        }
+
 
         if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
             if (m_currentMode == DisplayMode::DatasetImages && !m_currentDatasetPath.empty()) {
@@ -228,6 +376,7 @@ namespace gs::gui {
                 LOG_DEBUG("Refreshing PLY nodes");
                 updatePLYNodes();
             }
+
         }
 
         ImGui::SameLine();
@@ -308,6 +457,8 @@ namespace gs::gui {
             // Open file browser for adding PLY
             events::cmd::ShowWindow{.window_name = "file_browser", .show = true}.emit();
             LOG_DEBUG("Opening file browser to add PLY");
+
+
         }
 
         ImGui::Separator();

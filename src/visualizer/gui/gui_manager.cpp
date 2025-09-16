@@ -256,6 +256,7 @@ namespace gs::gui {
 
         // Render floating windows (these remain movable)
         if (window_states_["file_browser"]) {
+
             file_browser_->render(&window_states_["file_browser"]);
         }
 

@@ -4,6 +4,9 @@
 
 #pragma once
 
+// Add these includes at the top of the file
+#include <ShlObj.h>     // For BROWSEINFOA, SHBrowseForFolderA, etc.
+#include <windows.h>    // For Windows types like LPITEMIDLIST
 #include "core/events.hpp"
 #include <filesystem>
 #include <functional>
