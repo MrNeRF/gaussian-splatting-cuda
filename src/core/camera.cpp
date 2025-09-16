@@ -4,6 +4,7 @@
 
 #include "core/camera.hpp"
 #include "core/image_io.hpp"
+#include "core/logger.hpp"
 #include <c10/cuda/CUDAGuard.h>
 #include <torch/torch.h>
 
@@ -139,13 +140,21 @@ namespace gs {
     }
 
     void Camera::load_image_size(int resize_factor) {
-        // Load image synchronously
-        auto result = load_image(_image_path, resize_factor);
-        int w = std::get<1>(result);
-        int h = std::get<2>(result);
+        auto result = get_image_info(_image_path);
 
-        _image_width = w;
-        _image_height = h;
+        int w = std::get<0>(result);
+        int h = std::get<1>(result);
+
+        if (resize_factor > 0) {
+            if (w % resize_factor || h % resize_factor) {
+                LOG_ERROR("width or height are not divisible by resize_factor w {} h {} resize_factor {}", w, h, resize_factor);
+            }
+            _image_width = w / resize_factor;
+            _image_height = h / resize_factor;
+        } else {
+            _image_width = w;
+            _image_height = h;
+        }
     }
 
     size_t Camera::get_num_bytes_from_file() const {
