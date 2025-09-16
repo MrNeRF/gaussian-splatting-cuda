@@ -65,15 +65,15 @@ class Viewport {
 
             float y = +delta.x * rotateSpeed ;
             float p = -delta.y * rotateSpeed;
-            glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
+            glm::vec3 up = enforceUpright ? glm::vec3(0.0f, 1.0f, 0.0f) : R[1];
 
-            glm::mat3 Ry = glm::mat3(glm::rotate(glm::mat4(1.0f), y, glm::vec3(0.0f, 1.0f, 0.0f)));
+            glm::mat3 Ry = glm::mat3(glm::rotate(glm::mat4(1.0f), y, up));
             glm::mat3 Rp = glm::mat3(glm::rotate(glm::mat4(1.0f), p, R[0]));
             R = Rp * Ry * R;
 
             if (enforceUpright){
                 glm::vec3 forward = glm::normalize(R[2]);
-                glm::vec3 right = glm::normalize(glm::cross(worldUp, forward));
+                glm::vec3 right = glm::normalize(glm::cross(up, forward));
                 glm::vec3 up = glm::normalize(glm::cross(forward, right));
                 R[0] = right;
                 R[1] = up;
