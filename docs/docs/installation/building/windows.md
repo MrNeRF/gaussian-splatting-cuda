@@ -91,7 +91,9 @@
 ## Step 3: Downloading and building LichtFeld Studio
 
 - Press start and find "x64 native tools command prompt for VS 2022"
-- Create a directory "repos"
+- Create a directory "repos".
+
+	note: create this folder in a directory that does not contain spaces or the build process will fail later
 	```powershell
 	mkdir repos
 	```
@@ -172,6 +174,23 @@ After the last step is complete, you should have a new directory "\build" where 
 	cmake -B build -DCMAKE_BUILD_TYPE=Release -G Ninja -DCMAKE_TOOLCHAIN_FILE="../vcpkg/scripts/buildsystems/vcpkg.cmake"
 	cmake --build build -j
 	```
+#### Unable to find Ninja ###
+```
+CMake Error: CMake was unable to find a build program corresponding to "Ninja".  CMAKE_MAKE_PROGRAM is not set.  You probably need to select a different build tool.
+CMake Error: CMAKE_CUDA_COMPILER not set, after EnableLanguage
+CMake Error: CMAKE_CXX_COMPILER not set, after EnableLanguage
+CMake Error: CMAKE_C_COMPILER not set, after EnableLanguage
+-- Configuring incomplete, errors occurred!
+```
+- Possible cause: your build directory is containing a SPACE in the path.  The log file will show something like:
+```
+-- Warning: Paths with embedded space may be handled incorrectly by configure:
+   D:/repo space/repos/vcpkg/packages/hwloc_x64-windows
+   D:/repo space/repos/LichtFeld-Studio/build/vcpkg_installed/x64-windows
+   Please move the path to one without whitespaces!
+```
+Solution: move your directory structure (`LichtFeld-Studio` and `vcpkg`) to a directory without a space.
+
 #### Other things to check
 - Type "set" in the console
 - Verify the following environment variables
