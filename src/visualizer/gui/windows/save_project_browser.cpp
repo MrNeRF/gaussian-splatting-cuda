@@ -30,7 +30,7 @@ namespace gs::gui {
                     if (blnDirectory) {
                         pFileOpen->SetOptions(dwOptions | FOS_PICKFOLDERS);
                     } else {
-                        // pFileOpen->SetOptions(dwOptions || FOS_ALLOWMULTISELECT);  // for future reference/use
+                        // pFileOpen->SetOptions(dwOptions | FOS_ALLOWMULTISELECT);  // for future reference/use
                         hr = pFileOpen->SetFileTypes(
                             cFileTypes,
                             rgSpec);

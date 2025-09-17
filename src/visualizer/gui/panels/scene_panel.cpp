@@ -281,7 +281,7 @@ namespace gs::gui {
         if (SUCCEEDED(selectFileNative(filePath, rgSpec, 1, false))) {
             std::filesystem::path ply_path(filePath);
             events::cmd::LoadFile{.path = ply_path}.emit();
-            LOG_INFO("Loading project file : {}", std::filesystem::path(ply_path).string());
+            LOG_INFO("Loading ply file : {}", std::filesystem::path(ply_path).string());
         }
     }
 
@@ -292,13 +292,10 @@ namespace gs::gui {
             std::filesystem::path dataset_path(filePath);
             if (std::filesystem::is_directory(filePath)) {
                 events::cmd::LoadFile{.path = dataset_path, .is_dataset = true}.emit();
-                // std::string selected_path = filePath;
                 LOG_INFO("Loading dataset via drag-and-drop: {}", std::filesystem::path(dataset_path).string());
             }        
          }
     }
-
-    
 #endif // WIN32
 
     void ScenePanel::render(bool* p_open) {
@@ -319,14 +316,12 @@ namespace gs::gui {
             if (m_onDatasetLoad) {
                 m_onDatasetLoad(std::filesystem::path("")); // Empty path signals to open browser
             }
-
 #ifdef WIN32
             // show native windows file dialog for project file selection
             OpenProjectFileDialog();
 
             // hide the file browser
             events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
-
 #endif // WIN32
         }
 
@@ -356,7 +351,6 @@ namespace gs::gui {
             if (m_onDatasetLoad) {
                 m_onDatasetLoad(std::filesystem::path("")); // Empty path signals to open browser
             }
-
 #ifdef WIN32
             // show native windows file dialog for folder selection
             OpenPlyFileDialog();
@@ -365,7 +359,6 @@ namespace gs::gui {
             events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
 #endif // WIN32
         }
-
 
         if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
             if (m_currentMode == DisplayMode::DatasetImages && !m_currentDatasetPath.empty()) {
