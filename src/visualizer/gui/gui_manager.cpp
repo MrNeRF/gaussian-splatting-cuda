@@ -267,7 +267,7 @@ namespace gs::gui {
 
         if (window_states_["save_project_browser_before_exit"]) {
 #ifdef WIN32
-            bool was_project_saved = save_project_browser_->SaveProjectFileDialog();
+            bool was_project_saved = save_project_browser_->SaveProjectFileDialog(&window_states_["save_project_browser_before_exit"]);
 #else
             bool was_project_saved = save_project_browser_->render(&window_states_["save_project_browser_before_exit"]);
 #endif

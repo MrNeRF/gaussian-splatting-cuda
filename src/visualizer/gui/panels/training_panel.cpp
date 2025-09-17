@@ -122,16 +122,16 @@ namespace gs::gui::panels {
         return hr;
     }
 
-    void SaveProjectFileDialog() {
+    void SaveProjectFileDialog(bool* p_open) {
         // show native windows file dialog for project directory selection
         PWSTR filePath = nullptr;
         if (SUCCEEDED(selectFileNative(filePath, NULL, 0, true))) {
             std::filesystem::path project_path(filePath);
             events::cmd::SaveProject{project_path}.emit();
             LOG_INFO("Saving project file into : {}", std::filesystem::path(project_path).string());
+            *p_open = false;
         }
     }
-
 #endif // WIN32
 
     void SaveProjectButton(const UIContext& ctx, TrainingPanelState& state) {
@@ -143,12 +143,6 @@ namespace gs::gui::panels {
             if (project) {
                 if (project->getIsTempProject()) {
                     state.show_save_browser = true;
-#ifdef WIN32
-                    SaveProjectFileDialog();
-                    state.show_save_browser = false;
-
-#endif // WIN32
-
                 } else {
                     events::cmd::SaveProject{project->getProjectOutputFolder().string()}.emit();
                 }
@@ -884,6 +878,10 @@ namespace gs::gui::panels {
         // Render save project file browser
         if (state.show_save_browser) {
             state.save_browser.render(&state.show_save_browser);
+#ifdef WIN32
+            SaveProjectFileDialog(&state.show_save_browser);
+            state.show_save_browser = false;
+#endif // WIN32
         }
     }
 
