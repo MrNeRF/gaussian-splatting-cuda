@@ -250,6 +250,11 @@ sudo update-alternatives --install /usr/bin/g++ g++ /usr/local/gcc-14.1.0/bin/g+
 
 ## Usage
 
+### Introduction Tutorial: dataset preparation with Reality Capture and training with LichtFeld Studio
+
+[![LichtFeld Studio Beginner Tutorial - Using Reality Scan to create a  dataset for LichtFeld Studio](http://img.youtube.com/vi/JWmkhTlbDvg/0.jpg)](http://www.youtube.com/watch?v=JWmkhTlbDvg "Watch on youtube")
+
+
 ### Dataset Preparation
 
 Download and extract the Tanks & Trains dataset:
