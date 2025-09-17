@@ -7,6 +7,10 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#ifdef WIN32
+#include <Shobjidl.h>
+#include <windows.h>
+#endif
 
 namespace gs::gui {
 
@@ -16,6 +20,8 @@ namespace gs::gui {
 
         bool render(bool* p_open);
         void setCurrentPath(const std::filesystem::path& path);
+        HRESULT selectFileNative(PWSTR& strDirectory, COMDLG_FILTERSPEC rgSpec[] = {}, UINT cFileTypes = 0, bool blnDirectory = false);
+        bool SaveProjectFileDialog();
 
     private:
         std::string current_path_;

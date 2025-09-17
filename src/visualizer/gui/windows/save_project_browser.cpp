@@ -3,12 +3,87 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "gui/windows/save_project_browser.hpp"
+#include "core/logger.hpp"
 #include "core/events.hpp"
 #include <algorithm>
 #include <imgui.h>
 #include <print>
 
 namespace gs::gui {
+
+    #ifdef WIN32
+    HRESULT SaveProjectBrowser::selectFileNative(PWSTR& strDirectory, COMDLG_FILTERSPEC rgSpec[], UINT cFileTypes, bool blnDirectory) {
+
+        HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to initialize COM: {:#x}", static_cast<unsigned int>(hr));
+        } else {
+            // Create the FileOpenDialog instance
+            IFileOpenDialog* pFileOpen = nullptr;
+            hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
+                                  IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
+
+            if (SUCCEEDED(hr)) {
+                DWORD dwOptions;
+
+                if (SUCCEEDED(pFileOpen->GetOptions(&dwOptions))) {
+                    if (blnDirectory) {
+                        pFileOpen->SetOptions(dwOptions | FOS_PICKFOLDERS);
+                    } else {
+                        // pFileOpen->SetOptions(dwOptions || FOS_ALLOWMULTISELECT);  // for future reference/use
+                        hr = pFileOpen->SetFileTypes(
+                            cFileTypes,
+                            rgSpec);
+                        if (SUCCEEDED(hr)) {
+                            pFileOpen->SetOptions(dwOptions | FOS_NOCHANGEDIR | FOS_FILEMUSTEXIST);
+                            pFileOpen->SetFileTypeIndex(1);
+                        } else {
+                            LOG_ERROR("Failed to set file types: {:#x}", static_cast<unsigned int>(hr));
+                        }
+                    }
+                }
+
+                // Show the Open File dialog
+                hr = pFileOpen->Show(NULL);
+
+                if (SUCCEEDED(hr)) {
+                    IShellItem* pItem;
+                    hr = pFileOpen->GetResult(&pItem);
+                    if (SUCCEEDED(hr)) {
+                        PWSTR filePath = nullptr;
+                        hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &filePath);
+
+                        if (SUCCEEDED(hr)) {
+                            strDirectory = filePath;
+                            CoTaskMemFree(filePath);
+                        }
+                        pItem->Release();
+                    }
+                }
+                pFileOpen->Release();
+            } else {
+                LOG_ERROR("Failed to create FileOpenDialog: {:#x}", static_cast<unsigned int>(hr));
+                CoUninitialize();
+            }
+            CoUninitialize();
+        }
+        return hr;
+    }
+
+    bool SaveProjectBrowser::SaveProjectFileDialog() {
+        // show native windows file dialog for project directory selection
+        PWSTR filePath = nullptr;
+        if (SUCCEEDED(selectFileNative(filePath, NULL, 0, true))) {
+            std::filesystem::path project_path(filePath);
+            events::cmd::SaveProject{project_path}.emit();
+            LOG_INFO("Saving project file into : {}", std::filesystem::path(project_path).string());
+            return true;
+        }
+
+        return false;
+    }
+
+#endif
 
     SaveProjectBrowser::SaveProjectBrowser() {
         current_path_ = std::filesystem::current_path().string();
