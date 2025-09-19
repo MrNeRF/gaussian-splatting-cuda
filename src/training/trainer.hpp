@@ -118,13 +118,23 @@ namespace gs::training {
             int iter,
             Camera* cam,
             torch::Tensor gt_image,
+            torch::Tensor weights,
             RenderMode render_mode,
+            bool out_of_mask_penalty,
             std::stop_token stop_token = {});
 
         // Protected methods for computing loss
         std::expected<torch::Tensor, std::string> compute_photometric_loss(
             const RenderOutput& render_output,
             const torch::Tensor& gt_image,
+            const SplatData& splatData,
+            const param::OptimizationParameters& opt_params);
+            
+        std::expected<torch::Tensor, std::string> compute_photometric_loss(
+            const RenderOutput& render_output,
+            const torch::Tensor& gt_image,
+            const torch::Tensor& weights,
+            const float outOfMaskAlphaPenalty,
             const SplatData& splatData,
             const param::OptimizationParameters& opt_params);
 
@@ -161,6 +171,9 @@ namespace gs::training {
         // Handle control requests
         void handle_control_requests(int iter, std::stop_token stop_token = {});
 
+        // Prune gaussians using masks
+        void prune_after_training(float center_keep_threshold, int min_visibility_count);
+        
         void save_ply(const std::filesystem::path& save_path, int iter_num, bool join_threads = true);
 
         // Member variables

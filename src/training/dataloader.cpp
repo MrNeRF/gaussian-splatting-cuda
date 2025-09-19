@@ -154,6 +154,9 @@ namespace gs::training {
 
             // Load image data using image_io's standard function
             auto [data, w, h, c] = load_image(camera->image_path(), resize_factor);
+            
+            // Load image data using image_io's standard function
+            auto [datamask, w, h, c] = load_image(camera->mask_path(), resize_factor);
 
             // Update camera dimensions
             camera->update_image_dimensions(w, h);
@@ -167,6 +170,14 @@ namespace gs::training {
                     torch::TensorOptions()
                         .dtype(torch::kFloat32)
                         .device(torch::kCUDA));
+                        
+                if (!camera->mask_path().empty()) {
+                    slot->gpu_mask = torch::empty(
+                        {c, h, w},
+                        torch::TensorOptions()
+                            .dtype(torch::kFloat32)
+                            .device(torch::kCUDA));
+                }
                 slot->last_width = w;
                 slot->last_height = h;
             }
@@ -191,15 +202,33 @@ namespace gs::training {
                     .to(torch::kFloat32)
                     .div_(255.0f),
                 /*non_blocking=*/true);
+                
+            if (!camera->mask_path().empty()) {
+                
+                auto pinnedmask = torch::from_blob(
+                    data,
+                    {h, w, c},
+                    torch::TensorOptions()
+                        .dtype(torch::kUInt8)
+                        .pinned_memory(true));
+                        
+                slot->gpu_mask.copy_(
+                    pinnedmask.to(torch::kCUDA, /*non_blocking=*/true)
+                        .permute({2, 0, 1}) // HWC -> CHW
+                        .to(torch::kFloat32)
+                        .div_(255.0f),
+                    /*non_blocking=*/true);
+            }
 
             // Synchronize this stream
             stream.synchronize();
 
             // Free CPU memory using image_io's function
             free_image(data);
+            free_image(datamask);
 
             // Create the example - clone() here is cheap as it just increments ref count
-            CameraWithImage example{camera, slot->gpu_buffer.clone()};
+            CameraWithImage example{camera, slot->gpu_buffer.clone(), slot->gpu_mask.clone()};
 
             // Release buffer back to pool
             release_buffer(slot);

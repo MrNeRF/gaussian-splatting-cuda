@@ -30,6 +30,7 @@ namespace gs {
                    gsplat::CameraModelType camera_model_type,
                    const std::string& image_name,
                    const std::filesystem::path& image_path,
+                   const std::filesystem::path& mask_path,
                    int camera_width, int camera_height,
                    int uid)
         : _uid(uid),
@@ -44,6 +45,7 @@ namespace gs {
           _camera_model_type(camera_model_type),
           _image_name(image_name),
           _image_path(image_path),
+          _mask_path(mask_path),
           _camera_width(camera_width),
           _camera_height(camera_height),
           _image_width(camera_width),
@@ -112,6 +114,9 @@ namespace gs {
         h = std::get<2>(result);
         c = std::get<3>(result);
 
+        if (!data || w <= 0 || h <= 0 || c <= 0) {
+            throw std::runtime_error("Failed to load image or invalid dimensions");
+        }
         _image_width = w;
         _image_height = h;
 
@@ -137,6 +142,67 @@ namespace gs {
         _stream.synchronize();
 
         return image;
+    }
+    
+    torch::Tensor Camera::load_and_get_attention_weights(int resize_factor) {
+
+        if (_mask_path.empty())
+            return torch::Tensor();
+
+        unsigned char* data;
+        int w, h, c;
+
+        auto result = load_image(_mask_path, resize_factor);
+        
+        data = std::get<0>(result);
+        w = std::get<1>(result);
+        h = std::get<2>(result);
+        c = std::get<3>(result);
+
+        if (!data || w <= 0 || h <= 0 || c <= 0) {
+            return torch::Tensor();
+        }
+
+        _image_width = w;
+        _image_height = h;
+
+        // Use pinned memory for faster CPU to GPU transfer
+        auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
+
+        // Create the tensor on the CPU with a custom deleter to prevent memory leaks
+        torch::Tensor tmp_cpu = torch::from_blob(
+            data,
+            {h, w, c},
+            {w * c, c, 1},
+            // The deleter should come before the options
+            [&](void* d) { free_image(static_cast<unsigned char*>(d)); },
+            pinned_options);
+
+            
+        at::cuda::CUDAStreamGuard guard(_stream);
+        // Transfer the tensor to the GPU and permute in one go
+        torch::Tensor tmp_gpu = tmp_cpu.permute({2, 0, 1}).to(torch::kCUDA, /*non_blocking=*/true);
+
+        // Perform all subsequent operations directly on the GPU
+        auto channel0_gpu = tmp_gpu.select(0, 0);
+        auto mask_gpu = channel0_gpu.clone().to(torch::kBool);
+
+        torch::Tensor inv_gpu = mask_gpu;
+        if (inv_gpu.dim() == 2) {
+            inv_gpu = inv_gpu.unsqueeze(0);
+        }
+
+        const float invalidPixelWeight = 1.0f / 20.0f;
+
+        torch::Tensor W_gpu = torch::where(inv_gpu,
+                                           torch::ones_like(inv_gpu, torch::kFloat),
+                                           torch::full_like(inv_gpu, invalidPixelWeight, torch::kFloat));
+
+        
+        // Ensure the transfer is complete before returning
+        _stream.synchronize();
+
+        return W_gpu;
     }
 
     void Camera::load_image_size(int resize_factor) {
