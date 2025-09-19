@@ -21,7 +21,6 @@ namespace gs::gui {
         bool render(bool* p_open);
         void setCurrentPath(const std::filesystem::path& path);
 #ifdef WIN32
-        HRESULT selectFileNative(PWSTR& strDirectory, COMDLG_FILTERSPEC rgSpec[] = {}, UINT cFileTypes = 0, bool blnDirectory = false);
         bool SaveProjectFileDialog(bool* p_open);
 #endif
 

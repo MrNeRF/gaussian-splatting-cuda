@@ -23,7 +23,7 @@ namespace gs::gui {
             *p_open = false;
             return true;
         }
-
+        *p_open = false;
         return false;
     }
 #endif
