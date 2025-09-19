@@ -71,15 +71,8 @@ namespace gs::gui {
 
         // Set application icon - use the resource path helper
         try {
-            auto icon_path = gs::visualizer::getAssetPath("lichtfeld-icon.png");
-            auto result = load_image_with_alpha(icon_path);
-            unsigned char* data;
-            int width, height, channels = 0;
-
-            data = std::get<0>(result);
-            width = std::get<1>(result);
-            height = std::get<2>(result);
-            channels = std::get<3>(result);
+            const auto icon_path = gs::visualizer::getAssetPath("lichtfeld-icon.png");
+            const auto [data, width, height, channels] = load_image_with_alpha(icon_path);
 
             GLFWimage image{width, height, data};
             glfwSetWindowIcon(viewer_->getWindow(), 1, &image);
@@ -138,8 +131,6 @@ namespace gs::gui {
             ImGui::DestroyContext();
         }
     }
-
-
 
     void GuiManager::render() {
         // Start frame

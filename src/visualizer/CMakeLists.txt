@@ -19,6 +19,7 @@ add_library(gs_visualizer STATIC
         # GUI system
         gui/gui_manager.cpp
         gui/ui_widgets.cpp
+        gui/utils/native_dialogs.cpp
         gui/panels/main_panel.cpp
         gui/panels/training_panel.cpp
         gui/panels/crop_box_panel.cpp
