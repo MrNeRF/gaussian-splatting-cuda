@@ -264,6 +264,7 @@ namespace gs::gui {
             {
                 {L"LichtFeldStudio Project File", L"*.lfs;*.ls"},
             };
+
         if (SUCCEEDED(selectFileNative(filePath, rgSpec, 1, false))) {
             std::filesystem::path project_path(filePath);
             events::cmd::LoadProject{.path = project_path}.emit();
@@ -292,7 +293,7 @@ namespace gs::gui {
             std::filesystem::path dataset_path(filePath);
             if (std::filesystem::is_directory(filePath)) {
                 events::cmd::LoadFile{.path = dataset_path, .is_dataset = true}.emit();
-                LOG_INFO("Loading dataset via drag-and-drop: {}", std::filesystem::path(dataset_path).string());
+                LOG_INFO("Loading dataset : {}", std::filesystem::path(dataset_path).string());
             }        
          }
     }
