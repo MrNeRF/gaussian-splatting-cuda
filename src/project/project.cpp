@@ -16,7 +16,7 @@ namespace gs::management {
     // Static member definitions
     const Version Project::CURRENT_VERSION(0, 0, 1);
     const std::string Project::FILE_HEADER = "LichtFeldStudio Project File";
-    const std::string Project::EXTENSION = ".lfs";                // LichtFeldStudio file
+    const std::string Project::EXTENSION = ".lfs";               // LichtFeldStudio file
     const std::string Project::PROJECT_DIR_PREFIX = "lfs_proj_"; // LichtFeldStudio file
     const std::string Project::PROJECT_LOCK_FILE = ".lock";
 
