@@ -17,4 +17,6 @@ namespace gs::loader {
 
     PointCloud generate_random_point_cloud();
 
+    PointCloud load_simple_ply_point_cloud(const std::filesystem::path& filepath);
+
 } // namespace gs::loader
