@@ -21,7 +21,6 @@ namespace gs {
     }
 
     namespace gui {
-        class ScriptingConsole;
         class FileBrowser;
         class ScenePanel;
         class ProjectChangedDialogBox;
@@ -47,7 +46,6 @@ namespace gs {
             // Missing methods that visualizer_impl expects
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
             void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
-            void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
 
             // Viewport region access
             ImVec2 getViewportPos() const;

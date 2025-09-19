@@ -15,16 +15,12 @@ namespace gs {
     }
 
     namespace gui {
-        class ScriptingConsole;
         class FileBrowser;
-        class ProjectChangedDialogBox;
 
         // Shared context passed to all UI functions
         struct UIContext {
             visualizer::VisualizerImpl* viewer;
-            ScriptingConsole* console;
             FileBrowser* file_browser;
-            ProjectChangedDialogBox* project_changed_dialog_box;
             std::unordered_map<std::string, bool>* window_states;
         };
     } // namespace gui

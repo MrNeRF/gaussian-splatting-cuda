@@ -4,7 +4,9 @@
 
 #include "gui/panels/training_panel.hpp"
 #include "core/events.hpp"
+#include "core/logger.hpp"
 #include "gui/ui_widgets.hpp"
+#include "gui/utils/native_dialogs.hpp"
 #include "visualizer_impl.hpp"
 
 #include <chrono>
@@ -63,6 +65,19 @@ namespace gs::gui::panels {
             window_seconds = seconds;
         }
     };
+
+#ifdef WIN32
+    void SaveProjectFileDialog(bool* p_open) {
+        // show native windows file dialog for project directory selection
+        PWSTR filePath = nullptr;
+        if (SUCCEEDED(gs::gui::utils::selectFileNative(filePath, nullptr, 0, true))) {
+            std::filesystem::path project_path(filePath);
+            events::cmd::SaveProject{project_path}.emit();
+            LOG_INFO("Saving project file into : {}", std::filesystem::path(project_path).string());
+            *p_open = false;
+        }
+    }
+#endif // WIN32
 
     void SaveProjectButton(const UIContext& ctx, TrainingPanelState& state) {
         // Add Save Project button
@@ -808,6 +823,10 @@ namespace gs::gui::panels {
         // Render save project file browser
         if (state.show_save_browser) {
             state.save_browser.render(&state.show_save_browser);
+#ifdef WIN32
+            SaveProjectFileDialog(&state.show_save_browser);
+            state.show_save_browser = false;
+#endif // WIN32
         }
     }
 
