@@ -18,7 +18,10 @@
     "libarchive",
     "libwebp",
     "nlohmann-json",
-    "openimageio",
+    {
+      "name": "openimageio",
+      "features": [ "webp" ]
+    },
     "spdlog",
     "tbb"
   ]
