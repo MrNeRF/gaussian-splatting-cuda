@@ -119,7 +119,7 @@ namespace gs::gui::panels {
         if (trainer_state == TrainerManager::State::Ready) {
             // Before training - get from project (editable)
             opt_params = project->getOptimizationParams();
-            dataset_params = project->getProjectData().data_set_info;            
+            dataset_params = project->getProjectData().data_set_info;
         } else {
             // During/after training - get from trainer (read-only)
             const auto* trainer = trainer_manager->getTrainer();
@@ -464,7 +464,6 @@ namespace gs::gui::panels {
                 }
 
                 // Strategy-specific parameters
-
 
                 ImGui::EndTable();
             }
