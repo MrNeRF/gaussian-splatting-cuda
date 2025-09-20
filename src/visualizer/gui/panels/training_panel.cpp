@@ -218,19 +218,6 @@ namespace gs::gui::panels {
 
         // Optimization Parameters
         if (ImGui::TreeNode("Optimization")) {
-            // Enabled GUI checkbox
-            if (!can_edit) {
-                ImGui::BeginDisabled();
-            }
-            bool gut_enabled = opt_params.gut;
-            if (ImGui::Checkbox("GUT", &gut_enabled)) {
-                opt_params.gut = gut_enabled;
-                opt_params_changed = true;
-            }
-            if (!can_edit) {
-                ImGui::EndDisabled();
-            }
-
             if (ImGui::BeginTable("OptimizationTable", 2, ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
@@ -533,21 +520,58 @@ namespace gs::gui::panels {
                                    opt_params.antialiasing ||
                                    opt_params.gut;
 
+        has_active_features = true; // force show for now
+
         if (has_active_features && ImGui::TreeNode("Active Features")) {
             if (ImGui::BeginTable("FeaturesTable", 2, ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Feature", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                 ImGui::TableSetupColumn("Configuration", ImGuiTableColumnFlags_WidthStretch);
 
-                if (opt_params.use_bilateral_grid) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Bilateral Grid:");
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%dx%dx%d (LR: %.4f)",
-                                opt_params.bilateral_grid_X,
-                                opt_params.bilateral_grid_Y,
-                                opt_params.bilateral_grid_W,
-                                opt_params.bilateral_grid_lr);
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bool use_bilateral_grid_enabled = opt_params.use_bilateral_grid;
+                if (!can_edit) {
+                    ImGui::BeginDisabled();
+                }
+                if (ImGui::Checkbox("Bilateral Grid", &use_bilateral_grid_enabled)) {
+                    opt_params.use_bilateral_grid = use_bilateral_grid_enabled;
+                    opt_params_changed = true;
+                }
+                if (!can_edit) {
+                    ImGui::EndDisabled();
+                }
+
+                ImGui::TableNextColumn();
+                ImGui::Text("%dx%dx%d (LR: %.4f)",
+                            opt_params.bilateral_grid_X,
+                            opt_params.bilateral_grid_Y,
+                            opt_params.bilateral_grid_W,
+                            opt_params.bilateral_grid_lr);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                if (!can_edit) {
+                    ImGui::BeginDisabled();
+                }
+                bool use_antialiasing = opt_params.antialiasing;
+                if (ImGui::Checkbox("Anti Aliasing", &use_antialiasing)) {
+                    opt_params.antialiasing = use_antialiasing;
+                    opt_params_changed = true;
+                }
+                if (!can_edit) {
+                    ImGui::EndDisabled();
+                }
+
+                if (!can_edit) {
+                    ImGui::BeginDisabled();
+                }
+                bool gut_enabled = opt_params.gut;
+                if (ImGui::Checkbox("GUT", &gut_enabled)) {
+                    opt_params.gut = gut_enabled;
+                    opt_params_changed = true;
+                }
+                if (!can_edit) {
+                    ImGui::EndDisabled();
                 }
 
                 if (opt_params.pose_optimization != "none") {
@@ -576,24 +600,11 @@ namespace gs::gui::panels {
                     }
                 }
 
-                if (opt_params.antialiasing) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Antialiasing:");
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Enabled");
-                }
-
-                if (opt_params.gut) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("GUT Rasterizer:");
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Enabled");
-                }
-
                 ImGui::EndTable();
             }
+
+
+
             ImGui::TreePop();
         }
 
