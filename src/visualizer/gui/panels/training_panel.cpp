@@ -119,7 +119,7 @@ namespace gs::gui::panels {
         if (trainer_state == TrainerManager::State::Ready) {
             // Before training - get from project (editable)
             opt_params = project->getOptimizationParams();
-            dataset_params = project->getProjectData().data_set_info;
+            dataset_params = project->getProjectData().data_set_info;            
         } else {
             // During/after training - get from trainer (read-only)
             const auto* trainer = trainer_manager->getTrainer();
@@ -136,6 +136,48 @@ namespace gs::gui::panels {
         bool dataset_params_changed = false;
 
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 12.0f);
+        if (ImGui::BeginTable("DatasetTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                // Iterations - EDITABLE
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Iterations:");
+            ImGui::TableNextColumn();
+            if (can_edit) {
+                ImGui::PushItemWidth(-1);
+                int iterations = static_cast<int>(opt_params.iterations);
+                if (ImGui::InputInt("##iterations", &iterations, 1000, 5000)) {
+                    if (iterations > 0 && iterations <= 1000000) {
+                        opt_params.iterations = static_cast<size_t>(iterations);
+                        opt_params_changed = true;
+                    }
+                }
+                ImGui::PopItemWidth();
+            } else {
+                ImGui::Text("%zu", opt_params.iterations);
+            }
+
+            if (opt_params.strategy == "mcmc") {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Max Gaussians:");
+                ImGui::TableNextColumn();
+                if (can_edit) {
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::InputInt("##max_cap", &opt_params.max_cap, 10000, 100000)) {
+                        if (opt_params.max_cap > 0) {
+                            opt_params_changed = true;
+                        }
+                    }
+                    ImGui::PopItemWidth();
+                } else {
+                    ImGui::Text("%d", opt_params.max_cap);
+                }
+            }
+        }
+        ImGui::EndTable();
 
         // Dataset Parameters
         if (ImGui::TreeNode("Dataset")) {
@@ -234,25 +276,6 @@ namespace gs::gui::panels {
             if (ImGui::BeginTable("OptimizationTable", 2, ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
-                // Iterations - EDITABLE
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Iterations:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    int iterations = static_cast<int>(opt_params.iterations);
-                    if (ImGui::InputInt("##iterations", &iterations, 1000, 5000)) {
-                        if (iterations > 0 && iterations <= 1000000) {
-                            opt_params.iterations = static_cast<size_t>(iterations);
-                            opt_params_changed = true;
-                        }
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%zu", opt_params.iterations);
-                }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -441,23 +464,7 @@ namespace gs::gui::panels {
                 }
 
                 // Strategy-specific parameters
-                if (opt_params.strategy == "mcmc") {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Max Gaussians:");
-                    ImGui::TableNextColumn();
-                    if (can_edit) {
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::InputInt("##max_cap", &opt_params.max_cap, 10000, 100000)) {
-                            if (opt_params.max_cap > 0) {
-                                opt_params_changed = true;
-                            }
-                        }
-                        ImGui::PopItemWidth();
-                    } else {
-                        ImGui::Text("%d", opt_params.max_cap);
-                    }
-                }
+
 
                 ImGui::EndTable();
             }

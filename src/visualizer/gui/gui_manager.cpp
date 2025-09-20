@@ -40,6 +40,7 @@ namespace gs::gui {
         window_states_["project_changed_dialog_box"] = false;
         window_states_["save_project_browser_before_exit"] = false;
         window_states_["system_console"] = false;
+        window_states_["training_tab"] = false;
 
         // Initialize speed overlay state
         speed_overlay_visible_ = false;
@@ -207,6 +208,7 @@ namespace gs::gui {
             // Dock windows
             ImGui::DockBuilderDockWindow("Rendering Settings", dock_id_left);
             ImGui::DockBuilderDockWindow("Scene", dock_id_right);
+            ImGui::DockBuilderDockWindow("Training Settings", dock_id_left);
 
             ImGui::DockBuilderFinish(dockspace_id);
         }
@@ -230,15 +232,31 @@ namespace gs::gui {
                 ImGui::Separator();
                 panels::DrawRenderingSettings(ctx);
                 ImGui::Separator();
-                if (viewer_->getTrainer()) {
-                    panels::DrawTrainingControls(ctx);
-                    ImGui::Separator();
-                }
                 panels::DrawProgressInfo(ctx);
                 ImGui::Separator();
                 panels::DrawToolsPanel(ctx);
             }
             ImGui::End();
+
+            if (viewer_->getTrainer() && !window_states_["training_tab"]) {
+                ImGui::SetWindowFocus("Rendering Settings");
+                window_states_["training_tab"] = true;
+            } 
+            
+            if (!viewer_->getTrainer()) {
+                window_states_["training_tab"] = false;
+            }
+
+            if (window_states_["training_tab"]) {
+                if (ImGui::Begin("Training Settings", &show_main_panel_)) {
+                    panels::DrawTrainingControls(ctx);
+                    ImGui::Separator();
+                }
+                ImGui::End();
+            }
+
+
+
             ImGui::PopStyleColor();
         }
 
