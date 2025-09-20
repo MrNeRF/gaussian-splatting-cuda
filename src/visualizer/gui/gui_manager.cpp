@@ -241,8 +241,8 @@ namespace gs::gui {
             if (viewer_->getTrainer() && !window_states_["training_tab"]) {
                 ImGui::SetWindowFocus("Rendering Settings");
                 window_states_["training_tab"] = true;
-            } 
-            
+            }
+
             if (!viewer_->getTrainer()) {
                 window_states_["training_tab"] = false;
             }

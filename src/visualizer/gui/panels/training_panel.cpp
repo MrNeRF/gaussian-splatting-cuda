@@ -140,7 +140,7 @@ namespace gs::gui::panels {
             ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
             ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-                // Iterations - EDITABLE
+            // Iterations - EDITABLE
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("Iterations:");
