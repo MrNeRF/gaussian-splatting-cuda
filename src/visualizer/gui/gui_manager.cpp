@@ -255,8 +255,6 @@ namespace gs::gui {
                 ImGui::End();
             }
 
-
-
             ImGui::PopStyleColor();
         }
 
