@@ -550,17 +550,6 @@ namespace gs::gui::panels {
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                if (!can_edit) {
-                    ImGui::BeginDisabled();
-                }
-                bool use_antialiasing = opt_params.antialiasing;
-                if (ImGui::Checkbox("Anti Aliasing", &use_antialiasing)) {
-                    opt_params.antialiasing = use_antialiasing;
-                    opt_params_changed = true;
-                }
-                if (!can_edit) {
-                    ImGui::EndDisabled();
-                }
 
                 if (!can_edit) {
                     ImGui::BeginDisabled();
