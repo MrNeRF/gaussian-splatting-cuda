@@ -224,7 +224,7 @@ namespace gs::gui {
         // Draw docked panels
         if (show_main_panel_) {
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
-            if (ImGui::Begin("Rendering Settings", &show_main_panel_)) {
+            if (ImGui::Begin("Rendering Settings", nullptr)) {
                 // Draw contents without the manual sizing/positioning
                 panels::DrawWindowControls(ctx);
                 ImGui::Separator();
@@ -248,7 +248,7 @@ namespace gs::gui {
             }
 
             if (window_states_["training_tab"]) {
-                if (ImGui::Begin("Training Settings", &show_main_panel_)) {
+                if (ImGui::Begin("Training Settings", nullptr)) {
                     panels::DrawTrainingControls(ctx);
                     ImGui::Separator();
                 }
