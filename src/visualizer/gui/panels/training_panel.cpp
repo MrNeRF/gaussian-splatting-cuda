@@ -569,6 +569,20 @@ namespace gs::gui::panels {
                     ImGui::EndDisabled();
                 }
 
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bool bg_modulation_enabled = opt_params.bg_modulation;
+                if (!can_edit) {
+                    ImGui::BeginDisabled();
+                }
+                if (ImGui::Checkbox("Background Modulation", &bg_modulation_enabled)) {
+                    opt_params.bg_modulation = bg_modulation_enabled;
+                    opt_params_changed = true;
+                }
+                if (!can_edit) {
+                    ImGui::EndDisabled();
+                }
+
                 if (opt_params.pose_optimization != "none") {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
