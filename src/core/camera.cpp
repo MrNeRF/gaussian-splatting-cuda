@@ -115,12 +115,6 @@ namespace gs {
         _image_width = w;
         _image_height = h;
 
-        if (w * h > 4096*4096) {
-            std::string error_msg = std::format("Failed to load image - image size too large {} - use a resize factor for this dataset", _image_path.filename().string());
-            LOG_ERROR("Failed to load image - image size too large: (image: {} - w: {} - h: {})", _image_path.filename().string(), w, h);
-            throw std::runtime_error(error_msg);
-        }
-
         // Create tensor from pinned memory and transfer asynchronously
         torch::Tensor image = torch::from_blob(
             data,

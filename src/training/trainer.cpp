@@ -314,6 +314,13 @@ namespace gs::training {
             // Setup camera cache
             for (const auto& cam : base_dataset_->get_cameras()) {
                 m_cam_id_to_cam[cam->uid()] = cam;
+                cam->load_image_size(params.dataset.resize_factor);
+
+                if (cam->image_width() * cam->image_height() > 4096 * 4096) {
+                    std::string error_msg = std::format("image size too large {} - use a resize factor for this dataset", cam->image_name());
+                    LOG_ERROR("Image size too large: (image: {} - w: {} - h: {})", cam->image_name(), cam->camera_width(), cam->camera_height());
+                    throw std::runtime_error(error_msg);                                                       
+                }
             }
             LOG_DEBUG("Camera cache initialized with {} cameras", m_cam_id_to_cam.size());
 
