@@ -5,8 +5,8 @@
 #include "transforms.hpp"
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
-#include "formats/colmap.hpp"
 #include "external/tinyply.hpp"
+#include "formats/colmap.hpp"
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -327,35 +327,35 @@ namespace gs::loader {
 
             // Copy and convert vertex data according to its type
             switch (vertices->t) {
-                case tinyply::Type::FLOAT32: {
-                    const float* vertex_data = reinterpret_cast<const float*>(vertices->buffer.get());
-                    std::memcpy(pos_ptr, vertex_data, vertex_count * 3 * sizeof(float));
-                    break;
+            case tinyply::Type::FLOAT32: {
+                const float* vertex_data = reinterpret_cast<const float*>(vertices->buffer.get());
+                std::memcpy(pos_ptr, vertex_data, vertex_count * 3 * sizeof(float));
+                break;
+            }
+            case tinyply::Type::FLOAT64: {
+                const double* vertex_data = reinterpret_cast<const double*>(vertices->buffer.get());
+                for (size_t i = 0; i < vertex_count * 3; ++i) {
+                    pos_ptr[i] = static_cast<float>(vertex_data[i]);
                 }
-                case tinyply::Type::FLOAT64: {
-                    const double* vertex_data = reinterpret_cast<const double*>(vertices->buffer.get());
-                    for (size_t i = 0; i < vertex_count * 3; ++i) {
-                        pos_ptr[i] = static_cast<float>(vertex_data[i]);
-                    }
-                    break;
+                break;
+            }
+            case tinyply::Type::INT32: {
+                const int32_t* vertex_data = reinterpret_cast<const int32_t*>(vertices->buffer.get());
+                for (size_t i = 0; i < vertex_count * 3; ++i) {
+                    pos_ptr[i] = static_cast<float>(vertex_data[i]);
                 }
-                case tinyply::Type::INT32: {
-                    const int32_t* vertex_data = reinterpret_cast<const int32_t*>(vertices->buffer.get());
-                    for (size_t i = 0; i < vertex_count * 3; ++i) {
-                        pos_ptr[i] = static_cast<float>(vertex_data[i]);
-                    }
-                    break;
+                break;
+            }
+            case tinyply::Type::UINT8: {
+                const uint8_t* vertex_data = reinterpret_cast<const uint8_t*>(vertices->buffer.get());
+                for (size_t i = 0; i < vertex_count * 3; ++i) {
+                    pos_ptr[i] = static_cast<float>(vertex_data[i]);
                 }
-                case tinyply::Type::UINT8: {
-                    const uint8_t* vertex_data = reinterpret_cast<const uint8_t*>(vertices->buffer.get());
-                    for (size_t i = 0; i < vertex_count * 3; ++i) {
-                        pos_ptr[i] = static_cast<float>(vertex_data[i]);
-                    }
-                    break;
-                }
-                // Add more cases as needed for other types
-                default:
-                    throw std::runtime_error("Unsupported vertex type in PLY file");
+                break;
+            }
+            // Add more cases as needed for other types
+            default:
+                throw std::runtime_error("Unsupported vertex type in PLY file");
             }
 
             // Create color tensor
