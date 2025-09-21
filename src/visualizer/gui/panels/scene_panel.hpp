@@ -4,6 +4,10 @@
 
 #pragma once
 
+#ifdef WIN32
+#include <ShlObj.h>
+#include <windows.h>
+#endif // WIN32
 #include "core/events.hpp"
 #include <filesystem>
 #include <functional>

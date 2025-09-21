@@ -3,16 +3,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "gui/gui_manager.hpp"
+#include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include "gui/panels/main_panel.hpp"
 #include "gui/panels/scene_panel.hpp"
 #include "gui/panels/tools_panel.hpp"
 #include "gui/panels/training_panel.hpp"
 #include "gui/ui_widgets.hpp"
-#include "gui/windows/camera_controls.hpp"
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/project_changed_dialog_box.hpp"
-#include "gui/windows/scripting_console.hpp"
 #include "internal/resource_paths.hpp"
 #include "visualizer_impl.hpp"
 
@@ -30,19 +29,18 @@ namespace gs::gui {
         : viewer_(viewer) {
 
         // Create components
-        console_ = std::make_unique<ScriptingConsole>();
         file_browser_ = std::make_unique<FileBrowser>();
         project_changed_dialog_box_ = std::make_unique<ProjectChangedDialogBox>();
         scene_panel_ = std::make_unique<ScenePanel>(viewer->trainer_manager_);
         save_project_browser_ = std::make_unique<SaveProjectBrowser>();
 
         // Initialize window states
-        window_states_["console"] = false;
         window_states_["file_browser"] = false;
-        window_states_["camera_controls"] = false;
         window_states_["scene_panel"] = true;
         window_states_["project_changed_dialog_box"] = false;
         window_states_["save_project_browser_before_exit"] = false;
+        window_states_["system_console"] = false;
+        window_states_["training_tab"] = false;
 
         // Initialize speed overlay state
         speed_overlay_visible_ = false;
@@ -71,6 +69,18 @@ namespace gs::gui {
         // Platform/Renderer initialization
         ImGui_ImplGlfw_InitForOpenGL(viewer_->getWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 430");
+
+        // Set application icon - use the resource path helper
+        try {
+            const auto icon_path = gs::visualizer::getAssetPath("lichtfeld-icon.png");
+            const auto [data, width, height, channels] = load_image_with_alpha(icon_path);
+
+            GLFWimage image{width, height, data};
+            glfwSetWindowIcon(viewer_->getWindow(), 1, &image);
+            free_image(data);
+        } catch (const std::exception& e) {
+            LOG_WARN("Could not load application icon: {}", e.what());
+        }
 
         // Load fonts - use the resource path helper
         try {
@@ -192,12 +202,13 @@ namespace gs::gui {
             ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
             ImGui::DockBuilderSetNodeSize(dockspace_id, main_viewport->WorkSize);
 
-            ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.2f, nullptr, &dockspace_id);
+            ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.25f, nullptr, &dockspace_id);
             ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.2f, nullptr, &dockspace_id);
 
             // Dock windows
             ImGui::DockBuilderDockWindow("Rendering Settings", dock_id_left);
             ImGui::DockBuilderDockWindow("Scene", dock_id_right);
+            ImGui::DockBuilderDockWindow("Training Settings", dock_id_left);
 
             ImGui::DockBuilderFinish(dockspace_id);
         }
@@ -207,7 +218,6 @@ namespace gs::gui {
         // Create context for this frame
         UIContext ctx{
             .viewer = viewer_,
-            .console = console_.get(),
             .file_browser = file_browser_.get(),
             .window_states = &window_states_};
 
@@ -222,15 +232,29 @@ namespace gs::gui {
                 ImGui::Separator();
                 panels::DrawRenderingSettings(ctx);
                 ImGui::Separator();
-                if (viewer_->getTrainer()) {
-                    panels::DrawTrainingControls(ctx);
-                    ImGui::Separator();
-                }
                 panels::DrawProgressInfo(ctx);
                 ImGui::Separator();
                 panels::DrawToolsPanel(ctx);
             }
             ImGui::End();
+
+            if (viewer_->getTrainer() && !window_states_["training_tab"]) {
+                ImGui::SetWindowFocus("Rendering Settings");
+                window_states_["training_tab"] = true;
+            }
+
+            if (!viewer_->getTrainer()) {
+                window_states_["training_tab"] = false;
+            }
+
+            if (window_states_["training_tab"]) {
+                if (ImGui::Begin("Training Settings", &show_main_panel_)) {
+                    panels::DrawTrainingControls(ctx);
+                    ImGui::Separator();
+                }
+                ImGui::End();
+            }
+
             ImGui::PopStyleColor();
         }
 
@@ -240,16 +264,8 @@ namespace gs::gui {
         }
 
         // Render floating windows (these remain movable)
-        if (window_states_["console"]) {
-            console_->render(&window_states_["console"]);
-        }
-
         if (window_states_["file_browser"]) {
             file_browser_->render(&window_states_["file_browser"]);
-        }
-
-        if (window_states_["camera_controls"]) {
-            gui::windows::DrawCameraControls(&window_states_["camera_controls"]);
         }
 
         if (window_states_["project_changed_dialog_box"]) {
@@ -257,7 +273,11 @@ namespace gs::gui {
         }
 
         if (window_states_["save_project_browser_before_exit"]) {
+#ifdef WIN32
+            bool was_project_saved = save_project_browser_->SaveProjectFileDialog(&window_states_["save_project_browser_before_exit"]);
+#else
             bool was_project_saved = save_project_browser_->render(&window_states_["save_project_browser_before_exit"]);
+#endif
             if (was_project_saved) {
                 force_exit_ = true;
                 glfwSetWindowShouldClose(viewer_->getWindow(), true);
@@ -608,14 +628,6 @@ namespace gs::gui {
         ui::SpeedChanged::when([this](const auto& e) {
             showSpeedOverlay(e.current_speed, e.max_speed);
         });
-
-        // Handle console results
-        ui::ConsoleResult::when([this](const auto& e) {
-            console_->addLog("> %s", e.command.c_str());
-            if (!e.result.empty()) {
-                console_->addLog("%s", e.result.c_str());
-            }
-        });
     }
 
     void GuiManager::applyDefaultStyle() {
@@ -637,17 +649,6 @@ namespace gs::gui {
         window_states_[name] = !window_states_[name];
     }
 
-    void GuiManager::addConsoleLog(const char* fmt, ...) {
-        if (console_) {
-            va_list args;
-            va_start(args, fmt);
-            char buf[1024];
-            vsnprintf(buf, sizeof(buf), fmt, args);
-            va_end(args);
-            console_->addLog("%s", buf);
-        }
-    }
-
     bool GuiManager::wantsInput() const {
         ImGuiIO& io = ImGui::GetIO();
         return io.WantCaptureMouse || io.WantCaptureKeyboard;
@@ -658,12 +659,6 @@ namespace gs::gui {
                ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) ||
                ImGui::GetIO().WantCaptureMouse ||
                ImGui::GetIO().WantCaptureKeyboard;
-    }
-
-    void GuiManager::setScriptExecutor(std::function<std::string(const std::string&)> executor) {
-        if (console_) {
-            console_->setExecutor(executor);
-        }
     }
 
     void GuiManager::setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback) {
@@ -677,5 +672,4 @@ namespace gs::gui {
             project_changed_dialog_box_->setOnDialogClose(callback);
         }
     }
-
 } // namespace gs::gui

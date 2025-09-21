@@ -4,7 +4,9 @@
 
 #include "gui/panels/training_panel.hpp"
 #include "core/events.hpp"
+#include "core/logger.hpp"
 #include "gui/ui_widgets.hpp"
+#include "gui/utils/native_dialogs.hpp"
 #include "visualizer_impl.hpp"
 
 #include <chrono>
@@ -64,6 +66,19 @@ namespace gs::gui::panels {
         }
     };
 
+#ifdef WIN32
+    void SaveProjectFileDialog(bool* p_open) {
+        // show native windows file dialog for project directory selection
+        PWSTR filePath = nullptr;
+        if (SUCCEEDED(gs::gui::utils::selectFileNative(filePath, nullptr, 0, true))) {
+            std::filesystem::path project_path(filePath);
+            events::cmd::SaveProject{project_path}.emit();
+            LOG_INFO("Saving project file into : {}", std::filesystem::path(project_path).string());
+            *p_open = false;
+        }
+    }
+#endif // WIN32
+
     void SaveProjectButton(const UIContext& ctx, TrainingPanelState& state) {
         // Add Save Project button
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.9f, 1.0f));
@@ -121,6 +136,48 @@ namespace gs::gui::panels {
         bool dataset_params_changed = false;
 
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 12.0f);
+        if (ImGui::BeginTable("DatasetTable", 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+            // Iterations - EDITABLE
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("Iterations:");
+            ImGui::TableNextColumn();
+            if (can_edit) {
+                ImGui::PushItemWidth(-1);
+                int iterations = static_cast<int>(opt_params.iterations);
+                if (ImGui::InputInt("##iterations", &iterations, 1000, 5000)) {
+                    if (iterations > 0 && iterations <= 1000000) {
+                        opt_params.iterations = static_cast<size_t>(iterations);
+                        opt_params_changed = true;
+                    }
+                }
+                ImGui::PopItemWidth();
+            } else {
+                ImGui::Text("%zu", opt_params.iterations);
+            }
+
+            if (opt_params.strategy == "mcmc") {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Max Gaussians:");
+                ImGui::TableNextColumn();
+                if (can_edit) {
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::InputInt("##max_cap", &opt_params.max_cap, 10000, 100000)) {
+                        if (opt_params.max_cap > 0) {
+                            opt_params_changed = true;
+                        }
+                    }
+                    ImGui::PopItemWidth();
+                } else {
+                    ImGui::Text("%d", opt_params.max_cap);
+                }
+            }
+        }
+        ImGui::EndTable();
 
         // Dataset Parameters
         if (ImGui::TreeNode("Dataset")) {
@@ -203,28 +260,22 @@ namespace gs::gui::panels {
 
         // Optimization Parameters
         if (ImGui::TreeNode("Optimization")) {
+            // Enabled GUI checkbox
+            if (!can_edit) {
+                ImGui::BeginDisabled();
+            }
+            bool gut_enabled = opt_params.gut;
+            if (ImGui::Checkbox("GUT", &gut_enabled)) {
+                opt_params.gut = gut_enabled;
+                opt_params_changed = true;
+            }
+            if (!can_edit) {
+                ImGui::EndDisabled();
+            }
+
             if (ImGui::BeginTable("OptimizationTable", 2, ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
-                // Iterations - EDITABLE
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Iterations:");
-                ImGui::TableNextColumn();
-                if (can_edit) {
-                    ImGui::PushItemWidth(-1);
-                    int iterations = static_cast<int>(opt_params.iterations);
-                    if (ImGui::InputInt("##iterations", &iterations, 1000, 5000)) {
-                        if (iterations > 0 && iterations <= 1000000) {
-                            opt_params.iterations = static_cast<size_t>(iterations);
-                            opt_params_changed = true;
-                        }
-                    }
-                    ImGui::PopItemWidth();
-                } else {
-                    ImGui::Text("%zu", opt_params.iterations);
-                }
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -413,23 +464,6 @@ namespace gs::gui::panels {
                 }
 
                 // Strategy-specific parameters
-                if (opt_params.strategy == "mcmc") {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Max Gaussians:");
-                    ImGui::TableNextColumn();
-                    if (can_edit) {
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::InputInt("##max_cap", &opt_params.max_cap, 10000, 100000)) {
-                            if (opt_params.max_cap > 0) {
-                                opt_params_changed = true;
-                            }
-                        }
-                        ImGui::PopItemWidth();
-                    } else {
-                        ImGui::Text("%d", opt_params.max_cap);
-                    }
-                }
 
                 ImGui::EndTable();
             }
@@ -717,6 +751,13 @@ namespace gs::gui::panels {
                 if (!error_msg.empty()) {
                     ImGui::TextWrapped("%s", error_msg.c_str());
                 }
+                // Reset button
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.7f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.6f, 0.6f, 0.8f, 1.0f));
+                if (ImGui::Button("Reset Training", ImVec2(-1, 0))) {
+                    trainer_manager->resetTraining();
+                }
+                ImGui::PopStyleColor(2);
             }
             break;
 
@@ -788,6 +829,10 @@ namespace gs::gui::panels {
         // Render save project file browser
         if (state.show_save_browser) {
             state.save_browser.render(&state.show_save_browser);
+#ifdef WIN32
+            SaveProjectFileDialog(&state.show_save_browser);
+            state.show_save_browser = false;
+#endif // WIN32
         }
     }
 

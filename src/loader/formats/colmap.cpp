@@ -707,7 +707,12 @@ namespace gs::loader {
                 out[i]._center_x = out[i]._params[1].item<float>();
                 out[i]._center_y = out[i]._params[2].item<float>();
                 float k1 = out[i]._params[3].item<float>();
-                out[i]._radial_distortion = torch::tensor({k1}, torch::kFloat32);
+                // k1 should be zero for COLMAP's SIMPLE_RADIAL to match a pinhole model
+                if (k1 != 0.0f) {
+                    LOG_WARN("Camera {} uses SIMPLE_RADIAL model with non-zero k1 distortion ({})",
+                             out[i]._camera_ID, k1);
+                    out[i]._radial_distortion = torch::tensor({k1}, torch::kFloat32);
+                }
                 out[i]._camera_model_type = gsplat::CameraModelType::PINHOLE;
                 break;
             }
@@ -848,7 +853,7 @@ namespace gs::loader {
             LOG_DEBUG("Verifying actual image dimensions against COLMAP database");
 
             // Load first image to check actual dimensions
-            auto [img_data, actual_w, actual_h, channels] = load_image(out[0]._image_path);
+            auto [actual_w, actual_h, channels] = get_image_info(out[0]._image_path);
 
             int expected_w = out[0]._width;
             int expected_h = out[0]._height;
@@ -869,8 +874,6 @@ namespace gs::loader {
             } else {
                 LOG_DEBUG("Image dimensions match COLMAP database ({}x{})", actual_w, actual_h);
             }
-
-            free_image(img_data);
         }
 
         LOG_INFO("Training with {} images", out.size());

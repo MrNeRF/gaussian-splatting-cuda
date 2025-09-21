@@ -1,7 +1,6 @@
-# LichtFeld Studio
+<div align="center"><img src="src/visualizer/gui/assets/logo/lichtfeld-logo-white.svg" alt="LichtFeld Studio" height="60"></div>
 
 <div align="center">
-
 **A high-performance C++ and CUDA implementation of 3D Gaussian Splatting**
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Us-7289DA?logo=discord&logoColor=white)](https://discord.gg/TbxJST2BbC)
@@ -20,6 +19,22 @@
 [**Community**](#community--support)
 
 </div>
+
+---
+
+## Support LichtFeld Studio Development
+
+LichtFeld Studio is a free, open-source implementation of 3D Gaussian Splatting that pushes the boundaries of real-time rendering performance.
+
+**Why Your Support Matters**:
+This project requires significant time and resources to develop and maintain. 
+
+Unlike commercial alternatives that can cost thousands in licensing fees, LichtFeld Studio remains completely free and open. Your contribution helps ensure it stays that way while continuing to evolve with the latest research.
+
+Whether you're using it for research, production, or learning, your support enables us to dedicate more time to making LichtFeld Studio faster, more powerful, and accessible to everyone in the 3D graphics community.
+
+[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/MrNeRF)
+[![Support on Donorbox](https://img.shields.io/badge/Donate-Donorbox-27A9E1?style=for-the-badge)](https://donorbox.org/lichtfeld-studio)
 
 ---
 
@@ -45,14 +60,15 @@ Join our growing community for discussions, support, and updates:
 - **[Awesome 3D Gaussian Splatting](https://mrnerf.github.io/awesome-3D-gaussian-splatting/)** - Comprehensive paper list
 - **[@janusch_patas](https://twitter.com/janusch_patas)** - Follow for the latest updates
 
-## Active Bounty
+## Active Bounties
 
-### Second Bounty: Better 3DGS Initialization and Training without Densification
-**$2,600 + $500 Bonus Challenge**
+### Fourth Bounty: Automatic Per-Scene Hyperparameter Optimization
+**💰 $2,430** | [Issue #443](https://github.com/MrNeRF/LichtFeld-Studio/issues/443)  
+**📅 Deadline:** October 12, 2025 at 11:59 PM PST
 
-Details: [Issue #284](https://github.com/MrNeRF/LichtFeld-Studio/issues/284)
-
-Previous winner: [Florian Hahlbohm](https://github.com/MrNeRF/LichtFeld-Studio/pull/245) (2.4x rasterizer speedup)
+### Third Bounty: Follow-up to Bounty #002
+**💰 $500** | [Issue #421](https://github.com/MrNeRF/LichtFeld-Studio/issues/421)  
+**📅 Deadline:** None (open-ended)
 
 ## Quick Start
 
@@ -233,6 +249,11 @@ sudo update-alternatives --install /usr/bin/g++ g++ /usr/local/gcc-14.1.0/bin/g+
 </details>
 
 ## Usage
+
+### Introduction Tutorial: dataset preparation with Reality Capture and training with LichtFeld Studio
+
+[![LichtFeld Studio Beginner Tutorial - Using Reality Scan to create a  dataset for LichtFeld Studio](http://img.youtube.com/vi/JWmkhTlbDvg/0.jpg)](http://www.youtube.com/watch?v=JWmkhTlbDvg "Watch on youtube")
+
 
 ### Dataset Preparation
 

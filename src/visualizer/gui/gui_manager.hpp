@@ -8,6 +8,7 @@
 #include "gui/ui_context.hpp"
 #include "gui/windows/save_project_browser.hpp"
 #include "windows/project_changed_dialog_box.hpp"
+#include <GLFW/glfw3.h>
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
@@ -20,7 +21,6 @@ namespace gs {
     }
 
     namespace gui {
-        class ScriptingConsole;
         class FileBrowser;
         class ScenePanel;
         class ProjectChangedDialogBox;
@@ -43,14 +43,9 @@ namespace gs {
             void showWindow(const std::string& name, bool show = true);
             void toggleWindow(const std::string& name);
 
-            // Console access for logging
-            void addConsoleLog(const char* fmt, ...);
-
             // Missing methods that visualizer_impl expects
-            void setScriptExecutor(std::function<std::string(const std::string&)> executor);
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
             void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
-            void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
 
             // Viewport region access
             ImVec2 getViewportPos() const;
@@ -71,7 +66,6 @@ namespace gs {
             visualizer::VisualizerImpl* viewer_;
 
             // Owned components
-            std::unique_ptr<ScriptingConsole> console_;
             std::unique_ptr<FileBrowser> file_browser_;
             std::unique_ptr<ProjectChangedDialogBox> project_changed_dialog_box_;
             std::unique_ptr<ScenePanel> scene_panel_;

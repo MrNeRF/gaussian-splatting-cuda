@@ -4,11 +4,29 @@
 
 #include "gui/windows/save_project_browser.hpp"
 #include "core/events.hpp"
+#include "core/logger.hpp"
+#include "gui/utils/native_dialogs.hpp"
 #include <algorithm>
 #include <imgui.h>
 #include <print>
 
 namespace gs::gui {
+
+#ifdef WIN32
+    bool SaveProjectBrowser::SaveProjectFileDialog(bool* p_open) {
+        // show native windows file dialog for project directory selection
+        PWSTR filePath = nullptr;
+        if (SUCCEEDED(gs::gui::utils::selectFileNative(filePath, nullptr, 0, true))) {
+            std::filesystem::path project_path(filePath);
+            events::cmd::SaveProject{project_path}.emit();
+            LOG_INFO("Saving project file into : {}", std::filesystem::path(project_path).string());
+            *p_open = false;
+            return true;
+        }
+        *p_open = false;
+        return false;
+    }
+#endif
 
     SaveProjectBrowser::SaveProjectBrowser() {
         current_path_ = std::filesystem::current_path().string();
@@ -117,7 +135,6 @@ namespace gs::gui {
         }
         ImGui::EndChild();
 
-        // Project name input
         // Project name input
         ImGui::Separator();
 

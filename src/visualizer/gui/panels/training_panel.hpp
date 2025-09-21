@@ -7,6 +7,10 @@
 #include "gui/ui_context.hpp"
 #include "gui/windows/save_project_browser.hpp"
 #include <chrono>
+#ifdef WIN32
+#include <shobjidl.h>
+#include <windows.h>
+#endif
 
 namespace gs::gui::panels {
 

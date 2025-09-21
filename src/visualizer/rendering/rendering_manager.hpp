@@ -50,6 +50,9 @@ namespace gs::visualizer {
         float axes_size = 2.0f;
         std::array<bool, 3> axes_visibility = {true, true, true};
 
+        // Camera Rotation
+        bool lock_gimbal = false;
+
         // World transform
         geometry::EuclideanTransform world_transform;
 

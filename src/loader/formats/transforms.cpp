@@ -103,9 +103,11 @@ namespace gs::loader {
             try {
                 LOG_DEBUG("Width/height not in transforms.json, reading from first image");
                 auto first_frame_img_path = GetTransformImagePath(dir_path, transforms["frames"][0]);
-                auto result = load_image(first_frame_img_path);
-                w = std::get<1>(result);
-                h = std::get<2>(result);
+                auto result = get_image_info(first_frame_img_path);
+
+                w = std::get<0>(result);
+                h = std::get<1>(result);
+
                 LOG_DEBUG("Got image dimensions: {}x{}", w, h);
             } catch (const std::exception& e) {
                 std::string error_msg = "Error while trying to read image dimensions: " + std::string(e.what());

@@ -21,6 +21,14 @@
 
 namespace gs::rendering {
 
+    // Helper: clear any pending CUDA error so subsequent CUDA/Torch calls don't observe a stale error
+    static inline void clear_cuda_error_if_present() {
+#ifdef CUDA_GL_INTEROP_ENABLED
+        // Swallow and clear the sticky CUDA error (if any) to avoid cascading failures
+        (void)cudaGetLastError();
+#endif
+    }
+
     // Implementation for CudaGraphicsResourceDeleter
     void CudaGraphicsResourceDeleter::operator()(void* resource) const {
 #ifdef CUDA_GL_INTEROP_ENABLED
@@ -327,6 +335,7 @@ namespace gs::rendering {
                 if (auto result = interop_texture_->init(img_width, img_height); !result) {
                     LOG_WARN("Failed to initialize CUDA-GL interop: {}", result.error());
                     LOG_INFO("Falling back to CPU copy mode");
+                    clear_cuda_error_if_present();
                     interop_texture_.reset();
                     use_interop_ = false;
                 }
@@ -336,6 +345,8 @@ namespace gs::rendering {
         if (!use_interop_ || !interop_texture_) {
             // Fallback to CPU copy
             LOG_TRACE("Using CPU fallback for CUDA upload");
+            // If we reached here due to an earlier CUDA-GL interop error, make sure to clear it
+            clear_cuda_error_if_present();
             auto cpu_image = cuda_image;
             if (cuda_image.is_cuda()) {
                 cpu_image = cuda_image.to(torch::kCPU);
@@ -368,6 +379,7 @@ namespace gs::rendering {
         if (!result) {
             LOG_WARN("CUDA-GL interop update failed: {}", result.error());
             LOG_INFO("Falling back to CPU copy");
+            clear_cuda_error_if_present();
             use_interop_ = false;
             interop_texture_.reset();
             return uploadFromCUDA(cuda_image); // Retry with CPU fallback
