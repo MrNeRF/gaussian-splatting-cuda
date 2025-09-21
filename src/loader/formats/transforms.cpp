@@ -6,6 +6,7 @@
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include "formats/colmap.hpp"
+#include "external/tinyply.hpp"
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -247,6 +248,13 @@ namespace gs::loader {
 
         auto center = torch::zeros({3}, torch::kFloat32);
 
+        // Check for aabb_scale (used in some NeRF datasets for scene scaling)
+        float aabb_scale = 1.0f;
+        if (transforms.contains("aabb_scale")) {
+            aabb_scale = float(transforms["aabb_scale"]);
+            LOG_DEBUG("Found aabb_scale: {}", aabb_scale);
+        }
+
         LOG_INFO("Loaded {} cameras from transforms file", camerasdata.size());
 
         return {camerasdata, center};
@@ -267,6 +275,124 @@ namespace gs::loader {
         torch::Tensor colors = torch::randint(0, 256, {numInitGaussian, 3}, torch::kUInt8);
 
         return PointCloud(positions, colors);
+    }
+
+    PointCloud load_simple_ply_point_cloud(const std::filesystem::path& filepath) {
+        LOG_DEBUG("Loading simple PLY point cloud from: {}", filepath.string());
+
+        if (!std::filesystem::exists(filepath)) {
+            throw std::runtime_error(std::format("PLY file not found: {}", filepath.string()));
+        }
+
+        try {
+            // Open the PLY file
+            std::ifstream ss(filepath, std::ios::binary);
+            if (!ss) {
+                throw std::runtime_error(std::format("Failed to open PLY file: {}", filepath.string()));
+            }
+
+            // Parse PLY header
+            tinyply::PlyFile file;
+            file.parse_header(ss);
+
+            // Request vertex positions (x, y, z)
+            std::shared_ptr<tinyply::PlyData> vertices;
+            try {
+                vertices = file.request_properties_from_element("vertex", {"x", "y", "z"});
+            } catch (const std::exception& e) {
+                throw std::runtime_error(std::format("PLY file missing vertex positions: {}", e.what()));
+            }
+
+            // Try to get colors (red, green, blue) - optional
+            std::shared_ptr<tinyply::PlyData> colors;
+            bool has_colors = false;
+            try {
+                colors = file.request_properties_from_element("vertex", {"red", "green", "blue"});
+                has_colors = true;
+            } catch (const std::exception&) {
+                // Colors are optional, we'll use default white color if not present
+                LOG_DEBUG("PLY file has no color data, using default white color");
+            }
+
+            // Read the actual data
+            file.read(ss);
+
+            // Get vertex count
+            const size_t vertex_count = vertices->count;
+            LOG_DEBUG("Loaded {} vertices from PLY file", vertex_count);
+
+            // Create position tensor from vertex data
+            torch::Tensor positions = torch::zeros({static_cast<long>(vertex_count), 3}, torch::kFloat32);
+            float* pos_ptr = positions.data_ptr<float>();
+
+            // Copy and convert vertex data according to its type
+            switch (vertices->t) {
+                case tinyply::Type::FLOAT32: {
+                    const float* vertex_data = reinterpret_cast<const float*>(vertices->buffer.get());
+                    std::memcpy(pos_ptr, vertex_data, vertex_count * 3 * sizeof(float));
+                    break;
+                }
+                case tinyply::Type::FLOAT64: {
+                    const double* vertex_data = reinterpret_cast<const double*>(vertices->buffer.get());
+                    for (size_t i = 0; i < vertex_count * 3; ++i) {
+                        pos_ptr[i] = static_cast<float>(vertex_data[i]);
+                    }
+                    break;
+                }
+                case tinyply::Type::INT32: {
+                    const int32_t* vertex_data = reinterpret_cast<const int32_t*>(vertices->buffer.get());
+                    for (size_t i = 0; i < vertex_count * 3; ++i) {
+                        pos_ptr[i] = static_cast<float>(vertex_data[i]);
+                    }
+                    break;
+                }
+                case tinyply::Type::UINT8: {
+                    const uint8_t* vertex_data = reinterpret_cast<const uint8_t*>(vertices->buffer.get());
+                    for (size_t i = 0; i < vertex_count * 3; ++i) {
+                        pos_ptr[i] = static_cast<float>(vertex_data[i]);
+                    }
+                    break;
+                }
+                // Add more cases as needed for other types
+                default:
+                    throw std::runtime_error("Unsupported vertex type in PLY file");
+            }
+
+            // Create color tensor
+            torch::Tensor color_tensor;
+            if (has_colors && colors && colors->count == vertex_count) {
+                // Check if colors are float or uint8
+                if (colors->t == tinyply::Type::FLOAT32) {
+                    // Float colors [0, 1] - convert to uint8
+                    torch::Tensor float_colors = torch::zeros({static_cast<long>(vertex_count), 3}, torch::kFloat32);
+                    float* color_ptr = float_colors.data_ptr<float>();
+                    const float* color_data = reinterpret_cast<const float*>(colors->buffer.get());
+                    std::memcpy(color_ptr, color_data, vertex_count * 3 * sizeof(float));
+
+                    // Convert to uint8 [0, 255]
+                    color_tensor = (float_colors * 255.0f).clamp(0, 255).to(torch::kUInt8);
+                } else if (colors->t == tinyply::Type::UINT8 || colors->t == tinyply::Type::INT8) {
+                    // Already uint8
+                    color_tensor = torch::zeros({static_cast<long>(vertex_count), 3}, torch::kUInt8);
+                    uint8_t* color_ptr = color_tensor.data_ptr<uint8_t>();
+                    const uint8_t* color_data = reinterpret_cast<const uint8_t*>(colors->buffer.get());
+                    std::memcpy(color_ptr, color_data, vertex_count * 3 * sizeof(uint8_t));
+                } else {
+                    // Unsupported color type, use white
+                    LOG_WARN("Unsupported color type in PLY file, using default white color");
+                    color_tensor = torch::full({static_cast<long>(vertex_count), 3}, 255, torch::kUInt8);
+                }
+            } else {
+                // No colors or count mismatch, use white
+                color_tensor = torch::full({static_cast<long>(vertex_count), 3}, 255, torch::kUInt8);
+            }
+
+            LOG_INFO("Successfully loaded PLY point cloud with {} points", vertex_count);
+            return PointCloud(positions, color_tensor);
+
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::format("Failed to load PLY file {}: {}", filepath.string(), e.what()));
+        }
     }
 
 } // namespace gs::loader
