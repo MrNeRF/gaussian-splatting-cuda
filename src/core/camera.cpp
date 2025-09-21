@@ -152,6 +152,7 @@ namespace gs {
         unsigned char* data;
         int w, h, c;
 
+        // Load mask pixels (we do need pixels to build the weight map)
         auto result = load_image(_mask_path, resize_factor);
         
         data = std::get<0>(result);
@@ -163,8 +164,30 @@ namespace gs {
             return torch::Tensor();
         }
 
-        _image_width = w;
-        _image_height = h;
+
+        // Check if matches _image_width _image_height here
+        try {
+            auto [iw, ih, ic] = get_image_info(_image_path); // (w,h,channels)
+            int exp_w = iw, exp_h = ih;
+            if (resize_factor > 0) {
+                if ((iw % resize_factor) || (ih % resize_factor)) {
+                    LOG_ERROR("Image dims not divisible by resize_factor: {}x{} (rf={})",
+                              iw, ih, resize_factor);
+                }
+                exp_w = iw / std::max(1, resize_factor);
+                exp_h = ih / std::max(1, resize_factor);
+            }
+            if (w != exp_w || h != exp_h) {
+                LOG_WARN("Mask size {}x{} != expected image size {}x{} (rf={}). Skipping view.",
+                         w, h, exp_w, exp_h, resize_factor);
+                free_image(data);
+                return torch::Tensor(); // caller will treat as 'no weights' and skip
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR("Failed to read image info for validation: {}", e.what());
+            free_image(data);
+            return torch::Tensor();
+        }
 
         // Use pinned memory for faster CPU to GPU transfer
         auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
@@ -185,7 +208,7 @@ namespace gs {
 
         // Perform all subsequent operations directly on the GPU
         auto channel0_gpu = tmp_gpu.select(0, 0);
-        auto mask_gpu = channel0_gpu.clone().to(torch::kBool);
+        auto mask_gpu = channel0_gpu.to(torch::kBool);
 
         torch::Tensor inv_gpu = mask_gpu;
         if (inv_gpu.dim() == 2) {
