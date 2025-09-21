@@ -123,7 +123,6 @@ namespace {
             ::args::Flag random(parser, "random", "Use random initialization instead of SfM", {"random"});
             ::args::Flag gut(parser, "gut", "Enable GUT mode", {"gut"});
             ::args::Flag enable_sparsity(parser, "enable_sparsity", "Enable sparsity optimization", {"enable-sparsity"});
-            ::args::Flag rc(parser, "rc", "Workaround for reality captures - doesn't properly convert COLMAP camera model", {"rc"});
             ::args::Flag save_sog(parser, "sog", "Save in SOG format alongside PLY", {"sog"});
 
             ::args::MapFlag<std::string, int> resize_factor(parser, "resize_factor",
@@ -303,7 +302,6 @@ namespace {
                                         use_bilateral_grid_flag = bool(use_bilateral_grid),
                                         use_attention_mask_flag = bool(use_attention_mask),
                                         enable_eval_flag = bool(enable_eval),
-                                        rc_flag = bool(rc),
                                         headless_flag = bool(headless),
                                         antialiasing_flag = bool(antialiasing),
                                         enable_save_eval_images_flag = bool(enable_save_eval_images),
@@ -356,7 +354,6 @@ namespace {
                 setFlag(use_attention_mask_flag, opt.use_attention_mask);
                 setFlag(use_bilateral_grid_flag, opt.use_bilateral_grid);
                 setFlag(enable_eval_flag, opt.enable_eval);
-                setFlag(rc_flag, opt.rc);
                 setFlag(headless_flag, opt.headless);
                 setFlag(antialiasing_flag, opt.antialiasing);
                 setFlag(enable_save_eval_images_flag, opt.enable_save_eval_images);

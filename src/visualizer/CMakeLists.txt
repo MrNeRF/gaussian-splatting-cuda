@@ -8,7 +8,6 @@ add_library(gs_visualizer STATIC
         visualizer_impl.cpp
         core/main_loop.cpp
         core/data_loading_service.cpp
-        core/command_processor.cpp
 
         # Window management
         window/window_manager.cpp
@@ -20,15 +19,15 @@ add_library(gs_visualizer STATIC
         # GUI system
         gui/gui_manager.cpp
         gui/ui_widgets.cpp
+        gui/utils/native_dialogs.cpp
         gui/panels/main_panel.cpp
         gui/panels/training_panel.cpp
         gui/panels/crop_box_panel.cpp
         gui/panels/scene_panel.cpp
         gui/panels/tools_panel.cpp
         gui/panels/world_transform_panel.cpp
-        gui/windows/scripting_console.cpp
         gui/windows/file_browser.cpp
-        gui/windows/camera_controls.cpp
+        gui/windows/project_changed_dialog_box.cpp
         gui/windows/image_preview.cpp
         gui/windows/save_project_browser.cpp
 
@@ -112,11 +111,16 @@ foreach (ASSET_FILE ${ASSET_FILES})
     configure_file(${ASSET_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/assets/${ASSET_NAME}" COPYONLY)
 endforeach ()
 
-# ALSO copy assets from gui/assets (where your font actually is!)
-file(GLOB GUI_ASSET_FILES "${CMAKE_CURRENT_SOURCE_DIR}/gui/assets/*")
+set(GUI_ASSET_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/gui/assets/JetBrainsMono-Regular.ttf"
+        "${CMAKE_CURRENT_SOURCE_DIR}/gui/assets/lichtfeld-icon.png"
+)
+
 foreach (GUI_ASSET_FILE ${GUI_ASSET_FILES})
-    get_filename_component(ASSET_NAME ${GUI_ASSET_FILE} NAME)
-    configure_file(${GUI_ASSET_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/assets/${ASSET_NAME}" COPYONLY)
+    if(EXISTS ${GUI_ASSET_FILE} AND NOT IS_DIRECTORY ${GUI_ASSET_FILE})
+        get_filename_component(ASSET_NAME ${GUI_ASSET_FILE} NAME)
+        configure_file(${GUI_ASSET_FILE} "${VISUALIZER_BUILD_RESOURCE_DIR}/assets/${ASSET_NAME}" COPYONLY)
+    endif()
 endforeach ()
 
 # Compile definitions

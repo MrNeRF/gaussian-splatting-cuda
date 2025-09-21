@@ -8,6 +8,9 @@
 #include "project/project.hpp"
 #include "training/training_setup.hpp"
 #include "visualizer/visualizer.hpp"
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 namespace gs {
 
@@ -52,6 +55,9 @@ namespace gs {
 
     int run_gui_app(std::unique_ptr<param::TrainingParameters> params) {
         LOG_INFO("Starting viewer mode...");
+
+        LOG_DEBUG("removing temporary projects");
+        gs::management::RemoveTempUnlockedProjects();
 
         // Create visualizer with options
         auto viewer = visualizer::Visualizer::create({.title = "LichtFeld Studio",
@@ -136,6 +142,24 @@ namespace gs {
         if (params->optimization.headless) {
             return run_headless_app(std::move(params));
         }
+
+#ifdef WIN32
+        // hide console window on windows
+        HWND hwnd = GetConsoleWindow();
+        Sleep(1);
+        HWND owner = GetWindow(hwnd, GW_OWNER);
+        DWORD dwProcessId;
+        GetWindowThreadProcessId(hwnd, &dwProcessId);
+
+        // Only hide if did not start from console
+        if (GetCurrentProcessId() == dwProcessId) {
+            if (owner == NULL) {
+                ShowWindow(hwnd, SW_HIDE); // Windows 10
+            } else {
+                ShowWindow(owner, SW_HIDE); // Windows 11
+            }
+        }
+#endif
         // gui app
         return run_gui_app(std::move(params));
     }

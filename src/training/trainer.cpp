@@ -783,15 +783,12 @@ namespace gs::training {
                     return std::unexpected("Training on cameras with ortho model is not supported yet.");
                 }
             } else {
-                // Flag is workaround for non-RC datasets with distortion. By default it is off.
-                if (!params_.optimization.rc) {
-                    if (cam->radial_distortion().numel() != 0 ||
-                        cam->tangential_distortion().numel() != 0) {
-                        return std::unexpected("You must use --gut option to train on cameras with distortion.");
-                    }
-                    if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
-                        return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
-                    }
+                if (cam->radial_distortion().numel() != 0 ||
+                    cam->tangential_distortion().numel() != 0) {
+                    return std::unexpected("Distorted images detected.  You can use --gut option to train on cameras with distortion.");
+                }
+                if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
+                    return std::unexpected("You must use --gut option to train on cameras with non-pinhole model.");
                 }
             }
 

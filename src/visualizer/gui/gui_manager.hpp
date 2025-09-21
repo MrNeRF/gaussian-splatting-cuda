@@ -6,6 +6,9 @@
 
 #include "core/events.hpp"
 #include "gui/ui_context.hpp"
+#include "gui/windows/save_project_browser.hpp"
+#include "windows/project_changed_dialog_box.hpp"
+#include <GLFW/glfw3.h>
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
@@ -18,9 +21,9 @@ namespace gs {
     }
 
     namespace gui {
-        class ScriptingConsole;
         class FileBrowser;
         class ScenePanel;
+        class ProjectChangedDialogBox;
 
         class GuiManager {
         public:
@@ -40,13 +43,9 @@ namespace gs {
             void showWindow(const std::string& name, bool show = true);
             void toggleWindow(const std::string& name);
 
-            // Console access for logging
-            void addConsoleLog(const char* fmt, ...);
-
             // Missing methods that visualizer_impl expects
-            void setScriptExecutor(std::function<std::string(const std::string&)> executor);
             void setFileSelectedCallback(std::function<void(const std::filesystem::path&, bool)> callback);
-            void showScriptingConsole(bool show = true) { window_states_["console"] = show; }
+            void handleProjectChangedDialogCallback(std::function<void(bool)> callback);
 
             // Viewport region access
             ImVec2 getViewportPos() const;
@@ -54,6 +53,8 @@ namespace gs {
             bool isMouseInViewport() const;
             bool isViewportFocused() const;
             bool isPositionInViewport(double x, double y) const;
+
+            bool isForceExit() const { return force_exit_; }
 
         private:
             void setupEventHandlers();
@@ -65,8 +66,8 @@ namespace gs {
             visualizer::VisualizerImpl* viewer_;
 
             // Owned components
-            std::unique_ptr<ScriptingConsole> console_;
             std::unique_ptr<FileBrowser> file_browser_;
+            std::unique_ptr<ProjectChangedDialogBox> project_changed_dialog_box_;
             std::unique_ptr<ScenePanel> scene_panel_;
 
             // UI state only
@@ -89,6 +90,10 @@ namespace gs {
             // Method declarations
             void renderSpeedOverlay();
             void showSpeedOverlay(float current_speed, float max_speed);
+
+            std::unique_ptr<SaveProjectBrowser> save_project_browser_;
+
+            bool force_exit_ = false;
         };
     } // namespace gui
 } // namespace gs

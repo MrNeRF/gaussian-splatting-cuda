@@ -31,7 +31,6 @@ namespace {
     }
 
     // Downscale (resample) to (nw, nh). Returns newly malloc’ed RGB buffer.
-    // Downscale (resample) to (nw, nh). Returns newly malloc’ed RGB buffer.
     static inline unsigned char* downscale_resample_direct(const unsigned char* src_rgb,
                                                            int w, int h, int nw, int nh,
                                                            int nthreads /* 0=auto, 1=single */) {
@@ -70,6 +69,45 @@ std::tuple<int, int, int> get_image_info(std::filesystem::path p) {
     const int c = spec.nchannels;
     in->close();
     return {w, h, c};
+}
+
+std::tuple<unsigned char*, int, int, int>
+load_image_with_alpha(std::filesystem::path p) {
+    init_oiio();
+
+    std::unique_ptr<OIIO::ImageInput> in(OIIO::ImageInput::open(p.string()));
+    if (!in)
+        throw std::runtime_error("Load failed: " + p.string() + " : " + OIIO::geterror());
+
+    const OIIO::ImageSpec& spec = in->spec();
+    int w = spec.width, h = spec.height, file_c = spec.nchannels;
+
+    auto finish = [&](unsigned char* data, int W, int H, int C) {
+        in->close();
+        return std::make_tuple(data, W, H, C);
+    };
+
+    // Fast path: read 4 channels directly
+    if (file_c == 4) {
+        // allocate and read directly into final RGB buffer
+        auto* out = static_cast<unsigned char*>(std::malloc((size_t)w * h * 4));
+        if (!out) {
+            in->close();
+            throw std::bad_alloc();
+        }
+
+        if (!in->read_image(/*subimage*/ 0, /*miplevel*/ 0,
+                            /*chbegin*/ 0, /*chend*/ 4,
+                            OIIO::TypeDesc::UINT8, out)) {
+            std::string e = in->geterror();
+            std::free(out);
+            in->close();
+            throw std::runtime_error("Read failed: " + p.string() + (e.empty() ? "" : (" : " + e)));
+        }
+        return finish(out, w, h, 4);
+    } else {
+        LOG_ERROR("load_image_with_alpha: image does not contain alpha channel -  alpha channels found: {}", file_c);
+    }
 }
 
 std::tuple<unsigned char*, int, int, int>
@@ -212,8 +250,7 @@ void save_image(const std::filesystem::path& path, torch::Tensor image) {
     if (channels < 1 || channels > 4)
         throw std::runtime_error("save_image: channels must be in [1..4]");
 
-    std::cout << "Saving image: " << path
-              << " shape: [" << height << ", " << width << ", " << channels << "]\n";
+    LOG_INFO("Saving image: {} shape: [{}, {}, {}]", path.string(), height, width, channels);
 
     auto img_uint8 = (image.clamp(0, 1) * 255.0f).to(torch::kUInt8).contiguous();
 
@@ -296,7 +333,7 @@ namespace image_io {
     BatchImageSaver::BatchImageSaver(size_t num_workers)
         : num_workers_(std::min(num_workers, std::min(size_t(8), size_t(std::thread::hardware_concurrency())))) {
 
-        std::cout << "[BatchImageSaver] Starting with " << num_workers_ << " worker threads" << std::endl;
+        LOG_INFO("[BatchImageSaver] Starting with {} worker threads", num_workers_);
         for (size_t i = 0; i < num_workers_; ++i) {
             workers_.emplace_back(&BatchImageSaver::worker_thread, this);
         }
@@ -310,7 +347,7 @@ namespace image_io {
             if (stop_)
                 return;
             stop_ = true;
-            std::cout << "[BatchImageSaver] Shutting down..." << std::endl;
+            LOG_INFO("[BatchImageSaver] Shutting down...");
         }
         cv_.notify_all();
 
@@ -322,10 +359,7 @@ namespace image_io {
             process_task(task_queue_.front());
             task_queue_.pop();
         }
-        std::cout << "[BatchImageSaver] Shutdown complete" << std::endl;
-
-        // Optional: OIIO global shutdown to silence thread-pool warnings on some platforms.
-        // OIIO::shutdown();
+        LOG_INFO("[BatchImageSaver] Shutdown complete");
     }
 
     void BatchImageSaver::queue_save(const std::filesystem::path& path, torch::Tensor image) {
@@ -418,7 +452,7 @@ namespace image_io {
                 save_image(t.path, t.image);
             }
         } catch (const std::exception& e) {
-            std::cerr << "[BatchImageSaver] Error saving " << t.path << ": " << e.what() << std::endl;
+            LOG_ERROR("[BatchImageSaver] Error saving {}: {}", t.path.string(), e.what());
         }
     }
 

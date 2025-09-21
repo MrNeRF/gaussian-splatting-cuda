@@ -3,12 +3,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "visualizer_impl.hpp"
-#include "core/command_processor.hpp"
 #include "core/data_loading_service.hpp"
 #include "core/logger.hpp"
 #include "scene/scene_manager.hpp"
 #include "tools/translation_gizmo_tool.hpp"
 #include <stdexcept>
+#ifdef WIN32
+#include <windows.h>
+#endif
 
 namespace gs::visualizer {
 
@@ -41,9 +43,6 @@ namespace gs::visualizer {
         initial_settings.antialiasing = options.antialiasing;
         initial_settings.gut = options.gut;
         rendering_manager_->updateSettings(initial_settings);
-
-        // Create command processor
-        command_processor_ = std::make_unique<CommandProcessor>(scene_manager_.get());
 
         // Create data loading service
         data_loader_ = std::make_unique<DataLoadingService>(scene_manager_.get());
@@ -104,12 +103,7 @@ namespace gs::visualizer {
         main_loop_->setUpdateCallback([this]() { update(); });
         main_loop_->setRenderCallback([this]() { render(); });
         main_loop_->setShutdownCallback([this]() { shutdown(); });
-        main_loop_->setShouldCloseCallback([this]() { return window_manager_->shouldClose(); });
-
-        // Set up GUI connections
-        gui_manager_->setScriptExecutor([this](const std::string& cmd) {
-            return command_processor_->processCommand(cmd);
-        });
+        main_loop_->setShouldCloseCallback([this]() { return allowclose(); });
 
         gui_manager_->setFileSelectedCallback([this](const std::filesystem::path& path, bool is_dataset) {
             events::cmd::LoadFile{.path = path, .is_dataset = is_dataset}.emit();
@@ -172,15 +166,6 @@ namespace gs::visualizer {
             }
             if (rendering_manager_) {
                 rendering_manager_->markDirty();
-            }
-        });
-
-        // Evaluation completed
-        state::EvaluationCompleted::when([this](const auto& event) {
-            if (gui_manager_) {
-                gui_manager_->addConsoleLog(
-                    "Evaluation completed - PSNR: %.2f, SSIM: %.3f, LPIPS: %.3f",
-                    event.psnr, event.ssim, event.lpips);
             }
         });
 
@@ -351,6 +336,48 @@ namespace gs::visualizer {
 
         window_manager_->swapBuffers();
         window_manager_->pollEvents();
+    }
+
+    bool VisualizerImpl::allowclose() {
+        // If we are trying to close and the project is temporary, show dialog
+        if (window_manager_->shouldClose() && !gui_manager_->isForceExit()) {
+            if (project_) {
+                if (project_->getIsTempProject()) {
+                    gui_manager_->showWindow("project_changed_dialog_box", true);
+                    window_manager_->cancelClose();
+                }
+            }
+        }
+        // If we are trying to close and the project is temporary and we are forcing exit, unlock project
+        if (window_manager_->shouldClose() && gui_manager_->isForceExit()) {
+            if (project_) {
+                if (project_->getIsTempProject()) {
+                    project_->unlockProject();
+                }
+            }
+        }
+
+#ifdef WIN32
+        // show console in case it was hidden to prevent cmd window to stay hidden/in memory after closing the application
+        if (window_manager_->shouldClose()) {
+            HWND hwnd = GetConsoleWindow();
+            Sleep(1);
+            HWND owner = GetWindow(hwnd, GW_OWNER);
+            DWORD dwProcessId;
+            GetWindowThreadProcessId(hwnd, &dwProcessId);
+
+            // show console if we started from console
+            if (GetCurrentProcessId() != dwProcessId) {
+                if (owner == NULL) {
+                    ShowWindow(hwnd, SW_SHOW); // Windows 10
+                } else {
+                    ShowWindow(owner, SW_SHOW); // Windows 11
+                }
+            }
+        }
+#endif
+
+        return window_manager_->shouldClose();
     }
 
     void VisualizerImpl::shutdown() {
@@ -548,10 +575,6 @@ namespace gs::visualizer {
             }
         } catch (const std::exception& e) {
             LOG_ERROR("Error handling LoadProject command: {}", e.what());
-
-            if (gui_manager_) {
-                gui_manager_->addConsoleLog("ERROR: Failed to load project: %s", e.what());
-            }
 
             // Re-throw to let higher level handle it
             throw;

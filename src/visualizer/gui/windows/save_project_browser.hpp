@@ -7,6 +7,10 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#ifdef WIN32
+#include <Shobjidl.h>
+#include <windows.h>
+#endif
 
 namespace gs::gui {
 
@@ -14,8 +18,11 @@ namespace gs::gui {
     public:
         SaveProjectBrowser();
 
-        void render(bool* p_open);
+        bool render(bool* p_open);
         void setCurrentPath(const std::filesystem::path& path);
+#ifdef WIN32
+        bool SaveProjectFileDialog(bool* p_open);
+#endif
 
     private:
         std::string current_path_;

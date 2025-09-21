@@ -4,18 +4,37 @@
 
 #include "gui/windows/save_project_browser.hpp"
 #include "core/events.hpp"
+#include "core/logger.hpp"
+#include "gui/utils/native_dialogs.hpp"
 #include <algorithm>
 #include <imgui.h>
 #include <print>
 
 namespace gs::gui {
 
+#ifdef WIN32
+    bool SaveProjectBrowser::SaveProjectFileDialog(bool* p_open) {
+        // show native windows file dialog for project directory selection
+        PWSTR filePath = nullptr;
+        if (SUCCEEDED(gs::gui::utils::selectFileNative(filePath, nullptr, 0, true))) {
+            std::filesystem::path project_path(filePath);
+            events::cmd::SaveProject{project_path}.emit();
+            LOG_INFO("Saving project file into : {}", std::filesystem::path(project_path).string());
+            *p_open = false;
+            return true;
+        }
+        *p_open = false;
+        return false;
+    }
+#endif
+
     SaveProjectBrowser::SaveProjectBrowser() {
         current_path_ = std::filesystem::current_path().string();
         project_dir_name_ = "";
     }
 
-    void SaveProjectBrowser::render(bool* p_open) {
+    // returns true if project was saved
+    bool SaveProjectBrowser::render(bool* p_open) {
         ImGui::SetNextWindowSize(ImVec2(650, 400), ImGuiCond_FirstUseEver);
 
         // Add NoDocking flag and make it modal
@@ -24,10 +43,12 @@ namespace gs::gui {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.17f, 0.98f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
 
+        bool was_project_saved = false;
+
         if (!ImGui::Begin("Save Project", p_open, window_flags)) {
             ImGui::End();
             ImGui::PopStyleColor(2);
-            return;
+            return was_project_saved;
         }
 
         if (ImGui::BeginMenuBar()) {
@@ -115,7 +136,6 @@ namespace gs::gui {
         ImGui::EndChild();
 
         // Project name input
-        // Project name input
         ImGui::Separator();
 
         // Make the label white (or light gray)
@@ -162,6 +182,7 @@ namespace gs::gui {
             events::cmd::SaveProject{project_dir}.emit();
             // Call the callback if set
             *p_open = false;
+            was_project_saved = true;
         }
         ImGui::PopStyleColor(2);
 
@@ -178,6 +199,8 @@ namespace gs::gui {
 
         ImGui::End();
         ImGui::PopStyleColor(2);
+
+        return was_project_saved;
     }
 
     void SaveProjectBrowser::setCurrentPath(const std::filesystem::path& path) {

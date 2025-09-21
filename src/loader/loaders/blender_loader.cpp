@@ -99,7 +99,7 @@ namespace gs::loader {
                 .scene_center = torch::zeros({3}),
                 .loader_used = name(),
                 .load_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time),
-                .warnings = {"Blender/NeRF datasets use random point cloud initialization"}};
+                .warnings = {"Validation mode - point cloud not loaded"}};
         }
 
         // Load the dataset
@@ -157,14 +157,29 @@ namespace gs::loader {
                 std::move(cameras), dataset_config, gs::training::CameraDataset::Split::ALL);
 
             if (options.progress) {
-                options.progress(60.0f, "Generating random point cloud...");
+                options.progress(60.0f, "Loading point cloud...");
             }
 
-            // Generate random point cloud for Blender datasets
-            LOG_DEBUG("Generating random point cloud for initialization");
-            auto random_pc = generate_random_point_cloud();
-            auto point_cloud = std::make_shared<PointCloud>(std::move(random_pc));
-            LOG_INFO("Generated random point cloud with {} points", point_cloud->size());
+            // Try to load point cloud from PLY file, fallback to random generation
+            std::filesystem::path pointcloud_path = transforms_file.parent_path() / "pointcloud.ply";
+            std::shared_ptr<PointCloud> point_cloud;
+            std::vector<std::string> warnings;
+
+            LOG_DEBUG("Looking for point cloud at: {}", pointcloud_path.string());
+
+            if (std::filesystem::exists(pointcloud_path)) {
+                LOG_DEBUG("Loading point cloud from PLY file");
+                auto loaded_pc = load_simple_ply_point_cloud(pointcloud_path);
+                point_cloud = std::make_shared<PointCloud>(std::move(loaded_pc));
+                LOG_INFO("Loaded point cloud with {} points from pointcloud.ply", point_cloud->size());
+            } else {
+                LOG_WARN("No pointcloud.ply found in dataset directory: {}", transforms_file.parent_path().string());
+                LOG_DEBUG("Generating random point cloud for initialization");
+                auto random_pc = generate_random_point_cloud();
+                point_cloud = std::make_shared<PointCloud>(std::move(random_pc));
+                LOG_INFO("Generated random point cloud with {} points", point_cloud->size());
+                warnings.push_back("Using random point cloud initialization (pointcloud.ply not found)");
+            }
 
             if (options.progress) {
                 options.progress(100.0f, "Blender/NeRF loading complete");
@@ -182,7 +197,7 @@ namespace gs::loader {
                 .scene_center = scene_center,
                 .loader_used = name(),
                 .load_time = load_time,
-                .warnings = {"Using random point cloud initialization"}};
+                .warnings = std::move(warnings)};
 
             LOG_INFO("Blender/NeRF dataset loaded successfully in {}ms", load_time.count());
             LOG_INFO("  - {} cameras", camera_infos.size());
