@@ -410,15 +410,12 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
         std::exit(0);
     }
 
-    // Training mode - load JSON first
-    if (!params->dataset.data_path.empty()) {
-        auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
-        if (!opt_params_result) {
-            return std::unexpected(std::format("Failed to load optimization parameters: {}",
-                                               opt_params_result.error()));
-        }
-        params->optimization = *opt_params_result;
+    auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
+    if (!opt_params_result) {
+        return std::unexpected(std::format("Failed to load optimization parameters: {}",
+                                           opt_params_result.error()));
     }
+    params->optimization = *opt_params_result;
 
     // Apply command line overrides
     if (apply_overrides) {
