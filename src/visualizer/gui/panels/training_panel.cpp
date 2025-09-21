@@ -575,7 +575,7 @@ namespace gs::gui::panels {
                 if (!can_edit) {
                     ImGui::BeginDisabled();
                 }
-                if (ImGui::Checkbox("Background Modulation", &bg_modulation_enabled)) {
+                if (ImGui::Checkbox("BG Modulation", &bg_modulation_enabled)) {
                     opt_params.bg_modulation = bg_modulation_enabled;
                     opt_params_changed = true;
                 }
