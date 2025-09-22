@@ -57,6 +57,38 @@ namespace gs::gui::panels {
 
     void DrawWindowControls(const UIContext& ctx) {
 
+#ifdef WIN32
+        // On non-Windows platforms, dont show the console toggle button
+
+        if (!ctx.window_states->at("system_console")) {
+            if (ImGui::Button("Show system Console", ImVec2(-1, 0))) {
+                HWND hwnd = GetConsoleWindow();
+                Sleep(1);
+                HWND owner = GetWindow(hwnd, GW_OWNER);
+
+                if (owner == NULL) {
+                    ShowWindow(hwnd, SW_SHOW); // Windows 10
+                } else {
+                    ShowWindow(owner, SW_SHOW); // Windows 11
+                }
+                ctx.window_states->at("system_console") = true;
+            }
+        } else {
+            if (ImGui::Button("Hide system Console", ImVec2(-1, 0))) {
+                HWND hwnd = GetConsoleWindow();
+                Sleep(1);
+                HWND owner = GetWindow(hwnd, GW_OWNER);
+
+                if (owner == NULL) {
+                    ShowWindow(hwnd, SW_HIDE); // Windows 10
+                } else {
+                    ShowWindow(owner, SW_HIDE); // Windows 11
+                }
+                ctx.window_states->at("system_console") = false;
+            }
+        }
+#endif // Win32
+
         ImGui::Text("Windows");
         ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
     }
