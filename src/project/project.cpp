@@ -256,6 +256,7 @@ namespace gs::management {
         bool contains_data = dataJson.contains("data_path") &&
                              dataJson.contains("images") &&
                              dataJson.contains("resize_factor") &&
+                             dataJson.contains("max_width") &&
                              dataJson.contains("test_every") &&
                              dataJson.contains("data_type");
 
@@ -276,6 +277,7 @@ namespace gs::management {
         data.data_set_info.data_path = dataJson["data_path"].get<std::string>();
         data.data_set_info.images = dataJson["images"].get<std::string>();
         data.data_set_info.resize_factor = dataJson["resize_factor"].get<int>();
+        data.data_set_info.max_width = dataJson["max_width"].get<int>();
         data.data_set_info.test_every = dataJson["test_every"].get<int>();
         data.data_set_info.data_type = dataJson["data_type"].get<std::string>();
 
@@ -325,6 +327,7 @@ namespace gs::management {
         json["data"]["data_path"] = data.data_set_info.data_path;
         json["data"]["data_type"] = data.data_set_info.data_type;
         json["data"]["resize_factor"] = data.data_set_info.resize_factor;
+        json["data"]["max_width"] = data.data_set_info.max_width;
         json["data"]["test_every"] = data.data_set_info.test_every;
         json["data"]["images"] = data.data_set_info.images;
 

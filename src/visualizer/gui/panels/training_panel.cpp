@@ -226,6 +226,26 @@ namespace gs::gui::panels {
                     ImGui::Text("%d", dataset_params.resize_factor);
                 }
 
+                if (can_edit) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Max Width:");
+                    ImGui::TableNextColumn();
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::InputInt("##max_width", &dataset_params.max_width, 100, 500)) {
+                        if (dataset_params.max_width >= 256 && dataset_params.max_width <= 7680) {
+                            dataset_params_changed = true;
+                        }
+                    }
+                    ImGui::PopItemWidth();
+                } else {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("Max Width:");
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", dataset_params.max_width);
+                }
+
                 // Test Every - EDITABLE (only shown if evaluation is enabled)
                 if (opt_params.enable_eval) {
                     ImGui::TableNextRow();
@@ -650,6 +670,7 @@ namespace gs::gui::panels {
 
                 // Only update the fields from DatasetConfig that we allow editing
                 project_data.data_set_info.resize_factor = dataset_params.resize_factor;
+                project_data.data_set_info.max_width = dataset_params.max_width;
                 project_data.data_set_info.test_every = dataset_params.test_every;
 
                 // Set the updated project data back

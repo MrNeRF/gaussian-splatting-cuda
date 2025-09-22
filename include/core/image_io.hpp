@@ -21,7 +21,7 @@ load_image_with_alpha(std::filesystem::path p);
 
 // Existing functions
 std::tuple<unsigned char*, int, int, int>
-load_image(std::filesystem::path p, int res_div = -1);
+load_image(std::filesystem::path p, int res_div = -1, int max_width = 0);
 void save_image(const std::filesystem::path& path, torch::Tensor image);
 void save_image(const std::filesystem::path& path,
                 const std::vector<torch::Tensor>& images,

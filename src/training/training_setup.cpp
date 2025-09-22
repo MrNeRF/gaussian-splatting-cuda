@@ -18,6 +18,7 @@ namespace gs::training {
         // 2. Set up load options
         loader::LoadOptions load_options{
             .resize_factor = params.dataset.resize_factor,
+            .max_width = params.dataset.max_width,
             .images_folder = params.dataset.images,
             .validate_only = false,
             .progress = [](float percentage, const std::string& message) {
