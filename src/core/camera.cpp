@@ -164,7 +164,7 @@ namespace gs {
                 _image_height = max_width;
                 _image_width = (_image_width * max_width) / _image_height;
             }
-        }        
+        }
     }
 
     size_t Camera::get_num_bytes_from_file(int resize_factor, int max_width) const {
@@ -177,7 +177,7 @@ namespace gs {
         if (resize_factor > 0) {
             w = w / resize_factor;
             h = h / resize_factor;
-        } 
+        }
 
         if (max_width > 0 && (w > max_width || h > max_width)) {
             if (w > h) {
@@ -191,7 +191,6 @@ namespace gs {
 
         size_t num_bytes = w * h * c * sizeof(float);
         return num_bytes;
-
     }
 
     size_t Camera::get_num_bytes_from_file() const {

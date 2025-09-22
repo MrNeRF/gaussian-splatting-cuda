@@ -128,7 +128,6 @@ load_image(std::filesystem::path p, int res_div, int max_width) {
 
     // Decide threading for the resample (see notes below)
     const int nthreads = 0; // set to 1 if you call this from multiple worker threads
-    
 
     // Fast path: read 3 channels directly (drop alpha if present)
     if (file_c >= 3) {
@@ -201,7 +200,7 @@ load_image(std::filesystem::path p, int res_div, int max_width) {
                     scale_w = std::max(1, max_width * nw / nh);
                     scale_h = std::max(1, max_width);
                 }
-            } 
+            }
 
             unsigned char* out = nullptr;
             try {

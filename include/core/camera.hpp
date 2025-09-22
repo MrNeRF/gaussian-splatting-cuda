@@ -80,8 +80,6 @@ namespace gs {
         float FoVx() const noexcept { return _FoVx; }
         float FoVy() const noexcept { return _FoVy; }
 
-
-
     private:
         // IDs
         float _FoVx = 0.f;
