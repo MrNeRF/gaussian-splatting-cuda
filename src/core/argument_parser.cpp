@@ -134,7 +134,7 @@ namespace {
                                                                 {"2", 2},
                                                                 {"4", 4},
                                                                 {"8", 8}});
-            ::args::ValueFlag<int> max_width(parser, "max_width", "Max width of images (default: 3840)", {"max-width"});
+            ::args::ValueFlag<int> max_width(parser, "max_width", "Max width of images in px (default: 3840)", {"max-width"});
 
             // Parse arguments
             try {
@@ -267,6 +267,16 @@ namespace {
                     return std::unexpected(std::format(
                         "ERROR: Invalid pose optimization '{}'. Valid options are: none, direct, mlp",
                         opt));
+                }
+            }
+
+            if (max_width) {
+                int width = ::args::get(max_width);
+                if (width <= 0) {
+                    return std::unexpected("ERROR: --max-width must be greather than 0");
+                }
+                if (width > 4096) {
+                    return std::unexpected("ERROR: --max-width cannot be higher than 4096");
                 }
             }
 

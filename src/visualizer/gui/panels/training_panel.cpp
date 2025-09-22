@@ -226,23 +226,19 @@ namespace gs::gui::panels {
                     ImGui::Text("%d", dataset_params.resize_factor);
                 }
 
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Max Width (px):");
+                ImGui::TableNextColumn();
                 if (can_edit) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Max Width:");
-                    ImGui::TableNextColumn();
                     ImGui::PushItemWidth(-1);
-                    if (ImGui::InputInt("##max_width", &dataset_params.max_width, 100, 500)) {
-                        if (dataset_params.max_width >= 256 && dataset_params.max_width <= 7680) {
+                    if (ImGui::InputInt("##max_width", &dataset_params.max_width, 80, 400)) {
+                        if (dataset_params.max_width > 0 && dataset_params.max_width <= 4096) {
                             dataset_params_changed = true;
                         }
                     }
                     ImGui::PopItemWidth();
                 } else {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::Text("Max Width:");
-                    ImGui::TableNextColumn();
                     ImGui::Text("%d", dataset_params.max_width);
                 }
 
