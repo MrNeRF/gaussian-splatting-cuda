@@ -91,10 +91,6 @@ namespace gs::training {
             for (const auto& cam : _cameras) {
                 total_bytes += cam->get_num_bytes_from_file(_datasetConfig.resize_factor, _datasetConfig.max_width);
             }
-            // Adjust for resolution factor if specified
-            //if (_datasetConfig.resize_factor > 0) {
-                //total_bytes /= _datasetConfig.resize_factor * _datasetConfig.resize_factor;
-            //}
             return total_bytes;
         }
 

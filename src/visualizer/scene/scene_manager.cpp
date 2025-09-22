@@ -93,7 +93,7 @@ namespace gs {
             auto loader = gs::loader::Loader::create();
             gs::loader::LoadOptions options{
                 .resize_factor = -1,
-                .max_width = 0,
+                .max_width = 3840,
                 .images_folder = "images",
                 .validate_only = false};
 
@@ -173,7 +173,7 @@ namespace gs {
             auto loader = gs::loader::Loader::create();
             gs::loader::LoadOptions options{
                 .resize_factor = -1,
-                .max_width = 0,
+                .max_width = 3840,
                 .images_folder = "images",
                 .validate_only = false};
 
