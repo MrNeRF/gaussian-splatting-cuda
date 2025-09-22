@@ -533,6 +533,7 @@ namespace gs {
                 json["dataset"]["images"] = params.dataset.images;
                 json["dataset"]["resize_factor"] = params.dataset.resize_factor;
                 json["dataset"]["test_every"] = params.dataset.test_every;
+                json["dataset"]["max_width"] = params.dataset.max_width;
 
                 // Optimization configuration
                 nlohmann::json opt_json = params.optimization.to_json();

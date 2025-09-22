@@ -134,6 +134,7 @@ namespace {
                                                                 {"2", 2},
                                                                 {"4", 4},
                                                                 {"8", 8}});
+            ::args::ValueFlag<int> max_width(parser, "max_width", "Max width of images in px (default: 3840)", {"max-width"});
 
             // Parse arguments
             try {
@@ -269,11 +270,22 @@ namespace {
                 }
             }
 
+            if (max_width) {
+                int width = ::args::get(max_width);
+                if (width <= 0) {
+                    return std::unexpected("ERROR: --max-width must be greather than 0");
+                }
+                if (width > 4096) {
+                    return std::unexpected("ERROR: --max-width cannot be higher than 4096");
+                }
+            }
+
             // Create lambda to apply command line overrides after JSON loading
             auto apply_cmd_overrides = [&params,
                                         // Capture values, not references
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
                                         resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
+                                        max_width_val = max_width ? std::optional<int>(::args::get(max_width)) : std::optional<int>(3840),             // default 3840
                                         num_workers_val = num_workers ? std::optional<int>(::args::get(num_workers)) : std::optional<int>(),
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
                                         project_name_val = project_name ? std::optional<std::string>(::args::get(project_name)) : std::optional<std::string>(),
@@ -324,6 +336,7 @@ namespace {
                 // Apply all overrides
                 setVal(iterations_val, opt.iterations);
                 setVal(resize_factor_val, ds.resize_factor);
+                setVal(max_width_val, ds.max_width);
                 setVal(num_workers_val, opt.num_workers);
                 setVal(max_cap_val, opt.max_cap);
                 setVal(project_name_val, ds.project_path);
