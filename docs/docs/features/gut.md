@@ -1,6 +1,6 @@
 # 3DGUT
 
-3DGUT (3D Gaussian Unscented Transform) is an alternative method of rendering proposed by NVIDIA Reasearch that uses raytracing instead of rasterization. Most significantly, it allows rendering and training with nonlinear projections, like camera models with distortion.
+3DGUT (3D Gaussian Unscented Transform) is an alternative method of rendering proposed by NVIDIA Research that uses raytracing instead of rasterization. Most significantly, it allows rendering and training with nonlinear projections, like camera models with distortion.
 
 ## When to Use
 Use 3DGUT when your COLMAP camera model is not PINHOLE or SIMPLE_PINHOLE.
