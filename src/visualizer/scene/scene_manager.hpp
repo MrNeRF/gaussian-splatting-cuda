@@ -117,6 +117,7 @@ namespace gs {
     private:
         void setupEventHandlers();
         void emitSceneChanged();
+        void handleCropActivePly(const gs::geometry::BoundingBox& crop_box);
 
         Scene scene_;
         mutable std::mutex state_mutex_;

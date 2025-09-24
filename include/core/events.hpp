@@ -54,7 +54,7 @@ namespace gs {
             EVENT(AddPLY, std::filesystem::path path; std::string name;);
             EVENT(RemovePLY, std::string name;);
             EVENT(SetPLYVisibility, std::string name; bool visible;);
-            EVENT(CropBoxChanged, gs::geometry::BoundingBox crop_box;);
+            EVENT(CropPLY, gs::geometry::BoundingBox crop_box;);
             EVENT(CyclePLY, );
             EVENT(ToggleSplitView, );
             EVENT(ToggleGTComparison, );

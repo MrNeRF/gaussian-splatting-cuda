@@ -112,7 +112,7 @@ namespace {
 
     void write_ply_impl(const gs::PointCloud& pc,
                         const std::filesystem::path& root,
-                        int iteration) {
+                        int iteration, const std::string& stem) {
         namespace fs = std::filesystem;
         fs::create_directories(root);
 
@@ -161,7 +161,11 @@ namespace {
                 ply.write(out_stream, /*binary=*/true);
             };
 
-        write_output_ply(root / ("splat_" + std::to_string(iteration) + ".ply"), tensors, pc.attribute_names);
+        if (stem.empty()) {
+            write_output_ply(root / ("splat_" + std::to_string(iteration) + ".ply"), tensors, pc.attribute_names);
+        } else {
+            write_output_ply(root / std::string(stem + ".ply"), tensors, pc.attribute_names);
+        }
     }
 
     void write_sog_impl(const gs::SplatData& splat_data,
@@ -436,21 +440,21 @@ namespace gs {
     }
 
     // Export to PLY
-    void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_threads) const {
+    void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_threads, std::string stem) const {
         auto pc = to_point_cloud();
 
         if (join_threads) {
             // Synchronous save - wait for completion
-            write_ply_impl(pc, root, iteration);
+            write_ply_impl(pc, root, iteration, stem);
         } else {
             // Asynchronous save
             cleanup_finished_saves();
 
             std::lock_guard<std::mutex> lock(_save_mutex);
             _save_futures.emplace_back(
-                std::async(std::launch::async, [pc = std::move(pc), root, iteration]() {
+                std::async(std::launch::async, [pc = std::move(pc), root, iteration, stem]() {
                     try {
-                        write_ply_impl(pc, root, iteration);
+                        write_ply_impl(pc, root, iteration, stem);
                     } catch (const std::exception& e) {
                         LOG_ERROR("Failed to save PLY for iteration {}: {}", iteration, e.what());
                     }

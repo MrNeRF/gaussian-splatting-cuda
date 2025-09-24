@@ -50,17 +50,21 @@ namespace gs::gui::panels {
             settings_changed = true;
         }
 
+        ImVec4 orangishColor(1.0f, 0.55f, 0.0f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, orangishColor);
+
         // Add the "Crop Active PLY" button below the checkboxes
         if (ImGui::Button("Crop Active PLY")) {
             gs::geometry::BoundingBox crop_box;
             crop_box.setBounds(settings.crop_min, settings.crop_max);
-            geometry::EuclideanTransform transform(settings.crop_transform);
+            geometry::EuclideanTransform transform(settings.crop_transform.inv());
             crop_box.setworld2BBox(transform);
             // Emit event for bounds change
-            events::cmd::CropBoxChanged{
+            events::cmd::CropPLY{
                 .crop_box = crop_box}
                 .emit();
         }
+        ImGui::PopStyleColor(1); // pop orange color
 
         if (settings.show_crop_box) {
             // Appearance controls
