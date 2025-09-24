@@ -230,8 +230,6 @@ namespace gs::gui {
                 ImGui::Separator();
                 panels::DrawRenderingSettings(ctx);
                 ImGui::Separator();
-                //panels::DrawProgressInfo(ctx);
-                //ImGui::Separator();
                 panels::DrawToolsPanel(ctx);
                 panels::DrawSystemConsoleButton(ctx);
             }

@@ -857,7 +857,6 @@ namespace gs::gui::panels {
         int num_splats = trainer_manager->getNumSplats();
         ImGui::Text("num Splats: %d", num_splats);
 
-
         // Render save project file browser
         if (state.show_save_browser) {
             state.save_browser.render(&state.show_save_browser);

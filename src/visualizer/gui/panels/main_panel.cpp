@@ -16,44 +16,7 @@
 
 namespace gs::gui::panels {
 
-    void DrawMainPanel(const UIContext& ctx) {
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
-
-        // Simplified flags - positioning is handled in GuiManager::render()
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
-                                 ImGuiWindowFlags_NoMove |
-                                 ImGuiWindowFlags_NoResize |
-                                 ImGuiWindowFlags_NoCollapse |
-                                 ImGuiWindowFlags_NoTitleBar; // Add this to remove title bar
-
-        if (ImGui::Begin("Rendering Setting", nullptr, flags)) {
-
-            DrawWindowControls(ctx);
-            ImGui::Separator();
-
-            widgets::DrawModeStatus(ctx);
-            ImGui::Separator();
-
-            DrawRenderingSettings(ctx);
-            ImGui::Separator();
-            /*
-            if (ctx.viewer->getTrainer()) {
-                DrawTrainingControls(ctx);
-                ImGui::Separator();
-            }
-            */
-            // DrawProgressInfo(ctx);
-            //ImGui::Separator();
-
-            DrawToolsPanel(ctx);
-        }
-        ImGui::End();
-
-        ImGui::PopStyleColor();
-    }
-
     void DrawWindowControls(const UIContext& ctx) {
-
 
         ImGui::Text("Windows");
         ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
@@ -354,8 +317,6 @@ namespace gs::gui::panels {
 
             widgets::DrawLossPlot(loss_data.data(), static_cast<int>(loss_data.size()),
                                   min_val, max_val, "");
-            // ImGui::Text("num Splats: %d", num_splats);
-            // ImGui::Text("Loss: %.4f", loss_data.back());
         }
 
     }
