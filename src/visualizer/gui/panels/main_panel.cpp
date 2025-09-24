@@ -318,6 +318,5 @@ namespace gs::gui::panels {
             widgets::DrawLossPlot(loss_data.data(), static_cast<int>(loss_data.size()),
                                   min_val, max_val, "");
         }
-
     }
 } // namespace gs::gui::panels
