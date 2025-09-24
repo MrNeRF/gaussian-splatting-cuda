@@ -206,9 +206,9 @@ namespace gs::gui {
             ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.2f, nullptr, &dockspace_id);
 
             // Dock windows
-            ImGui::DockBuilderDockWindow("Rendering Settings", dock_id_left);
+            ImGui::DockBuilderDockWindow("Rendering", dock_id_left);
             ImGui::DockBuilderDockWindow("Scene", dock_id_right);
-            ImGui::DockBuilderDockWindow("Training Settings", dock_id_left);
+            ImGui::DockBuilderDockWindow("Training", dock_id_left);
 
             ImGui::DockBuilderFinish(dockspace_id);
         }
@@ -224,22 +224,21 @@ namespace gs::gui {
         // Draw docked panels
         if (show_main_panel_) {
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
-            if (ImGui::Begin("Rendering Settings", nullptr)) {
+            if (ImGui::Begin("Rendering", nullptr)) {
                 // Draw contents without the manual sizing/positioning
-                panels::DrawWindowControls(ctx);
-                ImGui::Separator();
                 widgets::DrawModeStatusWithContentSwitch(ctx);
                 ImGui::Separator();
                 panels::DrawRenderingSettings(ctx);
                 ImGui::Separator();
-                panels::DrawProgressInfo(ctx);
-                ImGui::Separator();
+                //panels::DrawProgressInfo(ctx);
+                //ImGui::Separator();
                 panels::DrawToolsPanel(ctx);
+                panels::DrawSystemConsoleButton(ctx);
             }
             ImGui::End();
 
             if (viewer_->getTrainer() && !window_states_["training_tab"]) {
-                ImGui::SetWindowFocus("Rendering Settings");
+                ImGui::SetWindowFocus("Rendering");
                 window_states_["training_tab"] = true;
             }
 
@@ -248,9 +247,10 @@ namespace gs::gui {
             }
 
             if (window_states_["training_tab"]) {
-                if (ImGui::Begin("Training Settings", nullptr)) {
+                if (ImGui::Begin("Training", nullptr)) {
                     panels::DrawTrainingControls(ctx);
                     ImGui::Separator();
+                    panels::DrawProgressInfo(ctx);
                 }
                 ImGui::End();
             }

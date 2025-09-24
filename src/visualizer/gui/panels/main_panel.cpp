@@ -27,9 +27,6 @@ namespace gs::gui::panels {
                                  ImGuiWindowFlags_NoTitleBar; // Add this to remove title bar
 
         if (ImGui::Begin("Rendering Setting", nullptr, flags)) {
-            // Add a custom title
-            ImGui::Text("Rendering Settings");
-            ImGui::Separator();
 
             DrawWindowControls(ctx);
             ImGui::Separator();
@@ -39,14 +36,14 @@ namespace gs::gui::panels {
 
             DrawRenderingSettings(ctx);
             ImGui::Separator();
-
+            /*
             if (ctx.viewer->getTrainer()) {
                 DrawTrainingControls(ctx);
                 ImGui::Separator();
             }
-
-            DrawProgressInfo(ctx);
-            ImGui::Separator();
+            */
+            // DrawProgressInfo(ctx);
+            //ImGui::Separator();
 
             DrawToolsPanel(ctx);
         }
@@ -56,6 +53,13 @@ namespace gs::gui::panels {
     }
 
     void DrawWindowControls(const UIContext& ctx) {
+
+
+        ImGui::Text("Windows");
+        ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
+    }
+
+    void DrawSystemConsoleButton(const UIContext& ctx) {
 
 #ifdef WIN32
         // On non-Windows platforms, dont show the console toggle button
@@ -88,18 +92,12 @@ namespace gs::gui::panels {
             }
         }
 #endif // Win32
-
-        ImGui::Text("Windows");
-        ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
     }
 
     void DrawRenderingSettings(const UIContext& ctx) {
         auto render_manager = ctx.viewer->getRenderingManager();
         if (!render_manager)
             return;
-
-        ImGui::Text("Rendering Settings");
-        ImGui::Separator();
 
         // Get current render settings
         auto settings = render_manager->getSettings();
@@ -355,9 +353,10 @@ namespace gs::gui::panels {
             std::snprintf(loss_label, sizeof(loss_label), "Loss: %.4f", loss_data.back());
 
             widgets::DrawLossPlot(loss_data.data(), static_cast<int>(loss_data.size()),
-                                  min_val, max_val, loss_label);
+                                  min_val, max_val, "");
+            // ImGui::Text("num Splats: %d", num_splats);
+            // ImGui::Text("Loss: %.4f", loss_data.back());
         }
 
-        ImGui::Text("num Splats: %d", num_splats);
     }
 } // namespace gs::gui::panels
