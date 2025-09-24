@@ -8,6 +8,7 @@
 #include <expected>
 #include <filesystem>
 #include <future>
+#include <geometry/bounding_box.hpp>
 #include <glm/glm.hpp>
 #include <mutex>
 #include <string>
@@ -86,6 +87,8 @@ namespace gs {
 
         // Get attribute names for the PLY format
         std::vector<std::string> get_attribute_names() const;
+
+        SplatData crop_by_cropbox(const gs::geometry::BoundingBox &bounding_box) const;
 
     public:
         // Holds the magnitude of the screen space gradient
