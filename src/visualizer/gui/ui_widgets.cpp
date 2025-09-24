@@ -77,7 +77,7 @@ namespace gs::gui::widgets {
             nullptr,
             min_val,
             max_val,
-            ImVec2(0, 80));
+            ImVec2(ImGui::GetContentRegionAvail().x, 80));
     }
 
     void DrawModeStatus(const UIContext& ctx) {

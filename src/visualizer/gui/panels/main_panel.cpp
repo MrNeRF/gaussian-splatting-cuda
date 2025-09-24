@@ -16,46 +16,13 @@
 
 namespace gs::gui::panels {
 
-    void DrawMainPanel(const UIContext& ctx) {
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
+    void DrawWindowControls(const UIContext& ctx) {
 
-        // Simplified flags - positioning is handled in GuiManager::render()
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
-                                 ImGuiWindowFlags_NoMove |
-                                 ImGuiWindowFlags_NoResize |
-                                 ImGuiWindowFlags_NoCollapse |
-                                 ImGuiWindowFlags_NoTitleBar; // Add this to remove title bar
-
-        if (ImGui::Begin("Rendering Setting", nullptr, flags)) {
-            // Add a custom title
-            ImGui::Text("Rendering Settings");
-            ImGui::Separator();
-
-            DrawWindowControls(ctx);
-            ImGui::Separator();
-
-            widgets::DrawModeStatus(ctx);
-            ImGui::Separator();
-
-            DrawRenderingSettings(ctx);
-            ImGui::Separator();
-
-            if (ctx.viewer->getTrainer()) {
-                DrawTrainingControls(ctx);
-                ImGui::Separator();
-            }
-
-            DrawProgressInfo(ctx);
-            ImGui::Separator();
-
-            DrawToolsPanel(ctx);
-        }
-        ImGui::End();
-
-        ImGui::PopStyleColor();
+        ImGui::Text("Windows");
+        ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
     }
 
-    void DrawWindowControls(const UIContext& ctx) {
+    void DrawSystemConsoleButton(const UIContext& ctx) {
 
 #ifdef WIN32
         // On non-Windows platforms, dont show the console toggle button
@@ -88,18 +55,12 @@ namespace gs::gui::panels {
             }
         }
 #endif // Win32
-
-        ImGui::Text("Windows");
-        ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
     }
 
     void DrawRenderingSettings(const UIContext& ctx) {
         auto render_manager = ctx.viewer->getRenderingManager();
         if (!render_manager)
             return;
-
-        ImGui::Text("Rendering Settings");
-        ImGui::Separator();
 
         // Get current render settings
         auto settings = render_manager->getSettings();
@@ -355,9 +316,8 @@ namespace gs::gui::panels {
             std::snprintf(loss_label, sizeof(loss_label), "Loss: %.4f", loss_data.back());
 
             widgets::DrawLossPlot(loss_data.data(), static_cast<int>(loss_data.size()),
-                                  min_val, max_val, loss_label);
+                                  min_val, max_val, "");
         }
 
-        ImGui::Text("num Splats: %d", num_splats);
     }
 } // namespace gs::gui::panels
