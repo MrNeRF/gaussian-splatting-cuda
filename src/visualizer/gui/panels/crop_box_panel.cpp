@@ -50,6 +50,18 @@ namespace gs::gui::panels {
             settings_changed = true;
         }
 
+        // Add the "Crop Active PLY" button below the checkboxes
+        if (ImGui::Button("Crop Active PLY")) {
+            gs::geometry::BoundingBox crop_box;
+            crop_box.setBounds(settings.crop_min, settings.crop_max);
+            geometry::EuclideanTransform transform(settings.crop_transform);
+            crop_box.setworld2BBox(transform);
+            // Emit event for bounds change
+            events::cmd::CropBoxChanged{
+                .crop_box = crop_box}
+                .emit();
+        }
+
         if (settings.show_crop_box) {
             // Appearance controls
             float bbox_color[3] = {settings.crop_color.x, settings.crop_color.y, settings.crop_color.z};
