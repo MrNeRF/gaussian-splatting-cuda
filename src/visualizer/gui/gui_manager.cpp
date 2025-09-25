@@ -69,6 +69,12 @@ namespace gs::gui {
         // Platform/Renderer initialization
         ImGui_ImplGlfw_InitForOpenGL(viewer_->getWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 430");
+        
+        float xscale, yscale;
+        glfwGetWindowContentScale(viewer_->getWindow(), &xscale, &yscale);
+
+        // some clamping / safety net for weird DPI values
+        xscale = std::clamp(xscale, 1.0f, 2.0f);
 
         // Set application icon - use the resource path helper
         try {
@@ -85,7 +91,7 @@ namespace gs::gui {
         // Load fonts - use the resource path helper
         try {
             auto font_path = gs::visualizer::getAssetPath("JetBrainsMono-Regular.ttf");
-            io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 14.0f);
+            io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 14.0f * xscale );
         } catch (const std::exception& e) {
             // If font loading fails, just use the default font
             LOG_WARN("Could not load custom font: {}", e.what());
