@@ -237,7 +237,10 @@ namespace gs {
         LOG_DEBUG("Removing '{}' from scene", name);
 
         scene_.removeNode(name);
-        splat_paths_.erase(name);
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            splat_paths_.erase(name);
+        }
 
         // If no nodes left, transition to empty
         if (scene_.getNodeCount() == 0) {
