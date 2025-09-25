@@ -115,7 +115,7 @@ namespace gs {
             }
 
             // Add to scene
-            std::string name = path.filename().string();
+            std::string name = path.stem().string();
             size_t gaussian_count = (*splat_data)->size();
             LOG_DEBUG("Adding '{}' to scene with {} gaussians", name, gaussian_count);
 
@@ -126,7 +126,7 @@ namespace gs {
                 std::lock_guard<std::mutex> lock(state_mutex_);
                 content_type_ = ContentType::SplatFiles;
                 splat_paths_.clear();
-                splat_paths_.push_back(path);
+                splat_paths_[name] = path;
             }
 
             // Determine file type for event
@@ -212,7 +212,7 @@ namespace gs {
             // Update paths
             {
                 std::lock_guard<std::mutex> lock(state_mutex_);
-                splat_paths_.push_back(path);
+                splat_paths_[name] = path;
             }
 
             events::state::PLYAdded{
@@ -237,12 +237,12 @@ namespace gs {
         LOG_DEBUG("Removing '{}' from scene", name);
 
         scene_.removeNode(name);
+        splat_paths_.erase(name);
 
         // If no nodes left, transition to empty
         if (scene_.getNodeCount() == 0) {
             std::lock_guard<std::mutex> lock(state_mutex_);
             content_type_ = ContentType::Empty;
-            splat_paths_.clear();
             LOG_DEBUG("No nodes remaining, transitioning to empty state");
         }
 
@@ -392,7 +392,7 @@ namespace gs {
             info.num_nodes = scene_.getNodeCount();
             info.source_type = "Splat";
             if (!splat_paths_.empty()) {
-                info.source_path = splat_paths_.back();
+                info.source_path = splat_paths_.rbegin()->second; // get the "last" element of the splat_paths_
                 // Determine specific type from extension
                 auto ext = info.source_path.extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
@@ -435,11 +435,7 @@ namespace gs {
     void SceneManager::handleCropActivePly(const gs::geometry::BoundingBox& crop_box) {
         LOG_DEBUG("Starting crop operation for active PLY files");
 
-        // Only process if we have splat files
-        if (content_type_ != ContentType::SplatFiles) {
-            LOG_DEBUG("Not in splat files mode, skipping crop operation");
-            return;
-        }
+        changeContentType(ContentType::SplatFiles);
 
         // Get all visible nodes from the scene
         auto visible_nodes = scene_.getVisibleNodes();
@@ -450,7 +446,7 @@ namespace gs {
 
         LOG_INFO("Cropping {} visible splat files", visible_nodes.size());
 
-        std::vector<std::filesystem::path> new_files_to_add;
+        std::map<std::string, std::filesystem::path> crop_name_to_ply_path;
 
         for (const auto* node : visible_nodes) {
             const std::string& node_name = node->name;
@@ -484,18 +480,9 @@ namespace gs {
                 std::filesystem::path original_path;
                 {
                     std::lock_guard<std::mutex> lock(state_mutex_);
-                    // We need to match the node name to its original path
-                    // Since we don't store node->path mapping, we'll use the directory of the first path
-                    // and create the new filename based on the node name
+                    // accessing splat_paths_ is critical code
                     if (!splat_paths_.empty()) {
-                        original_path = splat_paths_[0].parent_path() / (node_name + ".ply");
-                        // Try to find actual matching path
-                        for (const auto& path : splat_paths_) {
-                            if (path.stem().string() == node_name) {
-                                original_path = path;
-                                break;
-                            }
-                        }
+                        original_path = splat_paths_[node_name];
                     }
                 }
 
@@ -517,7 +504,7 @@ namespace gs {
                 std::filesystem::path actual_saved_path = temp_dir / (crop_name + ".ply");
 
                 if (std::filesystem::exists(actual_saved_path)) {
-                    new_files_to_add.push_back(actual_saved_path);
+                    crop_name_to_ply_path[crop_name] = actual_saved_path;
                     LOG_INFO("Successfully saved cropped splat: {}", actual_saved_path.string());
                 } else {
                     LOG_ERROR("Failed to save cropped splat file: {}", actual_saved_path.string());
@@ -530,16 +517,16 @@ namespace gs {
         }
 
         // Add all successfully cropped files to the scene
-        for (const auto& file_path : new_files_to_add) {
+        for (const auto& [crop_name, crop_path] : crop_name_to_ply_path) {
             try {
-                addSplatFile(file_path, "", true); // Use default name, make visible
+                addSplatFile(crop_path, crop_name, true); // Use default name, make visible
             } catch (const std::exception& e) {
-                LOG_ERROR("Failed to add cropped file '{}' to scene: {}", file_path.string(), e.what());
+                LOG_ERROR("Failed to add cropped file '{}' to scene: {}", crop_path.string(), e.what());
             }
         }
 
-        if (!new_files_to_add.empty()) {
-            LOG_INFO("Crop operation completed. Added {} new cropped splat files", new_files_to_add.size());
+        if (!crop_name_to_ply_path.empty()) {
+            LOG_INFO("Crop operation completed. Added {} new cropped splat files", crop_name_to_ply_path.size());
         } else {
             LOG_INFO("Crop operation completed. No new files were created");
         }
