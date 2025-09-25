@@ -156,7 +156,7 @@ namespace gs::gui {
         if (mouse_in_viewport && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) {
             if (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
                 ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
-                ImGui::GetIO().WantCaptureMouse = false;                
+                ImGui::GetIO().WantCaptureMouse = false;
             }
         }
 
@@ -422,7 +422,7 @@ namespace gs::gui {
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(backup_current_context);
         }
-            }
+    }
 
     void GuiManager::updateViewportRegion() {
         const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
