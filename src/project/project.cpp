@@ -379,7 +379,7 @@ namespace gs::management {
     }
 
     bool Project::addPly(const PlyData& ply_to_be_added) {
-        std::lock_guard<std::mutex> lock(data_mutex);
+        std::lock_guard<std::mutex> lock(data_mutex_);
 
         for (const auto& ply : project_data_.outputs.plys) {
             if (ply.ply_name == ply_to_be_added.ply_name) {
@@ -408,7 +408,7 @@ namespace gs::management {
     }
 
     void Project::removePly(size_t index) {
-        std::lock_guard<std::mutex> lock(data_mutex);
+        std::lock_guard<std::mutex> lock(data_mutex_);
 
         if (index < project_data_.outputs.plys.size()) {
             project_data_.outputs.plys.erase(project_data_.outputs.plys.begin() + index);
@@ -420,7 +420,7 @@ namespace gs::management {
     }
 
     void Project::renamePly(const std::string& old_name, const std::string& new_name) {
-        std::lock_guard<std::mutex> lock(data_mutex);
+        std::lock_guard<std::mutex> lock(data_mutex_);
 
         bool found_ply = false;
         for (auto& ply : project_data_.outputs.plys) {
@@ -440,7 +440,7 @@ namespace gs::management {
     }
 
     void Project::clearPlys() {
-        std::lock_guard<std::mutex> lock(data_mutex);
+        std::lock_guard<std::mutex> lock(data_mutex_);
 
         project_data_.outputs.plys.clear();
         if (update_file_on_change_ && !output_file_name_.empty()) {

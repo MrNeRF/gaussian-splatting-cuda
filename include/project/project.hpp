@@ -171,7 +171,7 @@ namespace gs::management {
         std::filesystem::path output_file_name_;
         bool update_file_on_change_ = false; // if true update file on every change
         mutable std::mutex io_mutex_;
-        mutable std::mutex data_mutex;
+        mutable std::mutex data_mutex_;
         bool is_temp_project_ = false;
     };
     // go over all lfs folders in temp directory and remove unlocked ones
