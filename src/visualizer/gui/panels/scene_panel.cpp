@@ -403,7 +403,7 @@ namespace gs::gui {
         new_name = new_name.substr(0, new_name.find_last_not_of(" \t\n\r") + 1); // trim whitespace
 
         if (!new_name.empty()) {
-            const std::string& old_name = m_plyNodes[m_renameState.renaming_index].name;
+            const std::string old_name = m_plyNodes[m_renameState.renaming_index].name;
 
             if (new_name != old_name) {
                 // Check if name already exists
