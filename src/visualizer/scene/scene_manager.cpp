@@ -71,6 +71,10 @@ namespace gs {
         cmd::CropPLY::when([this](const auto& cmd) {
             handleCropActivePly(cmd.crop_box);
         });
+
+        cmd::RenamePLY::when([this](const auto& cmd) {
+            handleRenamePly(cmd);
+        });
     }
 
     void SceneManager::changeContentType(const ContentType& type) {
@@ -540,4 +544,39 @@ namespace gs {
         }
     }
 
+    // Add this method to your SceneManager implementation (scene_manager.cpp)
+
+    bool SceneManager::renamePLY(const std::string& old_name, const std::string& new_name) {
+        LOG_DEBUG("Renaming '{}' to '{}'", old_name, new_name);
+
+        // Attempt to rename in the scene
+        bool success = scene_.renameNode(old_name, new_name);
+
+        if (success && old_name != new_name) {
+            // Update the splat_paths_ map to use the new name
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                auto it = splat_paths_.find(old_name);
+                if (it != splat_paths_.end()) {
+                    auto path = it->second;
+                    splat_paths_.erase(it);
+                    splat_paths_[new_name] = path;
+                }
+            }
+
+            emitSceneChanged();
+
+            LOG_INFO("Successfully renamed '{}' to '{}'", old_name, new_name);
+        } else if (!success) {
+            LOG_WARN("Failed to rename '{}' to '{}' - name may already exist", old_name, new_name);
+        }
+
+        return success;
+    }
+    void SceneManager::handleRenamePly(const events::cmd::RenamePLY& event) {
+        renamePLY(event.old_name, event.new_name);
+        if (lfs_project_) {
+            lfs_project_->renamePly(event.old_name, event.new_name);
+        }
+    }
 } // namespace gs

@@ -379,6 +379,7 @@ namespace gs::management {
     }
 
     bool Project::addPly(const PlyData& ply_to_be_added) {
+        std::lock_guard<std::mutex> lock(data_mutex);
 
         for (const auto& ply : project_data_.outputs.plys) {
             if (ply.ply_name == ply_to_be_added.ply_name) {
@@ -407,6 +408,8 @@ namespace gs::management {
     }
 
     void Project::removePly(size_t index) {
+        std::lock_guard<std::mutex> lock(data_mutex);
+
         if (index < project_data_.outputs.plys.size()) {
             project_data_.outputs.plys.erase(project_data_.outputs.plys.begin() + index);
         }
@@ -416,7 +419,29 @@ namespace gs::management {
         }
     }
 
+    void Project::renamePly(const std::string& old_name, const std::string& new_name) {
+        std::lock_guard<std::mutex> lock(data_mutex);
+
+        bool found_ply = false;
+        for (auto& ply : project_data_.outputs.plys) {
+            if (ply.ply_name == old_name) {
+                ply.ply_name = new_name;
+                LOG_INFO("Project: changed project ply name successfully old name {} new name {}", old_name, new_name);
+                found_ply = true;
+                break;
+            }
+        }
+        if (!found_ply) {
+            LOG_WARN("could not find ply with name {}", old_name);
+        }
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
+        }
+    }
+
     void Project::clearPlys() {
+        std::lock_guard<std::mutex> lock(data_mutex);
+
         project_data_.outputs.plys.clear();
         if (update_file_on_change_ && !output_file_name_.empty()) {
             writeToFile();

@@ -53,6 +53,7 @@ namespace gs {
             EVENT(GoToCamView, int cam_id;);
             EVENT(AddPLY, std::filesystem::path path; std::string name;);
             EVENT(RemovePLY, std::string name;);
+            EVENT(RenamePLY, std::string old_name; std::string new_name;);
             EVENT(SetPLYVisibility, std::string name; bool visible;);
             EVENT(CropPLY, gs::geometry::BoundingBox crop_box;);
             EVENT(CyclePLY, );

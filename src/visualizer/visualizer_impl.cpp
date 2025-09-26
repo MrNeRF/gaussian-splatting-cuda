@@ -397,7 +397,8 @@ namespace gs::visualizer {
         if (project_) {
             try {
                 LOG_TIMER("LoadProject");
-
+                // write to project file on every change - maybe configurable in the future?
+                project_->setUpdateFileOnChange(true);
                 // slicing intended
                 auto dataset = static_cast<const param::DatasetConfig&>(project_->getProjectData().data_set_info);
                 if (!dataset.data_path.empty()) {
@@ -408,7 +409,8 @@ namespace gs::visualizer {
                         throw std::runtime_error(std::format("Failed to load dataset from project: {}", result.error()));
                     }
                 }
-
+                // update the project of all the different managers
+                updateProjectOnModules();
                 // load plys
                 LoadProjectPlys();
 
