@@ -159,6 +159,7 @@ namespace gs::gui {
         void nextImage();
         void previousImage();
         void goToImage(size_t index);
+        void disableImage();
 
         std::optional<size_t> getCurrentIndex() const {
             return image_paths_.empty() ? std::nullopt : std::optional(current_index_);

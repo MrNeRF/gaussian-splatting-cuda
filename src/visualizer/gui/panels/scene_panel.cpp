@@ -60,6 +60,10 @@ namespace gs::gui {
         events::cmd::GoToCamView::when([this](const auto& event) {
             handleGoToCamView(event);
         });
+
+        events::cmd::ToggleEnableCamera::when([this](const auto& event) {
+            handleToggleEnableCamera(event);
+        });
     }
 
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
@@ -141,6 +145,27 @@ namespace gs::gui {
 
         // Update current mode based on active tab
         updateModeFromTab();
+    }
+
+    void ScenePanel::handleToggleEnableCamera(const events::cmd::ToggleEnableCamera& event) {
+        // Find the image path for this camera ID
+        for (const auto& [path, cam_id] : m_PathToCamId) {
+            if (cam_id == event.cam_id) {
+                // Find index in sorted image list
+                if (auto it = std::find(m_imagePaths.begin(), m_imagePaths.end(), path); it != m_imagePaths.end()) {
+                    m_selectedImageIndex = static_cast<int>(std::distance(m_imagePaths.begin(), it));
+                    m_needsScrollToSelection = true; // Mark that we need to scroll
+                    m_enabledStatus[m_imagePaths[m_selectedImageIndex]] = !m_enabledStatus[m_imagePaths[m_selectedImageIndex]];
+                    if (m_enabledStatus[m_imagePaths[m_selectedImageIndex]])
+                        m_numEnabledImages++;
+                    else
+                        m_numEnabledImages--;
+                    LOG_TRACE("Toggle enabled status camera ID {} (New status: {})",
+                              event.cam_id, m_enabledStatus[m_imagePaths[m_selectedImageIndex]]);
+                }
+                break;
+            }
+        }
     }
 
     void ScenePanel::handleGoToCamView(const events::cmd::GoToCamView& event) {
@@ -507,8 +532,9 @@ namespace gs::gui {
         // Image list view
         ImGui::BeginChild("ImageList", ImVec2(0, 0), true);
 
-        if (!m_imagePaths.empty()) {
-            ImGui::Text("Images (%zu):", m_imagePaths.size());
+        if (!m_imagePaths.empty()) {            
+
+            ImGui::Text("Images (%zu / %zu):", m_numEnabledImages, m_imagePaths.size());
             ImGui::Separator();
 
             // Track if we need to scroll to the selected item
@@ -523,6 +549,7 @@ namespace gs::gui {
 
                 // Check if this item is selected
                 bool is_selected = (m_selectedImageIndex == static_cast<int>(i));
+                bool is_enabled = m_enabledStatus[imagePath];
 
                 // Push a different color for selected items to make them more visible
                 if (is_selected) {
@@ -552,6 +579,14 @@ namespace gs::gui {
                     onImageDoubleClicked(i);
                 }
 
+                if (!is_enabled) {
+                    // draw a line over the text
+                    ImVec2 cursorScreenPos = ImGui::GetCursorScreenPos();
+                    ImVec2 textSize = ImGui::CalcTextSize(unique_id.c_str());
+                    cursorScreenPos.y -= 10;
+                    ImGui::GetWindowDrawList()->AddLine(cursorScreenPos, ImVec2(cursorScreenPos.x + textSize.x, cursorScreenPos.y), IM_COL32(0, 0, 0, 255), 1.0f);
+                } 
+
                 // Context menu for right-click - use unique ID
                 std::string context_menu_id = std::format("context_menu_{}", i);
                 if (ImGui::BeginPopupContextItem(context_menu_id.c_str())) {
@@ -572,6 +607,42 @@ namespace gs::gui {
                             LOG_WARN("Camera data not found for: {}", imagePath.filename().string());
                         }
                     }
+                    if (is_enabled && ImGui::MenuItem("Disable image")) {
+                        // Get the camera data for this image
+                        auto cam_data_it = m_PathToCamId.find(imagePath);
+                        if (cam_data_it != m_PathToCamId.end()) {
+                            // Emit the new GoToCamView command event with camera data
+                            events::cmd::ToggleEnableCamera{
+                                .cam_id = cam_data_it->second}
+                                .emit();
+
+                            LOG_INFO("Set status enabled for camera: {} (Status : {})",
+                                     imagePath.filename().string(),
+                                     m_enabledStatus[imagePath]);
+                        } else {
+                            // Log warning if camera data not found
+                            LOG_WARN("Camera data not found for: {}", imagePath.filename().string());
+                        }
+                    } 
+
+                    if (!is_enabled && ImGui::MenuItem("Enable image")) {
+                        // Get the camera data for this image
+                        auto cam_data_it = m_PathToCamId.find(imagePath);
+                        if (cam_data_it != m_PathToCamId.end()) {
+                            // Emit the new GoToCamView command event with camera data
+                            events::cmd::ToggleEnableCamera{
+                                .cam_id = cam_data_it->second}
+                                .emit();
+
+                            LOG_INFO("Set status enabled for camera : {} (Status : {})",
+                                     imagePath.filename().string(),
+                                     m_enabledStatus[imagePath]);
+                        } else {
+                            // Log warning if camera data not found
+                            LOG_WARN("Camera data not found for: {}", imagePath.filename().string());
+                        }
+                    } 
+
                     ImGui::EndPopup();
                 }
             }
@@ -592,8 +663,10 @@ namespace gs::gui {
 
         m_currentDatasetPath = path;
         m_imagePaths.clear();
+        m_enabledStatus.clear();
         m_PathToCamId.clear();
         m_selectedImageIndex = -1;
+        m_numEnabledImages = 0;
 
         if (!m_trainer_manager) {
             LOG_ERROR("m_trainer_manager was not set");
@@ -607,6 +680,7 @@ namespace gs::gui {
         for (const auto& cam : cams) {
             m_imagePaths.emplace_back(cam->image_path());
             m_PathToCamId[cam->image_path()] = cam->uid();
+            m_enabledStatus[cam->image_path()] = true;
             LOG_TRACE("Added camera: {} (ID: {})", cam->image_path().filename().string(), cam->uid());
         }
 
@@ -614,6 +688,8 @@ namespace gs::gui {
         std::ranges::sort(m_imagePaths, [](const auto& a, const auto& b) {
             return a.filename() < b.filename();
         });
+
+        m_numEnabledImages = m_imagePaths.size();
 
         LOG_INFO("Loaded {} images from dataset: {}", m_imagePaths.size(), path.string());
     }

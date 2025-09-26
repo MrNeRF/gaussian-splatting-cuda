@@ -35,12 +35,15 @@ namespace gs {
 
             // Image list data for dataset mode
             std::vector<std::filesystem::path> m_imagePaths;
+            typedef bool enabled;
+            std::map<std::filesystem::path, enabled> m_enabledStatus;
             typedef int CamId;
             // cam path to cam id
             std::map<std::filesystem::path, CamId> m_PathToCamId;
             int m_selectedImageIndex = -1;
             std::filesystem::path m_currentDatasetPath;
             bool m_needsScrollToSelection = false;
+            int m_numEnabledImages = 0;
 
             // PLY scene graph data for PLY mode
             struct PLYNode {
@@ -89,6 +92,7 @@ namespace gs {
             void handlePLYAdded(const events::state::PLYAdded& event);
             void handlePLYRemoved(const events::state::PLYRemoved& event);
             void handleGoToCamView(const events::cmd::GoToCamView& event);
+            void handleToggleEnableCamera(const events::cmd::ToggleEnableCamera& event);
             void loadImageCams(const std::filesystem::path& path);
             void onImageSelected(const std::filesystem::path& imagePath);
             void onImageDoubleClicked(size_t imageIndex);

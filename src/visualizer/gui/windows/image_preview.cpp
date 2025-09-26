@@ -488,6 +488,12 @@ namespace gs::gui {
         preloadAdjacentImages();
     }
 
+    void ImagePreview::disableImage() {
+        events::cmd::ToggleEnableCamera{
+            .cam_id = static_cast<int>(current_index_)}
+            .emit();
+    }
+
     std::pair<float, float> ImagePreview::calculateDisplaySize(int window_width, int window_height) const {
         if (!current_texture_) {
             return {0.0f, 0.0f};
@@ -644,6 +650,9 @@ namespace gs::gui {
             }
             if (ImGui::IsKeyPressed(ImGuiKey_F)) {
                 fit_to_window_ = !fit_to_window_;
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
+                disableImage();
             }
             if (ImGui::IsKeyPressed(ImGuiKey_R) || ImGui::IsKeyPressed(ImGuiKey_1)) {
                 zoom_ = 1.0f;
