@@ -639,5 +639,8 @@ namespace gs::visualizer {
         if (trainer_manager_) {
             trainer_manager_->setProject(project_);
         }
+        if (scene_manager_) {
+            scene_manager_->setProject(project_);
+        }
     }
 } // namespace gs::visualizer

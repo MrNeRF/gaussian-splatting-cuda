@@ -523,6 +523,11 @@ namespace gs {
         for (const auto& [crop_name, crop_path] : crop_name_to_ply_path) {
             try {
                 addSplatFile(crop_path, crop_name, true); // Use default name, make visible
+                if (lfs_project_) {
+                    if (!lfs_project_->addPly(false, crop_path, -1, crop_name)) {
+                        LOG_ERROR("Failed to add cropped ply '{}' to project", crop_name);
+                    }
+                }
             } catch (const std::exception& e) {
                 LOG_ERROR("Failed to add cropped file '{}' to scene: {}", crop_path.string(), e.what());
             }

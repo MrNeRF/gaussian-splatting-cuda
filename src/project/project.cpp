@@ -397,6 +397,11 @@ namespace gs::management {
         return true;
     }
 
+    bool Project::addPly(bool imported, const std::filesystem::path& path, int iter, const std::string& _ply_name) {
+        PlyData ply(imported, path, iter, _ply_name);
+        return addPly(ply);
+    }
+
     std::vector<PlyData> Project::getPlys() const {
         return project_data_.outputs.plys;
     }

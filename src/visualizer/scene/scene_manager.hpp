@@ -9,6 +9,7 @@
 #include "scene/scene.hpp"
 #include <filesystem>
 #include <mutex>
+#include <project/project.hpp>
 
 namespace gs {
 
@@ -122,6 +123,8 @@ namespace gs {
 
         SceneInfo getSceneInfo() const;
 
+        void setProject(std::shared_ptr<gs::management::Project> project) { lfs_project_ = project; }
+
     private:
         void setupEventHandlers();
         void emitSceneChanged();
@@ -143,6 +146,8 @@ namespace gs {
 
         // Cache for parameters
         std::optional<param::TrainingParameters> cached_params_;
+        // project
+        std::shared_ptr<gs::management::Project> lfs_project_ = nullptr;
     };
 
 } // namespace gs
