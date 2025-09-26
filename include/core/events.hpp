@@ -4,6 +4,7 @@
 
 #pragma once
 #include "core/event_bus.hpp"
+#include "geometry/bounding_box.hpp"
 #include <filesystem>
 #include <glm/glm.hpp>
 #include <optional>
@@ -53,6 +54,7 @@ namespace gs {
             EVENT(AddPLY, std::filesystem::path path; std::string name;);
             EVENT(RemovePLY, std::string name;);
             EVENT(SetPLYVisibility, std::string name; bool visible;);
+            EVENT(CropPLY, gs::geometry::BoundingBox crop_box;);
             EVENT(CyclePLY, );
             EVENT(ToggleSplitView, );
             EVENT(ToggleGTComparison, );

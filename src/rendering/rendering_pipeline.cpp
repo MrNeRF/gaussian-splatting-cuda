@@ -65,7 +65,13 @@ namespace gs::rendering {
 
         try {
             // Perform rendering with fast_rasterize
-            SplatData& mutable_model = const_cast<SplatData&>(model);
+
+            SplatData cropped_model;
+            if (request.crop_box) {
+                cropped_model = model.crop_by_cropbox(*request.crop_box);
+            }
+
+            SplatData& mutable_model = request.crop_box ? const_cast<SplatData&>(cropped_model) : const_cast<SplatData&>(model);
 
             RenderResult result;
             if (request.gut) {

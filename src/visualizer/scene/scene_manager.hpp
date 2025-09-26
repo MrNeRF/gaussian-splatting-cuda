@@ -63,7 +63,15 @@ namespace gs {
         // Path accessors
         std::vector<std::filesystem::path> getSplatPaths() const {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            return splat_paths_;
+
+            std::vector<std::filesystem::path> values;
+            values.reserve(splat_paths_.size());
+
+            for (const auto& [key, value] : splat_paths_) {
+                values.push_back(value);
+            }
+
+            return values;
         }
 
         // Legacy compatibility
@@ -117,12 +125,14 @@ namespace gs {
     private:
         void setupEventHandlers();
         void emitSceneChanged();
+        void handleCropActivePly(const gs::geometry::BoundingBox& crop_box);
 
         Scene scene_;
         mutable std::mutex state_mutex_;
 
         ContentType content_type_ = ContentType::Empty;
-        std::vector<std::filesystem::path> splat_paths_;
+        // splat name to splat path
+        std::map<std::string, std::filesystem::path> splat_paths_;
         std::filesystem::path dataset_path_;
 
         // Training support
