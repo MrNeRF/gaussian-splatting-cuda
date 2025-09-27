@@ -439,6 +439,55 @@ namespace gs::management {
         }
     }
 
+    static bool change_ply_path(const std::filesystem::path& old_path, const std::filesystem::path& new_path) {
+        try {
+            if (!std::filesystem::exists(old_path)) {
+                LOG_ERROR("ply path does not exists: {}", old_path.string());
+                return false; // path does not exist
+            }
+            std::filesystem::rename(old_path, new_path);
+            LOG_INFO("successfully changed ply path from {} to {}", old_path.string(), new_path.string());
+            return true;
+        } catch (const std::exception& e) {
+            LOG_ERROR("rename ply failed: ply path: {} reason: {}", old_path.string(), e.what());
+            return false; // any error (e.g., permission denied, invalid path)
+        } catch (...) {
+            LOG_ERROR("rename ply failed: ply path: {} for unknown reason", old_path.string());
+            return false;
+        }
+    }
+
+    bool Project::updatePlyPath(const std::string& ply_name, const std::filesystem::path& new_path) {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+
+        bool found_ply = false;
+        std::filesystem::path old_path;
+        for (auto& ply : project_data_.outputs.plys) {
+            if (ply.ply_name == ply_name) {
+                LOG_INFO("Project: changed project ply path successfully old path {} new path {}", ply.ply_path.string(), new_path.string());
+                old_path = ply.ply_path;
+                ply.ply_path = new_path;
+                found_ply = true;
+                break;
+            }
+        }
+        if (!found_ply) {
+            LOG_WARN("could not find ply with name {}", ply_name);
+            return false;
+        }
+
+        if (!change_ply_path(old_path, new_path)) {
+            return false;
+        }
+
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            if (!writeToFile()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     void Project::clearPlys() {
         std::lock_guard<std::mutex> lock(data_mutex_);
 

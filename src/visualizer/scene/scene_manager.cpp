@@ -557,8 +557,24 @@ namespace gs {
                 auto it = splat_paths_.find(old_name);
                 if (it != splat_paths_.end()) {
                     auto path = it->second;
+
                     splat_paths_.erase(it);
-                    splat_paths_[new_name] = path;
+                    std::filesystem::path new_ply_path;
+                    // chaning ply name and path
+                    std::filesystem::path new_path = path;
+                    // resposibility of file systems changes should be on the project
+                    if (lfs_project_) {
+                        auto parent = path.parent_path();
+                        auto extension = path.extension();
+                        new_path = parent / (new_name + extension.string());
+                        if (!lfs_project_->updatePlyPath(old_name, new_path)) {
+                            // os rename failed - reducing to old path
+                            new_path = path;
+                        }
+                        lfs_project_->renamePly(old_name, new_name);
+                    }
+
+                    splat_paths_[new_name] = new_path;
                 }
             }
 
@@ -573,8 +589,5 @@ namespace gs {
     }
     void SceneManager::handleRenamePly(const events::cmd::RenamePLY& event) {
         renamePLY(event.old_name, event.new_name);
-        if (lfs_project_) {
-            lfs_project_->renamePly(event.old_name, event.new_name);
-        }
     }
 } // namespace gs
