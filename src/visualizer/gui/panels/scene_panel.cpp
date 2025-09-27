@@ -60,6 +60,10 @@ namespace gs::gui {
         events::cmd::GoToCamView::when([this](const auto& event) {
             handleGoToCamView(event);
         });
+
+        events::cmd::RenamePLY::when([this](const auto& event) {
+            handlePLYRenamed(event);
+        });
     }
 
     void ScenePanel::handleSceneLoaded(const events::state::SceneLoaded& event) {
@@ -373,6 +377,65 @@ namespace gs::gui {
             m_imagePreview->render(&m_showImagePreview);
         }
     }
+    void ScenePanel::startRenaming(int nodeIndex) {
+        if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_plyNodes.size())) {
+            return;
+        }
+
+        m_renameState.is_renaming = true;
+        m_renameState.renaming_index = nodeIndex;
+        m_renameState.focus_input = true;
+
+        // Copy current name to buffer
+        const std::string& current_name = m_plyNodes[nodeIndex].name;
+        strncpy(m_renameState.buffer, current_name.c_str(), sizeof(m_renameState.buffer) - 1);
+        m_renameState.buffer[sizeof(m_renameState.buffer) - 1] = '\0';
+
+        LOG_DEBUG("Started renaming PLY at index {} ('{}')", nodeIndex, current_name);
+    }
+
+    void ScenePanel::finishRenaming() {
+        if (!m_renameState.is_renaming || m_renameState.renaming_index < 0) {
+            return;
+        }
+
+        std::string new_name(m_renameState.buffer);
+        new_name = new_name.substr(0, new_name.find_last_not_of(" \t\n\r") + 1); // trim whitespace
+
+        if (!new_name.empty()) {
+            const std::string old_name = m_plyNodes[m_renameState.renaming_index].name;
+
+            if (new_name != old_name) {
+                // Check if name already exists
+                bool name_exists = std::any_of(m_plyNodes.begin(), m_plyNodes.end(),
+                                               [&new_name](const PLYNode& node) {
+                                                   return node.name == new_name;
+                                               });
+
+                if (name_exists) {
+                    LOG_WARN("Name '{}' already exists, keeping original name '{}'", new_name, old_name);
+                } else {
+                    // Emit rename command
+                    events::cmd::RenamePLY{
+                        .old_name = old_name,
+                        .new_name = new_name}
+                        .emit();
+                    LOG_INFO("Emitted rename command: '{}' -> '{}'", old_name, new_name);
+                }
+            }
+        }
+
+        cancelRenaming();
+    }
+
+    void ScenePanel::cancelRenaming() {
+        m_renameState.is_renaming = false;
+        m_renameState.renaming_index = -1;
+        m_renameState.focus_input = false;
+        m_renameState.input_was_active = false; // Reset the tracking flag
+        m_renameState.escape_pressed = false;
+        memset(m_renameState.buffer, 0, sizeof(m_renameState.buffer));
+    }
 
     void ScenePanel::renderPLYSceneGraph() {
         ImGui::Text("Scene Graph (PLY Mode)");
@@ -391,7 +454,6 @@ namespace gs::gui {
 #ifdef WIN32
             // show native windows file dialog for folder selection
             OpenPlyFileDialog();
-
             // hide the file browser
             events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
 #endif // WIN32
@@ -401,6 +463,14 @@ namespace gs::gui {
 
         // Scene graph tree
         ImGui::BeginChild("SceneGraph", ImVec2(0, 0), true);
+
+        // Check for F2 key press when a PLY is selected and we're not already renaming
+        if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_F2) &&
+            !m_renameState.is_renaming && m_selectedPLYIndex >= 0 &&
+            m_selectedPLYIndex < static_cast<int>(m_plyNodes.size())) {
+            startRenaming(m_selectedPLYIndex);
+            LOG_DEBUG("F2 pressed - starting rename for PLY '{}'", m_plyNodes[m_selectedPLYIndex].name);
+        }
 
         if (!m_plyNodes.empty()) {
             ImGui::Text("Models (%zu):", m_plyNodes.size());
@@ -436,52 +506,86 @@ namespace gs::gui {
 
                 ImGui::SameLine();
 
-                // Tree node
-                ImGui::TreeNodeEx(node_id.c_str(), flags);
+                // Check if this node is being renamed
+                bool is_renaming = (m_renameState.is_renaming && m_renameState.renaming_index == static_cast<int>(i));
 
-                // Show gaussian count
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.2f, 0.2f, 0.2f, 1), "(%zu)", node.gaussian_count);
+                if (is_renaming) {
+                    // Render input field for renaming
+                    ImGui::PushID(static_cast<int>(i));
 
-                // Selection
-                if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-                    m_selectedPLYIndex = static_cast<int>(i);
-                    // Update selection
-                    for (auto& n : m_plyNodes) {
-                        n.selected = false;
+                    if (m_renameState.focus_input) {
+                        ImGui::SetKeyboardFocusHere();
+                        m_renameState.focus_input = false;
                     }
-                    node.selected = true;
 
-                    LOG_DEBUG("PLY '{}' selected", node.name);
+                    ImGuiInputTextFlags input_flags = ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue;
+                    bool entered = ImGui::InputText("##rename", m_renameState.buffer, sizeof(m_renameState.buffer), input_flags);
 
-                    // Emit selection event
-                    events::ui::NodeSelected{
-                        .path = node.name,
-                        .type = "PLY",
-                        .metadata = {
-                            {"name", node.name},
-                            {"gaussians", std::to_string(node.gaussian_count)},
-                            {"visible", node.visible ? "true" : "false"}}}
-                        .emit();
+                    bool is_active = ImGui::IsItemActive();
+                    bool is_focused = ImGui::IsItemFocused();
+                    m_renameState.escape_pressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
+
+                    // Track if the input was ever active (user clicked on it)
+                    if (is_active) {
+                        m_renameState.input_was_active = true;
+                    }
+
+                    // Handle Enter key
+                    if (entered) {
+                        finishRenaming();
+                    }
+                    // Handle focus loss - cancel if escape pressed or
+                    // input was active before and is now neither active nor focused (another app button was pressed)
+                    else if (m_renameState.escape_pressed || (m_renameState.input_was_active && !is_focused)) {
+                        cancelRenaming();
+                    }
+
+                    ImGui::PopID();
+                } else {
+                    // Normal tree node display
+                    ImGui::TreeNodeEx(node_id.c_str(), flags);
+
+                    // Selection
+                    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                        m_selectedPLYIndex = static_cast<int>(i);
+                        // Update selection
+                        for (auto& n : m_plyNodes) {
+                            n.selected = false;
+                        }
+                        node.selected = true;
+
+                        LOG_DEBUG("PLY '{}' selected", node.name);
+
+                        // Emit selection event
+                        events::ui::NodeSelected{
+                            .path = node.name,
+                            .type = "PLY",
+                            .metadata = {
+                                {"name", node.name},
+                                {"gaussians", std::to_string(node.gaussian_count)},
+                                {"visible", node.visible ? "true" : "false"}}}
+                            .emit();
+                    }
+
+                    // Right-click context menu - provide explicit popup ID
+                    if (ImGui::BeginPopupContextItem(popup_id.c_str())) {
+                        if (ImGui::MenuItem("Rename PLY")) {
+                            startRenaming(static_cast<int>(i));
+                            LOG_DEBUG("Starting rename for PLY '{}'", node.name);
+                        }
+                        if (ImGui::MenuItem("Remove PLY", nullptr, false, false)) {
+                            // disabled for now
+                            // events::cmd::RemovePLY{.name = node.name}.emit();
+                            // LOG_INFO("Removing PLY '{}' via context menu", node.name);
+                        }
+                        ImGui::EndPopup();
+                    }
                 }
 
-                // Right-click context menu - provide explicit popup ID
-                if (ImGui::BeginPopupContextItem(popup_id.c_str())) {
-                    if (ImGui::MenuItem("Remove")) {
-                        events::cmd::RemovePLY{.name = node.name}.emit();
-                        LOG_INFO("Removing PLY '{}' via context menu", node.name);
-                    }
-                    ImGui::Separator();
-                    bool menu_visible = node.visible;
-                    if (ImGui::MenuItem("Visible", nullptr, &menu_visible)) {
-                        node.visible = menu_visible;
-                        events::cmd::SetPLYVisibility{
-                            .name = node.name,
-                            .visible = menu_visible}
-                            .emit();
-                        LOG_TRACE("PLY '{}' visibility toggled via menu to: {}", node.name, menu_visible);
-                    }
-                    ImGui::EndPopup();
+                // Show gaussian count (outside of rename check)
+                if (!is_renaming) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0.2f, 0.2f, 0.2f, 1), "(%zu)", node.gaussian_count);
                 }
             }
 
@@ -648,6 +752,22 @@ namespace gs::gui {
             LOG_INFO("Opening image preview: {} (index {})",
                      imagePath.filename().string(), imageIndex);
         }
+    }
+
+    void ScenePanel::handlePLYRenamed(const events::cmd::RenamePLY& event) {
+        LOG_DEBUG("PLY renamed from '{}' to '{}'", event.old_name, event.new_name);
+
+        // Update the node name in our list
+        auto it = std::find_if(m_plyNodes.begin(), m_plyNodes.end(),
+                               [&event](const PLYNode& node) { return node.name == event.old_name; });
+
+        if (it != m_plyNodes.end()) {
+            it->name = event.new_name;
+            LOG_TRACE("Updated PLY node name in scene panel");
+        }
+
+        // Cancel any active renaming
+        cancelRenaming();
     }
 
 } // namespace gs::gui

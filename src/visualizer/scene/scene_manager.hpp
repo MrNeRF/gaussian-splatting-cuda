@@ -9,6 +9,7 @@
 #include "scene/scene.hpp"
 #include <filesystem>
 #include <mutex>
+#include <project/project.hpp>
 
 namespace gs {
 
@@ -122,10 +123,14 @@ namespace gs {
 
         SceneInfo getSceneInfo() const;
 
+        void setProject(std::shared_ptr<gs::management::Project> project) { lfs_project_ = project; }
+        bool renamePLY(const std::string& old_name, const std::string& new_name);
+
     private:
         void setupEventHandlers();
         void emitSceneChanged();
         void handleCropActivePly(const gs::geometry::BoundingBox& crop_box);
+        void handleRenamePly(const events::cmd::RenamePLY& event);
 
         Scene scene_;
         mutable std::mutex state_mutex_;
@@ -143,6 +148,8 @@ namespace gs {
 
         // Cache for parameters
         std::optional<param::TrainingParameters> cached_params_;
+        // project
+        std::shared_ptr<gs::management::Project> lfs_project_ = nullptr;
     };
 
 } // namespace gs

@@ -71,6 +71,10 @@ namespace gs {
         cmd::CropPLY::when([this](const auto& cmd) {
             handleCropActivePly(cmd.crop_box);
         });
+
+        cmd::RenamePLY::when([this](const auto& cmd) {
+            handleRenamePly(cmd);
+        });
     }
 
     void SceneManager::changeContentType(const ContentType& type) {
@@ -523,6 +527,11 @@ namespace gs {
         for (const auto& [crop_name, crop_path] : crop_name_to_ply_path) {
             try {
                 addSplatFile(crop_path, crop_name, true); // Use default name, make visible
+                if (lfs_project_) {
+                    if (!lfs_project_->addPly(false, crop_path, -1, crop_name)) {
+                        LOG_ERROR("Failed to add cropped ply '{}' to project", crop_name);
+                    }
+                }
             } catch (const std::exception& e) {
                 LOG_ERROR("Failed to add cropped file '{}' to scene: {}", crop_path.string(), e.what());
             }
@@ -535,4 +544,50 @@ namespace gs {
         }
     }
 
+    bool SceneManager::renamePLY(const std::string& old_name, const std::string& new_name) {
+        LOG_DEBUG("Renaming '{}' to '{}'", old_name, new_name);
+
+        // Attempt to rename in the scene
+        bool success = scene_.renameNode(old_name, new_name);
+
+        if (success && old_name != new_name) {
+            // Update the splat_paths_ map to use the new name
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                auto it = splat_paths_.find(old_name);
+                if (it != splat_paths_.end()) {
+                    auto path = it->second;
+
+                    splat_paths_.erase(it);
+                    std::filesystem::path new_ply_path;
+                    // chaning ply name and path
+                    std::filesystem::path new_path = path;
+                    // resposibility of file systems changes should be on the project
+                    if (lfs_project_) {
+                        auto parent = path.parent_path();
+                        auto extension = path.extension();
+                        new_path = parent / (new_name + extension.string());
+                        if (!lfs_project_->updatePlyPath(old_name, new_path)) {
+                            // os rename failed - reducing to old path
+                            new_path = path;
+                        }
+                        lfs_project_->renamePly(old_name, new_name);
+                    }
+
+                    splat_paths_[new_name] = new_path;
+                }
+            }
+
+            emitSceneChanged();
+
+            LOG_INFO("Successfully renamed '{}' to '{}'", old_name, new_name);
+        } else if (!success) {
+            LOG_WARN("Failed to rename '{}' to '{}' - name may already exist", old_name, new_name);
+        }
+
+        return success;
+    }
+    void SceneManager::handleRenamePly(const events::cmd::RenamePLY& event) {
+        renamePLY(event.old_name, event.new_name);
+    }
 } // namespace gs
