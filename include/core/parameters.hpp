@@ -98,6 +98,7 @@ namespace gs {
             int test_every = 8;
             std::vector<std::string> timelapse_images = {};
             int timelapse_every = 50;
+            int max_width = 3840;
         };
 
         struct TrainingParameters {

@@ -111,7 +111,7 @@ load_image_with_alpha(std::filesystem::path p) {
 }
 
 std::tuple<unsigned char*, int, int, int>
-load_image(std::filesystem::path p, int res_div) {
+load_image(std::filesystem::path p, int res_div, int max_width) {
     init_oiio();
 
     std::unique_ptr<OIIO::ImageInput> in(OIIO::ImageInput::open(p.string()));
@@ -147,7 +147,31 @@ load_image(std::filesystem::path p, int res_div) {
                 in->close();
                 throw std::runtime_error("Read failed: " + p.string() + (e.empty() ? "" : (" : " + e)));
             }
-            return finish(out, w, h, 3);
+            in->close();
+
+            if (max_width > 0 && (w > max_width || h > max_width)) {
+                int scale_w;
+                int scale_h;
+                if (w > h) {
+                    scale_h = std::max(1, max_width * h / w);
+                    scale_w = std::max(1, max_width);
+                } else {
+                    scale_w = std::max(1, max_width * w / h);
+                    scale_h = std::max(1, max_width);
+                }
+                unsigned char* ret = nullptr;
+                try {
+                    ret = downscale_resample_direct(out, w, h, scale_w, scale_h, nthreads);
+                } catch (...) {
+                    std::free(out);
+                    throw;
+                }
+                std::free(out);
+                return {ret, scale_w, scale_h, 3};
+            } else {
+                return {out, w, h, 3};
+            }
+
         } else if (res_div == 2 || res_div == 4 || res_div == 8) {
             // read full, then downscale in-place into a new buffer without extra copy
             auto* full = static_cast<unsigned char*>(std::malloc((size_t)w * h * 3));
@@ -166,15 +190,27 @@ load_image(std::filesystem::path p, int res_div) {
 
             const int nw = std::max(1, w / res_div);
             const int nh = std::max(1, h / res_div);
+            int scale_w = nw;
+            int scale_h = nh;
+            if (max_width > 0 && (nw > max_width || nh > max_width)) {
+                if (nw > nh) {
+                    scale_h = std::max(1, max_width * nh / nw);
+                    scale_w = std::max(1, max_width);
+                } else {
+                    scale_w = std::max(1, max_width * nw / nh);
+                    scale_h = std::max(1, max_width);
+                }
+            }
+
             unsigned char* out = nullptr;
             try {
-                out = downscale_resample_direct(full, w, h, nw, nh, nthreads);
+                out = downscale_resample_direct(full, w, h, scale_w, scale_h, nthreads);
             } catch (...) {
                 std::free(full);
                 throw;
             }
             std::free(full);
-            return {out, nw, nh, 3};
+            return {out, scale_w, scale_h, 3};
         } else {
             LOG_ERROR("load_image: unsupported resize factor {}", res_div);
             // fall through

@@ -70,8 +70,8 @@ namespace gs::training {
             size_t camera_idx = _indices[index];
             auto& cam = _cameras[camera_idx];
 
-            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resize_factor);
-            torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resize_factor);
+            torch::Tensor image = cam->load_and_get_image(_datasetConfig.resize_factor, _datasetConfig.max_width);
+            torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resize_factor, _datasetConfig.max_width);
             return {{cam.get(), std::move(image), std::move(attention_weights)}, torch::empty({})};
         }
 
@@ -91,11 +91,7 @@ namespace gs::training {
             }
             size_t total_bytes = 0;
             for (const auto& cam : _cameras) {
-                total_bytes += cam->get_num_bytes_from_file();
-            }
-            // Adjust for resolution factor if specified
-            if (_datasetConfig.resize_factor > 0) {
-                total_bytes /= _datasetConfig.resize_factor * _datasetConfig.resize_factor;
+                total_bytes += cam->get_num_bytes_from_file(_datasetConfig.resize_factor, _datasetConfig.max_width);
             }
             return total_bytes;
         }
@@ -109,6 +105,7 @@ namespace gs::training {
             return std::nullopt;
         }
         void set_resize_factor(int resize_factor) { _datasetConfig.resize_factor = resize_factor; }
+        void set_max_width(int max_width) { _datasetConfig.max_width = max_width; }
 
     private:
         std::vector<std::shared_ptr<Camera>> _cameras;
@@ -153,6 +150,7 @@ namespace gs::training {
             // Set up load options
             gs::loader::LoadOptions options{
                 .resize_factor = datasetConfig.resize_factor,
+                .max_width = datasetConfig.max_width,
                 .images_folder = datasetConfig.images,
                 .validate_only = false};
 
@@ -200,6 +198,7 @@ namespace gs::training {
             // Set up load options
             gs::loader::LoadOptions options{
                 .resize_factor = datasetConfig.resize_factor,
+                .max_width = datasetConfig.max_width,
                 .images_folder = datasetConfig.images,
                 .validate_only = false};
 

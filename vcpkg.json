@@ -20,7 +20,9 @@
     "nlohmann-json",
     {
       "name": "openimageio",
-      "features": [ "webp" ]
+      "features": [
+        "webp"
+      ]
     },
     "spdlog",
     "tbb"

@@ -8,6 +8,7 @@
 #include <expected>
 #include <filesystem>
 #include <future>
+#include <geometry/bounding_box.hpp>
 #include <glm/glm.hpp>
 #include <mutex>
 #include <string>
@@ -81,7 +82,8 @@ namespace gs {
         void increment_sh_degree();
 
         // Export methods - join_threads controls sync vs async
-        void save_ply(const std::filesystem::path& root, int iteration, bool join_threads = true) const;
+        // if stem is not empty save splat as stem.ply
+        void save_ply(const std::filesystem::path& root, int iteration, bool join_threads = true, std::string stem = "") const;
         void save_sog(const std::filesystem::path& root, int iteration, int kmeans_iterations = 10, bool join_threads = true) const;
 
         // Get attribute names for the PLY format
@@ -90,6 +92,8 @@ namespace gs {
         // Remove splats that are outside of the mask
         void filterByMask(const torch::Tensor& keep_mask);
         
+        SplatData crop_by_cropbox(const gs::geometry::BoundingBox& bounding_box) const;
+
     public:
         // Holds the magnitude of the screen space gradient
         torch::Tensor _densification_info = torch::empty({0});

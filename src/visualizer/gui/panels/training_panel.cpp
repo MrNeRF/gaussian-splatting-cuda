@@ -226,6 +226,22 @@ namespace gs::gui::panels {
                     ImGui::Text("%d", dataset_params.resize_factor);
                 }
 
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("Max Width (px):");
+                ImGui::TableNextColumn();
+                if (can_edit) {
+                    ImGui::PushItemWidth(-1);
+                    if (ImGui::InputInt("##max_width", &dataset_params.max_width, 80, 400)) {
+                        if (dataset_params.max_width > 0 && dataset_params.max_width <= 4096) {
+                            dataset_params_changed = true;
+                        }
+                    }
+                    ImGui::PopItemWidth();
+                } else {
+                    ImGui::Text("%d", dataset_params.max_width);
+                }
+
                 // Test Every - EDITABLE (only shown if evaluation is enabled)
                 if (opt_params.enable_eval) {
                     ImGui::TableNextRow();
@@ -569,6 +585,20 @@ namespace gs::gui::panels {
                     ImGui::EndDisabled();
                 }
 
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bool bg_modulation_enabled = opt_params.bg_modulation;
+                if (!can_edit) {
+                    ImGui::BeginDisabled();
+                }
+                if (ImGui::Checkbox("BG Modulation", &bg_modulation_enabled)) {
+                    opt_params.bg_modulation = bg_modulation_enabled;
+                    opt_params_changed = true;
+                }
+                if (!can_edit) {
+                    ImGui::EndDisabled();
+                }
+
                 if (opt_params.pose_optimization != "none") {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
@@ -636,6 +666,7 @@ namespace gs::gui::panels {
 
                 // Only update the fields from DatasetConfig that we allow editing
                 project_data.data_set_info.resize_factor = dataset_params.resize_factor;
+                project_data.data_set_info.max_width = dataset_params.max_width;
                 project_data.data_set_info.test_every = dataset_params.test_every;
 
                 // Set the updated project data back
@@ -822,6 +853,9 @@ namespace gs::gui::panels {
         ImGui::Text("Iteration: %d (%.1f iters/sec)", current_iteration, iters_per_sec);
 
         ImGui::Text("Loss: %.6f", current_loss);
+
+        int num_splats = trainer_manager->getNumSplats();
+        ImGui::Text("num Splats: %d", num_splats);
 
         // Render save project file browser
         if (state.show_save_browser) {

@@ -70,6 +70,12 @@ namespace gs::gui {
         ImGui_ImplGlfw_InitForOpenGL(viewer_->getWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 430");
 
+        float xscale, yscale;
+        glfwGetWindowContentScale(viewer_->getWindow(), &xscale, &yscale);
+
+        // some clamping / safety net for weird DPI values
+        xscale = std::clamp(xscale, 1.0f, 2.0f);
+
         // Set application icon - use the resource path helper
         try {
             const auto icon_path = gs::visualizer::getAssetPath("lichtfeld-icon.png");
@@ -85,7 +91,7 @@ namespace gs::gui {
         // Load fonts - use the resource path helper
         try {
             auto font_path = gs::visualizer::getAssetPath("JetBrainsMono-Regular.ttf");
-            io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 14.0f);
+            io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 14.0f * xscale);
         } catch (const std::exception& e) {
             // If font loading fails, just use the default font
             LOG_WARN("Could not load custom font: {}", e.what());
@@ -206,9 +212,9 @@ namespace gs::gui {
             ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.2f, nullptr, &dockspace_id);
 
             // Dock windows
-            ImGui::DockBuilderDockWindow("Rendering Settings", dock_id_left);
+            ImGui::DockBuilderDockWindow("Rendering", dock_id_left);
             ImGui::DockBuilderDockWindow("Scene", dock_id_right);
-            ImGui::DockBuilderDockWindow("Training Settings", dock_id_left);
+            ImGui::DockBuilderDockWindow("Training", dock_id_left);
 
             ImGui::DockBuilderFinish(dockspace_id);
         }
@@ -224,22 +230,19 @@ namespace gs::gui {
         // Draw docked panels
         if (show_main_panel_) {
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
-            if (ImGui::Begin("Rendering Settings", &show_main_panel_)) {
+            if (ImGui::Begin("Rendering", nullptr)) {
                 // Draw contents without the manual sizing/positioning
-                panels::DrawWindowControls(ctx);
-                ImGui::Separator();
                 widgets::DrawModeStatusWithContentSwitch(ctx);
                 ImGui::Separator();
                 panels::DrawRenderingSettings(ctx);
                 ImGui::Separator();
-                panels::DrawProgressInfo(ctx);
-                ImGui::Separator();
                 panels::DrawToolsPanel(ctx);
+                panels::DrawSystemConsoleButton(ctx);
             }
             ImGui::End();
 
             if (viewer_->getTrainer() && !window_states_["training_tab"]) {
-                ImGui::SetWindowFocus("Rendering Settings");
+                ImGui::SetWindowFocus("Rendering");
                 window_states_["training_tab"] = true;
             }
 
@@ -248,9 +251,10 @@ namespace gs::gui {
             }
 
             if (window_states_["training_tab"]) {
-                if (ImGui::Begin("Training Settings", &show_main_panel_)) {
+                if (ImGui::Begin("Training", nullptr)) {
                     panels::DrawTrainingControls(ctx);
                     ImGui::Separator();
+                    panels::DrawProgressInfo(ctx);
                 }
                 ImGui::End();
             }

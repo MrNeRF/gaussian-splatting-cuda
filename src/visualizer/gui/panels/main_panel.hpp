@@ -15,4 +15,5 @@ namespace gs::gui::panels {
     void DrawWindowControls(const UIContext& ctx);
     void DrawRenderingSettings(const UIContext& ctx);
     void DrawProgressInfo(const UIContext& ctx);
+    void DrawSystemConsoleButton(const UIContext& ctx);
 } // namespace gs::gui::panels

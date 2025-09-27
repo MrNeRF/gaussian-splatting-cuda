@@ -207,6 +207,7 @@ namespace gs::loader {
             dataset_config.data_path = path;
             dataset_config.images = actual_images_folder;
             dataset_config.resize_factor = options.resize_factor;
+            dataset_config.max_width = options.max_width;
 
             // Create dataset with ALL images - use correct namespace
             auto dataset = std::make_shared<gs::training::CameraDataset>(

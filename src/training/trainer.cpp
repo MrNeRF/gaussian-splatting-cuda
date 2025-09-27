@@ -495,12 +495,14 @@ namespace gs::training {
                          train_dataset_->size().value());
             }
 
-            // chage resize factor (change may comes from gui)
+            // change resize factor (change may comes from gui)
             if (train_dataset_) {
                 train_dataset_->set_resize_factor(params.dataset.resize_factor);
+                train_dataset_->set_max_width(params.dataset.max_width);
             }
             if (val_dataset_) {
                 val_dataset_->set_resize_factor(params.dataset.resize_factor);
+                val_dataset_->set_max_width(params.dataset.max_width);
             }
 
             train_dataset_size_ = train_dataset_->size().value();
@@ -1043,8 +1045,10 @@ namespace gs::training {
 
                             // Image size isn't correct until the image has been loaded once
                             // If we use the camera before it's loaded, it will render images at the non-scaled size
-                            if (cam_to_use->camera_height() == cam_to_use->image_height() && params_.dataset.resize_factor != 1) {
-                                cam_to_use->load_image_size(params_.dataset.resize_factor);
+                            if ((cam_to_use->camera_height() == cam_to_use->image_height() && params_.dataset.resize_factor != 1) ||
+                                cam_to_use->image_height() > params_.dataset.max_width ||
+                                cam_to_use->image_width() > params_.dataset.max_width) {
+                                cam_to_use->load_image_size(params_.dataset.resize_factor, params_.dataset.max_width);
                             }
 
                             RenderOutput rendered_timelapse_output = fast_rasterize(

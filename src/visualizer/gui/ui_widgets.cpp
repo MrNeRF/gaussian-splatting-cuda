@@ -68,16 +68,19 @@ namespace gs::gui::widgets {
         if (count <= 0)
             return;
 
+        // Ensure we have a valid, non-empty label
+        const char* plot_label = (label && strlen(label) > 0) ? label : "Plot##default";
+
         // Simple line plot using ImGui
         ImGui::PlotLines(
-            label,
+            plot_label,
             values,
             count,
             0,
             nullptr,
             min_val,
             max_val,
-            ImVec2(0, 80));
+            ImVec2(ImGui::GetContentRegionAvail().x, 80));
     }
 
     void DrawModeStatus(const UIContext& ctx) {

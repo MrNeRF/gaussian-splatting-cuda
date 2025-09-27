@@ -112,7 +112,7 @@ namespace {
 
     void write_ply_impl(const gs::PointCloud& pc,
                         const std::filesystem::path& root,
-                        int iteration) {
+                        int iteration, const std::string& stem) {
         namespace fs = std::filesystem;
         fs::create_directories(root);
 
@@ -161,7 +161,11 @@ namespace {
                 ply.write(out_stream, /*binary=*/true);
             };
 
-        write_output_ply(root / ("splat_" + std::to_string(iteration) + ".ply"), tensors, pc.attribute_names);
+        if (stem.empty()) {
+            write_output_ply(root / ("splat_" + std::to_string(iteration) + ".ply"), tensors, pc.attribute_names);
+        } else {
+            write_output_ply(root / std::string(stem + ".ply"), tensors, pc.attribute_names);
+        }
     }
 
     void write_sog_impl(const gs::SplatData& splat_data,
@@ -436,21 +440,21 @@ namespace gs {
     }
 
     // Export to PLY
-    void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_threads) const {
+    void SplatData::save_ply(const std::filesystem::path& root, int iteration, bool join_threads, std::string stem) const {
         auto pc = to_point_cloud();
 
         if (join_threads) {
             // Synchronous save - wait for completion
-            write_ply_impl(pc, root, iteration);
+            write_ply_impl(pc, root, iteration, stem);
         } else {
             // Asynchronous save
             cleanup_finished_saves();
 
             std::lock_guard<std::mutex> lock(_save_mutex);
             _save_futures.emplace_back(
-                std::async(std::launch::async, [pc = std::move(pc), root, iteration]() {
+                std::async(std::launch::async, [pc = std::move(pc), root, iteration, stem]() {
                     try {
-                        write_ply_impl(pc, root, iteration);
+                        write_ply_impl(pc, root, iteration, stem);
                     } catch (const std::exception& e) {
                         LOG_ERROR("Failed to save PLY for iteration {}: {}", iteration, e.what());
                     }
@@ -609,4 +613,110 @@ namespace gs {
         _opacity = _opacity.index({km}).contiguous();
         //_max_radii2D is not required;
     }
-}
+    
+    SplatData SplatData::crop_by_cropbox(const gs::geometry::BoundingBox& bounding_box) const {
+        LOG_TIMER("SplatData::crop_by_cropbox");
+
+        if (_means.size(0) == 0) {
+            LOG_WARN("Cannot crop empty SplatData");
+            return SplatData(); // Return empty SplatData
+        }
+
+        // Get bounding box properties
+        const auto bbox_min = bounding_box.getMinBounds();
+        const auto bbox_max = bounding_box.getMaxBounds();
+        const auto& world2bbox_transform = bounding_box.getworld2BBox();
+
+        const int num_points = _means.size(0);
+
+        LOG_DEBUG("Cropping {} points with bounding box: min({}, {}, {}), max({}, {}, {})",
+                  num_points, bbox_min.x, bbox_min.y, bbox_min.z, bbox_max.x, bbox_max.y, bbox_max.z);
+
+        // Get transformation matrix from the EuclideanTransform
+        glm::mat4 world_to_bbox_matrix = world2bbox_transform.toMat4();
+
+        // Convert transformation matrix to tensor and move to same device as means
+        // we transpose the matrix since gl is colmn major and torch is row major
+        auto transform_tensor = torch::tensor({world_to_bbox_matrix[0][0], world_to_bbox_matrix[1][0], world_to_bbox_matrix[2][0], world_to_bbox_matrix[3][0],
+                                               world_to_bbox_matrix[0][1], world_to_bbox_matrix[1][1], world_to_bbox_matrix[2][1], world_to_bbox_matrix[3][1],
+                                               world_to_bbox_matrix[0][2], world_to_bbox_matrix[1][2], world_to_bbox_matrix[2][2], world_to_bbox_matrix[3][2],
+                                               world_to_bbox_matrix[0][3], world_to_bbox_matrix[1][3], world_to_bbox_matrix[2][3], world_to_bbox_matrix[3][3]},
+                                              torch::TensorOptions().dtype(torch::kFloat32))
+                                    .reshape({4, 4})
+                                    .to(_means.device());
+
+        // Convert means to homogeneous coordinates [N, 4]
+        auto means_homo = torch::cat({_means, torch::ones({num_points, 1}, _means.options())}, 1);
+
+        // Transform all points: (4x4) @ (Nx4)^T = (4xN), then transpose back to (Nx4)
+        auto transformed_points = torch::matmul(transform_tensor, means_homo.t()).t();
+
+        // Extract xyz coordinates (drop homogeneous coordinate)
+        auto local_points = transformed_points.index({torch::indexing::Slice(), torch::indexing::Slice(0, 3)});
+
+        // Create bounding box bounds tensors
+        auto bbox_min_tensor = torch::tensor({bbox_min.x, bbox_min.y, bbox_min.z},
+                                             torch::TensorOptions().dtype(torch::kFloat32).device(_means.device()));
+        auto bbox_max_tensor = torch::tensor({bbox_max.x, bbox_max.y, bbox_max.z},
+                                             torch::TensorOptions().dtype(torch::kFloat32).device(_means.device()));
+
+        // Check which points are inside the bounding box using tensor operations
+        auto inside_min = torch::ge(local_points, bbox_min_tensor.unsqueeze(0)); // [N, 3]
+        auto inside_max = torch::le(local_points, bbox_max_tensor.unsqueeze(0)); // [N, 3]
+
+        // Point is inside if all 3 coordinates satisfy both min and max constraints
+        auto inside_mask = torch::all(inside_min & inside_max, 1); // [N]
+
+        // Count points inside
+        int points_inside = inside_mask.sum().item<int>();
+
+        LOG_DEBUG("Found {} points inside bounding box ({:.1f}%)",
+                  points_inside, (float)points_inside / num_points * 100.0f);
+
+        if (points_inside == 0) {
+            LOG_WARN("No points found inside bounding box, returning empty SplatData");
+            return SplatData();
+        }
+
+        // Get indices of points inside the bounding box
+        auto indices = torch::nonzero(inside_mask).squeeze(1); // Get 1D tensor of indices
+
+        // Index all tensors using the mask
+        auto cropped_means = _means.index({indices}).contiguous();
+        auto cropped_sh0 = _sh0.index({indices}).contiguous();
+        auto cropped_shN = _shN.index({indices}).contiguous();
+        auto cropped_scaling = _scaling.index({indices}).contiguous();
+        auto cropped_rotation = _rotation.index({indices}).contiguous();
+        auto cropped_opacity = _opacity.index({indices}).contiguous();
+
+        // Recalculate scene scale for the cropped data
+        torch::Tensor scene_center = cropped_means.mean(0);
+        torch::Tensor dists = torch::norm(cropped_means - scene_center, 2, 1);
+        float new_scene_scale = points_inside > 1 ? dists.median().item<float>() : _scene_scale;
+
+        // Create new SplatData with cropped tensors
+        SplatData cropped_splat(
+            _max_sh_degree,
+            std::move(cropped_means),
+            std::move(cropped_sh0),
+            std::move(cropped_shN),
+            std::move(cropped_scaling),
+            std::move(cropped_rotation),
+            std::move(cropped_opacity),
+            new_scene_scale);
+
+        // Copy over the active SH degree
+        cropped_splat._active_sh_degree = _active_sh_degree;
+
+        // If densification info exists and has the right size, crop it too
+        if (_densification_info.defined() && _densification_info.size(0) == num_points) {
+            cropped_splat._densification_info = _densification_info.index({indices}).contiguous();
+        }
+
+        LOG_DEBUG("Successfully cropped SplatData: {} -> {} points (scale: {:.4f} -> {:.4f})",
+                  num_points, points_inside, _scene_scale, new_scene_scale);
+
+        return cropped_splat;
+    }
+
+} // namespace gs

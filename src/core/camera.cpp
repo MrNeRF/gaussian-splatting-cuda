@@ -100,7 +100,7 @@ namespace gs {
         return std::make_tuple(fx, fy, cx, cy);
     }
 
-    torch::Tensor Camera::load_and_get_image(int resize_factor) {
+    torch::Tensor Camera::load_and_get_image(int resize_factor, int max_width) {
         // Use pinned memory for faster GPU transfer
         auto pinned_options = torch::TensorOptions().dtype(torch::kUInt8).pinned_memory(true);
 
@@ -108,7 +108,7 @@ namespace gs {
         int w, h, c;
 
         // Load image synchronously
-        auto result = load_image(_image_path, resize_factor);
+        auto result = load_image(_image_path, resize_factor, max_width);
         data = std::get<0>(result);
         w = std::get<1>(result);
         h = std::get<2>(result);
@@ -228,7 +228,7 @@ namespace gs {
         return W_gpu;
     }
 
-    void Camera::load_image_size(int resize_factor) {
+    void Camera::load_image_size(int resize_factor, int max_width) {
         auto result = get_image_info(_image_path);
 
         int w = std::get<0>(result);
@@ -236,7 +236,7 @@ namespace gs {
 
         if (resize_factor > 0) {
             if (w % resize_factor || h % resize_factor) {
-                LOG_ERROR("width or height are not divisible by resize_factor w {} h {} resize_factor {}", w, h, resize_factor);
+                LOG_WARN("width or height are not divisible by resize_factor w {} h {} resize_factor {}", w, h, resize_factor);
             }
             _image_width = w / resize_factor;
             _image_height = h / resize_factor;
@@ -244,6 +244,42 @@ namespace gs {
             _image_width = w;
             _image_height = h;
         }
+
+        if (max_width > 0 && (_image_width > max_width || _image_height > max_width)) {
+            if (_image_width > _image_height) {
+                _image_width = max_width;
+                _image_height = (_image_height * max_width) / _image_width;
+            } else {
+                _image_height = max_width;
+                _image_width = (_image_width * max_width) / _image_height;
+            }
+        }
+    }
+
+    size_t Camera::get_num_bytes_from_file(int resize_factor, int max_width) const {
+        auto result = get_image_info(_image_path);
+
+        int w = std::get<0>(result);
+        int h = std::get<1>(result);
+        int c = std::get<2>(result);
+
+        if (resize_factor > 0) {
+            w = w / resize_factor;
+            h = h / resize_factor;
+        }
+
+        if (max_width > 0 && (w > max_width || h > max_width)) {
+            if (w > h) {
+                h = (h * max_width) / w;
+                w = max_width;
+            } else {
+                w = (w * max_width) / h;
+                h = max_width;
+            }
+        }
+
+        size_t num_bytes = w * h * c * sizeof(float);
+        return num_bytes;
     }
 
     size_t Camera::get_num_bytes_from_file() const {
