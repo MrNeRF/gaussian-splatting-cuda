@@ -246,7 +246,7 @@ namespace gs::gui::panels {
                 .emit();
         }
 
-            // Grid plane selection
+            // SH DEGREE selection
         const char* sh_degrees[] = {"0", "1", "2", "3"};
         int current_sh_degree = static_cast<int>(settings.sh_degree);
         if (ImGui::Combo("SH Degree", &current_sh_degree, sh_degrees, IM_ARRAYSIZE(sh_degrees))) {
@@ -261,7 +261,6 @@ namespace gs::gui::panels {
                 .background_color = std::nullopt}
                 .emit();
         }
-
 
         // Display current FPS and VSync control on the same line
         float average_fps = ctx.viewer->getAverageFPS();
@@ -306,21 +305,6 @@ namespace gs::gui::panels {
         int current_iter = trainer_manager->getCurrentIteration();
         int total_iter = trainer_manager->getTotalIterations();
         int num_splats = trainer_manager->getNumSplats();
-
-
-        HWND hwnd = GetConsoleWindow();
-        HWND owner = GetWindow(hwnd, GW_OWNER);
-        if (owner != NULL) {
-            ITaskbarList3* m_pITaskBarList3;
-            CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_ITaskbarList3, (void**)&m_pITaskBarList3);
-            if (m_pITaskBarList3) {
-                m_pITaskBarList3->SetProgressState(owner, TBPF_NORMAL);
-                m_pITaskBarList3->SetProgressValue(owner, current_iter, total_iter);
-                // Windows 11 - adjust console window title to show progress
-                //std::string title = std::format("LichtFeld Studio - Training Progress: {}/{} - Splats: {}", current_iter, total_iter, num_splats);
-                //SetWindowTextA(hwnd, title.c_str());
-            }
-        }
 
         // Fix: Convert deque to vector
         std::deque<float> loss_deque = trainer_manager->getLossBuffer();
