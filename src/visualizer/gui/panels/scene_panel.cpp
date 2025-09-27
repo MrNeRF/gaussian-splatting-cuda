@@ -464,6 +464,14 @@ namespace gs::gui {
         // Scene graph tree
         ImGui::BeginChild("SceneGraph", ImVec2(0, 0), true);
 
+        // Check for F2 key press when a PLY is selected and we're not already renaming
+        if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_F2) &&
+            !m_renameState.is_renaming && m_selectedPLYIndex >= 0 &&
+            m_selectedPLYIndex < static_cast<int>(m_plyNodes.size())) {
+            startRenaming(m_selectedPLYIndex);
+            LOG_DEBUG("F2 pressed - starting rename for PLY '{}'", m_plyNodes[m_selectedPLYIndex].name);
+        }
+
         if (!m_plyNodes.empty()) {
             ImGui::Text("Models (%zu):", m_plyNodes.size());
             ImGui::Separator();
