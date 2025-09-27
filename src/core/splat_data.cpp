@@ -386,6 +386,14 @@ namespace gs {
         }
     }
 
+    void SplatData::set_active_sh_degree(int sh_degree = 0) {
+        if (sh_degree <= _max_sh_degree) {
+            _active_sh_degree = sh_degree;
+        } else {
+            _active_sh_degree = _max_sh_degree;
+        }
+    }
+
     // Get attribute names for PLY format
     std::vector<std::string> SplatData::get_attribute_names() const {
         std::vector<std::string> a{"x", "y", "z", "nx", "ny", "nz"};
