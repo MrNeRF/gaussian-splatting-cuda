@@ -875,8 +875,7 @@ namespace gs::visualizer {
                 .show_dividers = true,
                 .divider_color = glm::vec4(1.0f, 0.85f, 0.0f, 1.0f),
                 .show_labels = true,
-                .sh_degree = settings_.sh_degree
-            };
+                .sh_degree = settings_.sh_degree};
         }
 
         // Handle PLY comparison mode

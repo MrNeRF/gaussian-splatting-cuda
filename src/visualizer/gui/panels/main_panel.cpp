@@ -246,7 +246,7 @@ namespace gs::gui::panels {
                 .emit();
         }
 
-            // SH DEGREE selection
+        // SH DEGREE selection
         const char* sh_degrees[] = {"0", "1", "2", "3"};
         int current_sh_degree = static_cast<int>(settings.sh_degree);
         if (ImGui::Combo("SH Degree", &current_sh_degree, sh_degrees, IM_ARRAYSIZE(sh_degrees))) {

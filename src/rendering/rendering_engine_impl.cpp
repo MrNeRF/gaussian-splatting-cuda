@@ -147,7 +147,7 @@ namespace gs::rendering {
         LOG_TRACE("Rendering gaussians with viewport {}x{}", request.viewport.size.x, request.viewport.size.y);
 
         // Convert to internal pipeline request using designated initializers
-        RenderingPipeline::RenderRequest pipeline_req {
+        RenderingPipeline::RenderRequest pipeline_req{
             .view_rotation = request.viewport.rotation,
             .view_translation = request.viewport.translation,
             .viewport_size = request.viewport.size,
