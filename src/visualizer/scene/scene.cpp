@@ -283,8 +283,6 @@ namespace gs {
         cache_valid_ = true;
     }
 
-    // Add this method to your scene.cpp file
-
     bool Scene::renameNode(const std::string& old_name, const std::string& new_name) {
         // Check if new name already exists (case-sensitive)
         if (old_name == new_name) {

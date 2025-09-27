@@ -544,8 +544,6 @@ namespace gs {
         }
     }
 
-    // Add this method to your SceneManager implementation (scene_manager.cpp)
-
     bool SceneManager::renamePLY(const std::string& old_name, const std::string& new_name) {
         LOG_DEBUG("Renaming '{}' to '{}'", old_name, new_name);
 

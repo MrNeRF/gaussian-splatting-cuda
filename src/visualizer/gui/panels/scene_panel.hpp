@@ -58,7 +58,7 @@ namespace gs {
                 int renaming_index = -1;
                 char buffer[256] = {};
                 bool focus_input = false;
-                bool input_was_active = false;  // Add this to track if input was ever active
+                bool input_was_active = false;
             } m_renameState;
 
             // Tab management

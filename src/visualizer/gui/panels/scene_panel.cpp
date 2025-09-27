@@ -567,19 +567,9 @@ namespace gs::gui {
                             LOG_DEBUG("Starting rename for PLY '{}'", node.name);
                         }
                         if (ImGui::MenuItem("Remove PLY", nullptr, false, false)) {
-                            // Disabled for now as requested
+                            // disabled for now
                             // events::cmd::RemovePLY{.name = node.name}.emit();
                             // LOG_INFO("Removing PLY '{}' via context menu", node.name);
-                        }
-                        ImGui::Separator();
-                        bool menu_visible = node.visible;
-                        if (ImGui::MenuItem("Visible", nullptr, &menu_visible)) {
-                            node.visible = menu_visible;
-                            events::cmd::SetPLYVisibility{
-                                .name = node.name,
-                                .visible = menu_visible}
-                                .emit();
-                            LOG_TRACE("PLY '{}' visibility toggled via menu to: {}", node.name, menu_visible);
                         }
                         ImGui::EndPopup();
                     }
