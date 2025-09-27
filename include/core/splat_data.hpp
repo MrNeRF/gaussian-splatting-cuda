@@ -80,6 +80,7 @@ namespace gs {
 
         // Utility methods
         void increment_sh_degree();
+        void set_active_sh_degree(int sh_degree);
 
         // Export methods - join_threads controls sync vs async
         // if stem is not empty save splat as stem.ply

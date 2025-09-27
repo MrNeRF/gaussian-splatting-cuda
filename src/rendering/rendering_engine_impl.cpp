@@ -147,7 +147,7 @@ namespace gs::rendering {
         LOG_TRACE("Rendering gaussians with viewport {}x{}", request.viewport.size.x, request.viewport.size.y);
 
         // Convert to internal pipeline request using designated initializers
-        RenderingPipeline::RenderRequest pipeline_req{
+        RenderingPipeline::RenderRequest pipeline_req {
             .view_rotation = request.viewport.rotation,
             .view_translation = request.viewport.translation,
             .viewport_size = request.viewport.size,
@@ -159,7 +159,8 @@ namespace gs::rendering {
             .background_color = request.background_color,
             .point_cloud_mode = request.point_cloud_mode,
             .voxel_size = request.voxel_size,
-            .gut = request.gut};
+            .gut = request.gut,
+            .sh_degree = request.sh_degree};
 
         // Convert crop box if present
         std::unique_ptr<gs::geometry::BoundingBox> temp_crop_box;
@@ -418,7 +419,8 @@ namespace gs::rendering {
             .background_color = request.background_color,
             .point_cloud_mode = request.point_cloud_mode,
             .voxel_size = request.voxel_size,
-            .gut = request.gut};
+            .gut = request.gut,
+            .sh_degree = request.sh_degree};
 
         auto result = pipeline_.render(model, internal_request);
 
