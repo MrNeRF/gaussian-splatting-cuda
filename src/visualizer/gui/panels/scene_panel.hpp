@@ -59,6 +59,7 @@ namespace gs {
                 char buffer[256] = {};
                 bool focus_input = false;
                 bool input_was_active = false;
+                bool escape_pressed = false;
             } m_renameState;
 
             // Tab management

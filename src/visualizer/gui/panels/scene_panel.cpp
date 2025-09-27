@@ -433,6 +433,7 @@ namespace gs::gui {
         m_renameState.renaming_index = -1;
         m_renameState.focus_input = false;
         m_renameState.input_was_active = false; // Reset the tracking flag
+        m_renameState.escape_pressed = false;
         memset(m_renameState.buffer, 0, sizeof(m_renameState.buffer));
     }
 
@@ -514,6 +515,7 @@ namespace gs::gui {
 
                     bool is_active = ImGui::IsItemActive();
                     bool is_focused = ImGui::IsItemFocused();
+                    m_renameState.escape_pressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
 
                     // Track if the input was ever active (user clicked on it)
                     if (is_active) {
@@ -524,12 +526,9 @@ namespace gs::gui {
                     if (entered) {
                         finishRenaming();
                     }
-                    // Handle focus loss - only cancel if input was active before and is now neither active nor focused
-                    else if (m_renameState.input_was_active && !is_active && !is_focused) {
-                        cancelRenaming();
-                    }
-                    // Handle Escape key
-                    else if (is_active && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                    // Handle focus loss - cancel if escape pressed or
+                    // input was active before and is now neither active nor focused (another app button was pressed)
+                    else if (m_renameState.escape_pressed || (m_renameState.input_was_active && !is_focused)) {
                         cancelRenaming();
                     }
 
