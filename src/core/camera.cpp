@@ -144,7 +144,7 @@ namespace gs {
         return image;
     }
     
-    torch::Tensor Camera::load_and_get_attention_weights(int resize_factor) {
+    torch::Tensor Camera::load_and_get_attention_weights(int resize_factor, int max_width) {
 
         if (_mask_path.empty())
             return torch::Tensor();
@@ -153,7 +153,7 @@ namespace gs {
         int w, h, c;
 
         // Load mask pixels (we do need pixels to build the weight map)
-        auto result = load_image(_mask_path, resize_factor);
+        auto result = load_image(_mask_path, resize_factor, max_width);
         
         data = std::get<0>(result);
         w = std::get<1>(result);
