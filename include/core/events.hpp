@@ -137,6 +137,7 @@ namespace gs {
             EVENT(CameraMove, glm::mat3 rotation; glm::vec3 translation;);
             EVENT(SpeedChanged, float current_speed; float max_speed;);
             EVENT(RenderSettingsChanged,
+                  std::optional<int> sh_degree;
                   std::optional<float> fov;
                   std::optional<float> scaling_modifier;
                   std::optional<bool> antialiasing;
