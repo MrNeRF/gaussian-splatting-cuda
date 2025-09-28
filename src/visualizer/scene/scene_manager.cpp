@@ -544,6 +544,16 @@ namespace gs {
         }
     }
 
+    void SceneManager::updatePlyPath(const std::string& ply_name, const std::filesystem::path& ply_path) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        auto it = splat_paths_.find(ply_name);
+        if (it != splat_paths_.end()) {
+            it->second = ply_path;
+        } else {
+            LOG_WARN("ply name was not found {}", ply_name);
+        }
+    }
+
     bool SceneManager::renamePLY(const std::string& old_name, const std::string& new_name) {
         LOG_DEBUG("Renaming '{}' to '{}'", old_name, new_name);
 
