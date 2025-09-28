@@ -125,6 +125,7 @@ namespace gs {
 
         void setProject(std::shared_ptr<gs::management::Project> project) { lfs_project_ = project; }
         bool renamePLY(const std::string& old_name, const std::string& new_name);
+        void updatePlyPath(const std::string& ply_name, const std::filesystem::path& ply_path);
 
     private:
         void setupEventHandlers();

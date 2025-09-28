@@ -448,7 +448,10 @@ namespace gs::visualizer {
         // set all of the nodes to invisible except the last one
         for (auto it = plys.begin(); it != plys.end(); ++it) {
             std::string ply_name = it->ply_name;
-
+            if (!std::filesystem::exists(it->ply_path)) {
+                LOG_ERROR("ply path not exists {}. skip loading", it->ply_path.string());
+                continue;
+            }
             bool is_last = (std::next(it) == plys.end());
             LOG_TRACE("Adding PLY '{}' to scene (visible: {})", ply_name, is_last);
             scene_manager_->addSplatFile(it->ply_path, ply_name, is_last);
@@ -610,6 +613,11 @@ namespace gs::visualizer {
                     LOG_ERROR("porting project failed. Dst dir {} ", project_->getProjectOutputFolder().string());
                 }
                 project_->setIsTempProject(false);
+
+                for (const auto& ply : project_->getPlys()) {
+                    scene_manager_->updatePlyPath(ply.ply_name, ply.ply_path);
+                }
+
             } else {
                 if (!project_->writeToFile()) {
                     LOG_ERROR("save project failed {} ", project_->getProjectFileName().string());
