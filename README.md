@@ -249,10 +249,11 @@ sudo update-alternatives --install /usr/bin/g++ g++ /usr/local/gcc-14.1.0/bin/g+
 </details>
 
 ## Usage
-
-### Introduction Tutorial: dataset preparation with Reality Capture and training with LichtFeld Studio
+The preferred way to use LichtFeld Studio is to import your data (undistorted images + pointcloud + camera locations) in COLMAP format.  
+Have a look at these 2 introduction videos on how to get your images ready for use in LichtFeld Studio:
 
 [![LichtFeld Studio Beginner Tutorial - Using Reality Scan to create a  dataset for LichtFeld Studio](http://img.youtube.com/vi/JWmkhTlbDvg/0.jpg)](http://www.youtube.com/watch?v=JWmkhTlbDvg "Watch on youtube")
+[![LichtFeld Studio Beginner Tutorial - Using Colmap to create a  dataset for LichtFeld Studio](http://img.youtube.com/vi/-3TBbukYN00/0.jpg)](https://www.youtube.com/watch?v=-3TBbukYN00 "Watch on youtube")
 
 
 ### Dataset Preparation
