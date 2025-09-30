@@ -333,7 +333,7 @@ namespace gs::gui::panels {
             std::snprintf(loss_label, sizeof(loss_label), "Loss: %.4f", loss_data.back());
 
             widgets::DrawLossPlot(loss_data.data(), static_cast<int>(loss_data.size()),
-                                  min_val, max_val, "");
+                                  min_val, max_val, loss_label);
         }
     }
 } // namespace gs::gui::panels

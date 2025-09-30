@@ -697,7 +697,6 @@ namespace gs::gui::panels {
         // Get state directly from the single source of truth
         auto trainer_state = trainer_manager->getState();
         int current_iteration = trainer_manager->getCurrentIteration();
-        float current_loss = trainer_manager->getCurrentLoss();
 
         // Render controls based on trainer state
         switch (trainer_state) {
@@ -852,10 +851,22 @@ namespace gs::gui::panels {
         // Display iteration with rate
         ImGui::Text("Iteration: %d (%.1f iters/sec)", current_iteration, iters_per_sec);
 
-        ImGui::Text("Loss: %.6f", current_loss);
-
         int num_splats = trainer_manager->getNumSplats();
         ImGui::Text("num Splats: %d", num_splats);
+
+        // display memory usage
+        size_t free_t, total_t;
+        cudaMemGetInfo(&free_t, &total_t);
+        size_t used_t = total_t - free_t;
+
+        ImVec4 memColor = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
+        float pctUsed = (used_t / 1e9f) / (total_t / 1e9f) * 100;
+
+        if (pctUsed > 75) {
+            memColor = ImVec4(0.9f, 0.2f, 0.2f, 1.0f); // red
+        }
+
+        ImGui::TextColored(memColor, "Used GPU Memory: %.1f%% (%.1f/%.1f GB)", pctUsed, used_t / 1e9f, total_t / 1e9f);
 
         // Render save project file browser
         if (state.show_save_browser) {
