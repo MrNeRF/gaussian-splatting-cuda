@@ -697,7 +697,6 @@ namespace gs::gui::panels {
         // Get state directly from the single source of truth
         auto trainer_state = trainer_manager->getState();
         int current_iteration = trainer_manager->getCurrentIteration();
-        float current_loss = trainer_manager->getCurrentLoss();
 
         // Render controls based on trainer state
         switch (trainer_state) {
@@ -851,8 +850,6 @@ namespace gs::gui::panels {
         float iters_per_sec = g_iter_rate_tracker.getIterationsPerSecond();
         // Display iteration with rate
         ImGui::Text("Iteration: %d (%.1f iters/sec)", current_iteration, iters_per_sec);
-
-        ImGui::Text("Loss: %.6f", current_loss);
 
         int num_splats = trainer_manager->getNumSplats();
         ImGui::Text("num Splats: %d", num_splats);
