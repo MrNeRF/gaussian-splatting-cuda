@@ -25,13 +25,13 @@ LFS is not yet meant for a wide public release. There is no installer, because t
 - Possible Causes
 	- You used image rescaling factor
 		- LFS is currently rescaling the image every time it loads it from disk.  This causes heavey CPU usage for the rescaling.   A caching mechanism (on memory or disk) would solve this, but this is currently not available
-		- Your images are large
-			- If an image has the largest size greater than 3840pixels, with default settings, LFS will rescale the image to 3840.  This scaling is happening every time the image is loaded from disk (see previous point)
+	- Your images are large
+		- If an image has the largest size greater than 3840pixels, with default settings, LFS will rescale the image to 3840.  This scaling is happening every time the image is loaded from disk (see previous point)
 - Resolutions
 	- Export your undistorted image to the size that you want to train them
 	- Export your images with a maximum of 3840pixels
 	- Set the max-width to the width of  your images
-		- Remark: max supoprted size is 4096x4096 pixels
+		- Remark: max supoprted pixel size is 4096x4096 pixels
 	
 ### How do I export the created splat
 The gaussian splat is automatically created in the directory where you have saved your LFS project.  In case you did not save your project, you can do so after training.  If you did not save your project, the .ply is in a temporary directory
