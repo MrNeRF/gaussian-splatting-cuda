@@ -19,6 +19,7 @@ namespace gs::gui {
         // Callbacks for menu actions
         void setOnImportDataset(std::function<void()> callback);
         void setOnOpenProject(std::function<void()> callback);
+        void setOnImportPLY(std::function<void()> callback);
 
         // Window state management
         bool isAboutWindowOpen() const { return show_about_window_; }
@@ -35,6 +36,7 @@ namespace gs::gui {
         // Callbacks
         std::function<void()> on_import_dataset_;
         std::function<void()> on_open_project_;
+        std::function<void()> on_import_ply_;
 
         // Window states
         bool show_about_window_ = false;

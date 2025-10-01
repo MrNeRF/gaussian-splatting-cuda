@@ -6,6 +6,11 @@
 #include "core/logger.hpp"
 #include <imgui.h>
 
+#include <cstdlib> // for system()
+#ifdef _WIN32
+#include <windows.h> // for ShellExecuteA
+#endif
+
 namespace gs::gui {
 
     MenuBar::MenuBar() {
@@ -20,6 +25,13 @@ namespace gs::gui {
         if (ImGui::BeginMainMenuBar()) {
             // File menu
             if (ImGui::BeginMenu("File")) {
+                if (ImGui::MenuItem("Open Project")) {
+                    LOG_DEBUG("Open Project clicked");
+                    if (on_open_project_) {
+                        on_open_project_();
+                    }
+                }
+
                 if (ImGui::MenuItem("Import Dataset")) {
                     LOG_DEBUG("Import Dataset clicked");
                     if (on_import_dataset_) {
@@ -27,10 +39,10 @@ namespace gs::gui {
                     }
                 }
 
-                if (ImGui::MenuItem("Open Project")) {
-                    LOG_DEBUG("Open Project clicked");
-                    if (on_open_project_) {
-                        on_open_project_();
+                if (ImGui::MenuItem("Import Ply")) {
+                    LOG_DEBUG("Import Ply clicked");
+                    if (on_import_ply_) {
+                        on_import_ply_();
                     }
                 }
 
@@ -39,14 +51,15 @@ namespace gs::gui {
 
             // Help menu
             if (ImGui::BeginMenu("Help")) {
-                if (ImGui::MenuItem("About")) {
-                    LOG_DEBUG("About clicked");
-                    show_about_window_ = true;
-                }
 
                 if (ImGui::MenuItem("Camera Controls")) {
                     LOG_DEBUG("Camera Controls clicked");
                     show_camera_controls_ = true;
+                }
+
+                if (ImGui::MenuItem("About LichtFeld Studio")) {
+                    LOG_DEBUG("About clicked");
+                    show_about_window_ = true;
                 }
 
                 ImGui::EndMenu();
@@ -61,14 +74,66 @@ namespace gs::gui {
             return;
         }
 
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 0.9f));
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking; // removed AlwaysAutoResize
+
+        // Set a nicer default size (e.g. 600px wide, 400px tall)
+        ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
+
+        // Optional: prevent it from becoming too narrow
+        ImGui::SetNextWindowSizeConstraints(ImVec2(500, 300), ImVec2(FLT_MAX, FLT_MAX));
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 0.95f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
 
-        if (ImGui::Begin("About", &show_about_window_, window_flags)) {
-            ImGui::Text("LichtFeld Project but MrNerf");
+        std::string version = "v0.1.3";
+        const char* repo_url = "https://github.com/MrNeRF/LichtFeld-Studio";
+
+        if (ImGui::Begin("About LichtFeld Studio", &show_about_window_, window_flags)) {
+            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.4f, 1.0f), "LichtFeld Studio");
+            ImGui::Separator();
+
+            ImGui::TextWrapped(
+                "LichtFeld Studio is a high-performance C++ and CUDA implementation of 3D Gaussian Splatting, "
+                "designed to fuse real and digital content seamlessly. It empowers research and development in "
+                "neural rendering, allowing real-time visualization, training, and inspection of neural radiance fields.");
+
+            ImGui::Spacing();
+            ImGui::Text("Version: %s", version.c_str());
+            ImGui::Spacing();
+
+            ImGui::TextWrapped("Source code, docs, and full project details are hosted on GitHub:");
+
+            // Clickable link
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.8f, 1.0f, 1.0f));
+            ImGui::Text("%s", repo_url);
+            ImGui::PopStyleColor();
+
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                if (ImGui::IsItemClicked()) {
+#ifdef _WIN32
+                    ShellExecuteA(nullptr, "open", repo_url, nullptr, nullptr, SW_SHOWNORMAL);
+#elif __APPLE__
+                    std::string cmd = "open " + std::string(repo_url);
+                    system(cmd.c_str());
+#else
+                    std::string cmd = "xdg-open " + std::string(repo_url);
+                    system(cmd.c_str());
+#endif
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+
+            ImGui::Text("Created by Mr Nerf");
+
+            ImGui::Spacing();
+            ImGui::Separator();
+
+            ImGui::TextWrapped("This software is licensed under GPLv3. See the LICENSE file for full terms.");
         }
         ImGui::End();
 
@@ -152,6 +217,10 @@ namespace gs::gui {
 
     void MenuBar::setOnOpenProject(std::function<void()> callback) {
         on_open_project_ = std::move(callback);
+    }
+
+    void MenuBar::setOnImportPLY(std::function<void()> callback) {
+        on_import_ply_ = std::move(callback);
     }
 
 } // namespace gs::gui

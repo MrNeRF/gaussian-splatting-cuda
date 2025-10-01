@@ -10,6 +10,7 @@
 #include "gui/panels/tools_panel.hpp"
 #include "gui/panels/training_panel.hpp"
 #include "gui/ui_widgets.hpp"
+#include "gui/utils/native_dialogs.hpp"
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/project_changed_dialog_box.hpp"
 #include "internal/resource_paths.hpp"
@@ -22,8 +23,56 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
+#ifdef WIN32
+#include <ShlObj.h>
+#include <windows.h>
+#endif // WIN32
 
 namespace gs::gui {
+
+#ifdef WIN32
+    void OpenProjectFileDialog() {
+        // show native windows file dialog for project file selection
+        PWSTR filePath = nullptr;
+
+        COMDLG_FILTERSPEC rgSpec[] =
+            {
+                {L"LichtFeldStudio Project File", L"*.lfs;*.ls"},
+            };
+
+        if (SUCCEEDED(gs::gui::utils::selectFileNative(filePath, rgSpec, 1, false))) {
+            std::filesystem::path project_path(filePath);
+            events::cmd::LoadProject{.path = project_path}.emit();
+            LOG_INFO("Loading project file : {}", std::filesystem::path(project_path).string());
+        }
+    }
+
+    void OpenPlyFileDialog() {
+        // show native windows file dialog for PLY file selection
+        PWSTR filePath = nullptr;
+        COMDLG_FILTERSPEC rgSpec[] =
+            {
+                {L"Point Cloud", L"*.ply;"},
+            };
+        if (SUCCEEDED(gs::gui::utils::selectFileNative(filePath, rgSpec, 1, false))) {
+            std::filesystem::path ply_path(filePath);
+            events::cmd::LoadFile{.path = ply_path}.emit();
+            LOG_INFO("Loading PLY file : {}", std::filesystem::path(ply_path).string()); // FIXED: Changed from "Loading project file"
+        }
+    }
+
+    void OpenDatasetFolderDialog() {
+        // show native windows file dialog for folder selection
+        PWSTR filePath = nullptr;
+        if (SUCCEEDED(gs::gui::utils::selectFileNative(filePath, nullptr, 0, true))) {
+            std::filesystem::path dataset_path(filePath);
+            if (std::filesystem::is_directory(dataset_path)) {
+                events::cmd::LoadFile{.path = dataset_path, .is_dataset = true}.emit();
+                LOG_INFO("Loading dataset : {}", std::filesystem::path(dataset_path).string());
+            }
+        }
+    }
+#endif // WIN32
 
     GuiManager::GuiManager(visualizer::VisualizerImpl* viewer)
         : viewer_(viewer) {
@@ -131,13 +180,37 @@ namespace gs::gui {
             }
         });
 
-        // ADD MENU BAR CALLBACKS HERE:
         menu_bar_->setOnImportDataset([this]() {
+            window_states_["file_browser"] = true;
+#ifdef WIN32
+            // show native windows file dialog for project file selection
+            OpenDatasetFolderDialog();
 
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
         });
 
         menu_bar_->setOnOpenProject([this]() {
+            window_states_["file_browser"] = true;
+#ifdef WIN32
+            // show native windows file dialog for project file selection
+            OpenProjectFileDialog();
 
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+        });
+
+        menu_bar_->setOnImportPLY([this]() {
+            window_states_["file_browser"] = true;
+#ifdef WIN32
+            // show native windows file dialog for project file selection
+            OpenPlyFileDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
         });
     }
 
