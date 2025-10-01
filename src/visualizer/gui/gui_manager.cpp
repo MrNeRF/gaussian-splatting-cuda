@@ -33,6 +33,7 @@ namespace gs::gui {
         project_changed_dialog_box_ = std::make_unique<ProjectChangedDialogBox>();
         scene_panel_ = std::make_unique<ScenePanel>(viewer->trainer_manager_);
         save_project_browser_ = std::make_unique<SaveProjectBrowser>();
+        menu_bar_ = std::make_unique<MenuBar>();
 
         // Initialize window states
         window_states_["file_browser"] = false;
@@ -129,6 +130,15 @@ namespace gs::gui {
                 events::cmd::LoadFile{.path = path, .is_dataset = true}.emit();
             }
         });
+
+        // ADD MENU BAR CALLBACKS HERE:
+        menu_bar_->setOnImportDataset([this]() {
+
+        });
+
+        menu_bar_->setOnOpenProject([this]() {
+
+        });
     }
 
     void GuiManager::shutdown() {
@@ -150,6 +160,10 @@ namespace gs::gui {
         bool mouse_in_viewport = isPositionInViewport(mouse_pos.x, mouse_pos.y);
 
         ImGui::NewFrame();
+
+        if (menu_bar_) {
+            menu_bar_->render();
+        }
 
         // Override ImGui's mouse capture for right/middle buttons when in viewport
         // This ensures that camera controls work properly
@@ -349,6 +363,11 @@ namespace gs::gui {
                 ImGui::PopStyleVar(2);
                 ImGui::PopStyleColor(2);
             }
+        }
+
+        if (menu_bar_) {
+            menu_bar_->renderAboutWindow();
+            menu_bar_->renderCameraControlsWindow();
         }
 
         // Get the viewport region for 3D rendering

@@ -5,7 +5,9 @@
 #pragma once
 
 #include "core/events.hpp"
+#include "gui/panels/menu_bar.hpp"
 #include "gui/ui_context.hpp"
+#include "gui/panels/menu_bar.hpp"
 #include "gui/windows/save_project_browser.hpp"
 #include "windows/project_changed_dialog_box.hpp"
 #include <GLFW/glfw3.h>
@@ -86,14 +88,14 @@ namespace gs {
             ImVec2 viewport_pos_;
             ImVec2 viewport_size_;
             bool viewport_has_focus_;
+            bool force_exit_ = false;
 
             // Method declarations
             void renderSpeedOverlay();
             void showSpeedOverlay(float current_speed, float max_speed);
 
             std::unique_ptr<SaveProjectBrowser> save_project_browser_;
-
-            bool force_exit_ = false;
+            std::unique_ptr<MenuBar> menu_bar_;
         };
     } // namespace gui
 } // namespace gs
