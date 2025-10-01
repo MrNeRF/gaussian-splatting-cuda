@@ -46,6 +46,22 @@ namespace gs::gui {
                     }
                 }
 
+                ImGui::Separator();
+                if (ImGui::MenuItem("Save Project As")) {
+                    LOG_DEBUG("Save Project As clicked");
+                    if (on_save_project_as_) {
+                        on_save_project_as_();
+                    }
+                }
+
+                // Disable "Save Project" if project is temporary
+                if (ImGui::MenuItem("Save Project", nullptr, false, !is_project_temp_)) {
+                    LOG_DEBUG("Save Project clicked");
+                    if (on_save_project_) {
+                        on_save_project_();
+                    }
+                }
+
                 ImGui::EndMenu();
             }
 
@@ -76,10 +92,6 @@ namespace gs::gui {
 
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking; // removed AlwaysAutoResize
 
-        // Set a nicer default size (e.g. 600px wide, 400px tall)
-        ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
-
-        // Optional: prevent it from becoming too narrow
         ImGui::SetNextWindowSizeConstraints(ImVec2(500, 300), ImVec2(FLT_MAX, FLT_MAX));
 
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 0.95f));
@@ -221,6 +233,14 @@ namespace gs::gui {
 
     void MenuBar::setOnImportPLY(std::function<void()> callback) {
         on_import_ply_ = std::move(callback);
+    }
+
+    void MenuBar::setOnSaveProjectAs(std::function<void()> callback) {
+        on_save_project_as_ = std::move(callback);
+    }
+
+    void MenuBar::setOnSaveProject(std::function<void()> callback) {
+        on_save_project_ = std::move(callback);
     }
 
 } // namespace gs::gui

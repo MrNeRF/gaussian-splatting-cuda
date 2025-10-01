@@ -1,5 +1,5 @@
 /* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
-*
+ *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #pragma once
@@ -20,6 +20,8 @@ namespace gs::gui {
         void setOnImportDataset(std::function<void()> callback);
         void setOnOpenProject(std::function<void()> callback);
         void setOnImportPLY(std::function<void()> callback);
+        void setOnSaveProjectAs(std::function<void()> callback);
+        void setOnSaveProject(std::function<void()> callback);
 
         // Window state management
         bool isAboutWindowOpen() const { return show_about_window_; }
@@ -32,15 +34,21 @@ namespace gs::gui {
         void renderAboutWindow();
         void renderCameraControlsWindow();
 
+        void setIsProjectTemp(bool is_temp) { is_project_temp_ = is_temp; }
+        [[nodiscard]] bool getIsProjectTemp() const { return is_project_temp_; }
+
     private:
         // Callbacks
         std::function<void()> on_import_dataset_;
         std::function<void()> on_open_project_;
         std::function<void()> on_import_ply_;
+        std::function<void()> on_save_project_as_;
+        std::function<void()> on_save_project_;
 
         // Window states
         bool show_about_window_ = false;
         bool show_camera_controls_ = false;
+        bool is_project_temp_ = true;
     };
 
 } // namespace gs::gui

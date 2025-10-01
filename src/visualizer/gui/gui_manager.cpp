@@ -72,6 +72,18 @@ namespace gs::gui {
             }
         }
     }
+
+    void SaveProjectFileDialog(bool* p_open) {
+        // show native windows file dialog for project directory selection
+        PWSTR filePath = nullptr;
+        if (SUCCEEDED(gs::gui::utils::selectFileNative(filePath, nullptr, 0, true))) {
+            std::filesystem::path project_path(filePath);
+            events::cmd::SaveProject{project_path}.emit();
+            LOG_INFO("Saving project file into : {}", std::filesystem::path(project_path).string());
+            *p_open = false;
+        }
+    }
+
 #endif // WIN32
 
     GuiManager::GuiManager(visualizer::VisualizerImpl* viewer)
@@ -89,6 +101,7 @@ namespace gs::gui {
         window_states_["scene_panel"] = true;
         window_states_["project_changed_dialog_box"] = false;
         window_states_["save_project_browser_before_exit"] = false;
+        window_states_["show_save_browser"] = false;
         window_states_["system_console"] = false;
         window_states_["training_tab"] = false;
 
@@ -211,6 +224,16 @@ namespace gs::gui {
             // hide the file browser
             events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
 #endif // WIN32
+        });
+
+        menu_bar_->setOnSaveProjectAs([this]() {
+            window_states_["show_save_browser"] = true;
+        });
+
+        menu_bar_->setOnSaveProject([this]() {
+            if (viewer_->project_) {
+                events::cmd::SaveProject{viewer_->project_->getProjectOutputFolder().string()}.emit();
+            }
         });
     }
 
@@ -373,6 +396,17 @@ namespace gs::gui {
                 force_exit_ = true;
                 glfwSetWindowShouldClose(viewer_->getWindow(), true);
                 LOG_INFO("Exiting LichtFeldStudio gracefully after project save");
+            }
+        }
+
+        if (window_states_["show_save_browser"]) {
+#ifdef WIN32
+            bool was_project_saved = save_project_browser_->SaveProjectFileDialog(&window_states_["show_save_browser"]);
+#else
+            bool was_project_saved = save_project_browser_->render(&window_states_["show_save_browser"]);
+#endif
+            if (was_project_saved) {
+                menu_bar_->setIsProjectTemp(viewer_->getProject()->getIsTempProject());
             }
         }
 
