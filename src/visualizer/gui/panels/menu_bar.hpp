@@ -26,7 +26,7 @@ namespace gs::gui {
         // Render separate windows (call these in your main render loop)
         void renderGettingStartedWindow();
         void renderAboutWindow();
-        void renderCameraControlsWindow();
+        void renderControlsAndShortcutsWindow();
 
         void setIsProjectTemp(bool is_temp) { is_project_temp_ = is_temp; }
         [[nodiscard]] bool getIsProjectTemp() const { return is_project_temp_; }
@@ -42,7 +42,7 @@ namespace gs::gui {
 
         // Window states
         bool show_about_window_ = false;
-        bool show_camera_controls_ = false;
+        bool show_controls_and_shortcuts_ = false;
         bool show_getting_started_ = false;
 
         bool is_project_temp_ = true;
