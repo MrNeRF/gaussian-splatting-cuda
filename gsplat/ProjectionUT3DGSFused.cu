@@ -127,6 +127,13 @@ namespace gsplat {
             image_gaussian_return =
                 world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
                     camera_model, rs_params, ut_params, mean, scale, quat);
+        } else if (camera_model_type == CameraModelType::EQUIRECTANGULAR) {
+            EquirectangularCameraModel::Parameters cm_params = {};
+            cm_params.resolution = {image_width, image_height};
+            EquirectangularCameraModel camera_model(cm_params);
+            image_gaussian_return =
+                world_gaussian_to_image_gaussian_unscented_transform_shutter_pose(
+                    camera_model, rs_params, ut_params, mean, scale, quat);
         } else {
             // should never reach here
             assert(false);

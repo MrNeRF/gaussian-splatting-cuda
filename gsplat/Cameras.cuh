@@ -1000,6 +1000,44 @@ struct OpenCVFisheyeCameraModel
     }
 };
 
+struct EquirectangularCameraModel : BaseCameraModel<EquirectangularCameraModel> {
+
+    using Base = BaseCameraModel<EquirectangularCameraModel>;
+
+    __host__ __device__ EquirectangularCameraModel(Parameters const& parameters)
+        : parameters(parameters) {}
+
+    Parameters parameters;
+
+
+    inline __device__ auto camera_ray_to_image_point(glm::fvec3 const& cam_ray, float margin_factor) const -> typename Base::ImagePointReturn {
+        auto dir = cam_ray / length(cam_ray);
+        auto longitude = std::atan2(dir.x, dir.z);
+        auto latitude = std::asin(dir.y);
+
+        auto px = (longitude / (2.f * PI) + 0.5f) * parameters.resolution[0];
+        auto py = (latitude / PI + 0.5f) * parameters.resolution[1];
+
+
+        auto valid = true;
+        valid &= image_point_in_image_bounds_margin(
+            glm::fvec2(px, py), parameters.resolution, margin_factor);
+
+        return {glm::fvec2(px, py), true};
+    }
+
+    inline __device__ CameraRay image_point_to_camera_ray(glm::fvec2 image_point) const {
+        auto phi = 2.0 * PI * (((image_point.x + 0.5) / static_cast<float>(parameters.resolution[0])) - 0.5);
+        auto theta = PI * (((image_point.y + 0.5) / static_cast<float>(parameters.resolution[1])) - 0.5);
+
+        auto dx = cos(theta) * sin(phi);
+        auto dy = sin(theta);
+        auto dz = cos(phi) * cos(theta);
+        auto ray = glm::fvec3(dx, dy, dz);
+        return {ray / length(ray), true};
+    }
+};
+
 // ---------------------------------------------------------------------------------------------
 
 // Gaussian projections
