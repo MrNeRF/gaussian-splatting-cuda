@@ -23,14 +23,8 @@ namespace gs::gui {
         void setOnSaveProjectAs(std::function<void()> callback);
         void setOnSaveProject(std::function<void()> callback);
 
-        // Window state management
-        bool isAboutWindowOpen() const { return show_about_window_; }
-        bool isCameraControlsWindowOpen() const { return show_camera_controls_; }
-
-        void setAboutWindowOpen(bool open) { show_about_window_ = open; }
-        void setCameraControlsWindowOpen(bool open) { show_camera_controls_ = open; }
-
         // Render separate windows (call these in your main render loop)
+        void renderGettingStartedWindow();
         void renderAboutWindow();
         void renderCameraControlsWindow();
 
@@ -38,6 +32,7 @@ namespace gs::gui {
         [[nodiscard]] bool getIsProjectTemp() const { return is_project_temp_; }
 
     private:
+        void openURL(const char* url);
         // Callbacks
         std::function<void()> on_import_dataset_;
         std::function<void()> on_open_project_;
@@ -48,6 +43,8 @@ namespace gs::gui {
         // Window states
         bool show_about_window_ = false;
         bool show_camera_controls_ = false;
+        bool show_getting_started_ = false;
+
         bool is_project_temp_ = true;
     };
 

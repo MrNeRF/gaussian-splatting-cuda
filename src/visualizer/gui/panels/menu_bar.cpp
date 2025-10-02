@@ -20,7 +20,6 @@ namespace gs::gui {
     MenuBar::~MenuBar() {
         // Cleanup handled automatically
     }
-
     void MenuBar::render() {
         if (ImGui::BeginMainMenuBar()) {
             // File menu
@@ -67,6 +66,10 @@ namespace gs::gui {
 
             // Help menu
             if (ImGui::BeginMenu("Help")) {
+                if (ImGui::MenuItem("Getting Started")) {
+                    LOG_DEBUG("Getting Started clicked");
+                    show_getting_started_ = true;
+                }
 
                 if (ImGui::MenuItem("Camera Controls")) {
                     LOG_DEBUG("Camera Controls clicked");
@@ -83,6 +86,94 @@ namespace gs::gui {
 
             ImGui::EndMainMenuBar();
         }
+
+        renderGettingStartedWindow();
+        renderAboutWindow();
+        renderCameraControlsWindow();
+    }
+
+    void MenuBar::openURL(const char* url) {
+#ifdef _WIN32
+        ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL);
+#elif __APPLE__
+        std::string cmd = "open " + std::string(url);
+        system(cmd.c_str());
+#else
+        std::string cmd = "xdg-open " + std::string(url);
+        system(cmd.c_str());
+#endif
+    }
+
+    void MenuBar::renderGettingStartedWindow() {
+        if (!show_getting_started_) {
+            return;
+        }
+
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize;
+
+        // Initial width (fits nicely, but height will adapt to content)
+        ImGui::SetNextWindowSize(ImVec2(650, 0), ImGuiCond_Once);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+
+        if (ImGui::Begin("Getting Started", &show_getting_started_, window_flags)) {
+            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.4f, 1.0f), "Usage");
+            ImGui::Separator();
+
+            ImGui::TextWrapped("Introduction Tutorial: dataset preparation");
+            ImGui::Spacing();
+
+            // Reality Scan video
+            const char* reality_scan_url = "http://www.youtube.com/watch?v=JWmkhTlbDvg";
+            ImGui::Bullet();
+            ImGui::TextWrapped("Using Reality Scan to create a dataset");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.8f, 1.0f, 1.0f));
+            ImGui::Text("%s", reality_scan_url);
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                if (ImGui::IsItemClicked()) {
+                    openURL(reality_scan_url);
+                }
+            }
+
+            // Colmap tutorial video
+            const char* colmap_tutorial_url = "https://www.youtube.com/watch?v=-3TBbukYN00";
+            ImGui::Bullet();
+            ImGui::TextWrapped("Beginner Tutorial - Using COLMAP to create a dataset for LichtFeld Studio");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.8f, 1.0f, 1.0f));
+            ImGui::Text("%s", colmap_tutorial_url);
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                if (ImGui::IsItemClicked()) {
+                    openURL(colmap_tutorial_url);
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // FAQ link
+            ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.4f, 1.0f), "FAQ:");
+            const char* faq_url = "https://github.com/MrNeRF/LichtFeld-Studio/blob/master/docs/docs/faq.md";
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.8f, 1.0f, 1.0f));
+            ImGui::Text("%s", faq_url);
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                if (ImGui::IsItemClicked()) {
+                    openURL(faq_url);
+                }
+            }
+        }
+        ImGui::End();
+
+        ImGui::PopStyleColor(4);
     }
 
     void MenuBar::renderAboutWindow() {
@@ -125,15 +216,7 @@ namespace gs::gui {
             if (ImGui::IsItemHovered()) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
                 if (ImGui::IsItemClicked()) {
-#ifdef _WIN32
-                    ShellExecuteA(nullptr, "open", repo_url, nullptr, nullptr, SW_SHOWNORMAL);
-#elif __APPLE__
-                    std::string cmd = "open " + std::string(repo_url);
-                    system(cmd.c_str());
-#else
-                    std::string cmd = "xdg-open " + std::string(repo_url);
-                    system(cmd.c_str());
-#endif
+                    openURL(repo_url);
                 }
             }
 

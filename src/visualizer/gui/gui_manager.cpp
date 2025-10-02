@@ -472,11 +472,6 @@ namespace gs::gui {
             }
         }
 
-        if (menu_bar_) {
-            menu_bar_->renderAboutWindow();
-            menu_bar_->renderCameraControlsWindow();
-        }
-
         // Get the viewport region for 3D rendering
         updateViewportRegion();
 
