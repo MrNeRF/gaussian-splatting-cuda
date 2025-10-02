@@ -401,13 +401,14 @@ namespace gs::gui {
 
         if (window_states_["show_save_browser"]) {
 #ifdef WIN32
-            bool was_project_saved = save_project_browser_->SaveProjectFileDialog(&window_states_["show_save_browser"]);
+            save_project_browser_->SaveProjectFileDialog(&window_states_["show_save_browser"]);
 #else
-            bool was_project_saved = save_project_browser_->render(&window_states_["show_save_browser"]);
+            save_project_browser_->render(&window_states_["show_save_browser"]);
 #endif
-            if (was_project_saved) {
-                menu_bar_->setIsProjectTemp(viewer_->getProject()->getIsTempProject());
-            }
+        }
+
+        if (menu_bar_ && viewer_) {
+            menu_bar_->setIsProjectTemp(viewer_->getProject()->getIsTempProject());
         }
 
         // Render speed overlay if visible
