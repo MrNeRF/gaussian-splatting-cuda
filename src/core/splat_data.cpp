@@ -180,7 +180,7 @@ namespace {
         fs::create_directories(sog_dir);
 
         // Set up SOG write options - use .sog extension to create bundle
-        std::filesystem::path sog_out_path = sog_dir / ("splat_" + std::to_string(iteration) + ".sog");
+        std::filesystem::path sog_out_path = sog_dir / ("splat_" + std::to_string(iteration) + "_sog.sog");
         gs::core::SogWriteOptions options{
             .iterations = kmeans_iterations,
             .output_path = sog_out_path};

@@ -1023,7 +1023,8 @@ namespace gs::training {
             const std::filesystem::path ply_path = save_path / (ply_name + ".ply");
             lf_project_->addPly(gs::management::PlyData(false, ply_path, iter_num, ply_name));
             if (params_.optimization.save_sog) {
-                lf_project_->addPly(gs::management::PlyData(false, sog_path, iter_num, ply_name));
+                std::string ply_name_sog = sog_path.stem().string();
+                lf_project_->addPly(gs::management::PlyData(false, sog_path, iter_num, ply_name_sog));
             }
         }
 

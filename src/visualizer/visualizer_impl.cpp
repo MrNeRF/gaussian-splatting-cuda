@@ -454,8 +454,12 @@ namespace gs::visualizer {
             }
             bool is_last = (std::next(it) == plys.end());
             LOG_TRACE("Adding PLY '{}' to scene (visible: {})", ply_name, is_last);
-            scene_manager_->addSplatFile(it->ply_path, ply_name, is_last);
-            scene_manager_->setPLYVisibility(ply_name, is_last);
+            try {
+                scene_manager_->addSplatFile(it->ply_path, ply_name, is_last);
+                scene_manager_->setPLYVisibility(ply_name, is_last);
+            } catch (const std::exception& e) {
+                LOG_ERROR("failed loading ply path {}. reason {} ", it->ply_path.string(), e.what());
+            }
         }
     }
 
@@ -594,7 +598,7 @@ namespace gs::visualizer {
             if (project_->getIsTempProject()) {
                 data_config.output_path.clear();
                 project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
-            } else {// else: project already exits (with output dir) - only need to replace data path
+            } else { // else: project already exits (with output dir) - only need to replace data path
                 project_->setDataInfo(data_config);
             }
 
