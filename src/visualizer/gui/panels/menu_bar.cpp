@@ -181,9 +181,10 @@ namespace gs::gui {
             return;
         }
 
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking; // removed AlwaysAutoResize
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize;
 
-        ImGui::SetNextWindowSizeConstraints(ImVec2(500, 300), ImVec2(FLT_MAX, FLT_MAX));
+        // Initial width (fits nicely, but height will adapt to content)
+        ImGui::SetNextWindowSize(ImVec2(650, 0), ImGuiCond_Once);
 
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 0.95f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
