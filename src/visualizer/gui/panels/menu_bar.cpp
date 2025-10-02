@@ -61,6 +61,14 @@ namespace gs::gui {
                     }
                 }
 
+                ImGui::Separator();
+                if (ImGui::MenuItem("Exit")) {
+                    LOG_DEBUG("Exit clicked");
+                    if (on_exit_) {
+                        on_exit_();
+                    }
+                }
+
                 ImGui::EndMenu();
             }
 
@@ -358,6 +366,10 @@ namespace gs::gui {
 
     void MenuBar::setOnSaveProject(std::function<void()> callback) {
         on_save_project_ = std::move(callback);
+    }
+
+    void MenuBar::setOnExit(std::function<void()> callback) {
+        on_exit_ = std::move(callback);
     }
 
 } // namespace gs::gui

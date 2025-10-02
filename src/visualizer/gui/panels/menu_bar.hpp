@@ -1,5 +1,5 @@
 /* SPDX-FileCopyrightText: 2025 LichtFeld Studio Authors
- *
+*
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #pragma once
@@ -22,6 +22,7 @@ namespace gs::gui {
         void setOnImportPLY(std::function<void()> callback);
         void setOnSaveProjectAs(std::function<void()> callback);
         void setOnSaveProject(std::function<void()> callback);
+        void setOnExit(std::function<void()> callback);
 
         // Render separate windows (call these in your main render loop)
         void renderGettingStartedWindow();
@@ -39,6 +40,7 @@ namespace gs::gui {
         std::function<void()> on_import_ply_;
         std::function<void()> on_save_project_as_;
         std::function<void()> on_save_project_;
+        std::function<void()> on_exit_;
 
         // Window states
         bool show_about_window_ = false;

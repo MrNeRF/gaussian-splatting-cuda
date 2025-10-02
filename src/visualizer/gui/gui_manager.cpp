@@ -235,6 +235,10 @@ namespace gs::gui {
                 events::cmd::SaveProject{viewer_->project_->getProjectOutputFolder().string()}.emit();
             }
         });
+
+        menu_bar_->setOnExit([this]() {
+            glfwSetWindowShouldClose(viewer_->getWindow(), true);
+        });
     }
 
     void GuiManager::shutdown() {
