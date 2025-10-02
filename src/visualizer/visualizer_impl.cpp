@@ -453,6 +453,8 @@ namespace gs::visualizer {
                 continue;
             }
             bool is_last = (std::next(it) == plys.end());
+
+
             LOG_TRACE("Adding PLY '{}' to scene (visible: {})", ply_name, is_last);
             try {
                 scene_manager_->addSplatFile(it->ply_path, ply_name, is_last);

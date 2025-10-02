@@ -71,9 +71,9 @@ namespace gs::gui {
                     show_getting_started_ = true;
                 }
 
-                if (ImGui::MenuItem("Camera Controls")) {
-                    LOG_DEBUG("Camera Controls clicked");
-                    show_camera_controls_ = true;
+                if (ImGui::MenuItem("Controls & ShortCuts")) {
+                    LOG_DEBUG("Camera Controls and ShortCuts clicked");
+                    show_controls_and_shortcuts_ = true;
                 }
 
                 if (ImGui::MenuItem("About LichtFeld Studio")) {
@@ -89,7 +89,7 @@ namespace gs::gui {
 
         renderGettingStartedWindow();
         renderAboutWindow();
-        renderCameraControlsWindow();
+        renderControlsAndShortcutsWindow();
     }
 
     void MenuBar::openURL(const char* url) {
@@ -236,8 +236,8 @@ namespace gs::gui {
         ImGui::PopStyleColor(4);
     }
 
-    void MenuBar::renderCameraControlsWindow() {
-        if (!show_camera_controls_) {
+    void MenuBar::renderControlsAndShortcutsWindow() {
+        if (!show_controls_and_shortcuts_) {
             return;
         }
 
@@ -247,66 +247,99 @@ namespace gs::gui {
         ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
 
-        if (ImGui::Begin("Camera Controls", &show_camera_controls_, window_flags)) {
-            ImGui::Text("Camera Controls:");
-            ImGui::Separator();
+        if (ImGui::Begin("Controls & Shortcuts", &show_controls_and_shortcuts_, window_flags)) {
+            if (ImGui::BeginTabBar("ControlsTabBar")) {
+                // Camera Controls Tab
+                if (ImGui::BeginTabItem("Camera Controls")) {
+                    ImGui::Spacing();
 
-            if (ImGui::BeginTable("camera_controls_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-                ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 400.0f);
-                ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableHeadersRow();
+                    if (ImGui::BeginTable("camera_controls_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 400.0f);
+                        ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableHeadersRow();
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Local Translate Camera");
-                ImGui::TableNextColumn();
-                ImGui::Text("Left Mouse + Drag");
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Local Translate Camera");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Left Mouse + Drag");
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Local Rotate Camera (Pitch/Yaw)");
-                ImGui::TableNextColumn();
-                ImGui::Text("Right Mouse + Drag");
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Local Rotate Camera (Pitch/Yaw)");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Right Mouse + Drag");
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Rotate Around Scene Center");
-                ImGui::TableNextColumn();
-                ImGui::Text("Middle Mouse + Drag");
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Rotate Around Scene Center");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Middle Mouse + Drag");
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Zoom");
-                ImGui::TableNextColumn();
-                ImGui::Text("Mouse Scroll");
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Zoom");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Mouse Scroll");
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Roll Camera");
-                ImGui::TableNextColumn();
-                ImGui::Text("R + Mouse Scroll");
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Roll Camera");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("R + Mouse Scroll");
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Move forward, backward, left and right within the scene");
-                ImGui::TableNextColumn();
-                ImGui::Text("w, s, a, d keys");
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Move forward, backward, left and right within the scene");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("w, s, a, d keys");
 
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::Text("Increase/Decrease wasd speed");
-                ImGui::TableNextColumn();
-                ImGui::Text("Ctrl + +/-");
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Increase/Decrease wasd speed");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Ctrl + +/-");
 
-                ImGui::EndTable();
+                        ImGui::EndTable();
+                    }
+
+                    ImGui::EndTabItem();
+                }
+
+                // Shortcuts Tab
+                if (ImGui::BeginTabItem("Shortcuts")) {
+                    ImGui::Spacing();
+
+                    if (ImGui::BeginTable("shortcuts_table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                        ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableHeadersRow();
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("G");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Compare ground truth images");
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("F2");
+                        ImGui::TableNextColumn();
+                        ImGui::Text("Rename ply");
+
+                        ImGui::EndTable();
+                    }
+
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
             }
-            ImGui::Separator();
         }
         ImGui::End();
 
         ImGui::PopStyleColor(4);
     }
-
     void MenuBar::setOnImportDataset(std::function<void()> callback) {
         on_import_dataset_ = std::move(callback);
     }
