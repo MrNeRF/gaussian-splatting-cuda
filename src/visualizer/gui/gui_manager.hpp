@@ -63,6 +63,7 @@ namespace gs {
             void applyDefaultStyle();
             void updateViewportRegion();
             void updateViewportFocus();
+            void initMenuBar();
 
             // Core dependencies
             visualizer::VisualizerImpl* viewer_;

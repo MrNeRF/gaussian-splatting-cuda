@@ -342,7 +342,7 @@ namespace gs::visualizer {
         // If we are trying to close and the project is temporary, show dialog
         if (window_manager_->shouldClose() && !gui_manager_->isForceExit()) {
             if (project_) {
-                if (project_->getIsTempProject()) {
+                if (project_->getIsTempProject() && !project_->getIsProjectEmpty()) {
                     gui_manager_->showWindow("project_changed_dialog_box", true);
                     window_manager_->cancelClose();
                 }
@@ -453,7 +453,6 @@ namespace gs::visualizer {
                 continue;
             }
             bool is_last = (std::next(it) == plys.end());
-
 
             LOG_TRACE("Adding PLY '{}' to scene (visible: {})", ply_name, is_last);
             try {

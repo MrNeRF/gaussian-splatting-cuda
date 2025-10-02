@@ -119,6 +119,55 @@ namespace gs::gui {
         // Cleanup handled automatically
     }
 
+    void GuiManager::initMenuBar() {
+        menu_bar_->setOnImportDataset([this]() {
+            window_states_["file_browser"] = true;
+#ifdef WIN32
+            // show native windows file dialog for project file selection
+            OpenDatasetFolderDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+        });
+
+        menu_bar_->setOnOpenProject([this]() {
+            window_states_["file_browser"] = true;
+#ifdef WIN32
+            // show native windows file dialog for project file selection
+            OpenProjectFileDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+        });
+
+        menu_bar_->setOnImportPLY([this]() {
+            window_states_["file_browser"] = true;
+#ifdef WIN32
+            // show native windows file dialog for project file selection
+            OpenPlyFileDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+        });
+
+        menu_bar_->setOnSaveProjectAs([this]() {
+            window_states_["show_save_browser"] = true;
+        });
+
+        menu_bar_->setOnSaveProject([this]() {
+            if (viewer_->project_) {
+                events::cmd::SaveProject{viewer_->project_->getProjectOutputFolder().string()}.emit();
+            }
+        });
+
+        menu_bar_->setOnExit([this]() {
+            glfwSetWindowShouldClose(viewer_->getWindow(), true);
+        });
+    }
+
     void GuiManager::init() {
         // ImGui initialization
         IMGUI_CHECKVERSION();
@@ -193,52 +242,7 @@ namespace gs::gui {
             }
         });
 
-        menu_bar_->setOnImportDataset([this]() {
-            window_states_["file_browser"] = true;
-#ifdef WIN32
-            // show native windows file dialog for project file selection
-            OpenDatasetFolderDialog();
-
-            // hide the file browser
-            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
-#endif // WIN32
-        });
-
-        menu_bar_->setOnOpenProject([this]() {
-            window_states_["file_browser"] = true;
-#ifdef WIN32
-            // show native windows file dialog for project file selection
-            OpenProjectFileDialog();
-
-            // hide the file browser
-            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
-#endif // WIN32
-        });
-
-        menu_bar_->setOnImportPLY([this]() {
-            window_states_["file_browser"] = true;
-#ifdef WIN32
-            // show native windows file dialog for project file selection
-            OpenPlyFileDialog();
-
-            // hide the file browser
-            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
-#endif // WIN32
-        });
-
-        menu_bar_->setOnSaveProjectAs([this]() {
-            window_states_["show_save_browser"] = true;
-        });
-
-        menu_bar_->setOnSaveProject([this]() {
-            if (viewer_->project_) {
-                events::cmd::SaveProject{viewer_->project_->getProjectOutputFolder().string()}.emit();
-            }
-        });
-
-        menu_bar_->setOnExit([this]() {
-            glfwSetWindowShouldClose(viewer_->getWindow(), true);
-        });
+        initMenuBar();
     }
 
     void GuiManager::shutdown() {

@@ -604,6 +604,10 @@ namespace gs::management {
         return true;
     }
 
+    bool Project::getIsProjectEmpty() const {
+        return project_data_.data_set_info.data_path.empty() && project_data_.outputs.plys.empty();
+    }
+
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
                                               const param::OptimizationParameters& opt,
                                               const std::string& project_name,
