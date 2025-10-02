@@ -553,7 +553,8 @@ namespace gs::management {
 
         setProjectOutputFolder(dst_dir);
         if (!fs::is_regular_file(output_file_name_)) {
-            LOG_ERROR("PortProjectToDir: {} orig path does not exists", output_file_name_.string());
+            // this can happen if user save an empty project with no data
+            LOG_DEBUG("PortProjectToDir: {} orig path does not exists", output_file_name_.string());
         }
         const std::string proj_filename = output_file_name_.filename().string();
         const fs::path dst_project_file_path = dst_dir / proj_filename;

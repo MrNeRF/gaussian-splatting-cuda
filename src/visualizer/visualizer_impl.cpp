@@ -189,9 +189,9 @@ namespace gs::visualizer {
             handleTrainingCompleted(event);
         });
 
-        // Listen to load file ( we need to update project)
+        // Listen to load dataset (we need to update project)
         cmd::LoadFile::when([this](const auto& cmd) {
-            handleLoadFileCommand(cmd);
+            handleLoadDataSetCommand(cmd);
         });
 
         // Listen to save project
@@ -586,13 +586,18 @@ namespace gs::visualizer {
         }
     }
 
-    void VisualizerImpl::handleLoadFileCommand(const events::cmd::LoadFile& cmd) {
+    void VisualizerImpl::handleLoadDataSetCommand(const events::cmd::LoadFile& cmd) {
         if (cmd.is_dataset && project_) {
             auto data_config = project_->getProjectData().data_set_info;
             data_config.data_path = cmd.path;
-            data_config.output_path.clear();
 
-            project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
+            if (project_->getIsTempProject()) {
+                data_config.output_path.clear();
+                project_ = gs::management::CreateTempNewProject(data_config, project_->getOptimizationParams());
+            } else {// else: project already exits (with output dir) - only need to replace data path
+                project_->setDataInfo(data_config);
+            }
+
             updateProjectOnModules();
         }
     }
