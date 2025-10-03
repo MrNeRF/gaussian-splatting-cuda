@@ -59,11 +59,11 @@ namespace {
 
         try {
             ::args::ArgumentParser parser(
-                "3D Gaussian Splatting CUDA Implementation\n",
-                "Lightning-fast CUDA implementation of 3D Gaussian Splatting algorithm.\n\n"
+                "LichtFeld Studio: High-performance 3D Gaussian Splatting. \n",
+                "High-performance CUDA implementation of 3D Gaussian Splatting algorithm.\n\n"
                 "Usage:\n"
-                "  Training:  gs_cuda --data-path <path> --output-path <path> [options]\n"
-                "  Viewing:   gs_cuda --view <path_to_ply> [options]\n");
+                "  Training: LichtFeld-Studio --data-path <path> --output-path <path> [options]\n"
+                "  Viewing:  LichtFeld-Studio --view <path_to_ply> [options]\n");
 
             // Define all arguments
             ::args::HelpFlag help(parser, "help", "Display help menu", {'h', "help"});
