@@ -73,7 +73,7 @@ namespace gs::gui::widgets {
 
         // Simple line plot using ImGui
         ImGui::PlotLines(
-            "",
+            "Plot##default",
             values,
             count,
             0,
