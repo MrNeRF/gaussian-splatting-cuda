@@ -59,8 +59,7 @@ namespace {
 
         try {
             ::args::ArgumentParser parser(
-                "LichtFeld Studio: High-performance 3D Gaussian Splatting. \n",
-                "High-performance CUDA implementation of 3D Gaussian Splatting algorithm.\n\n"
+                "LichtFeld Studio: High-performance CUDA implementation of 3D Gaussian Splatting algorithm. \n",
                 "Usage:\n"
                 "  Training: LichtFeld-Studio --data-path <path> --output-path <path> [options]\n"
                 "  Viewing:  LichtFeld-Studio --view <path_to_ply> [options]\n");
