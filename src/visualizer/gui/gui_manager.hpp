@@ -7,7 +7,6 @@
 #include "core/events.hpp"
 #include "gui/panels/menu_bar.hpp"
 #include "gui/ui_context.hpp"
-#include "gui/panels/menu_bar.hpp"
 #include "gui/windows/save_project_browser.hpp"
 #include "windows/project_changed_dialog_box.hpp"
 #include <GLFW/glfw3.h>
