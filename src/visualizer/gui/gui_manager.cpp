@@ -416,7 +416,8 @@ namespace gs::gui {
         }
 
         if (menu_bar_ && viewer_) {
-            menu_bar_->setIsProjectTemp(viewer_->getProject()->getIsTempProject());
+            auto project = viewer_->getProject();
+            menu_bar_->setIsProjectTemp(project ? project->getIsTempProject() : false);
         }
 
         // Render speed overlay if visible
