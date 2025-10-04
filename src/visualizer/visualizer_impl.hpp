@@ -119,7 +119,7 @@ namespace gs::visualizer {
         void setupComponentConnections();
         void handleLoadProjectCommand(const events::cmd::LoadProject& cmd);
         void handleTrainingCompleted(const events::state::TrainingCompleted& event);
-        void handleLoadDataSetCommand(const events::cmd::LoadFile& cmd);
+        void handleLoadFileCommand(const events::cmd::LoadFile& cmd);
         void handleSaveProject(const events::cmd::SaveProject& cmd);
 
         // Tool initialization

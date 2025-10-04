@@ -191,7 +191,7 @@ namespace gs::visualizer {
 
         // Listen to load dataset (we need to update project)
         cmd::LoadFile::when([this](const auto& cmd) {
-            handleLoadDataSetCommand(cmd);
+            handleLoadFileCommand(cmd);
         });
 
         // Listen to save project
@@ -591,7 +591,7 @@ namespace gs::visualizer {
         }
     }
 
-    void VisualizerImpl::handleLoadDataSetCommand(const events::cmd::LoadFile& cmd) {
+    void VisualizerImpl::handleLoadFileCommand(const events::cmd::LoadFile& cmd) {
         if (cmd.is_dataset && project_) {
             auto data_config = project_->getProjectData().data_set_info;
             data_config.data_path = cmd.path;
