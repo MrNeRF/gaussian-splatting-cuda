@@ -316,7 +316,7 @@ namespace gs::gui {
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Created by Mr Nerf");
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Created by LichtFeld Studio Authors");
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Licensed under GPLv3");
         }
