@@ -1011,28 +1011,26 @@ struct EquirectangularCameraModel : BaseCameraModel<EquirectangularCameraModel> 
 
 
     inline __device__ auto camera_ray_to_image_point(glm::fvec3 const& cam_ray, float margin_factor) const -> typename Base::ImagePointReturn {
-        auto dir = cam_ray / length(cam_ray);
-        auto longitude = std::atan2(dir.x, dir.z);
-        auto latitude = std::asin(dir.y);
+        auto azimuth = std::atan2(cam_ray.x, cam_ray.z);
+        auto elevation = std::asin(cam_ray.y / length(cam_ray));
 
-        auto px = (longitude / (2.f * PI) + 0.5f) * parameters.resolution[0];
-        auto py = (latitude / PI + 0.5f) * parameters.resolution[1];
-
-
+        auto px = (azimuth / (2.0f * PI) + 0.5f) * parameters.resolution[0];
+        auto py = (elevation / PI + 0.5f) * parameters.resolution[1];
+        auto p = glm::fvec2(px, py);
         auto valid = true;
         valid &= image_point_in_image_bounds_margin(
-            glm::fvec2(px, py), parameters.resolution, margin_factor);
+            p, parameters.resolution, margin_factor);
 
-        return {glm::fvec2(px, py), true};
+        return {p, true};
     }
 
     inline __device__ CameraRay image_point_to_camera_ray(glm::fvec2 image_point) const {
-        auto phi = 2.0 * PI * (((image_point.x + 0.5) / static_cast<float>(parameters.resolution[0])) - 0.5);
-        auto theta = PI * (((image_point.y + 0.5) / static_cast<float>(parameters.resolution[1])) - 0.5);
+        auto azimuth = 2.0 * PI * (image_point.x / static_cast<float>(parameters.resolution[0]) - 0.5);
+        auto elevation = PI * (image_point.y / static_cast<float>(parameters.resolution[1]) - 0.5);
 
-        auto dx = cos(theta) * sin(phi);
-        auto dy = sin(theta);
-        auto dz = cos(phi) * cos(theta);
+        auto dx = cos(elevation) * sin(azimuth);
+        auto dy = sin(elevation);
+        auto dz = cos(azimuth) * cos(elevation);
         auto ray = glm::fvec3(dx, dy, dz);
         return {ray / length(ray), true};
     }
