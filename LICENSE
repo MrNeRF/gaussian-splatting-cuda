@@ -672,3 +672,38 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <http://www.gnu.org/philosophy/why-not-lgpl.html>.
+
+
+18. Additional permission: CUDA Linking Exception (GPLv3 section 7)
+
+CUDA Linking Exception (GPLv3 section 7 - Additional Permission)
+
+As an additional permission under Section 7 of the GNU General Public License
+version 3, you are allowed to link this work, and works based on it, statically
+or dynamically, with the unmodified proprietary NVIDIA GPU libraries and runtime
+components required to build and run CUDA-based software, and to copy and
+distribute the resulting combined work under the terms of GPLv3.
+
+This additional permission applies only to the following NVIDIA components,
+including updates and bug-fix releases thereof: the CUDA Driver and Runtime
+libraries (e.g., libcuda, libcudart), CUDA math/accelerator libraries (e.g.,
+cuBLAS, cuBLASLt, cuFFT, cuRAND, cuSPARSE, cuSOLVER, NPP, NVJPEG), NVIDIA cuDNN,
+and, if used, other NVIDIA acceleration libraries commonly distributed for CUDA
+applications (e.g., NCCL, TensorRT, NVRTC). This permission does not extend to
+any other proprietary software.
+
+When you convey a combined work under this exception, you must still comply with
+the GPLv3 for all parts of this work that are not covered by this exception,
+including providing complete corresponding source code for this work and any
+derivative works of it. This exception does not grant any permission to modify,
+redistribute, or sublicense the NVIDIA components themselves; those remain
+governed by their respective licenses from NVIDIA.
+
+You may, at your option, remove or decline to apply this exception to your
+modified versions of this work. If you do not apply it, the ordinary terms of
+the GPLv3 will apply without this additional permission.
+
+This exception is intended to be narrowly construed to enable linking with the
+proprietary NVIDIA CUDA/cuDNN (and related) libraries needed to build and run
+this work, without imposing further restrictions beyond the NVIDIA licenses on
+recipients of the combined work.
