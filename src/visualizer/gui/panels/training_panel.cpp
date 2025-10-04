@@ -667,7 +667,6 @@ namespace gs::gui::panels {
     void DrawTrainingControls(const UIContext& ctx) {
         ImGui::Text("Training Control");
         ImGui::Separator();
-        ImGui::Separator();
 
         auto& state = TrainingPanelState::getInstance();
 
