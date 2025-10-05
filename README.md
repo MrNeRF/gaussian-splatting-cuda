@@ -56,7 +56,8 @@ LichtFeld Studio is a high-performance implementation of 3D Gaussian Splatting t
 Join our growing community for discussions, support, and updates:
 
 - **[Discord Community](https://discord.gg/TbxJST2BbC)** - Get help, share results, and discuss development
-- **[LichtFeld Studio FAQ](docs/docs/faq.md)** - Frequently Asked Questions about LichtFeld Studio
+- **[LichtFeld Studio FAQ](https://github.com/MrNeRF/LichtFeld-Studio/wiki/Frequently-Asked-Questions)** - Frequently Asked Questions about LichtFeld Studio
+- **[LichtFeld Studio Wiki](https://github.com/MrNeRF/LichtFeld-Studio/wiki/)** - Documentation WIKI
 - **[Website](https://mrnerf.com)** - Visit our website for more resources
 - **[Awesome 3D Gaussian Splatting](https://mrnerf.github.io/awesome-3D-gaussian-splatting/)** - Comprehensive paper list
 - **[@janusch_patas](https://twitter.com/janusch_patas)** - Follow for the latest updates
@@ -72,7 +73,7 @@ Join our growing community for discussions, support, and updates:
 **📅 Deadline:** None (open-ended)
 
 ## Installation
-See wiki
+Find out how to install in our [LichtFeld Studio Wiki](https://github.com/MrNeRF/LichtFeld-Studio/wiki/)
 
 ## Contributing
 
