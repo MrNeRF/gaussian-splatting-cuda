@@ -180,9 +180,6 @@ namespace gs::gui {
 
             if (ImGui::IsItemHovered()) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-                ImGui::SetTooltip("Click to open youtube tutorial");
-                ImGui::PopStyleColor();
                 if (ImGui::IsItemClicked()) {
                     openURL(reality_scan_url);
                 }
@@ -210,13 +207,11 @@ namespace gs::gui {
 
             if (ImGui::IsItemHovered()) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-                ImGui::SetTooltip("Click to open youtube tutorial");
-                ImGui::PopStyleColor();
-                if (ImGui::IsItemClicked()) {
-                    openURL(colmap_tutorial_url);
-                }
             }
+            if (ImGui::IsItemClicked()) {
+                openURL(colmap_tutorial_url);
+            }
+
             ImGui::Unindent(25.0f);
             ImGui::PopStyleColor(3);
 
@@ -237,18 +232,16 @@ namespace gs::gui {
 
             if (ImGui::IsItemHovered()) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-                ImGui::SetTooltip("Click to open FAQ");
-                ImGui::PopStyleColor();
-                if (ImGui::IsItemClicked()) {
-                    openURL(faq_url);
-                }
             }
+            if (ImGui::IsItemClicked()) {
+                openURL(faq_url);
+            }
+
             ImGui::Unindent(25.0f);
         }
         ImGui::End();
 
-        ImGui::PopStyleColor(7);
+        ImGui::PopStyleColor(5);
         ImGui::PopStyleVar(3);
     }
 
@@ -302,6 +295,19 @@ namespace gs::gui {
 
                 const ImVec4 labelColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
 
+                // Version
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(labelColor, "Version");
+                ImGui::TableNextColumn();
+                ImGui::TextWrapped("%s", GIT_TAGGED_VERSION);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                }
+                if (ImGui::IsItemClicked()) {
+                    ImGui::SetClipboardText(GIT_TAGGED_VERSION);
+                }
+
                 // Commit (short)
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -313,19 +319,6 @@ namespace gs::gui {
                 }
                 if (ImGui::IsItemClicked()) {
                     ImGui::SetClipboardText(GIT_COMMIT_HASH_SHORT);
-                }
-
-                // Commit (full)
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::TextColored(labelColor, "Full Hash");
-                ImGui::TableNextColumn();
-                ImGui::TextWrapped("%s", GIT_COMMIT_HASH_FULL);
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                }
-                if (ImGui::IsItemClicked()) {
-                    ImGui::SetClipboardText(GIT_COMMIT_HASH_FULL);
                 }
 
                 // Build Type
@@ -380,7 +373,6 @@ namespace gs::gui {
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                ImGui::SetTooltip("Click to open in browser");
             }
             if (ImGui::IsItemClicked()) {
                 openURL(repo_url);
@@ -393,7 +385,6 @@ namespace gs::gui {
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                ImGui::SetTooltip("Click to open in browser");
             }
             if (ImGui::IsItemClicked()) {
                 openURL(website_url);

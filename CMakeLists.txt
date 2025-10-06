@@ -24,9 +24,9 @@ execute_process(
 )
 
 execute_process(
-        COMMAND git rev-parse HEAD
+        COMMAND git describe --dirty
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE GIT_COMMIT_HASH_FULL
+        OUTPUT_VARIABLE GIT_TAGGED_VERSION
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
 )
@@ -36,12 +36,12 @@ if(NOT GIT_COMMIT_HASH_SHORT)
     set(GIT_COMMIT_HASH_SHORT "unknown")
 endif()
 
-if(NOT GIT_COMMIT_HASH_FULL)
-    set(GIT_COMMIT_HASH_FULL "unknown")
+if(NOT GIT_TAGGED_VERSION)
+    set(GIT_TAGGED_VERSION "unknown")
 endif()
 
 message(STATUS "Git commit (short): ${GIT_COMMIT_HASH_SHORT}")
-message(STATUS "Git commit (full): ${GIT_COMMIT_HASH_FULL}")
+message(STATUS "Git commit (full): ${GIT_TAGGED_VERSION}")
 
 # Setup
 get_filename_component(PROJ_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)

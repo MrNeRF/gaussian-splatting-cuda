@@ -12,7 +12,7 @@
 
 // Git commit information
 #define GIT_COMMIT_HASH_SHORT "@GIT_COMMIT_HASH_SHORT@"
-#define GIT_COMMIT_HASH_FULL  "@GIT_COMMIT_HASH_FULL@"
+#define GIT_TAGGED_VERSION  "@GIT_TAGGED_VERSION@"
 
 // Build type
 #cmakedefine DEBUG_BUILD
