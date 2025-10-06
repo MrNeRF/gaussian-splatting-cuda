@@ -423,7 +423,7 @@ namespace gs::management {
         std::lock_guard<std::mutex> lock(data_mutex_);
 
         LOG_DEBUG("Removing '{}' from project", name);
-        
+
         auto it = std::find_if(project_data_.outputs.plys.begin(), project_data_.outputs.plys.end(),
                                [&name](const PlyData& ply) { return ply.ply_name == name; });
 
