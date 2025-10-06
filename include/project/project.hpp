@@ -143,6 +143,7 @@ namespace gs::management {
         bool addPly(const PlyData& ply);
         bool addPly(bool imported, const std::filesystem::path& path, int iter, const std::string& _ply_name);
         void removePly(size_t index);
+        void removePly(const std::string& name);
         void renamePly(const std::string& old_name, const std::string& new_name);
         bool updatePlyPath(const std::string& ply_name, const std::filesystem::path& new_path);
 

@@ -419,6 +419,24 @@ namespace gs::management {
         }
     }
 
+    void Project::removePly(const std::string& name) {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+
+        LOG_DEBUG("Removing '{}' from project", name);
+        
+        auto it = std::find_if(project_data_.outputs.plys.begin(), project_data_.outputs.plys.end(),
+                               [&name](const PlyData& ply) { return ply.ply_name == name; });
+
+        if (it != project_data_.outputs.plys.end()) {
+            project_data_.outputs.plys.erase(it);
+            LOG_DEBUG("Project: Removed ply '{}'", name);
+        }
+
+        if (update_file_on_change_ && !output_file_name_.empty()) {
+            writeToFile();
+        }
+    }
+
     void Project::renamePly(const std::string& old_name, const std::string& new_name) {
         std::lock_guard<std::mutex> lock(data_mutex_);
 

@@ -246,6 +246,10 @@ namespace gs {
             splat_paths_.erase(name);
         }
 
+        if (lfs_project_) {
+            lfs_project_->removePly(name);
+        }
+
         // If no nodes left, transition to empty
         if (scene_.getNodeCount() == 0) {
             std::lock_guard<std::mutex> lock(state_mutex_);
