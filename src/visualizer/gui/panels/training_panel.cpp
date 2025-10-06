@@ -6,7 +6,7 @@
 #include "core/events.hpp"
 #include "core/logger.hpp"
 #include "gui/ui_widgets.hpp"
-#include "gui/utils/native_dialogs.hpp"
+#include "gui/utils/windows_utils.hpp"
 #include "visualizer_impl.hpp"
 
 #include <chrono>

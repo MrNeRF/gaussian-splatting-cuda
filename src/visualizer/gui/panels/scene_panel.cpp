@@ -4,13 +4,13 @@
 
 #include "gui/panels/scene_panel.hpp"
 #include "core/logger.hpp"
-#include "gui/utils/native_dialogs.hpp"
+#include "gui/utils/windows_utils.hpp"
 #include "gui/windows/image_preview.hpp"
+
 #include <algorithm>
 #include <filesystem>
 #include <format>
 #include <imgui.h>
-#include <ranges>
 #include <stdexcept>
 
 namespace gs::gui {
@@ -213,6 +213,40 @@ namespace gs::gui {
 
         // Make buttons smaller to fit the narrow panel
         float button_width = ImGui::GetContentRegionAvail().x;
+
+        if (ImGui::Button("Import dataset", ImVec2(button_width, 0))) {
+            // Request to show file browser
+            LOG_DEBUG("Opening file browser from scene panel");
+
+            // Fire the callback to open file browser with empty path
+            if (m_onDatasetLoad) {
+                m_onDatasetLoad(std::filesystem::path("")); // Empty path signals to open browser
+            }
+#ifdef WIN32
+            // show native windows file dialog for folder selection
+            OpenDatasetFolderDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+        }
+
+        if (ImGui::Button("Open .ply", ImVec2(button_width, 0))) {
+            // Request to show file browser
+            LOG_DEBUG("Opening file browser from scene panel");
+
+            // Fire the callback to open file browser with empty path
+            if (m_onDatasetLoad) {
+                m_onDatasetLoad(std::filesystem::path("")); // Empty path signals to open browser
+            }
+#ifdef WIN32
+            // show native windows file dialog for folder selection
+            OpenPlyFileDialog();
+
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+        }
 
         if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
             if (m_currentMode == DisplayMode::DatasetImages && !m_currentDatasetPath.empty()) {
