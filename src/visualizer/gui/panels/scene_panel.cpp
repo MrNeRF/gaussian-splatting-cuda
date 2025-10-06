@@ -387,6 +387,21 @@ namespace gs::gui {
 
         ImGui::Separator();
 
+        // Add PLY button
+        if (ImGui::Button("Add PLY", ImVec2(-1, 0))) {
+            // Open file browser for adding PLY
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = true}.emit();
+            LOG_DEBUG("Opening file browser to add PLY");
+#ifdef WIN32
+            // show native windows file dialog for folder selection
+            OpenPlyFileDialog();
+            // hide the file browser
+            events::cmd::ShowWindow{.window_name = "file_browser", .show = false}.emit();
+#endif // WIN32
+        }
+
+        ImGui::Separator();
+
         // Scene graph tree
         ImGui::BeginChild("SceneGraph", ImVec2(0, 0), true);
 
