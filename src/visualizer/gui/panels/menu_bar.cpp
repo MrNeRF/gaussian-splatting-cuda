@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include "gui/panels/menu_bar.hpp"
+#include "config.h"
 #include "core/logger.hpp"
 #include <imgui.h>
 
@@ -247,7 +248,7 @@ namespace gs::gui {
         }
         ImGui::End();
 
-        ImGui::PopStyleColor(5);
+        ImGui::PopStyleColor(7);
         ImGui::PopStyleVar(3);
     }
 
@@ -258,70 +259,160 @@ namespace gs::gui {
 
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize;
 
-        ImGui::SetNextWindowSize(ImVec2(700, 0), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(750, 0), ImGuiCond_Once);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 20.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 12.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 10.0f));
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.11f, 0.11f, 0.13f, 0.98f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.95f, 0.95f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.15f, 0.15f, 0.18f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.2f, 0.2f, 0.24f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.26f, 0.59f, 0.98f, 0.3f));
+        ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, ImVec4(0.2f, 0.2f, 0.24f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_TableBorderStrong, ImVec4(0.3f, 0.3f, 0.35f, 1.0f));
 
-        std::string version = "v0.1.3";
         const char* repo_url = "https://github.com/MrNeRF/LichtFeld-Studio";
+        const char* website_url = "https://lichtfeld.io";
 
         if (ImGui::Begin("About LichtFeld Studio", &show_about_window_, window_flags)) {
-            // Modern header
+            // Header
             ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "LICHTFELD STUDIO");
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s", version.c_str());
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
+            // Description
             ImGui::TextWrapped(
-                "A high-performance C++ and CUDA implementation of 3D Gaussian Splatting, "
-                "designed to fuse real and digital content seamlessly. Empowering research and development in "
-                "neural rendering with real-time visualization, training, and inspection of neural radiance fields.");
+                "A high-performance C++ and CUDA implementation of 3D Gaussian Splatting for "
+                "real-time neural rendering, training, and visualization.");
 
             ImGui::Spacing();
             ImGui::Spacing();
-            ImGui::Separator();
+
+            // Build Information Table
+            ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "BUILD INFORMATION");
             ImGui::Spacing();
 
-            ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "RESOURCES");
-            ImGui::Spacing();
-            ImGui::TextWrapped("Source code, documentation, and project details:");
+            if (ImGui::BeginTable("build_info_table", 2,
+                                  ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
 
-            ImGui::Indent(25.0f);
+                ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+                const ImVec4 labelColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
+
+                // Commit (short)
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(labelColor, "Commit");
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", GIT_COMMIT_HASH_SHORT);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                }
+                if (ImGui::IsItemClicked()) {
+                    ImGui::SetClipboardText(GIT_COMMIT_HASH_SHORT);
+                }
+
+                // Commit (full)
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(labelColor, "Full Hash");
+                ImGui::TableNextColumn();
+                ImGui::TextWrapped("%s", GIT_COMMIT_HASH_FULL);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                }
+                if (ImGui::IsItemClicked()) {
+                    ImGui::SetClipboardText(GIT_COMMIT_HASH_FULL);
+                }
+
+                // Build Type
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(labelColor, "Build Type");
+                ImGui::TableNextColumn();
+#ifdef DEBUG_BUILD
+                ImGui::Text("Debug");
+#else
+                ImGui::Text("Release");
+#endif
+
+                // Platform
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(labelColor, "Platform");
+                ImGui::TableNextColumn();
+#ifdef PLATFORM_WINDOWS
+                ImGui::Text("Windows");
+#elif defined(PLATFORM_LINUX)
+                ImGui::Text("Linux");
+#else
+                ImGui::Text("Unknown");
+#endif
+
+                // CUDA Interop
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(labelColor, "CUDA-GL Interop");
+                ImGui::TableNextColumn();
+#ifdef CUDA_GL_INTEROP_ENABLED
+                ImGui::Text("Enabled");
+#else
+                ImGui::Text("Disabled");
+#endif
+
+                ImGui::EndTable();
+            }
+
+            ImGui::Spacing();
+            ImGui::Spacing();
+
+            // Links
+            ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "LINKS");
+            ImGui::Spacing();
+
+            ImGui::Text("Repository:");
+            ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
-            ImGui::TextWrapped("%s", repo_url);
+            ImGui::Text("%s", repo_url);
             ImGui::PopStyleColor();
-
             if (ImGui::IsItemHovered()) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-                ImGui::SetTooltip("Click to open GitHub repository");
-                ImGui::PopStyleColor();
-                if (ImGui::IsItemClicked()) {
-                    openURL(repo_url);
-                }
+                ImGui::SetTooltip("Click to open in browser");
             }
-            ImGui::Unindent(25.0f);
+            if (ImGui::IsItemClicked()) {
+                openURL(repo_url);
+            }
+
+            ImGui::Text("Website:");
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+            ImGui::Text("%s", website_url);
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                ImGui::SetTooltip("Click to open in browser");
+            }
+            if (ImGui::IsItemClicked()) {
+                openURL(website_url);
+            }
 
             ImGui::Spacing();
+
+            // Credits & License
             ImGui::Separator();
             ImGui::Spacing();
-
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Created by LichtFeld Studio Authors");
-            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "LichtFeld Studio Authors");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), " | ");
+            ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Licensed under GPLv3");
         }
         ImGui::End();
 
-        ImGui::PopStyleColor(5);
+        ImGui::PopStyleColor(7);
         ImGui::PopStyleVar(3);
     }
 
