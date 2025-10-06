@@ -26,13 +26,12 @@ namespace gs::gui {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 8.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(12.0f, 6.0f));
         ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4(0.15f, 0.15f, 0.17f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_PopupBg,   ImVec4(0.12f, 0.12f, 0.14f, 1.0f)); // dark menus
-        ImGui::PushStyleColor(ImGuiCol_Header,    ImVec4(0.35f, 0.65f, 1.0f, 0.25f));
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f)); // dark menus
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.35f, 0.65f, 1.0f, 0.25f));
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.45f, 0.75f, 1.0f, 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.45f, 0.75f, 1.0f, 0.7f));
-        ImGui::PushStyleColor(ImGuiCol_Text,      ImVec4(0.95f, 0.95f, 0.95f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.45f, 0.75f, 1.0f, 0.7f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.95f, 0.95f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-
 
         if (ImGui::BeginMainMenuBar()) {
             // File menu
@@ -355,7 +354,7 @@ namespace gs::gui {
                     ImGui::Spacing();
 
                     if (ImGui::BeginTable("camera_controls_table", 2,
-                        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
+                                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
 
                         ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 350.0f);
                         ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthFixed, 200.0f);
@@ -418,7 +417,7 @@ namespace gs::gui {
                     ImGui::Spacing();
 
                     if (ImGui::BeginTable("shortcuts_table", 2,
-                        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
+                                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
 
                         ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                         ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 430.0f);

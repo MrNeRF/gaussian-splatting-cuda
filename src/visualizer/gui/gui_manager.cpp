@@ -10,13 +10,12 @@
 #include "gui/panels/tools_panel.hpp"
 #include "gui/panels/training_panel.hpp"
 #include "gui/ui_widgets.hpp"
+#include "gui/utils/windows_utils.hpp"
 #include "gui/windows/file_browser.hpp"
 #include "gui/windows/project_changed_dialog_box.hpp"
-#include "gui/utils/windows_utils.hpp"
 
 #include "internal/resource_paths.hpp"
 #include "visualizer_impl.hpp"
-
 
 #include <GLFW/glfw3.h>
 #include <chrono>
@@ -25,7 +24,6 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
-
 
 namespace gs::gui {
 

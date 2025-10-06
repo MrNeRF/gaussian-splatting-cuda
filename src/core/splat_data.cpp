@@ -168,11 +168,11 @@ namespace {
         }
     }
 
-    //returns the output path
+    // returns the output path
     std::filesystem::path write_sog_impl(const gs::SplatData& splat_data,
-                        const std::filesystem::path& root,
-                        int iteration,
-                        int kmeans_iterations) {
+                                         const std::filesystem::path& root,
+                                         int iteration,
+                                         int kmeans_iterations) {
         namespace fs = std::filesystem;
 
         // Create SOG subdirectory
@@ -478,7 +478,7 @@ namespace gs {
     std::filesystem::path SplatData::save_sog(const std::filesystem::path& root, int iteration, int kmeans_iterations, bool join_threads) const {
         // SOG must always be synchronous - k-means clustering is too heavy for async
         // and the shared data access patterns don't work well with async execution
-        return  write_sog_impl(*this, root, iteration, kmeans_iterations);
+        return write_sog_impl(*this, root, iteration, kmeans_iterations);
     }
 
     PointCloud SplatData::to_point_cloud() const {
