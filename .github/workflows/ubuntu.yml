@@ -22,6 +22,7 @@ jobs:
       VCPKG_ROOT: ${{ github.workspace }}/../vcpkg
       CC: gcc-14
       CXX: g++-14
+      VCPKG_BUILD_TYPE: release
 
     steps:
       - name: Checkout source

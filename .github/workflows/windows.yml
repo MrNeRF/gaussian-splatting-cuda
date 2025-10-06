@@ -18,6 +18,7 @@ jobs:
     runs-on: windows-2022
     env:
       VCPKG_ROOT: ${{ github.workspace }}\..\vcpkg
+      VCPKG_BUILD_TYPE: release
 
     steps:
       - name: Checkout source
