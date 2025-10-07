@@ -72,7 +72,8 @@ namespace {
             ::args::ValueFlag<std::string> view_ply(parser, "ply_file", "View a PLY file", {'v', "view"});
 
             // LichtFeldStudio project arguments
-            ::args::ValueFlag<std::string> project_name(parser, "proj_path", "LichtFeldStudio project path. Path must end with .ls", {"proj_path"});
+            ::args::ValueFlag<std::string> project_name(parser, "proj_path", "LichtFeldStudio project path. Path must end with .lfs", {"proj_path"});
+            ::args::ValueFlag<std::string> config_file(parser, "config_file", "LichtFeldStudio config file (json)", {"config"});
 
             // Training mode arguments
             ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to training data", {'d', "data-path"});
@@ -246,6 +247,7 @@ namespace {
                         mode));
                 }
             }
+
             if (strategy) {
                 const auto strat = ::args::get(strategy);
                 if (VALID_STRATEGIES.find(strat) == VALID_STRATEGIES.end()) {
@@ -258,6 +260,13 @@ namespace {
                 // strategy must be set immediately to ensure correct JSON loading
                 // in `read_optim_params_from_json()`
                 params.optimization.strategy = strat;
+            }
+
+            if (config_file) {
+                params.optimization.config_file = ::args::get(config_file);
+                if (!strategy) {
+                    params.optimization.strategy = ""; // Clear strategy to avoid using default strategy for evaulation of conflict
+                }
             }
 
             if (pose_opt) {
@@ -288,6 +297,7 @@ namespace {
                                         num_workers_val = num_workers ? std::optional<int>(::args::get(num_workers)) : std::optional<int>(),
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
                                         project_name_val = project_name ? std::optional<std::string>(::args::get(project_name)) : std::optional<std::string>(),
+                                        config_file_val = config_file ? std::optional<std::string>(::args::get(config_file)) : std::optional<std::string>(),
                                         images_folder_val = images_folder ? std::optional<std::string>(::args::get(images_folder)) : std::optional<std::string>(),
                                         test_every_val = test_every ? std::optional<int>(::args::get(test_every)) : std::optional<int>(),
                                         steps_scaler_val = steps_scaler ? std::optional<float>(::args::get(steps_scaler)) : std::optional<float>(),
@@ -411,6 +421,10 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
     // Parse command line arguments
     auto parse_result = parse_arguments(convert_args(argc, argv), *params);
+
+    std::string strategy = params->optimization.strategy; // empty when config files is used and not passed as command line argument
+    std::string config_file = params->optimization.config_file;
+
     if (!parse_result) {
         return std::unexpected(parse_result.error());
     }
@@ -422,12 +436,27 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
         std::exit(0);
     }
 
-    auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
-    if (!opt_params_result) {
-        return std::unexpected(std::format("Failed to load optimization parameters: {}",
-                                           opt_params_result.error()));
+    if (config_file != "") {
+        // Load parameters from JSON config file if provided
+        auto opt_params_result = gs::param::read_optim_params_from_custom_json(config_file);
+        if (!opt_params_result) {
+            return std::unexpected(std::format("Failed to load config file: {}", opt_params_result.error()));
+        }
+        params->optimization = *opt_params_result;
+    } else {
+        auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
+        if (!opt_params_result) {
+            return std::unexpected(std::format("Failed to load optimization parameters: {}",
+                                               opt_params_result.error()));
+        }
+        params->optimization = *opt_params_result;
     }
-    params->optimization = *opt_params_result;
+
+    // if a config file was used and strategy was also passed as command line argument, ensure they match 
+    if (config_file != "" && strategy != "" && strategy != params->optimization.strategy) {
+        LOG_WARN("Conflict between strategy in config file and --strategy on command line ");
+        return std::unexpected(std::format("Conflict between strategy in config file and --strategy on command line "));
+    }
 
     // Apply command line overrides
     if (apply_overrides) {

@@ -487,6 +487,35 @@ namespace gs {
 
         /**
          * @brief Read optimization parameters from JSON file
+         * @param[in] path Path to the JSON file (can be absolute or relative)
+         * @return Expected OptimizationParameters or error message
+         */
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_custom_json(const std::string path) {
+            auto json_result = read_json_file(path);
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
+
+            auto json = *json_result;
+
+            // Create default parameters for verification
+            OptimizationParameters defaults;
+
+            // Verify parameters before reading
+            verify_optimization_parameters(defaults, json);
+
+            try {
+                OptimizationParameters params = OptimizationParameters::from_json(json);
+
+                return params;
+
+            } catch (const std::exception& e) {
+                return std::unexpected(std::format("Error parsing optimization parameters: {}", e.what()));
+            }
+        }
+
+        /**
+         * @brief Read optimization parameters from JSON file
          * @param[in] strategy Optimization strategy to load parameters for
          * @return Expected OptimizationParameters or error message
          */
