@@ -72,7 +72,7 @@ namespace gs::loader {
         return image_path;
     }
 
-    std::tuple<std::vector<CameraData>, torch::Tensor> read_transforms_cameras_and_images(
+    std::tuple<std::vector<CameraData>, torch::Tensor, std::optional<std::tuple<std::vector<std::string>, std::vector<std::string>>>> read_transforms_cameras_and_images(
         const std::filesystem::path& transPath) {
 
         LOG_TIMER_TRACE("Read transforms file");
@@ -272,7 +272,34 @@ namespace gs::loader {
 
         LOG_INFO("Loaded {} cameras from transforms file", camerasdata.size());
 
-        return {camerasdata, center};
+        if (std::filesystem::is_regular_file(dir_path / "train.txt") &&
+            std::filesystem::is_regular_file(dir_path / "test.txt")) {
+            LOG_DEBUG("Found train.txt and test.txt files, loading image splits");
+
+            std::ifstream train_file(dir_path / "train.txt");
+            std::ifstream val_file(dir_path / "test.txt");
+
+            std::vector<std::string> train_images;
+            std::vector<std::string> val_images;
+
+            std::string line;
+            while (std::getline(train_file, line)) {
+                if (!line.empty()) {
+                    train_images.push_back(line);
+                }
+            }
+            while (std::getline(val_file, line)) {
+                if (!line.empty()) {
+                    val_images.push_back(line);
+                }
+            }
+
+            LOG_INFO("Loaded {} training images and {} validation images", train_images.size(), val_images.size());
+
+            return {camerasdata, center, std::make_tuple(train_images, val_images)};
+        }
+
+        return {camerasdata, center, std::nullopt};
     }
 
     PointCloud generate_random_point_cloud() {
