@@ -12,8 +12,36 @@
 #include <print>
 #include <set>
 #include <unordered_map>
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 namespace {
+
+            /**
+     * @brief Get the path to a configuration file
+     * @param filename Name of the configuration file
+     * @return std::filesystem::path Full path to the configuration file
+     */
+    std::filesystem::path get_config_path(const std::string& filename) {
+#ifdef _WIN32
+        char executablePathWindows[MAX_PATH];
+        GetModuleFileNameA(nullptr, executablePathWindows, MAX_PATH);
+        std::filesystem::path executablePath = std::filesystem::path(executablePathWindows);
+        std::filesystem::path searchDir = executablePath.parent_path();
+        while (!searchDir.empty() && !std::filesystem::exists(searchDir / "parameter" / filename)) {
+            searchDir = searchDir.parent_path();
+        }
+
+        if (searchDir.empty()) {
+            throw std::runtime_error("could not find " + (std::filesystem::path("parameter") / filename).string());
+        }
+#else
+        std::filesystem::path executablePath = std::filesystem::canonical("/proc/self/exe");
+        std::filesystem::path searchDir = executablePath.parent_path().parent_path();
+#endif
+        return searchDir / "parameter" / filename;
+    }
 
     enum class ParseResult {
         Success,
@@ -267,7 +295,7 @@ namespace {
             if (config_file) {
                 params.optimization.config_file = ::args::get(config_file);
                 if (!strategy) {
-                    params.optimization.strategy = ""; // Clear strategy to avoid using default strategy for evaulation of conflict
+                    params.optimization.strategy = ""; // Clear strategy to avoid using default strategy for evaluation of conflict
                 }
             }
 
@@ -426,6 +454,7 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
     std::string strategy = params->optimization.strategy; // empty when config files is used and not passed as command line argument
     std::string config_file = params->optimization.config_file;
+    std::filesystem::path config_file_to_read = config_file != "" ? config_file : get_config_path(params->optimization.strategy + "_optimization_params.json");
 
     if (!parse_result) {
         return std::unexpected(parse_result.error());
@@ -438,26 +467,17 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
         std::exit(0);
     }
 
-    if (config_file != "") {
-        // Load parameters from JSON config file if provided
-        auto opt_params_result = gs::param::read_optim_params_from_custom_json(config_file);
-        if (!opt_params_result) {
-            return std::unexpected(std::format("Failed to load config file: {}", opt_params_result.error()));
-        }
-        params->optimization = *opt_params_result;
-    } else {
-        auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
-        if (!opt_params_result) {
-            return std::unexpected(std::format("Failed to load optimization parameters: {}",
-                                               opt_params_result.error()));
-        }
-        params->optimization = *opt_params_result;
+    auto opt_params_result = gs::param::read_optim_params_from_json(config_file_to_read);
+    if (!opt_params_result) {
+        return std::unexpected(std::format("Failed to load optimization parameters: {}",
+                                            opt_params_result.error()));
     }
+    params->optimization = *opt_params_result;
 
-    // if a config file was used and strategy was also passed as command line argument, ensure they match 
+    // if a config file was used and strategy was also passed as command line argument, ensure they match
     if (config_file != "" && strategy != "" && strategy != params->optimization.strategy) {
-        LOG_WARN("Conflict between strategy in config file and --strategy on command line ");
-        return std::unexpected(std::format("Conflict between strategy in config file and --strategy on command line "));
+        LOG_ERROR("Conflict between strategy in config file and --strategy on command line");
+        return std::unexpected(std::format("Conflict between strategy in config file and --strategy on command line"));
     }
 
     // Apply command line overrides

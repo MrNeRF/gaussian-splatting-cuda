@@ -113,8 +113,7 @@ namespace gs {
         };
 
         // Modern C++23 functions returning expected values
-        std::expected<OptimizationParameters, std::string> read_optim_params_from_json(const std::string strategy);
-        std::expected<OptimizationParameters, std::string> read_optim_params_from_custom_json(const std::string strategy);
+        std::expected<OptimizationParameters, std::string> read_optim_params_from_json(std::filesystem::path& path);
 
         // Save training parameters to JSON
         std::expected<void, std::string> save_training_parameters_to_json(
