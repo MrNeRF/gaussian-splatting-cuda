@@ -18,7 +18,7 @@
 
 namespace {
 
-            /**
+    /**
      * @brief Get the path to a configuration file
      * @param filename Name of the configuration file
      * @return std::filesystem::path Full path to the configuration file
@@ -470,7 +470,7 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
     auto opt_params_result = gs::param::read_optim_params_from_json(config_file_to_read);
     if (!opt_params_result) {
         return std::unexpected(std::format("Failed to load optimization parameters: {}",
-                                            opt_params_result.error()));
+                                           opt_params_result.error()));
     }
     params->optimization = *opt_params_result;
 

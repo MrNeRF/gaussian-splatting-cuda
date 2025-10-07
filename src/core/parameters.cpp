@@ -25,7 +25,6 @@ namespace gs {
     namespace param {
         namespace {
 
-
             /**
              * @brief Read and parse a JSON configuration file
              * @param path Path to the JSON file

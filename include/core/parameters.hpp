@@ -83,7 +83,7 @@ namespace gs {
             float init_rho = 0.0005f;
             float prune_ratio = 0.6f;
 
-            std::string config_file = "";   
+            std::string config_file = "";
 
             nlohmann::json to_json() const;
             static OptimizationParameters from_json(const nlohmann::json& j);
