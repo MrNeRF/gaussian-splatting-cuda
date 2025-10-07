@@ -73,11 +73,13 @@ namespace {
 
             // LichtFeldStudio project arguments
             ::args::ValueFlag<std::string> project_name(parser, "proj_path", "LichtFeldStudio project path. Path must end with .lfs", {"proj_path"});
-            ::args::ValueFlag<std::string> config_file(parser, "config_file", "LichtFeldStudio config file (json)", {"config"});
 
             // Training mode arguments
             ::args::ValueFlag<std::string> data_path(parser, "data_path", "Path to training data", {'d', "data-path"});
             ::args::ValueFlag<std::string> output_path(parser, "output_path", "Path to output", {'o', "output-path"});
+
+            // config file argument
+            ::args::ValueFlag<std::string> config_file(parser, "config_file", "LichtFeldStudio config file (json)", {"config"});
 
             // Optional value arguments
             ::args::ValueFlag<uint32_t> iterations(parser, "iterations", "Number of iterations", {'i', "iter"});
