@@ -829,8 +829,13 @@ namespace gs::training {
                                 cam_to_use->load_image_size(params_.dataset.resize_factor, params_.dataset.max_width);
                             }
 
-                            RenderOutput rendered_timelapse_output = fast_rasterize(
-                                *cam_to_use, strategy_->get_model(), background_);
+                            RenderOutput rendered_timelapse_output;
+                            if (params_.optimization.gut) {
+                                rendered_timelapse_output = rasterize(*cam_to_use, strategy_->get_model(), bg, 1.0f, false,
+                                                                     false, RenderMode::RGB, nullptr);
+                            } else {
+                                rendered_timelapse_output = fast_rasterize(*cam_to_use, strategy_->get_model(), background_);
+                            }
 
                             // Get folder name to save in by stripping file extension
                             std::string folder_name = loader::strip_extension(img_name);
