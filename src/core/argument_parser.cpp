@@ -454,7 +454,7 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
 
     std::string strategy = params->optimization.strategy; // empty when config files is used and not passed as command line argument
     std::string config_file = params->optimization.config_file;
-    std::filesystem::path config_file_to_read = config_file != "" ? config_file : get_config_path(params->optimization.strategy + "_optimization_params.json");
+    std::filesystem::path config_file_to_read = config_file != "" ? std::filesystem::u8path(config_file) : get_config_path(params->optimization.strategy + "_optimization_params.json");
 
     if (!parse_result) {
         return std::unexpected(parse_result.error());
