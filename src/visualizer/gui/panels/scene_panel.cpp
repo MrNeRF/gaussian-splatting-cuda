@@ -515,8 +515,8 @@ namespace gs::gui {
                             LOG_DEBUG("Starting rename for PLY '{}'", node.name);
                         }
                         if (ImGui::MenuItem("Remove PLY")) {
-                            events::cmd::RemovePLY{.name = node.name}.emit();
                             LOG_INFO("Removing PLY '{}' via context menu", node.name);
+                            events::cmd::RemovePLY{.name = node.name}.emit();
                         }
                         ImGui::EndPopup();
                     }

@@ -483,6 +483,12 @@ namespace gs::gui {
 
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
+                        ImGui::TextColored(actionColor, "* Navigate Scene (Up/Down)");
+                        ImGui::TableNextColumn();
+                        ImGui::TextColored(controlColor, "Q, U");
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
                         ImGui::TextColored(actionColor, "* Adjust Movement Speed");
                         ImGui::TableNextColumn();
                         ImGui::TextColored(controlColor, "Ctrl + +/-");
@@ -498,27 +504,56 @@ namespace gs::gui {
                 if (ImGui::BeginTabItem("Shortcuts")) {
                     ImGui::Spacing();
 
-                    if (ImGui::BeginTable("shortcuts_table", 2,
+                    if (ImGui::BeginTable("shortcuts_table", 3,
                                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
 
-                        ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-                        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 430.0f);
+                        // Calculate available width and distribute columns
+                        float charWidth = ImGui::CalcTextSize("K").x;
+
+                        float keyWidth = 10 * charWidth; // Fixed width for key column
+                        float stateActionWidth = 40 * charWidth;
+                        float actionWidth = 40 * charWidth;
+
+                        ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, keyWidth);
+                        ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, stateActionWidth);
+                        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, actionWidth);
+
                         ImGui::TableHeadersRow();
 
                         const ImVec4 keyColor = ImVec4(0.4f, 0.7f, 1.0f, 1.0f);
+                        const ImVec4 StateColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
                         const ImVec4 actionColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
 
-                        ImGui::TableNextRow();
-                        ImGui::TableNextColumn();
-                        ImGui::TextColored(keyColor, "G");
-                        ImGui::TableNextColumn();
-                        ImGui::TextColored(actionColor, "> Compare ground truth images");
+                        // go to the next line if width does not fit the text
+                        auto WrappedTextColored = [](const ImVec4& color, const char* text) {
+                            ImGui::PushTextWrapPos(ImGui::GetColumnWidth() + ImGui::GetCursorPosX());
+                            ImGui::TextColored(color, "%s", text);
+                            ImGui::PopTextWrapPos();
+                        };
 
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::TextColored(keyColor, "F2");
+                        WrappedTextColored(keyColor, "G");
                         ImGui::TableNextColumn();
-                        ImGui::TextColored(actionColor, "> Rename ply file");
+                        WrappedTextColored(StateColor, "Image selected in Images panel");
+                        ImGui::TableNextColumn();
+                        WrappedTextColored(actionColor, "Split screen comparison between ground truth image and model image");
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        WrappedTextColored(keyColor, "V");
+                        ImGui::TableNextColumn();
+                        WrappedTextColored(StateColor, "Two plys selected in Ply panel");
+                        ImGui::TableNextColumn();
+                        WrappedTextColored(actionColor, "Split screen comparison between plys");
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        WrappedTextColored(keyColor, "F2");
+                        ImGui::TableNextColumn();
+                        WrappedTextColored(StateColor, "Ply selected in Ply panel");
+                        ImGui::TableNextColumn();
+                        WrappedTextColored(actionColor, "Rename ply file");
 
                         ImGui::EndTable();
                     }
