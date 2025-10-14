@@ -8,11 +8,41 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <unordered_map>
+
+namespace gs::system {
+    /**
+     * @brief Get total physical memory in bytes
+     * @return Total physical RAM in bytes, or default value if unavailable
+     */
+    std::size_t get_total_physical_memory();
+
+    /**
+     * @brief Get available physical memory in bytes
+     * @return Available physical RAM in bytes, or default value if unavailable
+     */
+    std::size_t get_available_physical_memory();
+
+    /**
+     * @brief Get memory usage percentage (0.0 to 1.0)
+     * @return Ratio of used memory to total memory
+     */
+    double get_memory_usage_ratio();
+} // namespace gs::system
 
 namespace gs::loader {
     struct LoadParams {
         int resize_factor;
         int max_width;
+    };
+
+    struct CachedImageData {
+        std::vector<unsigned char> data;
+        int width;
+        int height;
+        int channels;
+        std::size_t size_bytes;
+        std::chrono::steady_clock::time_point last_access;
     };
 
     class CacheLoader {
@@ -41,11 +71,11 @@ namespace gs::loader {
         }
 
         // Main method - to be implemented
-        std::tuple<unsigned char*, int, int, int> load_cached_image(const std::filesystem::path& path, const LoadParams& params);
+        [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image(const std::filesystem::path& path, const LoadParams& params);
 
     private:
-        std::tuple<unsigned char*, int, int, int> CacheLoader::load_cached_image_from_cpu(const std::filesystem::path& path, const LoadParams& params);
-        std::tuple<unsigned char*, int, int, int> CacheLoader::load_cached_image_from_fs(const std::filesystem::path& path, const LoadParams& params);
+        [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image_from_cpu(const std::filesystem::path& path, const LoadParams& params);
+        [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image_from_fs(const std::filesystem::path& path, const LoadParams& params);
         // Private constructor
         CacheLoader(
             const std::filesystem::path& cache_folder,
@@ -60,6 +90,18 @@ namespace gs::loader {
         bool use_cpu_memory_;
         float min_cpu_free_memory_ratio_ = 0.1; // make sure at least 10% RAM is free
         std::size_t min_cpu_free_GB_ = 1;       // min GB we want to be free
+
+        // CPU cache storage
+        std::unordered_map<std::string, CachedImageData> cpu_cache_;
+        std::mutex cpu_cache_mutex_;
+        std::set<std::string> image_being_loaded_cpu_;
+
+        // Helper methods
+        std::string generate_cache_key(const std::filesystem::path& path, const LoadParams& params) const;
+        bool has_sufficient_memory(std::size_t required_bytes) const;
+        void evict_if_needed(std::size_t required_bytes);
+        void evict_until_statisfied();
+        std::size_t get_cpu_cache_size() const;
 
         // FS cache params
         std::filesystem::path cache_folder_;
