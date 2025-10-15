@@ -890,7 +890,9 @@ namespace gs::training {
         is_running_ = true; // Now we can start
         LOG_INFO("Starting training loop with {} workers", params_.optimization.num_workers);
 
-        auto& loader = gs::loader::CacheLoader::getInstance(true, true);
+        auto& loader = gs::loader::CacheLoader::getInstance(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
+        //in case we call getInstance multiple times and cache parameters were changed by user
+        loader.update_cache_params(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
         loader.clean_cache_folders();
         loader.create_new_cache_folder();
 

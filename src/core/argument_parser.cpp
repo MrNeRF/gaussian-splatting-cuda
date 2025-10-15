@@ -164,7 +164,10 @@ namespace {
                                                                 {"2", 2},
                                                                 {"4", 4},
                                                                 {"8", 8}});
+
             ::args::ValueFlag<int> max_width(parser, "max_width", "Max width of images in px (default: 3840)", {"max-width"});
+            ::args::ValueFlag<bool> use_cpu_cache(parser, "use_cpu_cache", "if true - try using cpu memory to cache images (default: true)", {"use_cpu_cache"});
+            ::args::ValueFlag<bool> use_fs_cache(parser, "use_cpu_cache", "if true - try using temporary file system to cache images (default: true)", {"use_cpu_cache"});
 
             // Parse arguments
             try {
@@ -323,7 +326,9 @@ namespace {
                                         // Capture values, not references
                                         iterations_val = iterations ? std::optional<uint32_t>(::args::get(iterations)) : std::optional<uint32_t>(),
                                         resize_factor_val = resize_factor ? std::optional<int>(::args::get(resize_factor)) : std::optional<int>(1), // default 1
-                                        max_width_val = max_width ? std::optional<int>(::args::get(max_width)) : std::optional<int>(3840),          // default 3840
+                                        max_width_val = max_width ? std::optional<int>(::args::get(max_width)) : std::optional<int>(3840),       // default 3840
+                                        use_cpu_cache_val = use_cpu_cache ? std::optional<bool>(::args::get(use_cpu_cache)) : std::optional<bool>(true),
+                                        use_fs_cache_val = use_fs_cache ? std::optional<bool>(::args::get(use_fs_cache)) : std::optional<bool>(true),
                                         num_workers_val = num_workers ? std::optional<int>(::args::get(num_workers)) : std::optional<int>(),
                                         max_cap_val = max_cap ? std::optional<int>(::args::get(max_cap)) : std::optional<int>(),
                                         project_name_val = project_name ? std::optional<std::string>(::args::get(project_name)) : std::optional<std::string>(),
@@ -376,6 +381,8 @@ namespace {
                 setVal(iterations_val, opt.iterations);
                 setVal(resize_factor_val, ds.resize_factor);
                 setVal(max_width_val, ds.max_width);
+                setVal(use_cpu_cache_val, ds.loading_params.use_cpu_memory);
+                setVal(use_fs_cache_val, ds.loading_params.use_fs_cache);
                 setVal(num_workers_val, opt.num_workers);
                 setVal(max_cap_val, opt.max_cap);
                 setVal(project_name_val, ds.project_path);

@@ -315,7 +315,7 @@ namespace gs::loader {
         // If another thread is loading, fall back to direct load
 
         if (is_image_being_loaded) {
-            LOG_INFO("Image {} is being loaded by another thread, loading directly", cache_key);
+            LOG_DEBUG("Image {} is being loaded by another thread, loading directly", cache_key);
             if (use_fs_cache_) {
                 return load_cached_image_from_fs(path, params);
             }
@@ -420,16 +420,16 @@ namespace gs::loader {
     }
 
     std::tuple<unsigned char*, int, int, int> CacheLoader::load_cached_image(const std::filesystem::path& path, const LoadParams& params) {
-        print_cache_status();
+
         if (use_cpu_memory_) {
+            print_cache_status();
             return load_cached_image_from_cpu(path, params);
         }
         if (use_fs_cache_) {
-
             return load_cached_image_from_fs(path, params);
         }
 
-        return load_image(path, params.max_width, params.resize_factor);
+        return load_image(path, params.resize_factor, params.max_width);
     }
 
     void CacheLoader::print_cache_status() const {

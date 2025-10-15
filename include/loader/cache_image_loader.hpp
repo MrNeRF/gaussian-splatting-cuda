@@ -75,6 +75,11 @@ namespace gs::loader {
         void create_new_cache_folder();
         void clean_cache_folders();
 
+        void update_cache_params(bool use_cpu_memory, bool use_fs_cache) {
+            use_cpu_memory_ = use_cpu_memory;
+            use_fs_cache_ = use_fs_cache;
+        }
+
     private:
         [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image_from_cpu(const std::filesystem::path& path, const LoadParams& params);
         [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image_from_fs(const std::filesystem::path& path, const LoadParams& params);
