@@ -110,10 +110,11 @@ namespace gs::loader {
         std::mutex cache_mutex_;
         std::set<std::string> image_being_saved_;
 
-        const bool print_cache_status_ = true;
+        // log/debug memebers
         mutable std::mutex counter_mutex_;
+        const bool print_cache_status_ = true;
         mutable int load_counter_ = 0;
-        const int print_status_freq_num_ = 100; // every print_status_freq_num calls for load print cache status
+        const int print_status_freq_num_ = 500; // every print_status_freq_num calls for load print cache status
 
         const std::string LFS_CACHE_PREFIX = "lfs_cache_";
     };

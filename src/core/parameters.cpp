@@ -491,6 +491,23 @@ namespace gs {
             }
         }
 
+        std::expected<LoadingParams, std::string> read_loading_params_from_json(std::filesystem::path& path) {
+            auto json_result = read_json_file(path);
+
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
+            auto json = *json_result;
+            try {
+                LoadingParams params = LoadingParams::from_json(json);
+
+                return params;
+
+            } catch (const std::exception& e) {
+                return std::unexpected(std::format("Error parsing loading parameters: {}", e.what()));
+            }
+        }
+
         /**
          * @brief Save full training parameters (dataset + optimization) to JSON
          * @param params The full training parameters
@@ -511,6 +528,8 @@ namespace gs {
                 json["dataset"]["resize_factor"] = params.dataset.resize_factor;
                 json["dataset"]["test_every"] = params.dataset.test_every;
                 json["dataset"]["max_width"] = params.dataset.max_width;
+
+                json["loading_params"] = params.loading_params.to_json();
 
                 // Optimization configuration
                 nlohmann::json opt_json = params.optimization.to_json();
@@ -540,6 +559,50 @@ namespace gs {
             } catch (const std::exception& e) {
                 return std::unexpected(std::format("Error saving training parameters: {}", e.what()));
             }
+        }
+
+        LoadingParams LoadingParams::from_json(const nlohmann::json& j) {
+
+            bool use_cpu_memory = true;
+            float min_cpu_free_memory_ratio = 0.1f; // make sure at least 10% RAM is free
+            std::size_t min_cpu_free_GB = 1;        // min GB we want to be free
+            bool use_fs_cache = true;
+            bool print_cache_status = true;
+            int print_status_freq_num = 500; // every print_status_freq_num calls for load print cache status
+
+            LoadingParams params;
+            if (j.contains("use_cpu_memory")) {
+                params.use_cpu_memory = j["use_cpu_memory"];
+            }
+            if (j.contains("min_cpu_free_memory_ratio")) {
+                params.min_cpu_free_memory_ratio = j["min_cpu_free_memory_ratio"];
+            }
+            if (j.contains("min_cpu_free_GB")) {
+                params.min_cpu_free_GB = j["min_cpu_free_GB"];
+            }
+            if (j.contains("use_fs_cache")) {
+                params.use_fs_cache = j["use_fs_cache"];
+            }
+            if (j.contains("print_cache_status")) {
+                params.print_cache_status = j["print_cache_status"];
+            }
+            if (j.contains("print_status_freq_num")) {
+                params.print_status_freq_num = j["print_status_freq_num"];
+            }
+
+            return params;
+        }
+
+        nlohmann::json LoadingParams::to_json() const {
+            nlohmann::json loading_json;
+            loading_json["use_cpu_memory"] = use_cpu_memory;
+            loading_json["min_cpu_free_memory_ratio"] = min_cpu_free_memory_ratio;
+            loading_json["min_cpu_free_GB"] = min_cpu_free_GB;
+            loading_json["use_fs_cache"] = use_fs_cache;
+            loading_json["print_cache_status"] = print_cache_status;
+            loading_json["print_status_freq_num"] = print_status_freq_num;
+
+            return loading_json;
         }
 
     } // namespace param

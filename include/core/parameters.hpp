@@ -101,9 +101,22 @@ namespace gs {
             int max_width = 3840;
         };
 
+        struct LoadingParams {
+            bool use_cpu_memory = true;
+            float min_cpu_free_memory_ratio = 0.1f; // make sure at least 10% RAM is free
+            std::size_t min_cpu_free_GB = 1;        // min GB we want to be free
+            bool use_fs_cache = true;
+            bool print_cache_status = true;
+            int print_status_freq_num = 500; // every print_status_freq_num calls for load print cache status
+
+            nlohmann::json to_json() const;
+            static LoadingParams from_json(const nlohmann::json& j);
+        };
+
         struct TrainingParameters {
             DatasetConfig dataset;
             OptimizationParameters optimization;
+            LoadingParams loading_params;
 
             // Viewer mode specific
             std::filesystem::path ply_path = "";
@@ -114,6 +127,8 @@ namespace gs {
 
         // Modern C++23 functions returning expected values
         std::expected<OptimizationParameters, std::string> read_optim_params_from_json(std::filesystem::path& path);
+
+        std::expected<LoadingParams, std::string> read_loading_params_from_json(std::filesystem::path& path);
 
         // Save training parameters to JSON
         std::expected<void, std::string> save_training_parameters_to_json(

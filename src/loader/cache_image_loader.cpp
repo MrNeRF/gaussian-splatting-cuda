@@ -150,6 +150,10 @@ namespace gs::loader {
 
     CacheLoader::CacheLoader(bool use_cpu_memory, bool use_fs_cache) : use_cpu_memory_(use_cpu_memory), use_fs_cache_(use_fs_cache) {
         create_new_cache_folder();
+        if (min_cpu_free_memory_ratio_ < 0 || min_cpu_free_memory_ratio_ > 1) {
+            LOG_WARN("min_cpu_free_memory_ratio_ is outsid [0,1] interval = {}",min_cpu_free_memory_ratio_);
+            min_cpu_free_memory_ratio_ = std::clamp(min_cpu_free_memory_ratio_, 0.0f, 1.0f);
+        }
     }
 
     void CacheLoader::create_new_cache_folder() {
