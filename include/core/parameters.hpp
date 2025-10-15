@@ -89,18 +89,6 @@ namespace gs {
             static OptimizationParameters from_json(const nlohmann::json& j);
         };
 
-        struct DatasetConfig {
-            std::filesystem::path data_path = "";
-            std::filesystem::path output_path = "";
-            std::filesystem::path project_path = ""; // if path is relative it will be saved to output_path/project_name.ls
-            std::string images = "images";
-            int resize_factor = -1;
-            int test_every = 8;
-            std::vector<std::string> timelapse_images = {};
-            int timelapse_every = 50;
-            int max_width = 3840;
-        };
-
         struct LoadingParams {
             bool use_cpu_memory = true;
             float min_cpu_free_memory_ratio = 0.1f; // make sure at least 10% RAM is free
@@ -113,10 +101,25 @@ namespace gs {
             static LoadingParams from_json(const nlohmann::json& j);
         };
 
+        struct DatasetConfig {
+            std::filesystem::path data_path = "";
+            std::filesystem::path output_path = "";
+            std::filesystem::path project_path = ""; // if path is relative it will be saved to output_path/project_name.ls
+            std::string images = "images";
+            int resize_factor = -1;
+            int test_every = 8;
+            std::vector<std::string> timelapse_images = {};
+            int timelapse_every = 50;
+            int max_width = 3840;
+            LoadingParams loading_params;
+
+            nlohmann::json to_json() const;
+            static DatasetConfig from_json(const nlohmann::json& j);
+        };
+
         struct TrainingParameters {
             DatasetConfig dataset;
             OptimizationParameters optimization;
-            LoadingParams loading_params;
 
             // Viewer mode specific
             std::filesystem::path ply_path = "";
@@ -127,8 +130,6 @@ namespace gs {
 
         // Modern C++23 functions returning expected values
         std::expected<OptimizationParameters, std::string> read_optim_params_from_json(std::filesystem::path& path);
-
-        std::expected<LoadingParams, std::string> read_loading_params_from_json(std::filesystem::path& path);
 
         // Save training parameters to JSON
         std::expected<void, std::string> save_training_parameters_to_json(

@@ -475,15 +475,6 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
     params->optimization = *opt_params_result;
 
 
-    auto load_params_result = gs::param::read_loading_params_from_json(config_file_to_read);
-    if (!load_params_result) {
-        return std::unexpected(std::format("Failed to load loading parameters: {}",
-                                           load_params_result.error()));
-    }
-
-    params->loading_params = *load_params_result;
-
-
     // if a config file was used and strategy was also passed as command line argument, ensure they match
     if (config_file != "" && strategy != "" && strategy != params->optimization.strategy) {
         LOG_ERROR("Conflict between strategy in config file and --strategy on command line");

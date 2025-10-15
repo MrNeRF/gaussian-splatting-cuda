@@ -491,23 +491,6 @@ namespace gs {
             }
         }
 
-        std::expected<LoadingParams, std::string> read_loading_params_from_json(std::filesystem::path& path) {
-            auto json_result = read_json_file(path);
-
-            if (!json_result) {
-                return std::unexpected(json_result.error());
-            }
-            auto json = *json_result;
-            try {
-                LoadingParams params = LoadingParams::from_json(json);
-
-                return params;
-
-            } catch (const std::exception& e) {
-                return std::unexpected(std::format("Error parsing loading parameters: {}", e.what()));
-            }
-        }
-
         /**
          * @brief Save full training parameters (dataset + optimization) to JSON
          * @param params The full training parameters
@@ -522,14 +505,7 @@ namespace gs {
                 nlohmann::json json;
 
                 // Dataset configuration
-                json["dataset"]["data_path"] = params.dataset.data_path.string();
-                json["dataset"]["output_path"] = params.dataset.output_path.string();
-                json["dataset"]["images"] = params.dataset.images;
-                json["dataset"]["resize_factor"] = params.dataset.resize_factor;
-                json["dataset"]["test_every"] = params.dataset.test_every;
-                json["dataset"]["max_width"] = params.dataset.max_width;
-
-                json["loading_params"] = params.loading_params.to_json();
+                json["dataset"]= params.dataset.to_json();
 
                 // Optimization configuration
                 nlohmann::json opt_json = params.optimization.to_json();
@@ -604,6 +580,39 @@ namespace gs {
 
             return loading_json;
         }
+
+        nlohmann::json DatasetConfig::to_json() const {
+            nlohmann::json json;
+
+
+            json["data_path"] = data_path.string();
+            json["output_folder"] = output_path.string();
+            json["images"] = images;
+            json["resize_factor"] = resize_factor;
+            json["test_every"] =test_every;
+            json["max_width"] = max_width;
+            json["loading_params"] = loading_params.to_json();
+
+            return json;
+        }
+
+        DatasetConfig DatasetConfig::from_json(const nlohmann::json& j){
+            DatasetConfig dataset;
+
+            dataset.data_path = j["data_path"].get<std::string>();
+            dataset.images = j["images"].get<std::string>();
+            dataset.resize_factor = j["resize_factor"].get<int>();
+            dataset.max_width = j["max_width"].get<int>();
+            dataset.test_every = j["test_every"].get<int>();
+            dataset.output_path = j["output_folder"].get<std::string>();
+
+            if (j.contains("loading_params")) {
+                dataset.loading_params = LoadingParams::from_json(j["loading_params"]);
+            }
+
+            return dataset;
+        }
+
 
     } // namespace param
 } // namespace gs
