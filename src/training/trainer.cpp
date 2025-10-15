@@ -11,6 +11,9 @@
 #include "kernels/fused_ssim.cuh"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
+#include "loader/cache_image_loader.hpp"
+
+
 #include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <chrono>
@@ -886,6 +889,10 @@ namespace gs::training {
 
         is_running_ = true; // Now we can start
         LOG_INFO("Starting training loop with {} workers", params_.optimization.num_workers);
+
+        auto& loader = gs::loader::CacheLoader::getInstance(true, true);
+        loader.clean_cache_folders();
+        loader.create_new_cache_folder();
 
         try {
             int iter = 1;

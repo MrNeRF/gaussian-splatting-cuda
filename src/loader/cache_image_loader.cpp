@@ -2,7 +2,7 @@
  *
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include "cache_image_loader.hpp"
+#include "loader/cache_image_loader.hpp"
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include "project/project.hpp"
@@ -159,12 +159,13 @@ namespace gs::loader {
 
         auto cache_base = gs::management::GetLichtFeldBaseTemporaryFolder() / "cache";
 
-        if (std::filesystem::exists(cache_base)) {
+        if (!std::filesystem::exists(cache_base)) {
             bool success = std::filesystem::create_directories(cache_base);
             if (!success) {
                 throw std::runtime_error("failed to create cache base directory " + cache_base.string());
             }
         }
+
         std::string unique_cache_path = LFS_CACHE_PREFIX + gs::management::generateShortHash();
         std::filesystem::path cache_folder = cache_base / unique_cache_path;
 
@@ -217,14 +218,27 @@ namespace gs::loader {
 
     void CacheLoader::evict_until_statisfied() {
 
-        std::size_t available, total, min_free_bytes;
-        do {
-            available = gs::system::get_available_physical_memory();
-            total = gs::system::get_total_physical_memory();
-            min_free_bytes = max(
+        while (!cpu_cache_.empty()) {
+            std::size_t available = gs::system::get_available_physical_memory();
+            std::size_t total = gs::system::get_total_physical_memory();
+            std::size_t min_free_bytes = max(
                 static_cast<std::size_t>(total * min_cpu_free_memory_ratio_),
                 min_cpu_free_GB_ * 1024ULL * 1024 * 1024);
-        } while (available > min_free_bytes);
+
+            if (available > min_free_bytes) {
+                break;
+            }
+            {
+                std::lock_guard<std::mutex> lock(cpu_cache_mutex_);
+                auto oldest = std::min_element(cpu_cache_.begin(), cpu_cache_.end(),
+                                               [](const auto& a, const auto& b) {
+                                                   return a.second.last_access < b.second.last_access;
+                                               });
+                LOG_DEBUG("Evicting cached image {} ({} bytes) from CPU cache",
+                          oldest->first, oldest->second.size_bytes);
+                cpu_cache_.erase(oldest);
+            }
+        }
     }
 
     void CacheLoader::evict_if_needed(std::size_t required_bytes) {
@@ -253,6 +267,10 @@ namespace gs::loader {
         return total;
     }
 
+    std::string CacheLoader::generate_cache_key(const std::filesystem::path& path, const LoadParams& params) const {
+        return std::format("{}:resize_{}_maxw_{}", path.string(), params.resize_factor, params.max_width);
+    }
+
     std::tuple<unsigned char*, int, int, int> CacheLoader::load_cached_image_from_cpu(
         const std::filesystem::path& path,
         const LoadParams& params) {
@@ -273,7 +291,7 @@ namespace gs::loader {
                 unsigned char* img_data = static_cast<unsigned char*>(std::malloc(cached.data.size()));
                 std::memcpy(img_data, cached.data.data(), cached.data.size());
 
-                LOG_INFO("Loaded image {} from CPU cache", cache_key);
+                LOG_DEBUG("Loaded image {} from CPU cache", cache_key);
                 return {img_data, cached.width, cached.height, cached.channels};
             }
         }
@@ -334,11 +352,11 @@ namespace gs::loader {
 
                 cpu_cache_[cache_key] = std::move(cached_data);
 
-                LOG_INFO("Cached image {} in CPU memory ({} bytes, total cache: {} bytes)",
-                         cache_key, img_size, get_cpu_cache_size());
+                LOG_DEBUG("Cached image {} in CPU memory ({} bytes, total cache: {} bytes)",
+                          cache_key, img_size, get_cpu_cache_size());
             } else {
-                LOG_WARN("Insufficient memory to cache image {} ({} bytes required)",
-                         cache_key, img_size);
+                LOG_DEBUG("Insufficient memory to cache image {} ({} bytes required)",
+                          cache_key, img_size);
             }
 
             image_being_loaded_cpu_.erase(cache_key);
@@ -354,7 +372,7 @@ namespace gs::loader {
             return load_image(path, params.resize_factor, params.max_width);
         }
 
-        std::string unique_name = std::format("resize_factor_{}_", params.resize_factor) + path.filename().string();
+        std::string unique_name = std::format("rf_{}_mw_{}_", params.resize_factor, params.max_width) + path.filename().string();
 
         auto cache_img_path = cache_folder_ / unique_name;
 
@@ -384,7 +402,7 @@ namespace gs::loader {
                 if (!success) {
                     throw std::runtime_error("failed saving image" + path.filename().string() + " in cache folder " + cache_folder_.string());
                 }
-                LOG_INFO("successfully saved image {} in cache", cache_img_path.string());
+                LOG_INFO("successfully saved image {} in cache folder", cache_img_path.string());
                 success = create_done_file(cache_img_path);
 
                 if (!success) {
@@ -422,12 +440,12 @@ namespace gs::loader {
             load_counter_ = 0;
             double total_memory_gb = (double)gs::system::get_total_physical_memory() / giga_to_bytes;
             double memory_ratio = gs::system::get_memory_usage_ratio();
-            double cache_ratio = (double)get_cpu_cache_size() / giga_to_bytes;
+            double cache_ratio = (double)get_cpu_cache_size() / (double)gs::system::get_total_physical_memory();
 
             LOG_INFO("CacheInfo: Num images in cache {}", cpu_cache_.size());
-            LOG_INFO("CacheInfo: total memory{} GB", total_memory_gb);
-            LOG_INFO("CacheInfo: used memory{} ratio GB", memory_ratio);
-            LOG_INFO("CacheInfo: cache occupancy {}%", 100 * cache_ratio);
+            LOG_INFO("CacheInfo: total memory {:.2f}GB", total_memory_gb);
+            LOG_INFO("CacheInfo: used memory {:.2f}%", 100 * memory_ratio);
+            LOG_INFO("CacheInfo: cache memory occupancy {:.2f}%", 100 * cache_ratio);
         }
     }
 
