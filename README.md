@@ -12,11 +12,14 @@
 
 <img src="docs/viewer_demo.gif" alt="3D Gaussian Splatting Viewer" width="85%"/>
 
-[**Quick Start**](#quick-start) •
+[**Overview**](#overview) •
+[**Community & Support**](#community--support) •
+[**Active Bounties**](#active-bounties) •
 [**Installation**](#installation) •
-[**Usage**](#usage) •
-[**Results**](#benchmark-results) •
-[**Community**](#community--support)
+[**Contributing**](#contributing) •
+[**Acknowledgments**](#acknowledgments) •
+[**Citation**](#citation) •
+[**License**](#license)
 
 </div>
 
