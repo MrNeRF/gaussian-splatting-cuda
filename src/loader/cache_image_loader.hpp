@@ -53,11 +53,10 @@ namespace gs::loader {
 
         // Static method to get the singleton instance
         static CacheLoader& getInstance(
-            const std::filesystem::path& cache_folder,
             bool use_cpu_memory,
             bool use_fs_cache) {
             std::call_once(init_flag_, [&]() {
-                instance_.reset(new CacheLoader(cache_folder, use_cpu_memory, use_fs_cache));
+                instance_.reset(new CacheLoader(use_cpu_memory, use_fs_cache));
             });
             return *instance_;
         }
@@ -73,23 +72,19 @@ namespace gs::loader {
         // Main method - to be implemented
         [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image(const std::filesystem::path& path, const LoadParams& params);
 
+        void create_new_cache_folder();
+        void clean_cache_folders();
+
     private:
         [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image_from_cpu(const std::filesystem::path& path, const LoadParams& params);
         [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image_from_fs(const std::filesystem::path& path, const LoadParams& params);
         // Private constructor
-        CacheLoader(
-            const std::filesystem::path& cache_folder,
-            bool use_cpu_memory,
-            bool use_fs_cache) : cache_folder_(cache_folder),
-                                 use_cpu_memory_(use_cpu_memory),
-                                 use_fs_cache_(use_fs_cache) {
-            // Initialize your cache loader here
-        }
+        CacheLoader(bool use_cpu_memory, bool use_fs_cache);
 
         // CPU cache params
         bool use_cpu_memory_;
-        float min_cpu_free_memory_ratio_ = 0.1; // make sure at least 10% RAM is free
-        std::size_t min_cpu_free_GB_ = 1;       // min GB we want to be free
+        float min_cpu_free_memory_ratio_ = 0.1f; // make sure at least 10% RAM is free
+        std::size_t min_cpu_free_GB_ = 1;        // min GB we want to be free
 
         // CPU cache storage
         std::unordered_map<std::string, CachedImageData> cpu_cache_;
@@ -102,6 +97,7 @@ namespace gs::loader {
         void evict_if_needed(std::size_t required_bytes);
         void evict_until_statisfied();
         std::size_t get_cpu_cache_size() const;
+        void print_cache_status() const;
 
         // FS cache params
         std::filesystem::path cache_folder_;
@@ -113,5 +109,12 @@ namespace gs::loader {
 
         std::mutex cache_mutex_;
         std::set<std::string> image_being_saved_;
+
+        const bool print_cache_status_ = true;
+        mutable std::mutex counter_mutex_;
+        mutable int load_counter_ = 0;
+        const int print_status_freq_num_ = 100; // every print_status_freq_num calls for load print cache status
+
+        const std::string LFS_CACHE_PREFIX = "lfs_cache_";
     };
 } // namespace gs::loader

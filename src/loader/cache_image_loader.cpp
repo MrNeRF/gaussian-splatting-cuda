@@ -5,6 +5,8 @@
 #include "cache_image_loader.hpp"
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
+#include "project/project.hpp"
+
 #include <fstream>
 
 namespace gs::system {
@@ -144,6 +146,61 @@ namespace gs::loader {
         // Both the main file and its ".done" marker must exist
         return std::filesystem::exists(img_path) &&
                std::filesystem::exists(done_path);
+    }
+
+    CacheLoader::CacheLoader(bool use_cpu_memory, bool use_fs_cache) : use_cpu_memory_(use_cpu_memory), use_fs_cache_(use_fs_cache) {
+        create_new_cache_folder();
+    }
+
+    void CacheLoader::create_new_cache_folder() {
+        if (!use_fs_cache_) {
+            return;
+        }
+
+        auto cache_base = gs::management::GetLichtFeldBaseTemporaryFolder() / "cache";
+
+        if (std::filesystem::exists(cache_base)) {
+            bool success = std::filesystem::create_directories(cache_base);
+            if (!success) {
+                throw std::runtime_error("failed to create cache base directory " + cache_base.string());
+            }
+        }
+        std::string unique_cache_path = LFS_CACHE_PREFIX + gs::management::generateShortHash();
+        std::filesystem::path cache_folder = cache_base / unique_cache_path;
+
+        bool success = std::filesystem::create_directories(cache_folder);
+        if (!success) {
+            throw std::runtime_error("failed to create cache directory " + cache_folder.string());
+        }
+        cache_folder_ = cache_folder;
+    }
+
+    void CacheLoader::clean_cache_folders() {
+        auto cache_base = gs::management::GetLichtFeldBaseTemporaryFolder() / "cache";
+        if (!std::filesystem::exists(cache_base) || !std::filesystem::is_directory(cache_base)) {
+            LOG_ERROR("Invalid base folder: {}", cache_base.string());
+            return;
+        }
+
+        for (const auto& entry : std::filesystem::directory_iterator(cache_base)) {
+            if (entry.is_directory()) {
+                auto folder_name = entry.path().filename().string();
+
+                if (folder_name.rfind(LFS_CACHE_PREFIX, 0) == 0) { // starts with prefix
+                    if (std::filesystem::exists(entry.path() / ".lock")) {
+                        LOG_DEBUG("folder: {} exists, but it is locked", entry.path().string());
+                        continue;
+                    }
+                    std::error_code ec;
+                    std::filesystem::remove_all(entry.path(), ec);
+                    if (ec) {
+                        LOG_ERROR("Failed to remove {}:{}", entry.path().string(), ec.message());
+                        continue;
+                    }
+                    LOG_DEBUG("Removed folder: {}", entry.path().string());
+                }
+            }
+        }
     }
 
     bool CacheLoader::has_sufficient_memory(std::size_t required_bytes) const {
@@ -341,6 +398,7 @@ namespace gs::loader {
     }
 
     std::tuple<unsigned char*, int, int, int> CacheLoader::load_cached_image(const std::filesystem::path& path, const LoadParams& params) {
+        print_cache_status();
         if (use_cpu_memory_) {
             return load_cached_image_from_cpu(path, params);
         }
@@ -350,6 +408,27 @@ namespace gs::loader {
         }
 
         return load_image(path, params.max_width, params.resize_factor);
+    }
+
+    void CacheLoader::print_cache_status() const {
+        if (!print_cache_status_) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(counter_mutex_);
+        load_counter_++;
+        size_t giga_to_bytes = 1024ULL * 1024 * 1024;
+        if (load_counter_ > print_status_freq_num_) {
+            load_counter_ = 0;
+            double total_memory_gb = (double)gs::system::get_total_physical_memory() / giga_to_bytes;
+            double memory_ratio = gs::system::get_memory_usage_ratio();
+            double cache_ratio = (double)get_cpu_cache_size() / giga_to_bytes;
+
+            LOG_INFO("CacheInfo: Num images in cache {}", cpu_cache_.size());
+            LOG_INFO("CacheInfo: total memory{} GB", total_memory_gb);
+            LOG_INFO("CacheInfo: used memory{} ratio GB", memory_ratio);
+            LOG_INFO("CacheInfo: cache occupancy {}%", 100 * cache_ratio);
+        }
     }
 
 } // namespace gs::loader

@@ -698,7 +698,8 @@ namespace gs::management {
             fs::remove_all(entry);
         }
     }
-    static std::filesystem::path GetLichtFeldBaseTemporaryFolder() {
+
+    std::filesystem::path GetLichtFeldBaseTemporaryFolder() {
         return std::filesystem::temp_directory_path() / "LichtFeldStudio";
     }
 
@@ -734,7 +735,7 @@ namespace gs::management {
         return true;
     }
 
-    static std::string generateShortHash() {
+    std::string generateShortHash() {
         // Current time in nanoseconds
         auto now = std::chrono::high_resolution_clock::now();
         auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
