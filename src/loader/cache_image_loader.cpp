@@ -227,7 +227,7 @@ namespace gs::loader {
         return (available > required_bytes + min_free_bytes);
     }
 
-    void CacheLoader::evict_until_statisfied() {
+    void CacheLoader::evict_until_satisfied() {
 
         while (!cpu_cache_.empty()) {
             std::size_t available = gs::system::get_available_physical_memory();
