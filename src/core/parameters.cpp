@@ -589,7 +589,7 @@ namespace gs {
             json["output_folder"] = output_path.string();
             json["images"] = images;
             json["resize_factor"] = resize_factor;
-            json["test_every"] =test_every;
+            json["test_every"] = test_every;
             json["max_width"] = max_width;
             json["loading_params"] = loading_params.to_json();
 
