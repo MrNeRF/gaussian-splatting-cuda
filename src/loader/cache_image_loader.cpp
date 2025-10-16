@@ -407,7 +407,7 @@ namespace gs::loader {
                 }
             }
 
-            if (!is_image_being_saved) { // only one thread should enter this skope
+            if (!is_image_being_saved) { // only one thread should enter this scope
                 bool success = save_img_data(cache_img_path, result);
 
                 if (!success) {
