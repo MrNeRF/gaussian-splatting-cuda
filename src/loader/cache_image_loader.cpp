@@ -9,6 +9,19 @@
 
 #include <fstream>
 
+// Platform-specific includes
+#ifdef __linux__
+#include <sys/sysinfo.h>
+#elif defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/mach_host.h>
+#include <mach/vm_statistics.h>
+#include <sys/sysctl.h>
+#endif
+
 namespace gs::system {
     /**
      * @brief Get total physical memory in bytes
@@ -29,17 +42,6 @@ namespace gs::system {
     double get_memory_usage_ratio();
 } // namespace gs::system
 
-// Platform-specific includes
-#ifdef __linux__
-#include <sys/sysinfo.h>
-#elif defined(_WIN32)
-#include <windows.h>
-#elif defined(__APPLE__)
-#include <mach/mach.h>
-#include <mach/mach_host.h>
-#include <mach/vm_statistics.h>
-#include <sys/sysctl.h>
-#endif
 
 namespace gs::system {
 
@@ -217,7 +219,7 @@ namespace gs::loader {
         std::size_t available = gs::system::get_available_physical_memory();
         std::size_t total = gs::system::get_total_physical_memory();
 
-        std::size_t min_free_bytes = max(
+        std::size_t min_free_bytes = std::max(
             static_cast<std::size_t>(total * min_cpu_free_memory_ratio_),
             min_cpu_free_GB_ * 1024ULL * 1024 * 1024);
 
@@ -230,7 +232,7 @@ namespace gs::loader {
         while (!cpu_cache_.empty()) {
             std::size_t available = gs::system::get_available_physical_memory();
             std::size_t total = gs::system::get_total_physical_memory();
-            std::size_t min_free_bytes = max(
+            std::size_t min_free_bytes = std::max(
                 static_cast<std::size_t>(total * min_cpu_free_memory_ratio_),
                 min_cpu_free_GB_ * 1024ULL * 1024 * 1024);
 
