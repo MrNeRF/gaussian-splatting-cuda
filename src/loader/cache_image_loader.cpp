@@ -208,6 +208,11 @@ namespace gs::loader {
         }
     }
 
+    void CacheLoader::clear_cpu_cache() {
+        std::lock_guard<std::mutex> lock(cpu_cache_mutex_);
+        cpu_cache_.clear();
+    }
+
     bool CacheLoader::has_sufficient_memory(std::size_t required_bytes) const {
         std::size_t available = gs::system::get_available_physical_memory();
         std::size_t total = gs::system::get_total_physical_memory();

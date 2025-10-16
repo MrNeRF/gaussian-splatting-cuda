@@ -74,6 +74,7 @@ namespace gs::loader {
 
         void create_new_cache_folder();
         void clean_cache_folders();
+        void clear_cpu_cache();
 
         void update_cache_params(bool use_cpu_memory, bool use_fs_cache) {
             use_cpu_memory_ = use_cpu_memory;

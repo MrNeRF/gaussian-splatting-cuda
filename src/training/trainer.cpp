@@ -889,12 +889,12 @@ namespace gs::training {
 
         is_running_ = true; // Now we can start
         LOG_INFO("Starting training loop with {} workers", params_.optimization.num_workers);
-
-        auto& loader = gs::loader::CacheLoader::getInstance(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
+        // initializing image loader
+        auto& cache_loader = gs::loader::CacheLoader::getInstance(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
         //in case we call getInstance multiple times and cache parameters were changed by user
-        loader.update_cache_params(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
-        loader.clean_cache_folders();
-        loader.create_new_cache_folder();
+        cache_loader.update_cache_params(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
+        cache_loader.clean_cache_folders();
+        cache_loader.create_new_cache_folder();
 
         try {
             int iter = 1;
@@ -987,12 +987,16 @@ namespace gs::training {
             is_running_ = false;
             training_complete_ = true;
 
+            cache_loader.clear_cpu_cache();
+
             LOG_INFO("Training completed successfully");
             return {};
         } catch (const std::exception& e) {
             is_running_ = false;
             return std::unexpected(std::format("Training failed: {}", e.what()));
         }
+
+        cache_loader.clear_cpu_cache();
     }
 
     std::shared_ptr<const Camera> Trainer::getCamById(int camId) const {
