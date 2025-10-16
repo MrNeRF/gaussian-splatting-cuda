@@ -167,7 +167,7 @@ namespace {
 
             ::args::ValueFlag<int> max_width(parser, "max_width", "Max width of images in px (default: 3840)", {"max-width"});
             ::args::ValueFlag<bool> use_cpu_cache(parser, "use_cpu_cache", "if true - try using cpu memory to cache images (default: true)", {"use_cpu_cache"});
-            ::args::ValueFlag<bool> use_fs_cache(parser, "use_cpu_cache", "if true - try using temporary file system to cache images (default: true)", {"use_cpu_cache"});
+            ::args::ValueFlag<bool> use_fs_cache(parser, "use_fs_cache", "if true - try using temporary file system to cache images (default: true)", {"use_fs_cache"});
 
             // Parse arguments
             try {
