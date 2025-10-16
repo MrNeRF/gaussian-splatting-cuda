@@ -117,7 +117,7 @@ namespace gs::loader {
         std::mutex cache_mutex_;
         std::set<std::string> image_being_saved_;
 
-        // log/debug memebers
+        // log/debug members
         mutable std::mutex counter_mutex_;
         const bool print_cache_status_ = true;
         mutable int load_counter_ = 0;
