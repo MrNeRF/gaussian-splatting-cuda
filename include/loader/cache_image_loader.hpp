@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <vector>
 #include <unordered_map>
 
 namespace gs::system {

@@ -221,7 +221,7 @@ namespace gs::loader {
 
         std::size_t min_free_bytes = std::max(
             static_cast<std::size_t>(total * min_cpu_free_memory_ratio_),
-            min_cpu_free_GB_ * 1024ULL * 1024 * 1024);
+            static_cast<std::size_t>(min_cpu_free_GB_ * 1024ULL * 1024 * 1024));
 
         // Check if adding this image would leave sufficient free memory
         return (available > required_bytes + min_free_bytes);
@@ -234,7 +234,7 @@ namespace gs::loader {
             std::size_t total = gs::system::get_total_physical_memory();
             std::size_t min_free_bytes = std::max(
                 static_cast<std::size_t>(total * min_cpu_free_memory_ratio_),
-                min_cpu_free_GB_ * 1024ULL * 1024 * 1024);
+                static_cast<std::size_t>(min_cpu_free_GB_ * 1024ULL * 1024 * 1024));
 
             if (available > min_free_bytes) {
                 break;
