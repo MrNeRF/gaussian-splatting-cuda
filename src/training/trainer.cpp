@@ -993,10 +993,10 @@ namespace gs::training {
             return {};
         } catch (const std::exception& e) {
             is_running_ = false;
+            cache_loader.clear_cpu_cache();
+
             return std::unexpected(std::format("Training failed: {}", e.what()));
         }
-
-        cache_loader.clear_cpu_cache();
     }
 
     std::shared_ptr<const Camera> Trainer::getCamById(int camId) const {
