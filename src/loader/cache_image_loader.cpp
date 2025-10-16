@@ -298,7 +298,7 @@ namespace gs::loader {
 
                 // Allocate new memory and copy cached data
                 auto& cached = it->second;
-                // alocation should be like load_img sinse use call img_free
+                // allocation should be like load_img since use call img_free
                 unsigned char* img_data = static_cast<unsigned char*>(std::malloc(cached.data.size()));
                 std::memcpy(img_data, cached.data.data(), cached.data.size());
 
