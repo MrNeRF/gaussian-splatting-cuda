@@ -102,7 +102,7 @@ namespace gs::loader {
         std::string generate_cache_key(const std::filesystem::path& path, const LoadParams& params) const;
         bool has_sufficient_memory(std::size_t required_bytes) const;
         void evict_if_needed(std::size_t required_bytes);
-        void evict_until_statisfied();
+        void evict_until_satisfied();
         std::size_t get_cpu_cache_size() const;
         void print_cache_status() const;
 

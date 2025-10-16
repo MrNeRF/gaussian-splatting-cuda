@@ -373,7 +373,7 @@ namespace gs::loader {
             image_being_loaded_cpu_.erase(cache_key);
         }
 
-        evict_until_statisfied();
+        evict_until_satisfied();
 
         return {img_data, width, height, channels};
     }
