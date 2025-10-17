@@ -26,6 +26,7 @@ namespace gs {
                gsplat::CameraModelType camera_model_type,
                const std::string& image_name,
                const std::filesystem::path& image_path,
+               const std::filesystem::path& mask_path,
                int camera_width, int camera_height,
                int uid);
         Camera(const Camera&, const torch::Tensor& transform);
@@ -41,6 +42,9 @@ namespace gs {
 
         // Load image from disk and return it
         torch::Tensor load_and_get_image(int resize_factor = -1, int max_width = 3840);
+        
+        // Load mask from disk and return it
+        torch::Tensor load_and_get_attention_weights(int resize_factor = -1, int max_width = 3840);
 
         // Load image from disk just to populate _image_width/_image_height
         void load_image_size(int resize_factor = -1, int max_width = 3840);
@@ -75,6 +79,7 @@ namespace gs {
         gsplat::CameraModelType camera_model_type() const noexcept { return _camera_model_type; }
         const std::string& image_name() const noexcept { return _image_name; }
         const std::filesystem::path& image_path() const noexcept { return _image_path; }
+        const std::filesystem::path& mask_path() const noexcept { return _mask_path; }
         int uid() const noexcept { return _uid; }
 
         float FoVx() const noexcept { return _FoVx; }
@@ -101,6 +106,7 @@ namespace gs {
         // Image info
         std::string _image_name;
         std::filesystem::path _image_path;
+        std::filesystem::path _mask_path;
         int _camera_width = 0;
         int _camera_height = 0;
         int _image_width = 0;

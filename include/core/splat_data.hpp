@@ -90,6 +90,9 @@ namespace gs {
         // Get attribute names for the PLY format
         std::vector<std::string> get_attribute_names() const;
 
+        // Remove splats that are outside of the mask
+        void filterByMask(const torch::Tensor& keep_mask);
+        
         SplatData crop_by_cropbox(const gs::geometry::BoundingBox& bounding_box) const;
 
     public:

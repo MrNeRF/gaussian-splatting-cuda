@@ -36,6 +36,7 @@ namespace gs::loader {
         float _center_y = 0.f;
         std::string _image_name;
         std::filesystem::path _image_path;
+        std::filesystem::path _mask_path;
         CAMERA_MODEL _camera_model = CAMERA_MODEL::UNDEFINED;
         gsplat::CameraModelType _camera_model_type = gsplat::CameraModelType::PINHOLE;
         int _width = 0;

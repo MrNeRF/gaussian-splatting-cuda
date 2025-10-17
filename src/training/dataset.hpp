@@ -18,6 +18,7 @@ namespace gs::training {
     struct CameraWithImage {
         Camera* camera;
         torch::Tensor image;
+        torch::Tensor attentionMask;
     };
 
     using CameraExample = torch::data::Example<CameraWithImage, torch::Tensor>;
@@ -70,7 +71,8 @@ namespace gs::training {
             auto& cam = _cameras[camera_idx];
 
             torch::Tensor image = cam->load_and_get_image(_datasetConfig.resize_factor, _datasetConfig.max_width);
-            return {{cam.get(), std::move(image)}, torch::empty({})};
+            torch::Tensor attention_weights = cam->load_and_get_attention_weights(_datasetConfig.resize_factor, _datasetConfig.max_width);
+            return {{cam.get(), std::move(image), std::move(attention_weights)}, torch::empty({})};
         }
 
         torch::optional<size_t> size() const override {

@@ -24,7 +24,7 @@
   "save_steps": [7000, 30000],
   "pose_optimization": "none",
   "enable_eval": false,
-  "enable_save_eval_images": true,
+  "enable_save_eval_images": false,
   "use_bilateral_grid": false,
   "skip_intermediate": false,
   "bg_modulation": false,
@@ -45,5 +45,6 @@
   "antialiasing": false,
   "random": false,
   "init_num_pts": 100000,
-  "init_extent": 3.0
+  "init_extent": 3.0,
+  "attention_masks": false
 }
