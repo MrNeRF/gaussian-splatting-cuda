@@ -403,9 +403,9 @@ namespace gs::loader {
         if (cache_mode_ != CacheMode::Undetermined) {
             return; // cache where already determined by another thread
         } else {
-            if (!use_cpu_memory_&&!use_fs_cache_) {
+            if (!use_cpu_memory_ && !use_fs_cache_) {
                 LOG_INFO("No caching by user");
-                cache_mode_=CacheMode::NoCache;
+                cache_mode_ = CacheMode::NoCache;
                 return;
             }
 
@@ -422,7 +422,7 @@ namespace gs::loader {
 
             std::size_t img_size = static_cast<std::size_t>(width) * height * channels;
             std::size_t required_bytes = img_size * num_expected_images_;
-            if (has_sufficient_memory(required_bytes)) {
+            if (use_cpu_memory_ && has_sufficient_memory(required_bytes)) {
                 LOG_INFO("all images can be cached in RAM. Cache Loader will be in CPU memory mode.");
                 cache_mode_ = CacheMode::CPU_memory;
             } else {
@@ -432,11 +432,15 @@ namespace gs::loader {
                 LOG_INFO("not all images fit to cpu memory required_GB {:.2f}. available {:.2f}", required_GB, available_GB);
 
                 auto [org_width, org_height, org_channels] = get_image_info(path);
-                if (params.resize_factor > 1 || params.max_width < org_width) {
-                    LOG_INFO("image are preprocessed. Changing Cache to FS Mode");
+                if (use_fs_cache_ && (params.resize_factor > 1 || params.max_width < org_width)) {
+                    LOG_INFO("Images are preprocessed. Changing Cache to FS Mode");
                     cache_mode_ = CacheMode::FileSystem;
                 } else {
-                    LOG_INFO("image are not preprocessed. no need for caching");
+                    if (!use_fs_cache_) {
+                        LOG_INFO("No caching by user");
+                    } else {
+                        LOG_INFO("Images are not preprocessed. no need for caching");
+                    }
                     cache_mode_ = CacheMode::NoCache;
                 }
             }
