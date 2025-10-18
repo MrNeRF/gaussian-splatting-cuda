@@ -135,5 +135,7 @@ namespace gs {
         std::expected<void, std::string> save_training_parameters_to_json(
             const TrainingParameters& params,
             const std::filesystem::path& output_path);
+
+        std::expected<LoadingParams, std::string> read_loading_params_from_json(std::filesystem::path& path);
     } // namespace param
 } // namespace gs

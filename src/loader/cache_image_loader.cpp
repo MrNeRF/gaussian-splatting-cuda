@@ -479,6 +479,7 @@ namespace gs::loader {
             LOG_INFO("CacheInfo: total memory {:.2f}GB", total_memory_gb);
             LOG_INFO("CacheInfo: used memory {:.2f}%", 100 * memory_ratio);
             LOG_INFO("CacheInfo: cache memory occupancy {:.2f}%", 100 * cache_ratio);
+            LOG_INFO("*****"); // seperator
         }
     }
 

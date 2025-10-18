@@ -505,7 +505,7 @@ namespace gs {
                 nlohmann::json json;
 
                 // Dataset configuration
-                json["dataset"]= params.dataset.to_json();
+                json["dataset"] = params.dataset.to_json();
 
                 // Optimization configuration
                 nlohmann::json opt_json = params.optimization.to_json();
@@ -577,7 +577,6 @@ namespace gs {
         nlohmann::json DatasetConfig::to_json() const {
             nlohmann::json json;
 
-
             json["data_path"] = data_path.string();
             json["output_folder"] = output_path.string();
             json["images"] = images;
@@ -589,7 +588,7 @@ namespace gs {
             return json;
         }
 
-        DatasetConfig DatasetConfig::from_json(const nlohmann::json& j){
+        DatasetConfig DatasetConfig::from_json(const nlohmann::json& j) {
             DatasetConfig dataset;
 
             dataset.data_path = j["data_path"].get<std::string>();
@@ -606,6 +605,20 @@ namespace gs {
             return dataset;
         }
 
+        std::expected<LoadingParams, std::string> read_loading_params_from_json(std::filesystem::path& path) {
+            auto json_result = read_json_file(path);
+
+            if (!json_result) {
+                return std::unexpected(json_result.error());
+            }
+            LoadingParams loading_params;
+            try {
+                loading_params = LoadingParams::from_json(*json_result);
+            } catch (const std::exception& e) {
+                return std::unexpected(std::format("Error reading loading parameters: {}", e.what()));
+            }
+            return loading_params;
+        }
 
     } // namespace param
 } // namespace gs
