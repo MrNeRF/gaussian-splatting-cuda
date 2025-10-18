@@ -422,7 +422,12 @@ namespace gs::loader {
                 size_t giga_to_bytes = 1024ULL * 1024 * 1024;
                 double required_GB = static_cast<double>(required_bytes) / static_cast<double>(giga_to_bytes);
                 double available_GB = static_cast<double>(get_available_physical_memory()) / static_cast<double>(giga_to_bytes);
-                LOG_INFO("not all images fit to cpu memory required_GB {:.2f}. available {:.2f}", required_GB, available_GB);
+
+                if (use_cpu_memory_) {
+                    LOG_INFO("not all images fit to cpu memory required_GB {:.2f}. available {:.2f}", required_GB, available_GB);
+                } else {
+                    LOG_INFO("skip cpu memory cache by user");
+                }
 
                 auto [org_width, org_height, org_channels] = get_image_info(path);
                 if (use_fs_cache_ && (params.resize_factor > 1 || params.max_width < org_width)) {
