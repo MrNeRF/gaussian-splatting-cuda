@@ -33,13 +33,6 @@ namespace gs::loader {
             return mem_info.ullTotalPhys;
         }
         LOG_WARN("Failed to get total memory on Windows");
-#elif defined(__APPLE__)
-        int64_t mem_size;
-        size_t len = sizeof(mem_size);
-        if (sysctlbyname("hw.memsize", &mem_size, &len, NULL, 0) == 0) {
-            return static_cast<std::size_t>(mem_size);
-        }
-        LOG_WARN("Failed to get total memory on macOS");
 #else
         LOG_WARN("Unsupported platform for memory detection");
 #endif
