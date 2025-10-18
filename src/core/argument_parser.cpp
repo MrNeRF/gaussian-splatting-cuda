@@ -31,7 +31,7 @@ namespace {
         std::filesystem::path searchDir = executablePath.parent_path();
         while (!searchDir.empty() && !std::filesystem::exists(searchDir / "parameter" / filename)) {
             auto parent = searchDir.parent_path();
-            if (parent == searchDir) { // fixes initinite loop bug
+            if (parent == searchDir) { // when we reach a folder which is parentless - its parent is itself
                 break;
             }
             searchDir = parent;
