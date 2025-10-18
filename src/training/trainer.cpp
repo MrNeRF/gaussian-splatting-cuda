@@ -9,10 +9,9 @@
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include "kernels/fused_ssim.cuh"
+#include "loader/cache_image_loader.hpp"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
-#include "loader/cache_image_loader.hpp"
-
 
 #include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
@@ -891,10 +890,10 @@ namespace gs::training {
         LOG_INFO("Starting training loop with {} workers", params_.optimization.num_workers);
         // initializing image loader
         auto& cache_loader = gs::loader::CacheLoader::getInstance(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
-        //in case we call getInstance multiple times and cache parameters were changed by user
-        cache_loader.update_cache_params(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
-        cache_loader.clean_cache_folders();
-        cache_loader.create_new_cache_folder();
+        cache_loader.reset_cache();
+        // in case we call getInstance multiple times and cache parameters/dataset were changed by user
+        cache_loader.update_cache_params(params_.dataset.loading_params.use_cpu_memory,
+                                         params_.dataset.loading_params.use_fs_cache, train_dataset_size_);
 
         try {
             int iter = 1;

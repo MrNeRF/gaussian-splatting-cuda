@@ -46,28 +46,28 @@ target_include_directories(gs_loader
 )
 
 # Find the actual WebP library target
-if (TARGET WebP::webpdecoder)
+if(TARGET WebP::webpdecoder)
     set(WEBP_DECODE_LIB WebP::webpdecoder)
-elseif (TARGET WebP::webp)
+elseif(TARGET WebP::webp)
     set(WEBP_DECODE_LIB WebP::webp)
-elseif (TARGET webpdecoder)
+elseif(TARGET webpdecoder)
     set(WEBP_DECODE_LIB webpdecoder)
-else ()
+else()
     find_library(WEBP_DECODE_LIBRARY NAMES webpdecoder webp libwebpdecoder libwebp REQUIRED)
     set(WEBP_DECODE_LIB ${WEBP_DECODE_LIBRARY})
-endif ()
+endif()
 
 # Find the actual LibArchive library target
-if (TARGET LibArchive::LibArchive)
+if(TARGET LibArchive::LibArchive)
     set(ARCHIVE_LIB LibArchive::LibArchive)
-elseif (TARGET archive)
+elseif(TARGET archive)
     set(ARCHIVE_LIB archive)
-elseif (TARGET archive_static)
+elseif(TARGET archive_static)
     set(ARCHIVE_LIB archive_static)
-else ()
+else()
     find_library(ARCHIVE_LIBRARY NAMES archive libarchive REQUIRED)
     set(ARCHIVE_LIB ${ARCHIVE_LIBRARY})
-endif ()
+endif()
 
 # Link dependencies
 target_link_libraries(gs_loader

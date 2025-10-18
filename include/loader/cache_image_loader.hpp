@@ -8,10 +8,11 @@
 #include <memory>
 #include <mutex>
 #include <set>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
-namespace gs::system {
+namespace gs::loader {
+
     /**
      * @brief Get total physical memory in bytes
      * @return Total physical RAM in bytes, or default value if unavailable
@@ -29,9 +30,7 @@ namespace gs::system {
      * @return Ratio of used memory to total memory
      */
     double get_memory_usage_ratio();
-} // namespace gs::system
 
-namespace gs::loader {
     struct LoadParams {
         int resize_factor;
         int max_width;
@@ -74,13 +73,36 @@ namespace gs::loader {
         [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image(const std::filesystem::path& path, const LoadParams& params);
 
         void create_new_cache_folder();
+        void reset_cache();
         void clean_cache_folders();
         void clear_cpu_cache();
 
-        void update_cache_params(bool use_cpu_memory, bool use_fs_cache) {
+        void update_cache_params(bool use_cpu_memory, bool use_fs_cache, int num_expected_images) {
             use_cpu_memory_ = use_cpu_memory;
             use_fs_cache_ = use_fs_cache;
+            num_expected_images_=num_expected_images;
         }
+
+        enum class CacheMode {
+            Undetermined,
+            NoCache,
+            CPU_memory,
+            FileSystem
+        };
+
+        static std::string to_string(const CacheMode& mode) {
+            switch (mode) {
+            case CacheMode::Undetermined: return "Undetermined";
+            case CacheMode::NoCache: return "NoCache";
+            case CacheMode::CPU_memory: return "CPU_memory";
+            case CacheMode::FileSystem: return "FileSystem";
+            }
+            return "Unknown";
+        }
+
+        [[nodiscard]] CacheMode get_cache_mode() const { return cache_mode_; }
+
+        void set_num_expected_images(int num_expected_images) { num_expected_images_ = num_expected_images; }
 
     private:
         [[nodiscard]] std::tuple<unsigned char*, int, int, int> load_cached_image_from_cpu(const std::filesystem::path& path, const LoadParams& params);
@@ -105,6 +127,7 @@ namespace gs::loader {
         void evict_until_satisfied();
         std::size_t get_cpu_cache_size() const;
         void print_cache_status() const;
+        void determine_cache_mode(const std::filesystem::path& path, const LoadParams& params);
 
         // FS cache params
         std::filesystem::path cache_folder_;
@@ -124,5 +147,8 @@ namespace gs::loader {
         const int print_status_freq_num_ = 500; // every print_status_freq_num calls for load print cache status
 
         const std::string LFS_CACHE_PREFIX = "lfs_cache_";
+
+        CacheMode cache_mode_ = CacheMode::Undetermined;
+        int num_expected_images_ = 0;
     };
 } // namespace gs::loader

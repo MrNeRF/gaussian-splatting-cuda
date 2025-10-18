@@ -15,35 +15,9 @@
 #elif defined(_WIN32)
 #define NOMINMAX
 #include <windows.h>
-#elif defined(__APPLE__)
-#include <mach/mach.h>
-#include <mach/mach_host.h>
-#include <mach/vm_statistics.h>
-#include <sys/sysctl.h>
 #endif
 
-namespace gs::system {
-    /**
-     * @brief Get total physical memory in bytes
-     * @return Total physical RAM in bytes, or default value if unavailable
-     */
-    std::size_t get_total_physical_memory();
-
-    /**
-     * @brief Get available physical memory in bytes
-     * @return Available physical RAM in bytes, or default value if unavailable
-     */
-    std::size_t get_available_physical_memory();
-
-    /**
-     * @brief Get memory usage percentage (0.0 to 1.0)
-     * @return Ratio of used memory to total memory
-     */
-    double get_memory_usage_ratio();
-} // namespace gs::system
-
-
-namespace gs::system {
+namespace gs::loader {
 
     std::size_t get_total_physical_memory() {
 #ifdef __linux__
@@ -87,14 +61,6 @@ namespace gs::system {
             return mem_info.ullAvailPhys;
         }
         LOG_WARN("Failed to get available memory on Windows");
-#elif defined(__APPLE__)
-        vm_statistics64_data_t vm_stats;
-        mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
-        if (host_statistics64(mach_host_self(), HOST_VM_INFO64,
-                              (host_info64_t)&vm_stats, &count) == KERN_SUCCESS) {
-            return (vm_stats.free_count + vm_stats.inactive_count) * vm_page_size;
-        }
-        LOG_WARN("Failed to get available memory on macOS");
 #else
         LOG_WARN("Unsupported platform for memory detection");
 #endif
@@ -113,9 +79,6 @@ namespace gs::system {
         return 1.0 - (static_cast<double>(available) / static_cast<double>(total));
     }
 
-} // namespace gs::system
-
-namespace gs::loader {
     std::unique_ptr<CacheLoader> CacheLoader::instance_ = nullptr;
     std::once_flag CacheLoader::init_flag_;
 
@@ -153,7 +116,7 @@ namespace gs::loader {
     CacheLoader::CacheLoader(bool use_cpu_memory, bool use_fs_cache) : use_cpu_memory_(use_cpu_memory), use_fs_cache_(use_fs_cache) {
         create_new_cache_folder();
         if (min_cpu_free_memory_ratio_ < 0 || min_cpu_free_memory_ratio_ > 1) {
-            LOG_WARN("min_cpu_free_memory_ratio_ is outside [0,1] interval = {}",min_cpu_free_memory_ratio_);
+            LOG_WARN("min_cpu_free_memory_ratio_ is outside [0,1] interval = {}", min_cpu_free_memory_ratio_);
             min_cpu_free_memory_ratio_ = std::clamp(min_cpu_free_memory_ratio_, 0.0f, 1.0f);
         }
     }
@@ -180,6 +143,15 @@ namespace gs::loader {
             throw std::runtime_error("failed to create cache directory " + cache_folder.string());
         }
         cache_folder_ = cache_folder;
+    }
+
+    void CacheLoader::reset_cache() {
+        clear_cpu_cache();
+        clean_cache_folders();
+        create_new_cache_folder();
+
+        cache_mode_ = CacheMode::Undetermined;
+        num_expected_images_ = 0;
     }
 
     void CacheLoader::clean_cache_folders() {
@@ -216,8 +188,8 @@ namespace gs::loader {
     }
 
     bool CacheLoader::has_sufficient_memory(std::size_t required_bytes) const {
-        std::size_t available = gs::system::get_available_physical_memory();
-        std::size_t total = gs::system::get_total_physical_memory();
+        std::size_t available = get_available_physical_memory();
+        std::size_t total = get_total_physical_memory();
 
         std::size_t min_free_bytes = std::max(
             static_cast<std::size_t>(total * min_cpu_free_memory_ratio_),
@@ -230,8 +202,8 @@ namespace gs::loader {
     void CacheLoader::evict_until_satisfied() {
 
         while (!cpu_cache_.empty()) {
-            std::size_t available = gs::system::get_available_physical_memory();
-            std::size_t total = gs::system::get_total_physical_memory();
+            std::size_t available = get_available_physical_memory();
+            std::size_t total = get_total_physical_memory();
             std::size_t min_free_bytes = std::max(
                 static_cast<std::size_t>(total * min_cpu_free_memory_ratio_),
                 static_cast<std::size_t>(min_cpu_free_GB_ * 1024ULL * 1024 * 1024));
@@ -323,15 +295,12 @@ namespace gs::loader {
 
         if (is_image_being_loaded) {
             LOG_DEBUG("Image {} is being loaded by another thread, loading directly", cache_key);
-            if (use_fs_cache_) {
-                return load_cached_image_from_fs(path, params);
-            }
             return load_image(path, params.resize_factor, params.max_width);
         }
 
         // Load the image
 
-        auto [img_data, width, height, channels] = use_fs_cache_ ? load_cached_image_from_fs(path, params) : load_image(path, params.resize_factor, params.max_width);
+        auto [img_data, width, height, channels] = load_image(path, params.resize_factor, params.max_width);
 
         if (img_data == nullptr) {
             std::lock_guard<std::mutex> lock(cpu_cache_mutex_);
@@ -426,13 +395,62 @@ namespace gs::loader {
         return result;
     }
 
-    std::tuple<unsigned char*, int, int, int> CacheLoader::load_cached_image(const std::filesystem::path& path, const LoadParams& params) {
+    void CacheLoader::determine_cache_mode(const std::filesystem::path& path, const LoadParams& params) {
+        if (cache_mode_ != CacheMode::Undetermined) {
+            return; // cache where already determined
+        }
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        if (cache_mode_ != CacheMode::Undetermined) {
+            return; // cache where already determined by another thread
+        } else {
+            if (!use_cpu_memory_&&!use_fs_cache_) {
+                LOG_INFO("No caching by user");
+                cache_mode_=CacheMode::NoCache;
+                return;
+            }
 
-        if (use_cpu_memory_) {
+            if (num_expected_images_ <= 0) {
+                LOG_ERROR("unable to determine if full cpu caching num_expected_images_ is not initialized. skip caching.");
+                cache_mode_ = CacheMode::NoCache;
+                return;
+            }
+            clear_cpu_cache(); // cache does not suppose to be occupied
+
+            auto [img_data, width, height, channels] = load_image(path, params.resize_factor, params.max_width);
+
+            free_image(img_data);
+
+            std::size_t img_size = static_cast<std::size_t>(width) * height * channels;
+            std::size_t required_bytes = img_size * num_expected_images_;
+            if (has_sufficient_memory(required_bytes)) {
+                LOG_INFO("all images can be cached in RAM. Cache Loader will be in CPU memory mode.");
+                cache_mode_ = CacheMode::CPU_memory;
+            } else {
+                size_t giga_to_bytes = 1024ULL * 1024 * 1024;
+                double required_GB = static_cast<double>(required_bytes) / static_cast<double>(giga_to_bytes);
+                double available_GB = static_cast<double>(get_available_physical_memory()) / static_cast<double>(giga_to_bytes);
+                LOG_INFO("not all images fit to cpu memory required_GB {:.2f}. available {:.2f}", required_GB, available_GB);
+
+                auto [org_width, org_height, org_channels] = get_image_info(path);
+                if (params.resize_factor > 1 || params.max_width < org_width) {
+                    LOG_INFO("image are preprocessed. Changing Cache to FS Mode");
+                    cache_mode_ = CacheMode::FileSystem;
+                } else {
+                    LOG_INFO("image are not preprocessed. no need for caching");
+                    cache_mode_ = CacheMode::NoCache;
+                }
+            }
+        }
+    }
+
+    std::tuple<unsigned char*, int, int, int> CacheLoader::load_cached_image(const std::filesystem::path& path, const LoadParams& params) {
+        determine_cache_mode(path, params);
+
+        if (use_cpu_memory_ && cache_mode_ == CacheMode::CPU_memory) {
             print_cache_status();
             return load_cached_image_from_cpu(path, params);
         }
-        if (use_fs_cache_) {
+        if (use_fs_cache_ && cache_mode_ == CacheMode::FileSystem) {
             return load_cached_image_from_fs(path, params);
         }
 
@@ -449,9 +467,9 @@ namespace gs::loader {
         size_t giga_to_bytes = 1024ULL * 1024 * 1024;
         if (load_counter_ > print_status_freq_num_) {
             load_counter_ = 0;
-            double total_memory_gb = (double)gs::system::get_total_physical_memory() / giga_to_bytes;
-            double memory_ratio = gs::system::get_memory_usage_ratio();
-            double cache_ratio = (double)get_cpu_cache_size() / (double)gs::system::get_total_physical_memory();
+            double total_memory_gb = (double)get_total_physical_memory() / giga_to_bytes;
+            double memory_ratio = get_memory_usage_ratio();
+            double cache_ratio = (double)get_cpu_cache_size() / (double)get_total_physical_memory();
 
             LOG_INFO("CacheInfo: Num images in cache {}", cpu_cache_.size());
             LOG_INFO("CacheInfo: total memory {:.2f}GB", total_memory_gb);
