@@ -9,8 +9,10 @@
 #include "core/image_io.hpp"
 #include "core/logger.hpp"
 #include "kernels/fused_ssim.cuh"
+#include "loader/cache_image_loader.hpp"
 #include "rasterization/fast_rasterizer.hpp"
 #include "rasterization/rasterizer.hpp"
+
 #include <ATen/cuda/CUDAEvent.h>
 #include <atomic>
 #include <chrono>
@@ -886,6 +888,12 @@ namespace gs::training {
 
         is_running_ = true; // Now we can start
         LOG_INFO("Starting training loop with {} workers", params_.optimization.num_workers);
+        // initializing image loader
+        auto& cache_loader = gs::loader::CacheLoader::getInstance(params_.dataset.loading_params.use_cpu_memory, params_.dataset.loading_params.use_fs_cache);
+        cache_loader.reset_cache();
+        // in case we call getInstance multiple times and cache parameters/dataset were changed by user
+        cache_loader.update_cache_params(params_.dataset.loading_params.use_cpu_memory,
+                                         params_.dataset.loading_params.use_fs_cache, train_dataset_size_);
 
         try {
             int iter = 1;
@@ -978,10 +986,14 @@ namespace gs::training {
             is_running_ = false;
             training_complete_ = true;
 
+            cache_loader.clear_cpu_cache();
+
             LOG_INFO("Training completed successfully");
             return {};
         } catch (const std::exception& e) {
             is_running_ = false;
+            cache_loader.clear_cpu_cache();
+
             return std::unexpected(std::format("Training failed: {}", e.what()));
         }
     }
